@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();
+    </script>
+    <title>Glovecubs - Professional Disposable & Work Gloves | B2B Glove Distributor</title>
+    <meta name="description" content="Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers including Hospeco, Global Glove, Safeko, MCR Safety, and more. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.">
+    <meta name="keywords" content="disposable gloves, work gloves, nitrile gloves, latex gloves, vinyl gloves, B2B gloves, bulk gloves, industrial gloves, medical gloves, food service gloves, glove distributor, Salt Lake City">
+    <meta name="author" content="Glovecubs">
+    <meta property="og:title" content="Glovecubs - Professional Disposable & Work Gloves">
+    <meta property="og:description" content="Your trusted B2B distributor for 1,000+ glove SKUs. Bulk pricing, net terms, fast fulfillment.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://glovecubs.com">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Glovecubs - Professional Disposable & Work Gloves">
+    <meta name="twitter:description" content="B2B glove distributor with 1,000+ SKUs. Bulk pricing, net terms, fast fulfillment.">
+    <link rel="canonical" href="https://glovecubs.com">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <!-- Utility Bar (Trust Signals) -->
+    <div class="utility-bar">
+        <div class="container">
+            <div class="utility-bar-content">
+                <div class="utility-left">
+                    <span>Distributor pricing</span>
+                    <span class="utility-divider">•</span>
+                    <span>Net terms available</span>
+                    <span class="utility-divider">•</span>
+                    <span>Fast fulfillment</span>
+                    <span class="utility-divider">•</span>
+                    <span>Dedicated rep</span>
+                </div>
+                <div class="utility-right">
+                    <a href="tel:1-800-GLOVECUBS"><i class="fas fa-phone"></i> Phone</a>
+                    <a href="mailto:sales@glovecubs.com"><i class="fas fa-envelope"></i> Email</a>
+                    <a href="#" onclick="navigate('contact'); return false;"><i class="fas fa-comments"></i> Live Chat</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header (Sticky, Trust-Forward, B2B-First) -->
+    <header class="header-new">
+        <div class="container">
+            <div class="header-new-content">
+                <!-- Left: Logo + Badge -->
+                <div class="header-left">
+                    <a href="/" class="logo-new" onclick="navigate('home'); return false;">
+                        <img src="/images/logo.png" alt="Glovecubs" class="logo-image-new">
+                        <span class="authorized-badge">
+                            <i class="fas fa-check-circle"></i> Authorized Distributor
+                        </span>
+                    </a>
+                </div>
+
+                <!-- Right: Search + CTAs -->
+                <div class="header-right">
+                    <div class="header-search">
+                        <input type="text" id="searchInput" placeholder="Search by style, material, AQL, thickness, ANSI, industry…">
+                        <button onclick="searchProducts()"><i class="fas fa-search"></i></button>
+                    </div>
+                    <button class="btn-request-quote" onclick="navigate('b2b')">
+                        Request Quote
+                    </button>
+                    <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode">
+                        <i class="fas fa-moon icon-dark" aria-hidden="true"></i>
+                        <i class="fas fa-sun icon-light" aria-hidden="true"></i>
+                    </button>
+                    <div class="header-account-new" id="headerAccount">
+                        <a href="#" onclick="navigate('login'); return false;">Sign In</a>
+                    </div>
+                    <div class="header-cart-new" onclick="navigate('cart')">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span class="cart-count" id="cartCount">0</span>
+                    </div>
+                    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- Middle Banner: Navigation Menu -->
+            <div class="header-trust-link">
+                <nav class="header-nav-secondary">
+                    <ul class="header-nav-menu-secondary">
+                        <li><a href="#" onclick="navigate('products'); return false;">Shop Gloves</a></li>
+                        <li class="has-dropdown">
+                            <a href="#">Industries <i class="fas fa-chevron-down"></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Healthcare</a></li>
+                                <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Food Service</a></li>
+                                <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Manufacturing</a></li>
+                                <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Janitorial</a></li>
+                            </ul>
+                        </li>
+                        <li class="has-dropdown">
+                            <a href="#">Brands <i class="fas fa-chevron-down"></i></a>
+                            <ul class="dropdown-menu" id="brandDropdown">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </li>
+                        <li><a href="#" onclick="navigate('ai-advisor'); return false;">AI Recommender</a></li>
+                        <li><a href="#" onclick="navigate('b2b'); return false;">Bulk / RFQ</a></li>
+                        <li><a href="#" onclick="navigate('about'); return false;">Resources</a></li>
+                        <li><a href="#" onclick="navigate('faq'); return false;">FAQ</a></li>
+                        <li><a href="#" onclick="navigate('contact'); return false;">Contact</a></li>
+                        <li class="nav-button-item">
+                            <button class="btn-upload-invoice-banner" onclick="navigate('cost-analysis')">
+                                <i class="fas fa-file-invoice"></i> Upload Invoice
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="mainContent">
+        <!-- Content loaded dynamically -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <div class="footer-logo">
+                        <img src="/images/logo.png" alt="Glovecubs" class="footer-logo-image">
+                    </div>
+                    <p>Your trusted source for professional-grade disposable and work gloves. Serving businesses nationwide with quality products from top manufacturers.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+                <div class="footer-col">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="#" onclick="navigate('products'); return false;">All Products</a></li>
+                        <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Disposable Gloves</a></li>
+                        <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Work Gloves</a></li>
+                        <li><a href="#" onclick="navigate('b2b'); return false;">B2B Program</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Top Brands</h4>
+                    <ul>
+                        <li><a href="#" onclick="filterByBrand('Hospeco'); return false;">Hospeco</a></li>
+                        <li><a href="#" onclick="filterByBrand('Global Glove'); return false;">Global Glove</a></li>
+                        <li><a href="#" onclick="filterByBrand('Safeko'); return false;">Safeko</a></li>
+                        <li><a href="#" onclick="filterByBrand('PIP'); return false;">PIP</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Contact Us</h4>
+                    <ul class="contact-info">
+                        <li><i class="fas fa-phone"></i> 1-800-GLOVECUBS</li>
+                        <li><i class="fas fa-envelope"></i> sales@glovecubs.com</li>
+                        <li><i class="fas fa-map-marker-alt"></i> Salt Lake City, UT</li>
+                        <li><i class="fas fa-clock"></i> Mon-Fri: 8AM - 6PM MST</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Glovecubs. All rights reserved.</p>
+                <div class="payment-icons">
+                    <i class="fab fa-cc-visa"></i>
+                    <i class="fab fa-cc-mastercard"></i>
+                    <i class="fab fa-cc-amex"></i>
+                    <i class="fab fa-cc-discover"></i>
+                    <i class="fab fa-cc-paypal"></i>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Cart Sidebar -->
+    <div class="cart-sidebar" id="cartSidebar">
+        <div class="cart-sidebar-header">
+            <h3><i class="fas fa-shopping-cart"></i> Your Cart</h3>
+            <button onclick="toggleCartSidebar()" class="close-cart"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="cart-sidebar-content" id="cartSidebarContent">
+            <!-- Cart items loaded here -->
+        </div>
+        <div class="cart-sidebar-footer">
+            <div class="cart-subtotal">
+                <span>Subtotal:</span>
+                <span id="cartSubtotal">$0.00</span>
+            </div>
+            <button onclick="navigate('cart')" class="btn btn-secondary btn-block">View Cart</button>
+            <button onclick="navigate('checkout')" class="btn btn-primary btn-block">Checkout</button>
+        </div>
+    </div>
+    <div class="cart-overlay" id="cartOverlay" onclick="toggleCartSidebar()"></div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMessage">Item added to cart!</span>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('loginModal')"><i class="fas fa-times"></i></button>
+            <div id="loginModalContent">
+                <!-- Login form loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

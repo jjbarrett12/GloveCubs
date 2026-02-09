@@ -1,0 +1,7068 @@
+// ============================================
+// GLOVECUBS - Main Application JavaScript
+// ============================================
+
+// State management
+let state = {
+    user: null,
+    cart: [],
+    products: [],
+    currentPage: 'home',
+    filters: {
+        category: null,
+        brand: null,
+        material: null,
+        powder: null,
+        thickness: null,
+        size: null,
+        color: null,
+        grade: null,
+        useCase: null,
+        compliance: null,
+        cutLevel: null,
+        punctureLevel: null,
+        abrasionLevel: null,
+        flameResistant: null,
+        arcLevel: null,
+        warmRating: null,
+        texture: null,
+        cuffStyle: null,
+        handOrientation: null,
+        packaging: null,
+        sterility: null,
+        priceMin: null,
+        priceMax: null,
+        search: ''
+    }
+};
+
+// Generate or get session ID for cart
+function getSessionId() {
+    let sessionId = localStorage.getItem('sessionId');
+    if (!sessionId) {
+        sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        localStorage.setItem('sessionId', sessionId);
+    }
+    return sessionId;
+}
+
+// API helper
+const api = {
+    baseUrl: '',
+    
+    getHeaders() {
+        const headers = { 
+            'Content-Type': 'application/json',
+            'X-Session-Id': getSessionId()
+        };
+        const token = localStorage.getItem('token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    },
+
+    async get(endpoint) {
+        try {
+            const response = await fetch(this.baseUrl + endpoint, {
+                headers: this.getHeaders()
+            });
+            
+            const contentType = response.headers.get('content-type');
+            let data;
+            
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                // If response is HTML, it's likely an error page
+                if (text.trim().startsWith('<')) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('Authentication required. Please log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}`);
+                }
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response. Status: ${response.status}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+            
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            return data;
+        } catch (error) {
+            // If it's already our custom error, re-throw it
+            if (error.message && !error.message.includes('fetch')) {
+                throw error;
+            }
+            // Otherwise wrap it
+            throw new Error(`Network error: ${error.message}`);
+        }
+    },
+
+    async post(endpoint, data) {
+        try {
+            const response = await fetch(this.baseUrl + endpoint, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify(data)
+            });
+            
+            const contentType = response.headers.get('content-type');
+            let result;
+            
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                if (text.trim().startsWith('<')) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('Authentication required. Please log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}`);
+                }
+                try {
+                    result = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response. Status: ${response.status}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+            
+            if (!response.ok) {
+                throw new Error(result.error || `HTTP error! status: ${response.status}`);
+            }
+            return result;
+        } catch (error) {
+            if (error.message && !error.message.includes('fetch')) {
+                throw error;
+            }
+            throw new Error(`Network error: ${error.message}`);
+        }
+    },
+
+    async put(endpoint, data) {
+        try {
+            const response = await fetch(this.baseUrl + endpoint, {
+                method: 'PUT',
+                headers: this.getHeaders(),
+                body: JSON.stringify(data)
+            });
+            
+            const contentType = response.headers.get('content-type');
+            let result;
+            
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                if (text.trim().startsWith('<')) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('Authentication required. Please log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}`);
+                }
+                try {
+                    result = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response. Status: ${response.status}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+            
+            if (!response.ok) {
+                throw new Error(result.error || `HTTP error! status: ${response.status}`);
+            }
+            return result;
+        } catch (error) {
+            if (error.message && !error.message.includes('fetch')) {
+                throw error;
+            }
+            throw new Error(`Network error: ${error.message}`);
+        }
+    },
+
+    async delete(endpoint) {
+        try {
+            const response = await fetch(this.baseUrl + endpoint, {
+                method: 'DELETE',
+                headers: this.getHeaders()
+            });
+            
+            const contentType = response.headers.get('content-type');
+            let result;
+            
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                if (text.trim().startsWith('<')) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('Authentication required. Please log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}`);
+                }
+                try {
+                    result = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response. Status: ${response.status}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+            
+            if (!response.ok) {
+                throw new Error(result.error || `HTTP error! status: ${response.status}`);
+            }
+            return result;
+        } catch (error) {
+            if (error.message && !error.message.includes('fetch')) {
+                throw error;
+            }
+            throw new Error(`Network error: ${error.message}`);
+        }
+    }
+};
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+function getDiscountPercent(tier) {
+    if (!tier) return 0;
+    switch (tier.toLowerCase()) {
+        case 'bronze': return 5;
+        case 'silver': return 10;
+        case 'gold': return 15;
+        case 'platinum': return 20;
+        default: return 0;
+    }
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        initTheme();
+
+        // Check for stored user
+        const token = localStorage.getItem('token');
+        const userData = localStorage.getItem('user');
+        if (token && userData) {
+            try {
+                state.user = JSON.parse(userData);
+                updateHeaderAccount();
+            } catch (e) {
+                console.error('Error parsing user data:', e);
+            }
+        }
+
+        // Load initial data
+        try {
+            await Promise.all([
+                loadCart(),
+                loadBrands()
+            ]);
+        } catch (error) {
+            console.error('Error loading initial data:', error);
+        }
+
+        // Navigate to home page
+        navigate('home');
+
+        // Setup search with real-time search and Enter key support
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            let searchTimeout;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                const query = e.target.value.trim();
+                state.filters.search = query;
+                // Debounce search - wait 500ms after user stops typing
+                searchTimeout = setTimeout(() => {
+                    if (query.length > 0) {
+                        if (state.currentPage !== 'products') {
+                            navigate('products');
+                        } else {
+                            loadProducts();
+                        }
+                    } else if (state.currentPage === 'products') {
+                        // Clear search if input is empty
+                        state.filters.search = '';
+                        loadProducts();
+                    }
+                }, 500);
+            });
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    clearTimeout(searchTimeout);
+                    searchProducts();
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Initialization error:', error);
+        const mainContent = document.getElementById('mainContent');
+        if (mainContent) {
+            mainContent.innerHTML = `
+                <section style="padding: 80px 20px; text-align: center;">
+                    <h1 style="color: #111111; margin-bottom: 16px;">Error Loading Page</h1>
+                    <p style="color: #4B5563; margin-bottom: 24px;">Please refresh the page. If the problem persists, check the browser console.</p>
+                    <button onclick="window.location.reload()" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;">
+                        Refresh Page
+                    </button>
+                </section>
+            `;
+        }
+    }
+});
+
+// ============================================
+// NAVIGATION
+// ============================================
+
+async function navigate(page, params = {}) {
+    try {
+        state.currentPage = page;
+        const mainContent = document.getElementById('mainContent');
+        
+        if (!mainContent) {
+            console.error('mainContent element not found');
+            // Try again after a short delay
+            setTimeout(() => navigate(page, params), 100);
+            return;
+        }
+        
+        // Close mobile menu if open
+        const mainNav = document.getElementById('mainNav');
+        if (mainNav) {
+            mainNav.classList.remove('open');
+        }
+        const headerNav = document.querySelector('.header-nav-secondary');
+        if (headerNav) {
+            headerNav.classList.remove('mobile-open');
+        }
+        
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        switch (page) {
+        case 'home':
+            try {
+                await renderHomePage();
+            } catch (err) {
+                console.error('Failed to render homepage:', err);
+                if (mainContent) {
+                    mainContent.innerHTML = '<section style="padding: 80px 20px; text-align: center;"><h1 style="color: #111111;">Welcome to Glovecubs</h1><p style="color: #4B5563;">Please refresh the page.</p><button onclick="window.location.reload()" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 16px;">Refresh</button></section>';
+                }
+            }
+            break;
+        case 'products':
+            await renderProductsPage();
+            break;
+        case 'product':
+            await renderProductPage(params.id);
+            break;
+        case 'cart':
+            await renderCartPage();
+            toggleCartSidebar(false);
+            break;
+        case 'checkout':
+            await renderCheckoutPage();
+            toggleCartSidebar(false);
+            break;
+        case 'login':
+            renderLoginPage();
+            break;
+        case 'register':
+            renderRegisterPage();
+            break;
+        case 'dashboard':
+            if (state.user) {
+                await renderDashboardPage();
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'b2b':
+            renderB2BPage();
+            break;
+        case 'contact':
+            renderContactPage();
+            break;
+        case 'about':
+            renderAboutPage();
+            break;
+        case 'faq':
+            renderFAQPage();
+            break;
+        case 'admin':
+            renderAdminPanel();
+            break;
+        case 'ai-advisor':
+            renderAIAdvisor();
+            break;
+        case 'cost-analysis':
+            renderCostAnalysis();
+            break;
+        default:
+            await renderHomePage();
+        }
+    } catch (error) {
+        console.error('Navigation error:', error);
+        const mainContent = document.getElementById('mainContent');
+        if (mainContent) {
+            mainContent.innerHTML = `
+                <section style="padding: 80px 20px; text-align: center;">
+                    <h1 style="color: #111111; margin-bottom: 16px;">Error Loading Page</h1>
+                    <p style="color: #4B5563; margin-bottom: 24px;">${error.message || 'An error occurred'}</p>
+                    <button onclick="navigate('home')" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;">
+                        Go to Homepage
+                    </button>
+                </section>
+            `;
+        }
+    }
+}
+
+// ============================================
+// HOME PAGE
+// ============================================
+
+async function renderHomePage() {
+    const mainContent = document.getElementById('mainContent');
+    if (!mainContent) {
+        console.error('mainContent element not found');
+        return;
+    }
+    
+    // Load featured products with error handling
+    let products = [];
+    try {
+        const response = await api.get('/api/products');
+        products = Array.isArray(response) ? response : [];
+    } catch (error) {
+        console.error('Error loading products:', error);
+        products = [];
+    }
+    
+    mainContent.innerHTML = `
+        <!-- Hero Section (Two-Column, B2B-Focused) - Dark -->
+        <section class="hero-new home-hero-dark" style="position: relative; overflow: hidden; background: linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d1117 100%); padding: 80px 0 60px;">
+            <!-- Subtle orange glow -->
+            <div style="position: absolute; top: -100px; right: -100px; width: 400px; height: 400px; background: radial-gradient(circle, rgba(255,122,0,0.15) 0%, transparent 70%); border-radius: 50%; animation: pulse 8s ease-in-out infinite; pointer-events: none; z-index: 0;"></div>
+            <div style="position: absolute; bottom: -150px; left: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; animation: pulse 10s ease-in-out infinite; animation-delay: 2s; pointer-events: none; z-index: 0;"></div>
+            
+            <style>
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 0.5; }
+                    50% { transform: scale(1.1); opacity: 0.8; }
+                }
+                @keyframes float {
+                    0%, 100% { transform: translateY(0px); }
+                    50% { transform: translateY(-10px); }
+                }
+            </style>
+            
+            <div class="container" style="position: relative; z-index: 1;">
+                <div class="hero-new-content" style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; max-width: 1400px; margin: 0 auto;">
+                    <!-- Left Column: Copy + CTAs -->
+                    <div class="hero-left">
+                        <!-- Badge -->
+                        <div style="display: inline-block; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); color: #ffffff; padding: 8px 20px; border-radius: 30px; font-size: 13px; font-weight: 600; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(255,122,0,0.4); animation: float 3s ease-in-out infinite;">
+                            <i class="fas fa-star" style="margin-right: 6px;"></i>1,000+ SKUs Available
+                        </div>
+                        
+                        <h1 style="font-size: 56px; font-weight: 900; line-height: 1.1; margin-bottom: 20px; color: #ffffff;">
+                            Your One-Stop Shop for Bulk Gloves
+                        </h1>
+                        <p style="font-size: 20px; color: rgba(255,255,255,0.9); line-height: 1.6; margin-bottom: 20px; font-weight: 400;">
+                            Let our <span style="color: #FF7A00; font-weight: 600;">AI analyze your needs</span> and spending patterns to recommend the <span style="color: #FF7A00; font-weight: 600;">best-value gloves</span> for your specific use case—saving you time and money without compromising on quality or compliance.
+                        </p>
+                        <p style="font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 28px; font-style: italic; border-left: 3px solid #FF7A00; padding-left: 16px;">
+                            Built for safety managers, procurement teams, and operators who need reliability—not surprises.
+                        </p>
+                        
+                        <!-- Primary CTAs -->
+                        <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-lg" onclick="navigate('b2b')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 12px; color: #ffffff; box-shadow: 0 8px 25px rgba(255,122,0,0.4); transition: all 0.3s ease; cursor: pointer; position: relative; overflow: hidden;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 12px 35px rgba(255,122,0,0.6)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.4)';">
+                                <i class="fas fa-tag" style="margin-right: 8px;"></i>Get Distributor Pricing
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('ai-advisor')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; border: 3px solid #FF7A00; color: #FF7A00; background: rgba(255,122,0,0.1); border-radius: 12px; transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.background='rgba(255,122,0,0.2)'; this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)';" onmouseout="this.style.background='rgba(255,122,0,0.1)'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                                <i class="fas fa-robot" style="margin-right: 8px;"></i>Try AI Glove Finder
+                            </button>
+                        </div>
+                        
+                        <!-- Secondary Links -->
+                        <div style="display: flex; gap: 32px; flex-wrap: wrap; font-size: 15px; margin-bottom: 32px;">
+                            <a href="#" onclick="showRFQModal(); return false;" style="color: #FF7A00; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;" onmouseover="this.style.color='rgba(255,122,0,0.85)'; this.style.transform='translateX(5px)';" onmouseout="this.style.color='#FF7A00'; this.style.transform='translateX(0)';">
+                                <i class="fas fa-bolt" style="font-size: 14px;"></i>Request an RFQ in 60 seconds <i class="fas fa-arrow-right" style="font-size: 12px;"></i>
+                            </a>
+                            <a href="#" onclick="navigate('contact'); return false;" style="color: rgba(255,255,255,0.8); font-weight: 500; text-decoration: none; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;" onmouseover="this.style.color='#FF7A00'; this.style.transform='translateX(5px)';" onmouseout="this.style.color='rgba(255,255,255,0.8)'; this.style.transform='translateX(0)';">
+                                <i class="fas fa-headset" style="font-size: 14px;"></i>Talk to a glove specialist <i class="fas fa-arrow-right" style="font-size: 12px;"></i>
+                            </a>
+                        </div>
+                        
+                        <!-- Card 3: Trust + Operations (Moved to Left) -->
+                        <div class="hero-card" style="background: #ffffff; border: 2px solid rgba(255,122,0,0.4); border-radius: 16px; padding: 24px; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 13px;">
+                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                                    <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-file-invoice-dollar"></i></div>
+                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Net Terms</div>
+                                    <div style="color: #4B5563; font-size: 11px;">Approved accounts</div>
+                                </div>
+                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                                    <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-boxes"></i></div>
+                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Case & Pallet</div>
+                                    <div style="color: #4B5563; font-size: 11px;">Bulk ordering</div>
+                                </div>
+                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                                    <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-user-tie"></i></div>
+                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Dedicated Rep</div>
+                                    <div style="color: #4B5563; font-size: 11px;">Repeat ordering</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column: Interactive AI + Bulk Module -->
+                    <div class="hero-right">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <!-- Card 1: Quick Bulk Builder -->
+                            <div class="hero-card" style="background: #ffffff; border: 3px solid #FF7A00; border-radius: 20px; padding: 32px; box-shadow: 0 12px 40px rgba(0,0,0,0.3); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 16px 50px rgba(0,0,0,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(0,0,0,0.3)';">
+                                <!-- Decorative background elements -->
+                                <div style="position: absolute; top: -30px; right: -30px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(255,122,0,0.25) 0%, rgba(255,122,0,0.1) 50%, transparent 100%); border-radius: 50%; z-index: 0; animation: float 4s ease-in-out infinite;"></div>
+                                <div style="position: absolute; bottom: -40px; left: -40px; width: 130px; height: 130px; background: radial-gradient(circle, rgba(255,122,0,0.2) 0%, rgba(255,122,0,0.05) 50%, transparent 100%); border-radius: 50%; z-index: 0; animation: float 5s ease-in-out infinite; animation-delay: 1s;"></div>
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; z-index: 0;"></div>
+                                
+                                <div style="position: relative; z-index: 1;">
+                                    <h3 style="font-size: 24px; font-weight: 800; margin-bottom: 24px; color: #111111; display: flex; align-items: center; gap: 12px;">
+                                        Quick Bulk Builder
+                                    </h3>
+                                    <div style="display: grid; gap: 16px;">
+                                        <div>
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;">
+                                                <i class="fas fa-hand-paper" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Type:
+                                            </label>
+                                            <select id="bulkBuilderType" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer; transition: all 0.3s ease;" onfocus="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onblur="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                                <option value="">Select Glove Type</option>
+                                                <option>Disposable Gloves</option>
+                                                <option>Reusable Gloves</option>
+                                                <option>Both</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 8px; display: block; font-weight: 600;">
+                                                <i class="fas fa-industry" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Use (Select Multiple):
+                                            </label>
+                                            <div id="bulkBuilderUse" style="max-height: 200px; overflow-y: auto; border: 2px solid #FF7A00; border-radius: 10px; padding: 12px; background: #ffffff; transition: all 0.3s ease;" onfocusin="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onfocusout="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Food Service" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Food Service</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Industrial" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Industrial</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Medical" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Medical</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Janitorial" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Janitorial</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Healthcare" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Healthcare</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Food Processing" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Food Processing</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Sanitation" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Sanitation</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Laboratories" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Laboratories</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Pharmaceuticals" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Pharmaceuticals</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Beauty & Personal Care" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Beauty & Personal Care</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Tattoo & Body Art" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Tattoo & Body Art</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Automotive" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Automotive</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Construction" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Construction</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Manufacturing" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #111111;">Manufacturing</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Warehousing" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #1a1a1a;">Warehousing</span>
+                                                </label>
+                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Logistics" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 13px; color: #1a1a1a;">Logistics</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;">
+                                                <i class="fas fa-cube" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Qty:
+                                            </label>
+                                            <select id="bulkBuilderQty" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer; transition: all 0.3s ease;" onchange="handleBulkBuilderQtyChange(this)" onfocus="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onblur="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                                <option>10 cases</option>
+                                                <option>25 cases</option>
+                                                <option>50 cases</option>
+                                                <option>100+ cases</option>
+                                            </select>
+                                        </div>
+                                        <button class="btn btn-primary" onclick="buildBulkOrder()" style="width: 100%; margin-top: 12px; padding: 14px; font-size: 15px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 10px; color: #ffffff; box-shadow: 0 4px 15px rgba(255,122,0,0.4); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(255,122,0,0.5)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(255,122,0,0.4)';">
+                                            <i class="fas fa-rocket" style="margin-right: 8px;"></i>Build My Bulk Order
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Card 2: AI Spend Snapshot -->
+                            <div class="hero-card" style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 16px; padding: 28px; color: #ffffff; box-shadow: 0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 16px 50px rgba(255,122,0,0.6), inset 0 0 80px rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1)';">
+                                <!-- Shine effect -->
+                                <div style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); animation: shine 3s infinite; pointer-events: none;"></div>
+                                <style>
+                                    @keyframes shine {
+                                        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+                                        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+                                    }
+                                </style>
+                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #ffffff;">
+                                    <i class="fas fa-chart-line" style="margin-right: 8px;"></i>
+                                    AI Spend Snapshot
+                                </h3>
+                                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; line-height: 1.6;">
+                                    <div style="margin-bottom: 12px;">
+                                        <i class="fas fa-exclamation-circle" style="margin-right: 8px;"></i>
+                                        "You may be overbuying thickness for this task."
+                                    </div>
+                                    <div style="margin-bottom: 12px;">
+                                        <i class="fas fa-dollar-sign" style="margin-right: 8px;"></i>
+                                        "Switching from Brand A → Brand B could save ~12%."
+                                    </div>
+                                    <div>
+                                        <i class="fas fa-check-circle" style="margin-right: 8px;"></i>
+                                        "Standardize to 2 SKUs to reduce variance."
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary" onclick="navigate('cost-analysis')" style="width: 100%; background: #ffffff; color: #FF7A00; font-weight: 600; border: none; padding: 12px;">
+                                    Upload Invoice for Savings Suggestions
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Product Finder Section -->
+        <section style="background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%); padding: 80px 0;">
+            <div class="container">
+                <div class="section-header">
+                    <h2 style="color: #111111; font-size: 36px; font-weight: 700; margin-bottom: 12px;">Find the Exact Gloves You Need</h2>
+                    <p style="color: #374151; font-size: 16px;">Clear categories with detailed specs. No guessing. Every product shows thickness, texture, certifications, and use cases.</p>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 32px;">
+                    <div style="background: linear-gradient(135deg, #ffffff 0%, #fff5f0 100%); padding: 32px; border-radius: 12px; border: 2px solid #FF7A00; cursor: pointer; box-shadow: 0 4px 20px rgba(255,122,0,0.1); transition: all 0.3s ease;" onclick="filterByCategory('Disposable Gloves')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 30px rgba(255,122,0,0.2)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 20px rgba(255,122,0,0.1)';">
+                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+                            <div class="category-icon" style="width: 70px; height: 70px; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ffffff; font-size: 28px; box-shadow: 0 4px 15px rgba(255,122,0,0.3);">
+                                <i class="fas fa-hand-paper"></i>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #111111;">Disposable Gloves</h3>
+                                <p style="color: #374151; font-size: 14px;">Medical • Food Service • Industrial</p>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+                            <div>
+                                <strong style="font-size: 12px; color: #111111; text-transform: uppercase;">Materials:</strong>
+                                <div style="font-size: 13px; color: #374151; margin-top: 4px;">
+                                    • Nitrile (4-8 mil)<br>
+                                    • Latex (Powder-free)<br>
+                                    • Vinyl (Economy)
+                                </div>
+                            </div>
+                            <div>
+                                <strong style="font-size: 12px; color: #111111; text-transform: uppercase;">Certifications:</strong>
+                                <div style="font-size: 13px; color: #374151; margin-top: 4px;">
+                                    • FDA 510(k)<br>
+                                    • ASTM D6319<br>
+                                    • Powder-free options
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="background: #ffffff; padding: 32px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.4); cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.2); transition: all 0.3s ease;" onclick="filterByCategory('Work Gloves')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 30px rgba(255,122,0,0.3)'; this.style.borderColor='#FF7A00';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 20px rgba(0,0,0,0.2)'; this.style.borderColor='rgba(255,255,255,0.4)';">
+                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+                            <div class="category-icon" style="width: 70px; height: 70px; background: linear-gradient(135deg, #111111 0%, #1F2933 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FF7A00; font-size: 28px; box-shadow: 0 4px 15px rgba(17,17,17,0.3);">
+                                <i class="fas fa-hard-hat"></i>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #111111;">Work Gloves</h3>
+                                <p style="color: #374151; font-size: 14px;">Cut-Resistant • Impact • Chemical</p>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+                            <div>
+                                <strong style="font-size: 12px; color: #111111; text-transform: uppercase;">ANSI Levels:</strong>
+                                <div style="font-size: 13px; color: #374151; margin-top: 4px;">
+                                    • A2-A5 Cut Resistant<br>
+                                    • Impact Protection<br>
+                                    • Chemical Resistant
+                                </div>
+                            </div>
+                            <div>
+                                <strong style="font-size: 12px; color: #111111; text-transform: uppercase;">Materials:</strong>
+                                <div style="font-size: 13px; color: #374151; margin-top: 4px;">
+                                    • HPPE/Nitrile<br>
+                                    • Leather<br>
+                                    • Coated Work
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                    <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; box-shadow: 0 4px 15px rgba(255,122,0,0.3); transition: all 0.3s ease;" onclick="filterByMaterial('Nitrile')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(255,122,0,0.3)';">
+                        <div style="font-size: 36px; color: #ffffff; margin-bottom: 10px;"><i class="fas fa-shield-alt"></i></div>
+                        <strong style="font-size: 15px; color: #ffffff;">Nitrile</strong>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-top: 6px;">4-8 mil thickness</div>
+                    </div>
+                    <div style="background: #ffffff; padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease;" onclick="filterByMaterial('Latex')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)'; this.style.borderColor='#FF7A00';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'; this.style.borderColor='rgba(255,255,255,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;"><i class="fas fa-hand-paper"></i></div>
+                        <strong style="font-size: 15px; color: #111111;">Latex</strong>
+                        <div style="font-size: 12px; color: #4B5563; margin-top: 6px;">Powder-free available</div>
+                    </div>
+                    <div style="background: #ffffff; padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease;" onclick="filterByMaterial('Vinyl')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)'; this.style.borderColor='#FF7A00';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'; this.style.borderColor='rgba(255,255,255,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;"><i class="fas fa-hand-paper"></i></div>
+                        <strong style="font-size: 15px; color: #1a1a1a;">Vinyl</strong>
+                        <div style="font-size: 12px; color: #4B5563; margin-top: 6px;">Economy option</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fff5f0 0%, #ffffff 100%); padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid #FF7A00; box-shadow: 0 4px 15px rgba(255,122,0,0.2); transition: all 0.3s ease;" onclick="navigate('products')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(255,122,0,0.2)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;"><i class="fas fa-filter"></i></div>
+                        <strong style="font-size: 15px; color: #111111;">Advanced Filters</strong>
+                        <div style="font-size: 12px; color: #4B5563; margin-top: 6px;">Search by all specs</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Featured Products Section -->
+        <section style="background: linear-gradient(180deg, #111111 0%, #1a1a1a 100%); padding: 80px 0;">
+            <div class="container">
+                <div class="products-header">
+                    <div>
+                        <h2 style="color: #ffffff; font-size: 32px; font-weight: 700; margin-bottom: 8px;">Most Trusted Products</h2>
+                        <p style="color: rgba(255,255,255,0.8); font-size: 15px; margin-top: 4px;">Best-selling gloves from certified manufacturers</p>
+                    </div>
+                    <button class="btn btn-outline-dark" onclick="navigate('products')" style="border: 2px solid #FF7A00; color: #FF7A00; background: transparent; padding: 12px 24px; font-weight: 600; transition: all 0.3s ease;" onmouseover="this.style.background='#FF7A00'; this.style.color='#ffffff'; this.style.borderColor='#FF7A00';" onmouseout="this.style.background='transparent'; this.style.color='#FF7A00'; this.style.borderColor='#FF7A00';">View All <i class="fas fa-arrow-right"></i></button>
+                </div>
+                <div class="products-grid">
+                    ${products.length > 0 ? products.slice(0, 8).map(product => renderProductCard(product)).join('') : '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);">Loading products...</div>'}
+                </div>
+            </div>
+        </section>
+        
+        <!-- Trust Signals (Below Products) -->
+        <section style="background: linear-gradient(180deg, #1a1a1a 0%, #111111 100%); padding: 50px 0; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="container">
+                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 24px; text-align: center;">
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-certificate"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Authorized Distributor</div>
+                    </div>
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-warehouse"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Consistent Inventory</div>
+                    </div>
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-shipping-fast"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Fast Fulfillment</div>
+                    </div>
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-clipboard-check"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Spec-Based Recommendations</div>
+                    </div>
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-file-invoice-dollar"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Net Terms Available</div>
+                    </div>
+                    <div class="trust-signal" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s ease;" onmouseover="this.style.borderColor='rgba(255,122,0,0.5)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.2)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';">
+                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;">
+                            <i class="fas fa-user-tie"></i>
+                        </div>
+                        <div style="font-size: 13px; font-weight: 600; color: #111111;">Dedicated Account Support</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Google Maps Section -->
+        <section style="background: #111111; padding: 80px 0;">
+            <div class="container">
+                <div style="max-width: 1200px; margin: 0 auto;">
+                    <div style="background: rgba(255,255,255,0.05); padding: 48px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 24px rgba(0,0,0,0.3);">
+                        <h3 style="font-size: 32px; font-weight: 700; margin-bottom: 16px; color: #FF7A00; text-align: center;">Built Here, Servicing Everywhere</h3>
+                        <p style="color: rgba(255,255,255,0.9); line-height: 1.7; margin-bottom: 32px; text-align: center; font-size: 16px;">
+                            Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central location, we efficiently distribute quality gloves to businesses across the United States and beyond. Whether you're on the East Coast, West Coast, or anywhere in between, we're here to serve you.
+                        </p>
+                        <div style="width: 100%; height: 400px; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+                            <iframe 
+                                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12190.481301693!2d-111.89104748459382!3d40.76077997932681!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8752f5105c4b0b0b%3A0x5c5c5c5c5c5c5c5c!2sSalt%20Lake%20City%2C%20UT%2C%20USA!5e0!3m2!1sen!2sus!4v1706123456789!5m2!1sen!2sus" 
+                                width="100%" 
+                                height="400" 
+                                style="border:0; border-radius: 12px;" 
+                                allowfullscreen="" 
+                                loading="lazy" 
+                                referrerpolicy="no-referrer-when-downgrade"
+                                title="Glovecubs Headquarters - Salt Lake City, UT">
+                            </iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+// ============================================
+// ROTATING TEXT ANIMATION
+// ============================================
+
+function initRotatingText() {
+    const rotatingWord = document.querySelector('.rotating-word');
+    if (!rotatingWord) return;
+    
+    const words = ['Gloves', 'Quality', 'Time'];
+    let currentIndex = 0;
+    
+    function rotateText() {
+        // Fade out
+        rotatingWord.style.opacity = '0';
+        rotatingWord.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            currentIndex = (currentIndex + 1) % words.length;
+            rotatingWord.textContent = words[currentIndex];
+            
+            // Fade in
+            rotatingWord.style.opacity = '1';
+            rotatingWord.style.transform = 'translateY(0)';
+        }, 300);
+    }
+    
+    // Set initial styles
+    rotatingWord.style.transition = 'all 0.3s ease';
+    rotatingWord.style.opacity = '1';
+    
+    // Start rotation after 2 seconds, then every 3 seconds
+    setTimeout(() => {
+        rotateText();
+        setInterval(rotateText, 3000);
+    }, 2000);
+}
+
+// ============================================
+// PRODUCTS PAGE
+// ============================================
+
+async function renderProductsPage() {
+    const mainContent = document.getElementById('mainContent');
+    
+    // Sync search bar value into state so loadProducts() uses it (search works even if user typed then navigated)
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) state.filters.search = searchInput.value.trim();
+    
+    mainContent.innerHTML = `
+        <section class="shop-page">
+            <div class="container">
+                <div class="shop-layout">
+                    <aside class="shop-sidebar" style="max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 10px;">
+                        <div class="filter-section">
+                            <h3>Price range</h3>
+                            <div class="filter-price-range filter-price-range-bar">
+                                <div class="filter-price-track">
+                                    <div class="filter-price-filled" id="priceRangeFilled"></div>
+                                </div>
+                                <input type="range" id="priceMinSlider" min="0" max="300" value="0" step="5" class="filter-price-thumb filter-price-thumb-min" oninput="updatePriceRangeBar(); updatePriceLabels(); applyFilters();">
+                                <input type="range" id="priceMaxSlider" min="0" max="300" value="300" step="5" class="filter-price-thumb filter-price-thumb-max" oninput="updatePriceRangeBar(); updatePriceLabels(); applyFilters();">
+                                <div class="filter-price-range-labels">
+                                    <span id="priceMinLabel">$0</span>
+                                    <span id="priceMaxLabel">$300</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Categories</h3>
+                            <div class="filter-options" id="categoryFilters">
+                                <label class="filter-option">
+                                    <input type="radio" name="category" value="" checked onchange="applyFilters()">
+                                    <span>All Categories</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="radio" name="category" value="Disposable Gloves" onchange="applyFilters()">
+                                    <span>Disposable Gloves</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="radio" name="category" value="Work Gloves" onchange="applyFilters()">
+                                    <span>Work Gloves</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Material</h3>
+                            <div class="filter-options" id="materialFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="material" value="Nitrile" onchange="applyFilters()">
+                                    <span>Nitrile</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="material" value="Latex" onchange="applyFilters()">
+                                    <span>Latex</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="material" value="Vinyl" onchange="applyFilters()">
+                                    <span>Vinyl</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="material" value="Polyethylene (PE)" onchange="applyFilters()">
+                                    <span>Polyethylene (PE)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Size</h3>
+                            <div class="filter-options" id="sizeFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="XS" onchange="applyFilters()">
+                                    <span>XS</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="S" onchange="applyFilters()">
+                                    <span>S</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="M" onchange="applyFilters()">
+                                    <span>M</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="L" onchange="applyFilters()">
+                                    <span>L</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="XL" onchange="applyFilters()">
+                                    <span>XL</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="size" value="XXL" onchange="applyFilters()">
+                                    <span>XXL</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Color</h3>
+                            <div class="filter-color-swatches" id="colorFilters">
+                                <label class="filter-color-swatch-wrap" title="Blue">
+                                    <input type="checkbox" name="color" value="Blue" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#0066CC;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Black">
+                                    <input type="checkbox" name="color" value="Black" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#000000;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="White">
+                                    <input type="checkbox" name="color" value="White" onchange="applyFilters()">
+                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#FFFFFF;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Clear">
+                                    <input type="checkbox" name="color" value="Clear" onchange="applyFilters()">
+                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#E8F4FC;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Orange">
+                                    <input type="checkbox" name="color" value="Orange" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#FF7A00;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Purple">
+                                    <input type="checkbox" name="color" value="Purple" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#800080;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Green">
+                                    <input type="checkbox" name="color" value="Green" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#00AA00;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Natural">
+                                    <input type="checkbox" name="color" value="Natural" onchange="applyFilters()">
+                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#F5DEB3;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Gray">
+                                    <input type="checkbox" name="color" value="Gray" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#808080;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Tan">
+                                    <input type="checkbox" name="color" value="Tan" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#D2B48C;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Yellow">
+                                    <input type="checkbox" name="color" value="Yellow" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#FFD700;"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Thickness (Mil)</h3>
+                            <div class="filter-options" id="thicknessFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="2" onchange="applyFilters()">
+                                    <span>2 mil</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="3" onchange="applyFilters()">
+                                    <span>3 mil</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="4" onchange="applyFilters()">
+                                    <span>4 mil</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="5" onchange="applyFilters()">
+                                    <span>5 mil</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="6" onchange="applyFilters()">
+                                    <span>6 mil</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="thickness" value="7+" onchange="applyFilters()">
+                                    <span>7+ mil</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Powder</h3>
+                            <div class="filter-options" id="powderFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="powder" value="Powder-Free" onchange="applyFilters()">
+                                    <span>Powder-Free</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="powder" value="Powdered" onchange="applyFilters()">
+                                    <span>Powdered</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Grade</h3>
+                            <div class="filter-options" id="gradeFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="grade" value="Medical / Exam Grade" onchange="applyFilters()">
+                                    <span>Medical / Exam Grade</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="grade" value="Industrial Grade" onchange="applyFilters()">
+                                    <span>Industrial Grade</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="grade" value="Food Service Grade" onchange="applyFilters()">
+                                    <span>Food Service Grade</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Industries</h3>
+                            <div class="filter-options" id="useCaseFilters" style="max-height: 400px; overflow-y: auto;">
+                                <div style="margin-bottom: 12px; font-weight: 600; color: var(--primary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Disposable Gloves</div>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Healthcare" onchange="applyFilters()">
+                                    <span>Healthcare</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Food Service" onchange="applyFilters()">
+                                    <span>Food Service</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Food Processing" onchange="applyFilters()">
+                                    <span>Food Processing</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Janitorial" onchange="applyFilters()">
+                                    <span>Janitorial</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Sanitation" onchange="applyFilters()">
+                                    <span>Sanitation</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Laboratories" onchange="applyFilters()">
+                                    <span>Laboratories</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Pharmaceuticals" onchange="applyFilters()">
+                                    <span>Pharmaceuticals</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Beauty & Personal Care" onchange="applyFilters()">
+                                    <span>Beauty & Personal Care</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Tattoo & Body Art" onchange="applyFilters()">
+                                    <span>Tattoo & Body Art</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Automotive" onchange="applyFilters()">
+                                    <span>Automotive</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Education" onchange="applyFilters()">
+                                    <span>Education</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Childcare" onchange="applyFilters()">
+                                    <span>Childcare</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Cannabis" onchange="applyFilters()">
+                                    <span>Cannabis</span>
+                                </label>
+                                
+                                <div style="margin-top: 20px; margin-bottom: 12px; font-weight: 600; color: var(--primary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Work Gloves</div>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Construction" onchange="applyFilters()">
+                                    <span>Construction</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Trades (Electricians, HVAC, Plumbing)" onchange="applyFilters()">
+                                    <span>Trades (Electricians, HVAC, Plumbing)</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Manufacturing" onchange="applyFilters()">
+                                    <span>Manufacturing</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Industrial" onchange="applyFilters()">
+                                    <span>Industrial</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Warehousing" onchange="applyFilters()">
+                                    <span>Warehousing</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Logistics" onchange="applyFilters()">
+                                    <span>Logistics</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Distribution" onchange="applyFilters()">
+                                    <span>Distribution</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Transportation" onchange="applyFilters()">
+                                    <span>Transportation</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Utilities" onchange="applyFilters()">
+                                    <span>Utilities</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Energy" onchange="applyFilters()">
+                                    <span>Energy</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Agriculture" onchange="applyFilters()">
+                                    <span>Agriculture</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Landscaping" onchange="applyFilters()">
+                                    <span>Landscaping</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Mining" onchange="applyFilters()">
+                                    <span>Mining</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Heavy Industry" onchange="applyFilters()">
+                                    <span>Heavy Industry</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Public Works" onchange="applyFilters()">
+                                    <span>Public Works</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Municipal Services" onchange="applyFilters()">
+                                    <span>Municipal Services</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Waste Management" onchange="applyFilters()">
+                                    <span>Waste Management</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Recycling" onchange="applyFilters()">
+                                    <span>Recycling</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="useCase" value="Environmental Services" onchange="applyFilters()">
+                                    <span>Environmental Services</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Compliance / Certifications</h3>
+                            <div class="filter-options" id="complianceFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="FDA Approved" onchange="applyFilters()">
+                                    <span>FDA Approved</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="ASTM Tested" onchange="applyFilters()">
+                                    <span>ASTM Tested</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="Food Safe" onchange="applyFilters()">
+                                    <span>Food Safe</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="Latex Free" onchange="applyFilters()">
+                                    <span>Latex Free</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="Chemo Rated" onchange="applyFilters()">
+                                    <span>Chemo Rated</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="EN 455" onchange="applyFilters()">
+                                    <span>EN 455</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="compliance" value="EN 374" onchange="applyFilters()">
+                                    <span>EN 374</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Cut Level (ANSI)</h3>
+                            <div class="filter-options" id="cutLevelFilters">
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A1" onchange="applyFilters()"><span>A1</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A2" onchange="applyFilters()"><span>A2</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A3" onchange="applyFilters()"><span>A3</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A4" onchange="applyFilters()"><span>A4</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A5" onchange="applyFilters()"><span>A5</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A6" onchange="applyFilters()"><span>A6</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A7" onchange="applyFilters()"><span>A7</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A8" onchange="applyFilters()"><span>A8</span></label>
+                                <label class="filter-option"><input type="checkbox" name="cutLevel" value="A9" onchange="applyFilters()"><span>A9</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Puncture Level</h3>
+                            <div class="filter-options" id="punctureLevelFilters">
+                                <label class="filter-option"><input type="checkbox" name="punctureLevel" value="P1" onchange="applyFilters()"><span>P1</span></label>
+                                <label class="filter-option"><input type="checkbox" name="punctureLevel" value="P2" onchange="applyFilters()"><span>P2</span></label>
+                                <label class="filter-option"><input type="checkbox" name="punctureLevel" value="P3" onchange="applyFilters()"><span>P3</span></label>
+                                <label class="filter-option"><input type="checkbox" name="punctureLevel" value="P4" onchange="applyFilters()"><span>P4</span></label>
+                                <label class="filter-option"><input type="checkbox" name="punctureLevel" value="P5" onchange="applyFilters()"><span>P5</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Abrasion Level</h3>
+                            <div class="filter-options" id="abrasionLevelFilters">
+                                <label class="filter-option"><input type="checkbox" name="abrasionLevel" value="1" onchange="applyFilters()"><span>Level 1</span></label>
+                                <label class="filter-option"><input type="checkbox" name="abrasionLevel" value="2" onchange="applyFilters()"><span>Level 2</span></label>
+                                <label class="filter-option"><input type="checkbox" name="abrasionLevel" value="3" onchange="applyFilters()"><span>Level 3</span></label>
+                                <label class="filter-option"><input type="checkbox" name="abrasionLevel" value="4" onchange="applyFilters()"><span>Level 4</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Flame Resistant</h3>
+                            <div class="filter-options" id="flameResistantFilters">
+                                <label class="filter-option"><input type="checkbox" name="flameResistant" value="Yes" onchange="applyFilters()"><span>Flame Resistant</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Arc Rating</h3>
+                            <div class="filter-options" id="arcLevelFilters">
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="Cat 1" onchange="applyFilters()"><span>Category 1</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="Cat 2" onchange="applyFilters()"><span>Category 2</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="Cat 3" onchange="applyFilters()"><span>Category 3</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="Cat 4" onchange="applyFilters()"><span>Category 4</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="8 cal" onchange="applyFilters()"><span>8 cal</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="12 cal" onchange="applyFilters()"><span>12 cal</span></label>
+                                <label class="filter-option"><input type="checkbox" name="arcLevel" value="20 cal" onchange="applyFilters()"><span>20 cal</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Warm / Cold Weather</h3>
+                            <div class="filter-options" id="warmRatingFilters">
+                                <label class="filter-option"><input type="checkbox" name="warmRating" value="Insulated" onchange="applyFilters()"><span>Insulated</span></label>
+                                <label class="filter-option"><input type="checkbox" name="warmRating" value="Winter" onchange="applyFilters()"><span>Winter</span></label>
+                                <label class="filter-option"><input type="checkbox" name="warmRating" value="Cold Weather" onchange="applyFilters()"><span>Cold Weather</span></label>
+                                <label class="filter-option"><input type="checkbox" name="warmRating" value="Heated" onchange="applyFilters()"><span>Heated</span></label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Texture</h3>
+                            <div class="filter-options" id="textureFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="texture" value="Smooth" onchange="applyFilters()">
+                                    <span>Smooth</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="texture" value="Fingertip Textured" onchange="applyFilters()">
+                                    <span>Fingertip Textured</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="texture" value="Fully Textured" onchange="applyFilters()">
+                                    <span>Fully Textured</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Cuff Style</h3>
+                            <div class="filter-options" id="cuffStyleFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="cuffStyle" value="Beaded Cuff" onchange="applyFilters()">
+                                    <span>Beaded Cuff</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="cuffStyle" value="Non-Beaded" onchange="applyFilters()">
+                                    <span>Non-Beaded</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="cuffStyle" value="Extended Cuff" onchange="applyFilters()">
+                                    <span>Extended Cuff</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Hand Orientation</h3>
+                            <div class="filter-options" id="handOrientationFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="handOrientation" value="Ambidextrous" onchange="applyFilters()">
+                                    <span>Ambidextrous</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Packaging</h3>
+                            <div class="filter-options" id="packagingFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="packaging" value="Box (100 ct)" onchange="applyFilters()">
+                                    <span>Box (100 ct)</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="packaging" value="Box (200–250 ct)" onchange="applyFilters()">
+                                    <span>Box (200–250 ct)</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="packaging" value="Case (1,000 ct)" onchange="applyFilters()">
+                                    <span>Case (1,000 ct)</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="packaging" value="Case (2,000+ ct)" onchange="applyFilters()">
+                                    <span>Case (2,000+ ct)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Sterility</h3>
+                            <div class="filter-options" id="sterilityFilters">
+                                <label class="filter-option">
+                                    <input type="checkbox" name="sterility" value="Non-Sterile" onchange="applyFilters()">
+                                    <span>Non-Sterile</span>
+                                </label>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="sterility" value="Sterile" onchange="applyFilters()">
+                                    <span>Sterile</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <h3>Brand</h3>
+                            <div class="filter-options" id="brandFilters">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-dark btn-block" onclick="clearFilters()" style="margin-top: 20px;">
+                            <i class="fas fa-times"></i> Clear All Filters
+                        </button>
+                    </aside>
+                    <div class="shop-main">
+                        <div class="shop-header">
+                            <h1>All Products</h1>
+                            <div class="shop-controls">
+                                <span class="results-count" id="resultsCount">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="products-grid" id="productsGrid">
+                            <div class="loading"><div class="spinner"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+
+    // Load brands for filter
+    const brands = await api.get('/api/brands');
+    const brandFiltersHtml = `
+        <label class="filter-option">
+            <input type="radio" name="brand" value="" checked onchange="applyFilters()">
+            <span>All Brands</span>
+        </label>
+        ${brands.map(brand => `
+            <label class="filter-option">
+                <input type="radio" name="brand" value="${brand}" onchange="applyFilters()">
+                <span>${brand}</span>
+            </label>
+        `).join('')}
+    `;
+    document.getElementById('brandFilters').innerHTML = brandFiltersHtml;
+
+    // Restore search input value after rendering
+    setTimeout(() => {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput && state.filters.search) {
+            searchInput.value = state.filters.search;
+        }
+    }, 100);
+
+    // Apply any pre-set filters
+    const restoreFilter = (name, value) => {
+        if (!value) return;
+        if (Array.isArray(value)) {
+            value.forEach(v => {
+                const input = document.querySelector(`input[name="${name}"][value="${v}"]`);
+                if (input) input.checked = true;
+            });
+        } else {
+            const input = document.querySelector(`input[name="${name}"][value="${value}"]`);
+            if (input) input.checked = true;
+        }
+    };
+    
+    restoreFilter('category', state.filters.category);
+    restoreFilter('brand', state.filters.brand);
+    restoreFilter('material', state.filters.material);
+    restoreFilter('powder', state.filters.powder);
+    restoreFilter('thickness', state.filters.thickness);
+    restoreFilter('size', state.filters.size);
+    restoreFilter('color', state.filters.color);
+    restoreFilter('grade', state.filters.grade);
+    restoreFilter('useCase', state.filters.useCase);
+    restoreFilter('compliance', state.filters.compliance);
+    restoreFilter('cutLevel', state.filters.cutLevel);
+    restoreFilter('punctureLevel', state.filters.punctureLevel);
+    restoreFilter('abrasionLevel', state.filters.abrasionLevel);
+    restoreFilter('flameResistant', state.filters.flameResistant);
+    restoreFilter('arcLevel', state.filters.arcLevel);
+    restoreFilter('warmRating', state.filters.warmRating);
+    restoreFilter('texture', state.filters.texture);
+    restoreFilter('cuffStyle', state.filters.cuffStyle);
+    restoreFilter('handOrientation', state.filters.handOrientation);
+    restoreFilter('packaging', state.filters.packaging);
+    restoreFilter('sterility', state.filters.sterility);
+    const priceMinEl = document.getElementById('priceMinSlider');
+    const priceMaxEl = document.getElementById('priceMaxSlider');
+    if (priceMinEl && state.filters.priceMin != null) { priceMinEl.value = state.filters.priceMin; }
+    if (priceMaxEl && state.filters.priceMax != null) { priceMaxEl.value = state.filters.priceMax; }
+    updatePriceLabels();
+    updatePriceRangeBar();
+    initPriceRangeBar();
+
+    // Load products
+    await loadProducts();
+}
+
+async function loadProducts() {
+    let url = '/api/products?';
+    const params = [];
+    
+    if (state.filters.category) params.push(`category=${encodeURIComponent(state.filters.category)}`);
+    if (state.filters.brand) params.push(`brand=${encodeURIComponent(state.filters.brand)}`);
+    if (state.filters.material) {
+        if (Array.isArray(state.filters.material)) {
+            state.filters.material.forEach(m => params.push(`material=${encodeURIComponent(m)}`));
+        } else {
+            params.push(`material=${encodeURIComponent(state.filters.material)}`);
+        }
+    }
+    if (state.filters.powder) {
+        if (Array.isArray(state.filters.powder)) {
+            state.filters.powder.forEach(p => params.push(`powder=${encodeURIComponent(p)}`));
+        } else {
+            params.push(`powder=${encodeURIComponent(state.filters.powder)}`);
+        }
+    }
+    if (state.filters.thickness) {
+        if (Array.isArray(state.filters.thickness)) {
+            state.filters.thickness.forEach(t => params.push(`thickness=${encodeURIComponent(t)}`));
+        } else {
+            params.push(`thickness=${encodeURIComponent(state.filters.thickness)}`);
+        }
+    }
+    if (state.filters.size) {
+        if (Array.isArray(state.filters.size)) {
+            state.filters.size.forEach(s => params.push(`size=${encodeURIComponent(s)}`));
+        } else {
+            params.push(`size=${encodeURIComponent(state.filters.size)}`);
+        }
+    }
+    if (state.filters.color) {
+        if (Array.isArray(state.filters.color)) {
+            state.filters.color.forEach(c => params.push(`color=${encodeURIComponent(c)}`));
+        } else {
+            params.push(`color=${encodeURIComponent(state.filters.color)}`);
+        }
+    }
+    if (state.filters.grade) {
+        if (Array.isArray(state.filters.grade)) {
+            state.filters.grade.forEach(g => params.push(`grade=${encodeURIComponent(g)}`));
+        } else {
+            params.push(`grade=${encodeURIComponent(state.filters.grade)}`);
+        }
+    }
+    if (state.filters.useCase) {
+        if (Array.isArray(state.filters.useCase)) {
+            state.filters.useCase.forEach(u => params.push(`useCase=${encodeURIComponent(u)}`));
+        } else {
+            params.push(`useCase=${encodeURIComponent(state.filters.useCase)}`);
+        }
+    }
+    if (state.filters.compliance) {
+        if (Array.isArray(state.filters.compliance)) {
+            state.filters.compliance.forEach(c => params.push(`compliance=${encodeURIComponent(c)}`));
+        } else {
+            params.push(`compliance=${encodeURIComponent(state.filters.compliance)}`);
+        }
+    }
+    if (state.filters.cutLevel) {
+        if (Array.isArray(state.filters.cutLevel)) {
+            state.filters.cutLevel.forEach(c => params.push(`cutLevel=${encodeURIComponent(c)}`));
+        } else {
+            params.push(`cutLevel=${encodeURIComponent(state.filters.cutLevel)}`);
+        }
+    }
+    if (state.filters.punctureLevel) {
+        if (Array.isArray(state.filters.punctureLevel)) {
+            state.filters.punctureLevel.forEach(p => params.push(`punctureLevel=${encodeURIComponent(p)}`));
+        } else {
+            params.push(`punctureLevel=${encodeURIComponent(state.filters.punctureLevel)}`);
+        }
+    }
+    if (state.filters.abrasionLevel) {
+        if (Array.isArray(state.filters.abrasionLevel)) {
+            state.filters.abrasionLevel.forEach(a => params.push(`abrasionLevel=${encodeURIComponent(a)}`));
+        } else {
+            params.push(`abrasionLevel=${encodeURIComponent(state.filters.abrasionLevel)}`);
+        }
+    }
+    if (state.filters.flameResistant) {
+        if (Array.isArray(state.filters.flameResistant)) {
+            state.filters.flameResistant.forEach(f => params.push(`flameResistant=${encodeURIComponent(f)}`));
+        } else {
+            params.push(`flameResistant=${encodeURIComponent(state.filters.flameResistant)}`);
+        }
+    }
+    if (state.filters.arcLevel) {
+        if (Array.isArray(state.filters.arcLevel)) {
+            state.filters.arcLevel.forEach(a => params.push(`arcLevel=${encodeURIComponent(a)}`));
+        } else {
+            params.push(`arcLevel=${encodeURIComponent(state.filters.arcLevel)}`);
+        }
+    }
+    if (state.filters.warmRating) {
+        if (Array.isArray(state.filters.warmRating)) {
+            state.filters.warmRating.forEach(w => params.push(`warmRating=${encodeURIComponent(w)}`));
+        } else {
+            params.push(`warmRating=${encodeURIComponent(state.filters.warmRating)}`);
+        }
+    }
+    if (state.filters.texture) {
+        if (Array.isArray(state.filters.texture)) {
+            state.filters.texture.forEach(t => params.push(`texture=${encodeURIComponent(t)}`));
+        } else {
+            params.push(`texture=${encodeURIComponent(state.filters.texture)}`);
+        }
+    }
+    if (state.filters.cuffStyle) {
+        if (Array.isArray(state.filters.cuffStyle)) {
+            state.filters.cuffStyle.forEach(c => params.push(`cuffStyle=${encodeURIComponent(c)}`));
+        } else {
+            params.push(`cuffStyle=${encodeURIComponent(state.filters.cuffStyle)}`);
+        }
+    }
+    if (state.filters.handOrientation) {
+        if (Array.isArray(state.filters.handOrientation)) {
+            state.filters.handOrientation.forEach(h => params.push(`handOrientation=${encodeURIComponent(h)}`));
+        } else {
+            params.push(`handOrientation=${encodeURIComponent(state.filters.handOrientation)}`);
+        }
+    }
+    if (state.filters.packaging) {
+        if (Array.isArray(state.filters.packaging)) {
+            state.filters.packaging.forEach(p => params.push(`packaging=${encodeURIComponent(p)}`));
+        } else {
+            params.push(`packaging=${encodeURIComponent(state.filters.packaging)}`);
+        }
+    }
+    if (state.filters.sterility) {
+        if (Array.isArray(state.filters.sterility)) {
+            state.filters.sterility.forEach(s => params.push(`sterility=${encodeURIComponent(s)}`));
+        } else {
+            params.push(`sterility=${encodeURIComponent(state.filters.sterility)}`);
+        }
+    }
+    if (state.filters.priceMin != null && state.filters.priceMin > 0) params.push(`priceMin=${encodeURIComponent(state.filters.priceMin)}`);
+    if (state.filters.priceMax != null && state.filters.priceMax < 300) params.push(`priceMax=${encodeURIComponent(state.filters.priceMax)}`);
+    if (state.filters.search) params.push(`search=${encodeURIComponent(state.filters.search)}`);
+    
+    url += params.join('&');
+    
+    // Debug logging
+    if (state.filters.search) {
+        console.log('Searching for:', state.filters.search);
+        console.log('Search URL:', url);
+    }
+    
+    const products = await api.get(url);
+    state.products = products;
+    
+    // Debug logging
+    if (state.filters.search) {
+        console.log('Search results:', products.length, 'products found');
+    }
+    
+    const grid = document.getElementById('productsGrid');
+    const count = document.getElementById('resultsCount');
+    
+    if (grid) {
+        if (products.length === 0) {
+            grid.innerHTML = `
+                <div class="cart-empty" style="grid-column: 1/-1;">
+                    <i class="fas fa-search"></i>
+                    <h2>No Products Found</h2>
+                    <p>Try adjusting your filters or search terms.</p>
+                    <button class="btn btn-primary" onclick="clearFilters()">Clear Filters</button>
+                </div>
+            `;
+        } else {
+            grid.innerHTML = products.map(product => renderProductCard(product)).join('');
+        }
+    }
+    
+    if (count) {
+        count.textContent = `${products.length} product${products.length !== 1 ? 's' : ''} found`;
+    }
+}
+
+function applyFilters() {
+    // Category (radio button)
+    state.filters.category = document.querySelector('input[name="category"]:checked')?.value || null;
+    
+    // Brand (radio button)
+    state.filters.brand = document.querySelector('input[name="brand"]:checked')?.value || null;
+    
+    // All other filters (checkboxes - can have multiple values)
+    const getCheckedValues = (name) => {
+        const checked = Array.from(document.querySelectorAll(`input[name="${name}"]:checked`))
+            .map(input => input.value);
+        return checked.length > 0 ? checked : null;
+    };
+    
+    state.filters.material = getCheckedValues('material');
+    state.filters.powder = getCheckedValues('powder');
+    state.filters.thickness = getCheckedValues('thickness');
+    state.filters.size = getCheckedValues('size');
+    state.filters.color = getCheckedValues('color');
+    state.filters.grade = getCheckedValues('grade');
+    state.filters.useCase = getCheckedValues('useCase');
+    state.filters.compliance = getCheckedValues('compliance');
+    state.filters.cutLevel = getCheckedValues('cutLevel');
+    state.filters.punctureLevel = getCheckedValues('punctureLevel');
+    state.filters.abrasionLevel = getCheckedValues('abrasionLevel');
+    state.filters.flameResistant = getCheckedValues('flameResistant');
+    state.filters.arcLevel = getCheckedValues('arcLevel');
+    state.filters.warmRating = getCheckedValues('warmRating');
+    state.filters.texture = getCheckedValues('texture');
+    state.filters.cuffStyle = getCheckedValues('cuffStyle');
+    state.filters.handOrientation = getCheckedValues('handOrientation');
+    state.filters.packaging = getCheckedValues('packaging');
+    state.filters.sterility = getCheckedValues('sterility');
+    const priceMinSlider = document.getElementById('priceMinSlider');
+    const priceMaxSlider = document.getElementById('priceMaxSlider');
+    state.filters.priceMin = priceMinSlider ? parseFloat(priceMinSlider.value) : null;
+    state.filters.priceMax = priceMaxSlider ? parseFloat(priceMaxSlider.value) : null;
+    if (state.filters.priceMin != null && state.filters.priceMax != null && state.filters.priceMin > state.filters.priceMax) {
+        const t = state.filters.priceMin; state.filters.priceMin = state.filters.priceMax; state.filters.priceMax = t;
+    }
+    
+    loadProducts();
+}
+
+function updatePriceLabels() {
+    const minEl = document.getElementById('priceMinSlider');
+    const maxEl = document.getElementById('priceMaxSlider');
+    const minLabel = document.getElementById('priceMinLabel');
+    const maxLabel = document.getElementById('priceMaxLabel');
+    if (minEl && maxEl && parseFloat(minEl.value) > parseFloat(maxEl.value)) {
+        maxEl.value = minEl.value;
+    }
+    if (minEl && minLabel) minLabel.textContent = '$' + minEl.value;
+    if (maxEl && maxLabel) maxLabel.textContent = '$' + maxEl.value;
+}
+
+function updatePriceRangeBar() {
+    const minEl = document.getElementById('priceMinSlider');
+    const maxEl = document.getElementById('priceMaxSlider');
+    const filled = document.getElementById('priceRangeFilled');
+    if (!minEl || !maxEl || !filled) return;
+    const minVal = parseFloat(minEl.value);
+    const maxVal = parseFloat(maxEl.value);
+    const range = 300;
+    const left = (Math.min(minVal, maxVal) / range) * 100;
+    const right = 100 - (Math.max(minVal, maxVal) / range) * 100;
+    filled.style.left = left + '%';
+    filled.style.right = right + '%';
+}
+
+function initPriceRangeBar() {
+    const bar = document.querySelector('.filter-price-range-bar');
+    const minEl = document.getElementById('priceMinSlider');
+    const maxEl = document.getElementById('priceMaxSlider');
+    if (!bar || !minEl || !maxEl) return;
+    bar.addEventListener('mousemove', function(e) {
+        const rect = bar.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        if (pct < 0.5) { minEl.style.zIndex = '3'; maxEl.style.zIndex = '2'; }
+        else { maxEl.style.zIndex = '3'; minEl.style.zIndex = '2'; }
+    });
+    bar.addEventListener('mouseleave', function() {
+        minEl.style.zIndex = '2'; maxEl.style.zIndex = '2';
+    });
+}
+
+function clearFilters() {
+    state.filters = {
+        category: null,
+        brand: null,
+        material: null,
+        powder: null,
+        thickness: null,
+        size: null,
+        color: null,
+        grade: null,
+        useCase: null,
+        compliance: null,
+        cutLevel: null,
+        punctureLevel: null,
+        abrasionLevel: null,
+        flameResistant: null,
+        arcLevel: null,
+        warmRating: null,
+        texture: null,
+        cuffStyle: null,
+        handOrientation: null,
+        packaging: null,
+        sterility: null,
+        priceMin: null,
+        priceMax: null,
+        search: ''
+    };
+    
+    // Reset all radio buttons
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        if (radio.value === '') radio.checked = true;
+        else radio.checked = false;
+    });
+    
+    // Reset all checkboxes
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Reset price sliders
+    const priceMinSlider = document.getElementById('priceMinSlider');
+    const priceMaxSlider = document.getElementById('priceMaxSlider');
+    if (priceMinSlider) priceMinSlider.value = 0;
+    if (priceMaxSlider) priceMaxSlider.value = 300;
+    updatePriceLabels();
+    updatePriceRangeBar();
+    
+    // Reset search input if it exists
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    
+    loadProducts();
+}
+
+function filterByCategory(category) {
+    state.filters.category = category;
+    navigate('products');
+}
+
+function filterByBrand(brand) {
+    state.filters.brand = brand;
+    navigate('products');
+}
+
+function filterByMaterial(material) {
+    state.filters.material = material;
+    navigate('products');
+}
+
+function buildBulkOrder() {
+    // Get values from bulk builder
+    const qty = document.getElementById('bulkBuilderQty')?.value || '';
+    const type = document.getElementById('bulkBuilderType')?.value || '';
+    
+    // Get multiple selected use cases
+    const useCheckboxes = document.querySelectorAll('input[name="bulkBuilderUse"]:checked');
+    const useCases = Array.from(useCheckboxes).map(cb => cb.value);
+    
+    // If 100+ cases, trigger RFQ modal instead
+    if (qty === '100+ cases') {
+        showRFQModal();
+        return;
+    }
+    
+    // Reset filters first
+    state.filters = {
+        category: null,
+        brand: null,
+        material: null,
+        powder: null,
+        thickness: null,
+        size: null,
+        color: null,
+        grade: null,
+        useCase: null,
+        compliance: null,
+        texture: null,
+        cuffStyle: null,
+        handOrientation: null,
+        packaging: null,
+        sterility: null,
+        priceMin: null,
+        priceMax: null,
+        search: ''
+    };
+    
+    // Map Type to category filter
+    if (type) {
+        if (type === 'Disposable Gloves') {
+            state.filters.category = 'Disposable Gloves';
+        } else if (type === 'Reusable Gloves') {
+            state.filters.category = 'Work Gloves';
+        } else if (type === 'Both') {
+            // Don't set category filter - show both types
+            state.filters.category = null;
+        }
+    }
+    
+    // Map Use cases to useCase filter (multiple selections)
+    if (useCases.length > 0) {
+        // Map common use cases to industry filters
+        const useCaseMap = {
+            'Food Service': 'Food Service',
+            'Industrial': 'Industrial',
+            'Medical': 'Healthcare',
+            'Janitorial': 'Janitorial',
+            'Healthcare': 'Healthcare',
+            'Food Processing': 'Food Processing',
+            'Sanitation': 'Sanitation',
+            'Laboratories': 'Laboratories',
+            'Pharmaceuticals': 'Pharmaceuticals',
+            'Beauty & Personal Care': 'Beauty & Personal Care',
+            'Tattoo & Body Art': 'Tattoo & Body Art',
+            'Automotive': 'Automotive',
+            'Construction': 'Construction',
+            'Manufacturing': 'Manufacturing',
+            'Warehousing': 'Warehousing',
+            'Logistics': 'Logistics'
+        };
+        
+        const mappedUseCases = useCases
+            .map(use => useCaseMap[use])
+            .filter(use => use !== undefined);
+        
+        if (mappedUseCases.length > 0) {
+            state.filters.useCase = mappedUseCases;
+        }
+    }
+    
+    // Navigate to products page with filters applied
+    navigate('products');
+}
+
+function searchProducts() {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        const query = searchInput.value.trim();
+        state.filters.search = query;
+        if (query.length > 0 && state.currentPage !== 'products') {
+            navigate('products');
+        } else if (state.currentPage === 'products') {
+            loadProducts(); // Reload products with new search
+        }
+    }
+}
+
+// ============================================
+// PRODUCT CARD
+// ============================================
+
+function renderProductCard(product) {
+    try {
+        const isBulkUser = state.user?.is_approved;
+        let displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
+        const imgUrl = (product.image_url || '').trim();
+        
+        // Apply discount tier if user is approved
+        if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
+            const discountPercent = getDiscountPercent(state.user.discount_tier);
+            if (discountPercent > 0) {
+                displayPrice = displayPrice * (1 - discountPercent / 100);
+            }
+        }
+    
+    return `
+        <div class="product-card" onclick="navigate('product', { id: ${product.id} })">
+            ${product.featured ? '<div class="product-badge"><span class="badge badge-featured">Featured</span></div>' : ''}
+            <div class="product-image">
+                ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
+                <div class="product-image-placeholder" style="${imgUrl ? 'display:none;' : 'display:flex;'}">
+                    <i class="fas fa-hand-paper"></i>
+                </div>
+                <div class="product-actions" onclick="event.stopPropagation()">
+                    <button class="product-action-btn" onclick="quickAddToCart(${product.id})" title="Add to Cart">
+                        <i class="fas fa-cart-plus"></i>
+                    </button>
+                    <button class="product-action-btn" onclick="navigate('product', { id: ${product.id} })" title="View Details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="product-info">
+                <div class="product-brand">${product.brand}</div>
+                <h3 class="product-name">${product.name}</h3>
+                <div class="product-sku">${product.sku}</div>
+                <div class="product-meta">
+                    <span class="product-material">${product.material}</span>
+                    <span class="product-pack">${product.pack_qty || 100}/box</span>
+                </div>
+                ${(product.case_qty || product.pack_qty) ? '<div class="product-case-min" style="font-size:12px; color:var(--gray-600); margin-top:4px;">Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</div>' : ''}
+                <div class="product-price">
+                    <span class="price-current">$${displayPrice.toFixed(2)}</span>
+                    ${!isBulkUser && product.bulk_price ? `<span class="price-bulk">B2B: <span>$${product.bulk_price.toFixed(2)}</span></span>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    } catch (error) {
+        console.error('Error rendering product card:', error, product);
+        // Fallback rendering without discount
+        const isBulkUser = state.user?.is_approved;
+        const displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
+        const imgUrlFallback = (product.image_url || '').trim();
+        return `
+        <div class="product-card" onclick="navigate('product', { id: ${product.id} })">
+            <div class="product-image">
+                ${imgUrlFallback ? `<img src="${imgUrlFallback.replace(/"/g, '&quot;')}" alt="${(product.name || '')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
+                <div class="product-image-placeholder" style="${imgUrlFallback ? 'display:none;' : 'display:flex;'}">
+                    <i class="fas fa-hand-paper"></i>
+                </div>
+            </div>
+            <div class="product-info">
+                <div class="product-brand">${product.brand}</div>
+                <h3 class="product-name">${product.name}</h3>
+                <div class="product-sku">${product.sku}</div>
+                <div class="product-price">
+                    <span class="price-current">$${displayPrice.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    }
+}
+
+// ============================================
+// SINGLE PRODUCT PAGE
+// ============================================
+
+async function renderProductPage(productId) {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    const product = await api.get(`/api/products/${productId}`);
+    
+    if (!product || product.error) {
+        mainContent.innerHTML = `
+            <section class="product-page">
+                <div class="container">
+                    <div class="cart-empty">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h2>Product Not Found</h2>
+                        <p>The product you're looking for doesn't exist.</p>
+                        <button class="btn btn-primary" onclick="navigate('products')">Browse Products</button>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+
+    const sizes = product.sizes ? product.sizes.split(/[\s,]+/).map(s => s.trim()).filter(Boolean) : [];
+    const isBulkUser = state.user?.is_approved;
+    let displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
+    
+    // Apply discount tier if user is approved
+    if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
+        try {
+            const discountPercent = getDiscountPercent(state.user.discount_tier);
+            if (discountPercent > 0) {
+                displayPrice = displayPrice * (1 - discountPercent / 100);
+            }
+        } catch (error) {
+            console.error('Error applying discount:', error);
+        }
+    }
+
+    const sizingChartUrl = (product.sizing_chart_url || '').trim();
+    const isSizingChartUrl = (url) => {
+        if (!url) return false;
+        const u = url.toLowerCase();
+        return u === sizingChartUrl.toLowerCase() || u.includes('sizing') || u.includes('sizingchart') || u.includes('size-chart') || u.includes('size_chart');
+    };
+    const allGalleryUrls = [(product.image_url || '').trim(), ...(Array.isArray(product.images) ? product.images : []).map(u => (typeof u === 'string' ? u : (u && u.url) ? u.url : '').trim())].filter(Boolean);
+    const galleryImages = allGalleryUrls.filter(url => !isSizingChartUrl(url));
+    const mainImgUrl = galleryImages[0] || '';
+    const videoUrl = (product.video_url || '').trim();
+    const isYouTube = videoUrl && (/youtube\.com\/watch\?v=|youtu\.be\//.test(videoUrl));
+    const youtubeEmbed = videoUrl && isYouTube ? (videoUrl.includes('youtu.be/') ? 'https://www.youtube.com/embed/' + videoUrl.split('youtu.be/')[1].split('?')[0] : 'https://www.youtube.com/embed/' + (videoUrl.match(/[?&]v=([^&]+)/) || [])[1]) : '';
+    mainContent.innerHTML = `
+        <section class="product-page">
+            <div class="container">
+                <div class="breadcrumb">
+                    <a href="#" onclick="navigate('home'); return false;">Home</a>
+                    <span>/</span>
+                    <a href="#" onclick="navigate('products'); return false;">Products</a>
+                    <span>/</span>
+                    <a href="#" onclick="filterByCategory('${product.category}'); return false;">${product.category}</a>
+                    <span>/</span>
+                    <span>${product.name}</span>
+                </div>
+                <div class="product-detail">
+                    <div class="product-gallery">
+                        <div class="product-gallery-main">
+                            ${mainImgUrl ? `<img id="productMainImage" src="${mainImgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || 'Product').replace(/"/g, '&quot;')}" style="max-width:100%; height:auto; border-radius:8px; display:block;" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
+                            <div class="product-gallery-placeholder" style="${mainImgUrl ? 'display:none;' : 'display:flex;'}">
+                                <i class="fas fa-hand-paper"></i>
+                            </div>
+                        </div>
+                        ${galleryImages.length > 1 ? `
+                        <div class="product-gallery-thumbs">
+                            ${galleryImages.map((url, idx) => `
+                                <button type="button" class="product-gallery-thumb ${idx === 0 ? 'active' : ''}" data-url="${(url || '').replace(/"/g, '&quot;')}" onclick="setProductMainImage(this)" aria-label="View image ${idx + 1}">
+                                    <img src="${(url || '').replace(/"/g, '&quot;')}" alt="" loading="lazy" referrerpolicy="no-referrer" />
+                                </button>
+                            `).join('')}
+                        </div>
+                        ` : ''}
+                        ${videoUrl ? `
+                        <div class="product-video-section" style="margin-top: 20px;">
+                            <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #1a1a1a;">Product Video</h4>
+                            ${youtubeEmbed ? `
+                                <div class="product-video-embed" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000;">
+                                    <iframe src="${youtubeEmbed.replace(/"/g, '&quot;')}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" allowfullscreen></iframe>
+                                </div>
+                            ` : `
+                                <video src="${videoUrl.replace(/"/g, '&quot;')}" controls style="max-width: 100%; border-radius: 8px; background: #000;"></video>
+                            `}
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="product-detail-info">
+                        <div class="product-detail-brand">${product.brand}</div>
+                        <h1>${product.name}</h1>
+                        <div class="product-detail-sku">SKU: ${product.sku}</div>
+                        ${sizes.length > 0 ? `<div id="productVariantSkuDisplay" class="product-detail-sku" style="margin-top:4px; color:#FF7A00; font-weight:600;" data-base-sku="${(product.sku || '').replace(/"/g, '&quot;')}">Variant SKU(s): <span id="productVariantSkuSize">${product.sku}-${sizes[0].trim()}</span></div>` : ''}
+                        
+                        <div class="product-detail-price">
+                            <span class="price-current">$${displayPrice.toFixed(2)}</span>
+                            <span class="price-bulk">per box of ${product.pack_qty}</span>
+                            ${!isBulkUser && product.bulk_price ? `
+                                <div class="bulk-notice">
+                                    <i class="fas fa-tag"></i>
+                                    B2B Price: $${product.bulk_price.toFixed(2)} - <a href="#" onclick="navigate('register'); return false;">Apply for B2B Account</a>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <p class="product-description">${product.description}</p>
+
+                        <div class="product-specs">
+                            <h3>Specifications</h3>
+                            <div class="specs-list">
+                                <div class="spec-item">
+                                    <span class="spec-label">Material:</span>
+                                    <span class="spec-value">${product.material}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Color:</span>
+                                    <span class="spec-value">${product.color}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Pack Qty:</span>
+                                    <span class="spec-value">${product.pack_qty}/box</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Case Qty:</span>
+                                    <span class="spec-value">${product.case_qty}/case</span>
+                                </div>
+                            </div>
+                            ${(product.case_qty || product.pack_qty) ? '<p style="font-size: 13px; color: var(--gray-600); margin-top: 12px;"><i class="fas fa-box"></i> Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</p>' : ''}
+                        </div>
+
+                        ${sizes.length > 0 ? `
+                            <div class="size-selector">
+                                <h3>Select Size(s)</h3>
+                                <p class="size-selector-hint" style="font-size: 12px; color: #4B5563; margin-bottom: 10px;">Select one or more sizes to add to cart.</p>
+                                <div class="size-options size-options-checkboxes">
+                                    ${sizes.map((size, i) => {
+                                        const s = size.trim();
+                                        const esc = (x) => (x || '').replace(/"/g, '&quot;');
+                                        return `
+                                        <label class="size-checkbox-label">
+                                            <input type="checkbox" class="size-checkbox" data-size="${esc(s)}" ${i === 0 ? 'checked' : ''} onchange="toggleSizeCheckbox(this)">
+                                            <span class="size-checkbox-text">${esc(s)}</span>
+                                        </label>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="product-sizing-chart-section">
+                            <h3><i class="fas fa-ruler-combined"></i> Sizing Chart</h3>
+                            ${sizingChartUrl ? `
+                                <div class="sizing-chart-image-wrap">
+                                    <img src="${sizingChartUrl.replace(/"/g, '&quot;')}" alt="Sizing chart for ${(product.name || 'product').replace(/"/g, '&quot;')}" class="sizing-chart-image" loading="lazy" referrerpolicy="no-referrer" />
+                                </div>
+                            ` : sizes.length > 0 ? (function(){
+                                const letterSizes = ['XS','S','M','L','XL','2XL','3XL'];
+                                const isLetterSizes = sizes.some(s => letterSizes.includes((s || '').trim().toUpperCase()));
+                                if (isLetterSizes) {
+                                    const rows = [
+                                        ['Size', 'Hand width (in)', 'Hand length (in)'],
+                                        ['XS', '2\u20132\u00BD', '6'],
+                                        ['S', '2\u00BD\u20133', '6\u00BD'],
+                                        ['M', '3\u20133\u00BD', '7'],
+                                        ['L', '3\u00BD\u20134', '7\u00BD'],
+                                        ['XL', '4\u20134\u00BD', '8'],
+                                        ['2XL', '4\u00BD\u20135', '8\u00BD'],
+                                        ['3XL', '5+', '9+']
+                                    ];
+                                    return '<p class="sizing-chart-hint" style="font-size:13px;color:var(--gray-600);margin-bottom:10px;">Measure around the widest part of your palm (excluding thumb). Length: from base of palm to tip of middle finger.</p><table class="sizing-chart-table"><thead><tr>' + rows[0].map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>' + rows.slice(1).map(row => '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+                                }
+                                const numRows = [['Size', 'Fits hand (in)', 'Typical use'], ['7', '7\u20137\u00BD', 'Small'], ['8', '7\u00BD\u20138', 'Medium'], ['9', '8\u20138\u00BD', 'Large'], ['10', '8\u00BD\u20139', 'X-Large'], ['11', '9+', 'XX-Large']];
+                                return '<p class="sizing-chart-hint" style="font-size:13px;color:var(--gray-600);margin-bottom:10px;">Work glove numeric size typically matches hand circumference in inches.</p><table class="sizing-chart-table"><thead><tr>' + numRows[0].map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>' + numRows.slice(1).map(row => '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+                            })() : '<p class="sizing-chart-hint" style="font-size:13px;color:var(--gray-600);">This product has no size options. One size fits all.</p>'}
+                        </div>
+
+                        <div class="quantity-selector">
+                            <h3>Quantity (boxes)</h3>
+                            <div class="quantity-input">
+                                <button onclick="updateQuantity(-1)">-</button>
+                                <input type="number" id="productQuantity" value="1" min="1">
+                                <button onclick="updateQuantity(1)">+</button>
+                            </div>
+                        </div>
+
+                        <div class="add-to-cart-section">
+                            <button class="btn btn-primary btn-lg" onclick="addProductToCart(${product.id})">
+                                <i class="fas fa-cart-plus"></i> Add to Cart
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+
+    // Store selected sizes (array for multi-select)
+    window.selectedSizes = sizes.length > 0 ? [sizes[0].trim()] : [];
+}
+
+function setProductMainImage(thumbBtn) {
+    if (!thumbBtn) return;
+    const url = thumbBtn.getAttribute('data-url');
+    if (!url) return;
+    const main = document.getElementById('productMainImage');
+    if (main) main.src = url;
+    document.querySelectorAll('.product-gallery-thumb').forEach(btn => btn.classList.remove('active'));
+    thumbBtn.classList.add('active');
+}
+
+function toggleSizeCheckbox(checkbox) {
+    const size = checkbox && checkbox.getAttribute('data-size');
+    if (!size) return;
+    const checkboxes = document.querySelectorAll('.size-checkbox:checked');
+    window.selectedSizes = Array.from(checkboxes).map(cb => cb.getAttribute('data-size'));
+    const span = document.getElementById('productVariantSkuSize');
+    const displayEl = document.getElementById('productVariantSkuDisplay');
+    const baseSku = (displayEl && displayEl.getAttribute('data-base-sku')) || '';
+    if (span) {
+        span.textContent = window.selectedSizes.length === 0
+            ? '—'
+            : window.selectedSizes.map(s => baseSku ? `${baseSku}-${s}` : s).join(', ');
+    }
+}
+
+function updateQuantity(change) {
+    const input = document.getElementById('productQuantity');
+    let value = parseInt(input.value) + change;
+    if (value < 1) value = 1;
+    input.value = value;
+}
+
+async function addProductToCart(productId) {
+    const quantity = parseInt(document.getElementById('productQuantity')?.value || 1);
+    const selectedSizes = window.selectedSizes && Array.isArray(window.selectedSizes) ? window.selectedSizes : [];
+    // If no multi-select (e.g. product has no sizes), fall back to single selectedSize for backwards compatibility
+    const sizesToAdd = selectedSizes.length > 0 ? selectedSizes : (window.selectedSize ? [window.selectedSize] : [null]);
+
+    if (sizesToAdd.length === 0 || (sizesToAdd.length === 1 && sizesToAdd[0] === null)) {
+        // Product has no sizes - add single item
+        await api.post('/api/cart', {
+            product_id: productId,
+            size: null,
+            quantity: quantity
+        });
+        await loadCart();
+        showToast('Product added to cart!');
+        toggleCartSidebar(true);
+        return;
+    }
+
+    for (const size of sizesToAdd) {
+        await api.post('/api/cart', {
+            product_id: productId,
+            size: size,
+            quantity: quantity
+        });
+    }
+
+    await loadCart();
+    const msg = sizesToAdd.length === 1
+        ? 'Product added to cart!'
+        : sizesToAdd.length + ' sizes added to cart!';
+    showToast(msg);
+    toggleCartSidebar(true);
+}
+
+async function quickAddToCart(productId) {
+    await api.post('/api/cart', {
+        product_id: productId,
+        size: 'M',
+        quantity: 1
+    });
+
+    await loadCart();
+    showToast('Product added to cart!');
+}
+
+// ============================================
+// CART
+// ============================================
+
+async function loadCart() {
+    state.cart = await api.get('/api/cart');
+    updateCartCount();
+    updateCartSidebar();
+}
+
+function updateCartCount() {
+    const count = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+    document.getElementById('cartCount').textContent = count;
+}
+
+function updateCartSidebar() {
+    const content = document.getElementById('cartSidebarContent');
+    const subtotal = document.getElementById('cartSubtotal');
+    
+    if (state.cart.length === 0) {
+        content.innerHTML = `
+            <div style="text-align: center; padding: 40px 20px; color: #374151;">
+                <i class="fas fa-shopping-cart" style="font-size: 48px; color: #ddd; margin-bottom: 16px;"></i>
+                <p>Your cart is empty</p>
+            </div>
+        `;
+        subtotal.textContent = '$0.00';
+    } else {
+        const isBulkUser = state.user?.is_approved;
+        let total = 0;
+        
+        // Get discount percent for tier
+        let discountPercent = 0;
+        if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
+            try {
+                discountPercent = getDiscountPercent(state.user.discount_tier);
+            } catch (error) {
+                console.error('Error getting discount percent:', error);
+            }
+        }
+        
+        content.innerHTML = state.cart.map(item => {
+            let price = isBulkUser && item.bulk_price ? item.bulk_price : item.price;
+            // Apply discount tier to price
+            if (discountPercent > 0) {
+                price = price * (1 - discountPercent / 100);
+            }
+            total += price * item.quantity;
+            const itemImg = (item.image_url || '').trim();
+            return `
+                <div class="cart-sidebar-item">
+                    <div class="cart-sidebar-item-image">
+                        ${itemImg ? `<img src="${itemImg.replace(/"/g, '&quot;')}" alt="${item.name || 'Item'}" style="width:100%; height:100%; object-fit:cover; border-radius:8px; display:block;" referrerpolicy="no-referrer" onerror="this.style.display='none'; var i=this.nextElementSibling; if(i) i.style.display='block';" />` : ''}
+                        <i class="fas fa-hand-paper" style="${itemImg ? 'display:none;' : ''}"></i>
+                    </div>
+                    <div class="cart-sidebar-item-info">
+                        <h4>${item.name}</h4>
+                        <div class="sku" style="font-size: 11px; color: #4B5563; margin-top: 2px;">
+                            ${item.variant_sku && item.variant_sku !== item.sku ? 
+                                `<span style="font-weight: 600; color: #FF7A00;">${item.variant_sku}</span> <span style="color: #9CA3AF;">(${item.sku})</span>` : 
+                                item.sku || 'N/A'
+                            }
+                        </div>
+                        ${item.size ? `<div class="size" style="margin-top: 4px; font-size: 11px;"><strong>Size:</strong> <span style="background: #FF7A00; color: #ffffff; padding: 1px 6px; border-radius: 3px; font-weight: 600;">${item.size}</span></div>` : ''}
+                        <div class="price">${item.quantity} x $${price.toFixed(2)}</div>
+                    </div>
+                    <button class="cart-sidebar-item-remove" onclick="removeFromCart(${item.id})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+        
+        subtotal.textContent = `$${total.toFixed(2)}`;
+    }
+}
+
+function toggleCartSidebar(open) {
+    const sidebar = document.getElementById('cartSidebar');
+    const overlay = document.getElementById('cartOverlay');
+    
+    if (open === undefined) {
+        open = !sidebar.classList.contains('open');
+    }
+    
+    if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('open');
+    } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+    }
+}
+
+async function removeFromCart(cartItemId) {
+    await api.delete(`/api/cart/${cartItemId}`);
+    await loadCart();
+    
+    // Refresh cart page if on it
+    if (state.currentPage === 'cart') {
+        renderCartPage();
+    }
+}
+
+// ============================================
+// RFQ MODAL
+// ============================================
+
+function handleBulkBuilderQtyChange(selectElement) {
+    if (selectElement.value === '100+ cases') {
+        showRFQModal();
+    }
+}
+
+function showRFQModal() {
+    // Remove existing modal if present
+    const existingModal = document.getElementById('rfqModalOverlay');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Get values from bulk builder if available
+    const qty = document.getElementById('bulkBuilderQty')?.value || '';
+    const type = document.getElementById('bulkBuilderType')?.value || '';
+    
+    // Get multiple selected use cases
+    const useCheckboxes = document.querySelectorAll('input[name="bulkBuilderUse"]:checked');
+    const useCases = Array.from(useCheckboxes).map(cb => cb.value);
+    const use = useCases.length > 0 ? useCases.join(', ') : '';
+    
+    // Create modal overlay
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'rfqModalOverlay';
+    modalOverlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px);';
+    modalOverlay.onclick = (e) => {
+        if (e.target === modalOverlay) closeRFQModal();
+    };
+    
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = 'background: #ffffff; border-radius: 20px; padding: 0; max-width: 700px; width: 100%; max-height: 90vh; overflow: hidden; box-shadow: 0 25px 70px rgba(0,0,0,0.4); position: relative; display: flex; flex-direction: column;';
+    modalContent.onclick = (e) => e.stopPropagation();
+    
+    modalContent.innerHTML = `
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); padding: 32px 40px; color: #ffffff; position: relative; overflow: hidden;">
+            <div style="position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
+            <div style="position: absolute; bottom: -30px; left: -30px; width: 150px; height: 150px; background: rgba(255,255,255,0.08); border-radius: 50%;"></div>
+            <button onclick="closeRFQModal()" style="position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; font-size: 20px; color: #ffffff; cursor: pointer; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.3s ease; backdrop-filter: blur(10px);" onmouseover="this.style.background='rgba(255,255,255,0.3)'; this.style.transform='rotate(90deg)';" onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.transform='rotate(0deg)';">
+                <i class="fas fa-times"></i>
+            </button>
+            <div style="position: relative; z-index: 1; text-align: center;">
+                <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; backdrop-filter: blur(10px); border: 3px solid rgba(255,255,255,0.3);">
+                    <i class="fas fa-file-invoice-dollar" style="color: #ffffff; font-size: 32px;"></i>
+                </div>
+                <h2 style="font-size: 32px; font-weight: 800; margin-bottom: 8px; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">Request a Quote</h2>
+                <p style="font-size: 16px; opacity: 0.95; font-weight: 500;">Get custom pricing for bulk orders • Response within 24 hours</p>
+            </div>
+        </div>
+        
+        <!-- Form Content -->
+        <div style="padding: 40px; overflow-y: auto; flex: 1;">
+            <form id="rfqForm" onsubmit="submitRFQ(event)" style="display: grid; gap: 24px;">
+                <!-- Company Info Section -->
+                <div>
+                    <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 2px;"></div>
+                        Company Information
+                    </h3>
+                    <div style="display: grid; gap: 20px;">
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Company Name <span style="color: #FF7A00;">*</span>
+                            </label>
+                            <input type="text" name="company_name" required style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="Your company name">
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                    Contact Name <span style="color: #FF7A00;">*</span>
+                                </label>
+                                <input type="text" name="contact_name" required style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="Your name">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                    Email <span style="color: #FF7A00;">*</span>
+                                </label>
+                                <input type="email" name="email" required style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="your@email.com">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Phone <span style="color: #FF7A00;">*</span>
+                            </label>
+                            <input type="tel" name="phone" required style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="(555) 123-4567">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Order Details Section -->
+                ${qty || type || use ? `
+                <div style="background: linear-gradient(135deg, #fff5f0 0%, #ffe8d6 100%); padding: 24px; border-radius: 12px; border: 2px solid #FF7A00; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,122,0,0.1); border-radius: 50%;"></div>
+                    <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; position: relative; z-index: 1;">
+                        <i class="fas fa-boxes" style="color: #FF7A00; font-size: 20px;"></i>
+                        Order Details
+                    </h3>
+                    <div style="display: grid; gap: 16px; position: relative; z-index: 1;">
+                        ${qty ? `
+                        <div style="background: #FFFFFF; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,122,0,0.2);">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #4B5563; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Quantity</label>
+                            <div style="font-size: 16px; font-weight: 700; color: #111111;">${qty}</div>
+                            <input type="hidden" name="quantity" value="${qty}">
+                        </div>
+                        ` : ''}
+                        ${type ? `
+                        <div style="background: #FFFFFF; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,122,0,0.2);">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #4B5563; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Type</label>
+                            <div style="font-size: 16px; font-weight: 700; color: #111111;">${type}</div>
+                            <input type="hidden" name="type" value="${type}">
+                        </div>
+                        ` : ''}
+                        ${use ? `
+                        <div style="background: #FFFFFF; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,122,0,0.2);">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #4B5563; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Use Case</label>
+                            <div style="font-size: 16px; font-weight: 700; color: #111111;">${use}</div>
+                            <input type="hidden" name="use_case" value="${use}">
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : `
+                <div style="background: #F9FAFB; padding: 24px; border-radius: 12px; border: 2px dashed #E5E7EB;">
+                    <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-boxes" style="color: #4B5563; font-size: 20px;"></i>
+                        Order Details
+                    </h3>
+                    <div style="display: grid; gap: 16px;">
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Quantity <span style="color: #FF7A00;">*</span>
+                            </label>
+                            <input type="text" name="quantity" required style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="e.g., 100+ cases, 5000 units">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Type of Gloves
+                            </label>
+                            <select name="type" style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF; cursor: pointer;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';">
+                                <option value="">Select Type</option>
+                                <option value="Disposable Gloves">Disposable Gloves</option>
+                                <option value="Reusable Gloves">Reusable Gloves</option>
+                                <option value="Both">Both</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Use Case / Industry
+                            </label>
+                            <input type="text" name="use_case" style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="e.g., Food Service, Healthcare, Manufacturing">
+                        </div>
+                    </div>
+                </div>
+                `}
+                
+                <!-- Additional Notes -->
+                <div>
+                    <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                        Additional Notes or Requirements
+                    </label>
+                    <textarea name="notes" rows="5" style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; font-family: inherit; resize: vertical; transition: all 0.3s ease; background: #FFFFFF; line-height: 1.6;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="Any specific requirements, certifications needed, delivery timeline, preferred brands, etc."></textarea>
+                </div>
+                
+                <!-- Submit Buttons -->
+                <div style="display: flex; gap: 12px; margin-top: 10px; padding-top: 20px; border-top: 2px solid #E5E7EB;">
+                    <button type="button" onclick="closeRFQModal()" style="flex: 1; padding: 16px; font-size: 15px; font-weight: 600; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 10px; color: #4B5563; cursor: pointer; transition: all 0.3s ease;" onmouseover="this.style.background='#F3F4F6'; this.style.borderColor='#D1D5DB'; this.style.color='#111111';" onmouseout="this.style.background='#F9FAFB'; this.style.borderColor='#E5E7EB'; this.style.color='#6B7280';">
+                        Cancel
+                    </button>
+                    <button type="submit" id="rfqSubmitBtn" style="flex: 2; padding: 16px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 10px; color: #ffffff; cursor: pointer; box-shadow: 0 4px 15px rgba(255,122,0,0.4); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(255,122,0,0.5)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(255,122,0,0.4)';">
+                        <i class="fas fa-paper-plane"></i>
+                        <span>Submit RFQ</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+    
+    // Add entrance animation
+    modalOverlay.style.opacity = '0';
+    modalOverlay.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => {
+        modalOverlay.style.opacity = '1';
+        modalContent.style.transform = 'scale(0.95)';
+        modalContent.style.transition = 'transform 0.3s ease';
+        setTimeout(() => {
+            modalContent.style.transform = 'scale(1)';
+        }, 10);
+    }, 10);
+    
+    // Focus first input
+    setTimeout(() => {
+        const firstInput = modalContent.querySelector('input[type="text"], input[type="email"]');
+        if (firstInput) firstInput.focus();
+    }, 100);
+}
+
+function closeRFQModal() {
+    const modal = document.getElementById('rfqModalOverlay');
+    if (modal) {
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+            modal.remove();
+        }, 300);
+    }
+}
+
+async function submitRFQ(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    // Show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i>Submitting...';
+    submitBtn.disabled = true;
+    
+    try {
+        // Send RFQ to backend API
+        const response = await api.post('/api/rfqs', data);
+        
+        // Show success message
+        showToast('RFQ submitted successfully! We\'ll contact you within 24 hours.', 'success');
+        
+        // Close modal
+        closeRFQModal();
+        
+        // Optionally navigate to thank you page or reset form
+    } catch (error) {
+        showToast('Error submitting RFQ. Please try again or contact us directly.', 'error');
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+async function updateCartItemQuantity(cartItemId, quantity) {
+    await api.put(`/api/cart/${cartItemId}`, { quantity });
+    await loadCart();
+    renderCartPage();
+}
+
+async function renderCartPage() {
+    const mainContent = document.getElementById('mainContent');
+    let budgetInfo = null;
+    if (state.user) {
+        try { budgetInfo = await api.get('/api/account/budget'); } catch (e) {}
+    }
+    
+    if (state.cart.length === 0) {
+        mainContent.innerHTML = `
+            <section class="cart-page">
+                <div class="container">
+                    <div class="cart-empty">
+                        <i class="fas fa-shopping-cart"></i>
+                        <h2>Your Cart is Empty</h2>
+                        <p>Looks like you haven't added anything to your cart yet.</p>
+                        <button class="btn btn-primary" onclick="navigate('products')">Start Shopping</button>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+
+    const isBulkUser = state.user?.is_approved;
+    let subtotal = 0;
+    
+    // Get discount percent for tier
+    let discountPercent = 0;
+    if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
+        try {
+            discountPercent = getDiscountPercent(state.user.discount_tier);
+        } catch (error) {
+            console.error('Error getting discount percent:', error);
+        }
+    }
+    
+    state.cart.forEach(item => {
+        let price = isBulkUser && item.bulk_price ? item.bulk_price : item.price;
+        // Apply discount tier to price
+        if (discountPercent > 0) {
+            price = price * (1 - discountPercent / 100);
+        }
+        subtotal += price * item.quantity;
+    });
+    
+    const shipping = subtotal >= 500 ? 0 : 25;
+    const tax = subtotal * 0.08;
+    const total = subtotal + shipping + tax;
+
+    mainContent.innerHTML = `
+        <section class="cart-page">
+            <div class="container">
+                <h1 style="margin-bottom: 32px;">Shopping Cart</h1>
+                <div class="cart-bulk-upload" style="margin-bottom: 24px; padding: 16px; background: var(--gray-100); border-radius: 8px;">
+                    <h4 style="margin-bottom: 8px;"><i class="fas fa-upload"></i> Bulk add by SKU</h4>
+                    <p style="font-size: 13px; color: var(--gray-600); margin-bottom: 10px;">Paste SKU, quantity (one per line). Example: GLV-GL-N105FB, 5</p>
+                    <textarea id="bulkCartInput" rows="3" placeholder="SKU, quantity&#10;GLV-GL-N105FB, 5&#10;GLV-590MF, 2" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-family: monospace; font-size: 13px;"></textarea>
+                    <button type="button" class="btn btn-outline btn-sm" style="margin-top: 8px;" onclick="bulkAddToCart(); return false;">Add to cart</button>
+                </div>
+                <div class="cart-layout">
+                    <div class="cart-items">
+                        <div class="cart-header">
+                            <span>Product</span>
+                            <span>Price</span>
+                            <span>Quantity</span>
+                            <span>Total</span>
+                            <span></span>
+                        </div>
+                        ${                        state.cart.map(item => {
+                            let price = isBulkUser && item.bulk_price ? item.bulk_price : item.price;
+                            // Apply discount tier to price
+                            if (discountPercent > 0) {
+                                price = price * (1 - discountPercent / 100);
+                            }
+                            const itemTotal = price * item.quantity;
+                            const itemImg = (item.image_url || '').trim();
+                            return `
+                                <div class="cart-item">
+                                    <div class="cart-item-info">
+                                        <div class="cart-item-image">
+                                            ${itemImg ? `<img src="${itemImg.replace(/"/g, '&quot;')}" alt="${item.name || 'Item'}" style="width:100%; height:100%; object-fit:cover; border-radius:8px; display:block;" referrerpolicy="no-referrer" onerror="this.style.display='none'; var i=this.nextElementSibling; if(i) i.style.display='block';" />` : ''}
+                                            <i class="fas fa-hand-paper" style="${itemImg ? 'display:none;' : ''}"></i>
+                                        </div>
+                                        <div class="cart-item-details">
+                                            <h4>${item.name}</h4>
+                                            <div class="sku">
+                                                ${item.variant_sku && item.variant_sku !== item.sku ? 
+                                                    `<span style="font-weight: 600; color: #FF7A00;">${item.variant_sku}</span> <span style="color: #4B5563; font-size: 12px;">(${item.sku})</span>` : 
+                                                    item.sku || 'N/A'
+                                                }
+                                            </div>
+                                            ${item.size ? `<div class="size" style="margin-top: 4px;"><strong>Size:</strong> <span style="background: #FF7A00; color: #ffffff; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;">${item.size}</span></div>` : ''}
+                                        </div>
+                                    </div>
+                                    <div class="cart-item-price">$${price.toFixed(2)}</div>
+                                    <div class="cart-item-quantity">
+                                        <div class="quantity-input">
+                                            <button onclick="updateCartItemQuantity(${item.id}, ${item.quantity - 1})">-</button>
+                                            <input type="number" value="${item.quantity}" readonly>
+                                            <button onclick="updateCartItemQuantity(${item.id}, ${item.quantity + 1})">+</button>
+                                        </div>
+                                    </div>
+                                    <div class="cart-item-total">$${itemTotal.toFixed(2)}</div>
+                                    <button class="cart-item-remove" onclick="removeFromCart(${item.id})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="cart-summary">
+                        <h3>Order Summary</h3>
+                        ${!state.user ? `
+                            <div class="b2b-discount-notice">
+                                <i class="fas fa-info-circle"></i>
+                                <a href="#" onclick="navigate('login'); return false;">Log in</a> to see B2B pricing and discounts!
+                            </div>
+                        ` : ''}
+                        ${budgetInfo && budgetInfo.budget_amount != null ? `
+                            <div class="cart-budget-widget" style="background: var(--gray-100); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;">
+                                <strong><i class="fas fa-wallet"></i> Purchasing budget (${budgetInfo.budget_period})</strong><br>
+                                Budget: $${Number(budgetInfo.budget_amount).toLocaleString()} | Spent: $${Number(budgetInfo.spent).toLocaleString()} | <span style="color: var(--success); font-weight: 600;">Remaining: $${Number(budgetInfo.remaining).toLocaleString()}</span>
+                            </div>
+                        ` : ''}
+                        <div class="summary-row">
+                            <span class="label">Subtotal</span>
+                            <span class="value">$${subtotal.toFixed(2)}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="label">Shipping</span>
+                            <span class="value">${shipping === 0 ? 'FREE' : '$' + shipping.toFixed(2)}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="label">Est. Tax</span>
+                            <span class="value">$${tax.toFixed(2)}</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span class="label">Total</span>
+                            <span class="value">$${total.toFixed(2)}</span>
+                        </div>
+                        ${subtotal < 500 ? `<p style="font-size: 13px; color: #374151; margin-top: 16px;"><i class="fas fa-truck" style="color: var(--primary);"></i> Add $${(500 - subtotal).toFixed(2)} more for free shipping!</p>` : ''}
+                        <button class="btn btn-primary btn-block" onclick="navigate('checkout')">
+                            Proceed to Checkout
+                        </button>
+                        ${state.user ? '<button type="button" class="btn btn-outline btn-block" onclick="saveCartAsList(); return false;"><i class="fas fa-save"></i> Save current cart as list</button>' : ''}
+                        <button class="btn btn-outline-dark btn-block" onclick="navigate('products')">
+                            Continue Shopping
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+async function bulkAddToCart() {
+    const ta = document.getElementById('bulkCartInput');
+    if (!ta || !state.user) { showToast('Log in to use bulk add', 'error'); return; }
+    const text = ta.value.trim();
+    if (!text) { showToast('Enter SKU, quantity lines', 'error'); return; }
+    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const items = [];
+    for (const line of lines) {
+        const parts = line.split(/[,\t]/).map(p => p.trim());
+        const sku = parts[0];
+        const qty = parseInt(parts[1], 10) || 1;
+        if (sku) items.push({ sku, quantity: qty });
+    }
+    if (items.length === 0) { showToast('No valid SKU, quantity lines', 'error'); return; }
+    try {
+        const res = await api.post('/api/cart/bulk', { items });
+        showToast('Added ' + res.added + ' item(s)' + (res.skipped ? ', ' + res.skipped + ' skipped' : ''), 'success');
+        ta.value = '';
+        await loadCart();
+        renderCartPage();
+        const cartCount = document.getElementById('cartCount');
+        if (cartCount) cartCount.textContent = state.cart.length;
+    } catch (e) {
+        showToast(e.message || 'Bulk add failed', 'error');
+    }
+}
+
+async function saveCartAsList() {
+    if (!state.user || state.cart.length === 0) { showToast('Cart is empty or log in first', 'error'); return; }
+    const name = prompt('Name for this list (e.g. Monthly replenishment)');
+    if (!name || !name.trim()) return;
+    const items = state.cart.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: i.quantity }));
+    try {
+        await api.post('/api/saved-lists', { name: name.trim(), items });
+        showToast('List saved', 'success');
+        navigate('dashboard');
+    } catch (e) {
+        showToast(e.message || 'Could not save list', 'error');
+    }
+}
+
+// ============================================
+// CHECKOUT PAGE
+// ============================================
+
+async function renderCheckoutPage() {
+    if (!state.user) {
+        navigate('login');
+        showToast('Please log in to checkout');
+        return;
+    }
+
+    if (state.cart.length === 0) {
+        navigate('cart');
+        return;
+    }
+
+    const mainContent = document.getElementById('mainContent');
+    const [user, shipToAddresses] = await Promise.all([
+        api.get('/api/auth/me'),
+        api.get('/api/ship-to').catch(() => [])
+    ]);
+    
+    const isBulkUser = user.is_approved;
+    let subtotal = 0;
+    
+    // Get discount percent for tier
+    let discountPercent = 0;
+    if (user.is_approved && user.discount_tier && typeof getDiscountPercent === 'function') {
+        try {
+            discountPercent = getDiscountPercent(user.discount_tier);
+        } catch (error) {
+            console.error('Error getting discount percent:', error);
+            // Fallback to manual calculation
+            switch (user.discount_tier) {
+                case 'bronze': discountPercent = 5; break;
+                case 'silver': discountPercent = 10; break;
+                case 'gold': discountPercent = 15; break;
+                case 'platinum': discountPercent = 20; break;
+            }
+        }
+    }
+    
+    // Calculate subtotal with tier discount already applied to individual prices
+    state.cart.forEach(item => {
+        let price = isBulkUser && item.bulk_price ? item.bulk_price : item.price;
+        // Apply discount tier to price
+        if (discountPercent > 0) {
+            price = price * (1 - discountPercent / 100);
+        }
+        subtotal += price * item.quantity;
+    });
+    
+    // Discount is already applied to prices, so discount amount is 0
+    const discount = 0;
+    const shipping = subtotal >= 500 ? 0 : 25;
+    const tax = (subtotal - discount) * 0.08;
+    const total = subtotal - discount + shipping + tax;
+
+    mainContent.innerHTML = `
+        <section class="checkout-page">
+            <div class="container">
+                <h1 style="margin-bottom: 32px;">Checkout</h1>
+                <div class="checkout-layout">
+                    <div class="checkout-form">
+                        ${user.is_approved ? '<div class="checkout-net-terms" style="background: var(--gray-100); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;"><i class="fas fa-file-invoice-dollar"></i> This order will be invoiced. Net 30 / Net 45 terms apply for approved accounts.</div>' : ''}
+                        <div class="checkout-section">
+                            <h3>Shipping Address</h3>
+                            ${shipToAddresses.length > 0 ? `
+                                <div class="form-group">
+                                    <label>Ship to</label>
+                                    <select id="checkoutShipTo" style="width:100%; padding:12px; border:2px solid #e0e0e0; border-radius:8px;" onchange="toggleCheckoutAddress(this);">
+                                        <option value="">Custom address (below)</option>
+                                        ${shipToAddresses.map(s => '<option value="' + s.id + '">' + (s.label || 'Primary') + ' — ' + s.address + ', ' + s.city + ', ' + s.state + ' ' + s.zip + '</option>').join('')}
+                                    </select>
+                                </div>
+                            ` : ''}
+                            <div id="checkoutAddressFields">
+                            <div class="form-group">
+                                <label>Company Name</label>
+                                <input type="text" id="checkoutCompany" value="${user.company_name}" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Name</label>
+                                <input type="text" id="checkoutContact" value="${user.contact_name}">
+                            </div>
+                            <div class="form-group">
+                                <label>Street Address</label>
+                                <input type="text" id="checkoutAddress" value="${user.address || ''}" placeholder="Enter street address">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>City</label>
+                                    <input type="text" id="checkoutCity" value="${user.city || ''}" placeholder="City">
+                                </div>
+                                <div class="form-group">
+                                    <label>State</label>
+                                    <input type="text" id="checkoutState" value="${user.state || ''}" placeholder="State">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>ZIP Code</label>
+                                    <input type="text" id="checkoutZip" value="${user.zip || ''}" placeholder="ZIP">
+                                </div>
+                                <div class="form-group">
+                                    <label>Phone</label>
+                                    <input type="text" id="checkoutPhone" value="${user.phone || ''}" placeholder="Phone number">
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                        <div class="checkout-section">
+                            <h3>Order Notes (Optional)</h3>
+                            <div class="form-group">
+                                <textarea id="checkoutNotes" rows="3" placeholder="Special instructions for your order..."></textarea>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-lg btn-block" onclick="placeOrder()">
+                            <i class="fas fa-lock"></i> Place Order - $${total.toFixed(2)}
+                        </button>
+                    </div>
+                    <div class="checkout-summary">
+                        <h3>Order Summary</h3>
+                        <div class="checkout-items">
+                            ${                        state.cart.map(item => {
+                            let price = isBulkUser && item.bulk_price ? item.bulk_price : item.price;
+                            // Apply discount tier to price
+                            if (discountPercent > 0) {
+                                price = price * (1 - discountPercent / 100);
+                            }
+                            const checkoutItemImg = (item.image_url || '').trim();
+                            return `
+                                    <div class="checkout-item">
+                                        <div class="checkout-item-image">
+                                            ${checkoutItemImg ? `<img src="${checkoutItemImg.replace(/"/g, '&quot;')}" alt="${item.name || 'Item'}" style="width:100%; height:100%; object-fit:cover; border-radius:8px; display:block;" referrerpolicy="no-referrer" onerror="this.style.display='none'; var i=this.nextElementSibling; if(i) i.style.display='block';" />` : ''}
+                                            <i class="fas fa-hand-paper" style="${checkoutItemImg ? 'display:none;' : ''}"></i>
+                                        </div>
+                                        <div class="checkout-item-info">
+                                            <h4>${item.name}</h4>
+                                            <div class="meta">
+                                                ${item.variant_sku && item.variant_sku !== item.sku ? 
+                                                    `<span style="font-weight: 600; color: #FF7A00;">SKU: ${item.variant_sku}</span> | ` : 
+                                                    `SKU: ${item.sku} | `
+                                                }
+                                                ${item.size ? `Size: <strong>${item.size}</strong> | ` : ''}Qty: ${item.quantity}
+                                            </div>
+                                            <div class="price">$${(price * item.quantity).toFixed(2)}</div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        <div class="summary-row">
+                            <span class="label">Subtotal</span>
+                            <span class="value">$${subtotal.toFixed(2)}</span>
+                        </div>
+                        ${discountPercent > 0 ? `
+                            <div class="summary-row" style="color: #4caf50; font-weight: 600;">
+                                <span class="label"><i class="fas fa-tag" style="margin-right: 6px;"></i>${user.discount_tier.charAt(0).toUpperCase() + user.discount_tier.slice(1)} Tier Discount (${discountPercent}% applied)</span>
+                                <span class="value">Included</span>
+                            </div>
+                        ` : ''}
+                        <div class="summary-row">
+                            <span class="label">Shipping</span>
+                            <span class="value">${shipping === 0 ? 'FREE' : '$' + shipping.toFixed(2)}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="label">Tax</span>
+                            <span class="value">$${tax.toFixed(2)}</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span class="label">Total</span>
+                            <span class="value">$${total.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function toggleCheckoutAddress(selectEl) {
+    const fields = document.getElementById('checkoutAddressFields');
+    if (!fields) return;
+    fields.style.display = selectEl.value ? 'none' : 'block';
+}
+
+async function placeOrder() {
+    const shipToSelect = document.getElementById('checkoutShipTo');
+    const ship_to_id = shipToSelect && shipToSelect.value ? shipToSelect.value : null;
+    const address = `${document.getElementById('checkoutContact').value}
+${document.getElementById('checkoutAddress').value}
+${document.getElementById('checkoutCity').value}, ${document.getElementById('checkoutState').value} ${document.getElementById('checkoutZip').value}
+Phone: ${document.getElementById('checkoutPhone').value}`;
+    
+    const notes = document.getElementById('checkoutNotes').value;
+
+    const result = await api.post('/api/orders', {
+        shipping_address: address,
+        ship_to_id: ship_to_id || undefined,
+        notes: notes
+    });
+
+    if (result.success) {
+        await loadCart();
+        showOrderConfirmation(result.order_number, result.total);
+    } else {
+        showToast(result.error || 'Failed to place order');
+    }
+}
+
+function showOrderConfirmation(orderNumber, total) {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="cart-page">
+            <div class="container">
+                <div class="cart-empty">
+                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                    <h2>Order Placed Successfully!</h2>
+                    <p>Thank you for your order. Your order number is:</p>
+                    <h3 style="color: var(--primary); margin: 16px 0;">${orderNumber}</h3>
+                    <p>Total: $${total.toFixed(2)}</p>
+                    <p style="margin-top: 16px; color: #374151;">A confirmation email has been sent to your email address.</p>
+                    <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                        <button class="btn btn-primary" onclick="navigate('dashboard')">View Orders</button>
+                        <button class="btn btn-outline-dark" onclick="navigate('products')">Continue Shopping</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+// ============================================
+// AUTH PAGES
+// ============================================
+
+function renderLoginPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="auth-page">
+            <div class="container auth-container">
+                <div class="auth-tabs">
+                    <div class="auth-tab active" onclick="navigate('login')">Login</div>
+                    <div class="auth-tab" onclick="navigate('register')">Register</div>
+                </div>
+                <div class="auth-content">
+                    <div class="auth-form">
+                        <h2>Welcome Back</h2>
+                        <p class="subtitle">Sign in to access your B2B account and exclusive pricing.</p>
+                        
+                        <div id="loginError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
+                        
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" id="loginEmail" placeholder="Enter your email">
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" id="loginPassword" placeholder="Enter your password">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="handleLogin()">
+                            <i class="fas fa-sign-in-alt"></i> Sign In
+                        </button>
+                        
+                        <div class="b2b-benefits">
+                            <h4>B2B Account Benefits</h4>
+                            <ul>
+                                <li><i class="fas fa-check"></i> Wholesale pricing on all products</li>
+                                <li><i class="fas fa-check"></i> Volume discounts up to 20% off</li>
+                                <li><i class="fas fa-check"></i> Dedicated account manager</li>
+                                <li><i class="fas fa-check"></i> Net 30 payment terms (approved accounts)</li>
+                                <li><i class="fas fa-check"></i> Order history and quick reorder</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+
+    // Add enter key listener
+    document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleLogin();
+    });
+}
+
+async function handleLogin() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const errorDiv = document.getElementById('loginError');
+
+    if (!email || !password) {
+        errorDiv.textContent = 'Please enter email and password';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    const result = await api.post('/api/auth/login', { email, password });
+
+    if (result.success) {
+        localStorage.setItem('token', result.token);
+        localStorage.setItem('user', JSON.stringify(result.user));
+        state.user = result.user;
+        updateHeaderAccount();
+        await loadCart();
+        showToast('Welcome back, ' + result.user.contact_name + '!');
+        navigate('dashboard');
+    } else {
+        errorDiv.textContent = result.error || 'Login failed';
+        errorDiv.style.display = 'block';
+    }
+}
+
+function renderRegisterPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="auth-page">
+            <div class="container auth-container">
+                <div class="auth-tabs">
+                    <div class="auth-tab" onclick="navigate('login')">Login</div>
+                    <div class="auth-tab active" onclick="navigate('register')">Register</div>
+                </div>
+                <div class="auth-content">
+                    <div class="auth-form" style="max-width: 600px;">
+                        <h2>Apply for B2B Account</h2>
+                        <p class="subtitle">Create your business account to access wholesale pricing and bulk discounts.</p>
+                        
+                        <div id="registerError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
+                        <div id="registerSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
+                        
+                        <div class="form-group">
+                            <label>Company Name *</label>
+                            <input type="text" id="regCompany" placeholder="Your company name">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Contact Name *</label>
+                                <input type="text" id="regContact" placeholder="Your full name">
+                            </div>
+                            <div class="form-group">
+                                <label>Phone Number</label>
+                                <input type="tel" id="regPhone" placeholder="(555) 123-4567">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Email Address *</label>
+                            <input type="email" id="regEmail" placeholder="business@company.com">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Password *</label>
+                                <input type="password" id="regPassword" placeholder="Min 6 characters">
+                            </div>
+                            <div class="form-group">
+                                <label>Confirm Password *</label>
+                                <input type="password" id="regPassword2" placeholder="Confirm password">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Business Address</label>
+                            <input type="text" id="regAddress" placeholder="Street address">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>City</label>
+                                <input type="text" id="regCity" placeholder="City">
+                            </div>
+                            <div class="form-group">
+                                <label>State</label>
+                                <input type="text" id="regState" placeholder="State">
+                            </div>
+                        </div>
+                        <div class="form-group" style="max-width: 200px;">
+                            <label>ZIP Code</label>
+                            <input type="text" id="regZip" placeholder="ZIP">
+                        </div>
+                        
+                        <div class="form-group" style="padding: 16px; background: #f9f9f9; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="regAllowFreeUpgrades" style="margin-top: 4px; accent-color: #FF7A00;">
+                                <span>Allow free upgrades?</span>
+                            </label>
+                            <p style="margin: 8px 0 0 28px; font-size: 13px; color: #4B5563; font-weight: 400; line-height: 1.5;">If we are out of stock on an item, we will send another in-stock glove of equal or greater thickness and quality without charging you for the difference.</p>
+                        </div>
+                        
+                        <button class="btn btn-primary btn-block" onclick="handleRegister()">
+                            <i class="fas fa-user-plus"></i> Create Account
+                        </button>
+                        
+                        <p style="text-align: center; margin-top: 16px; color: #374151; font-size: 13px;">
+                            By registering, you agree to our Terms of Service and Privacy Policy.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+async function handleRegister() {
+    const errorDiv = document.getElementById('registerError');
+    const successDiv = document.getElementById('registerSuccess');
+    
+    const data = {
+        company_name: document.getElementById('regCompany').value,
+        contact_name: document.getElementById('regContact').value,
+        email: document.getElementById('regEmail').value,
+        password: document.getElementById('regPassword').value,
+        phone: document.getElementById('regPhone').value,
+        address: document.getElementById('regAddress').value,
+        city: document.getElementById('regCity').value,
+        state: document.getElementById('regState').value,
+        zip: document.getElementById('regZip').value,
+        allow_free_upgrades: document.getElementById('regAllowFreeUpgrades').checked
+    };
+
+    const password2 = document.getElementById('regPassword2').value;
+
+    // Validation
+    if (!data.company_name || !data.contact_name || !data.email || !data.password) {
+        errorDiv.textContent = 'Please fill in all required fields';
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+        return;
+    }
+
+    if (data.password !== password2) {
+        errorDiv.textContent = 'Passwords do not match';
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+        return;
+    }
+
+    if (data.password.length < 6) {
+        errorDiv.textContent = 'Password must be at least 6 characters';
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+        return;
+    }
+
+    const result = await api.post('/api/auth/register', data);
+
+    if (result.success) {
+        errorDiv.style.display = 'none';
+        successDiv.innerHTML = `
+            <i class="fas fa-check-circle"></i> ${result.message}<br>
+            <a href="#" onclick="navigate('login'); return false;">Click here to login</a>
+        `;
+        successDiv.style.display = 'block';
+    } else {
+        errorDiv.textContent = result.error || 'Registration failed';
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+    }
+}
+
+function updateHeaderAccount() {
+    const accountDiv = document.getElementById('headerAccount');
+    if (!accountDiv) return;
+    
+    if (state.user) {
+        const adminLink = state.user.is_approved ? `
+            <a href="#" onclick="navigate('admin'); return false;" style="margin-right: 12px; color: #FF7A00; font-weight: 600;">
+                <i class="fas fa-shield-alt"></i>
+                <span>Admin</span>
+            </a>
+        ` : '';
+        accountDiv.innerHTML = `
+            ${adminLink}
+            <a href="#" onclick="navigate('dashboard'); return false;">
+                <i class="fas fa-user-circle"></i>
+                <span>${state.user.company_name}</span>
+            </a>
+        `;
+    } else {
+        accountDiv.innerHTML = `
+            <a href="#" onclick="navigate('login'); return false;">
+                <i class="fas fa-user"></i>
+                <span>B2B Login</span>
+            </a>
+        `;
+    }
+}
+
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    state.user = null;
+    state.cart = [];
+    updateHeaderAccount();
+    updateCartCount();
+    showToast('You have been logged out');
+    navigate('home');
+}
+
+// ============================================
+// DASHBOARD PAGE
+// ============================================
+
+async function renderDashboardPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    const [user, orders, tierProgress, budget, rep, savedLists, rfqsMine, shipToAddresses] = await Promise.all([
+        api.get('/api/auth/me'),
+        api.get('/api/orders'),
+        api.get('/api/account/tier-progress').catch(() => null),
+        api.get('/api/account/budget').catch(() => null),
+        api.get('/api/account/rep').catch(() => ({ name: 'Glovecubs Sales', email: 'sales@glovecubs.com', phone: '1-800-GLOVECUBS' })),
+        api.get('/api/saved-lists').catch(() => []),
+        api.get('/api/rfqs/mine').catch(() => []),
+        api.get('/api/ship-to').catch(() => [])
+    ]);
+
+    const netTermsText = user.is_approved ? 'Net 30 / Net 45 available' : 'Net terms after approval';
+    const budgetHtml = budget ? `
+        <div class="dashboard-section dashboard-budget-card">
+            <h2><i class="fas fa-wallet"></i> Purchasing Budget</h2>
+            ${budget.budget_amount != null ? `
+                <div class="budget-display">
+                    <div class="budget-row"><span>Budget (${budget.budget_period}):</span> <strong>$${Number(budget.budget_amount).toLocaleString()}</strong></div>
+                    <div class="budget-row"><span>Spent:</span> <strong>$${Number(budget.spent).toLocaleString()}</strong></div>
+                    <div class="budget-row budget-remaining"><span>Remaining:</span> <strong>$${Number(budget.remaining).toLocaleString()}</strong></div>
+                    <div class="budget-progress-bar"><div class="budget-progress-fill" style="width: ${Math.min(100, (budget.spent / budget.budget_amount) * 100)}%"></div></div>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="openBudgetModal()">Edit Budget</button>
+            ` : `
+                <p style="color: var(--gray-600); margin-bottom: 12px;">Set a budget so your team can track spending.</p>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openBudgetModal()">Set Budget</button>
+            `}
+        </div>
+    ` : '';
+
+    const tierProgressHtml = tierProgress && tierProgress.next_tier ? `
+        <div class="dashboard-section dashboard-tier-progress">
+            <h2><i class="fas fa-chart-line"></i> Tier Progress</h2>
+            <p>YTD spend: <strong>$${Number(tierProgress.ytd_spend).toLocaleString()}</strong></p>
+            <p>You're <strong>$${Number(tierProgress.amount_to_next_tier).toLocaleString()}</strong> from <strong>${tierProgress.next_tier}</strong> (${tierProgress.next_tier_threshold ? '$' + Number(tierProgress.next_tier_threshold).toLocaleString() : ''})</p>
+            <div class="tier-progress-bar"><div class="tier-progress-fill" style="width: ${tierProgress.next_tier_threshold ? Math.min(100, (tierProgress.ytd_spend / tierProgress.next_tier_threshold) * 100) : 0}%"></div></div>
+        </div>
+    ` : '';
+
+    mainContent.innerHTML = `
+        <section class="dashboard-page">
+            <div class="container">
+                <div class="dashboard-layout">
+                    <aside class="dashboard-sidebar">
+                        <div class="dashboard-user">
+                            <div class="dashboard-user-avatar">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <h3>${user.company_name}</h3>
+                            <p>${user.email}</p>
+                            ${user.is_approved ? `<span class="dashboard-tier">${user.discount_tier} Tier</span>` : '<span class="dashboard-tier" style="background: #666;">Pending Approval</span>'}
+                        </div>
+                        <div class="dashboard-sidebar-net-terms">
+                            <i class="fas fa-file-invoice-dollar"></i> ${netTermsText}
+                        </div>
+                        <div class="dashboard-rep-card">
+                            <h4>Your Rep</h4>
+                            <p><strong>${rep.name}</strong></p>
+                            <p><a href="mailto:${rep.email}">${rep.email}</a></p>
+                            <p><a href="tel:${rep.phone.replace(/\D/g,'')}">${rep.phone}</a></p>
+                        </div>
+                        <nav class="dashboard-nav">
+                            <a href="#" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                            <a href="#" onclick="navigate('products'); return false;"><i class="fas fa-shopping-bag"></i> Shop Products</a>
+                            <a href="#" onclick="navigate('cart'); return false;"><i class="fas fa-shopping-cart"></i> My Cart</a>
+                            <a href="#" onclick="navigate('cart'); return false;"><i class="fas fa-upload"></i> Bulk Upload</a>
+                            <a href="#" onclick="logout(); return false;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        </nav>
+                    </aside>
+                    <div class="dashboard-main">
+                        <div class="dashboard-section">
+                            <h2>Account Overview</h2>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <i class="fas fa-shopping-bag"></i>
+                                    <div class="value">${orders.length}</div>
+                                    <div class="label">Total Orders</div>
+                                </div>
+                                <div class="stat-card">
+                                    <i class="fas fa-dollar-sign"></i>
+                                    <div class="value">$${orders.reduce((sum, o) => sum + o.total, 0).toFixed(0)}</div>
+                                    <div class="label">Total Spent</div>
+                                </div>
+                                <div class="stat-card">
+                                    <i class="fas fa-percent"></i>
+                                    <div class="value">${getDiscountPercent(user.discount_tier)}%</div>
+                                    <div class="label">Your Discount</div>
+                                </div>
+                                <div class="stat-card">
+                                    <i class="fas fa-${user.is_approved ? 'check-circle' : 'clock'}"></i>
+                                    <div class="value">${user.is_approved ? 'Active' : 'Pending'}</div>
+                                    <div class="label">Account Status</div>
+                                </div>
+                            </div>
+                        </div>
+                        ${tierProgressHtml}
+                        ${budgetHtml}
+                        <div class="dashboard-section">
+                            <h2>Recent Orders</h2>
+                            ${orders.length > 0 ? `<button type="button" class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="reorderOrder(${orders[0].id}); return false;"><i class="fas fa-redo"></i> Reorder Last Order</button>` : ''}
+                            ${orders.length === 0 ? `
+                                <p style="color: #374151; text-align: center; padding: 40px;">No orders yet. <a href="#" onclick="navigate('products'); return false;">Start shopping</a></p>
+                            ` : `
+                                <div class="orders-table-wrap">
+                                <table class="orders-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order #</th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                            <th>Total</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${orders.slice(0, 10).map(order => `
+                                            <tr>
+                                                <td><strong>${order.order_number}</strong></td>
+                                                <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                                                <td><span class="order-status status-${order.status}">${order.status}</span></td>
+                                                <td><strong>$${order.total.toFixed(2)}</strong></td>
+                                                <td class="order-actions">
+                                                    <button type="button" class="btn-order-action" onclick="reorderOrder(${order.id}); return false;" title="Reorder">Reorder</button>
+                                                    ${(order.tracking_number || order.tracking_url) ? `<a href="${(order.tracking_url || '#').replace(/"/g,'&quot;')}" target="_blank" rel="noopener" class="btn-order-action">Track</a>` : '<span class="order-action-muted">Track</span>'}
+                                                    <button type="button" class="btn-order-action" onclick="openInvoiceModal(${order.id}); return false;">Invoice</button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                                </div>
+                            `}
+                        </div>
+
+                        <div class="dashboard-section">
+                            <h2>Saved Lists</h2>
+                            ${savedLists.length === 0 ? `
+                                <p style="color: var(--gray-600);">Save your cart as a list to reorder quickly. Add items to cart, then "Save current cart as list" from the cart page.</p>
+                                <a href="#" onclick="navigate('cart'); return false;" class="btn btn-outline btn-sm">Go to Cart</a>
+                            ` : `
+                                <ul class="saved-lists-list">
+                                    ${savedLists.map(list => `
+                                        <li class="saved-list-item">
+                                            <span>${list.name}</span> (${list.items ? list.items.length : 0} items)
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="addSavedListToCart(${list.id}); return false;">Add to Cart</button>
+                                            <button type="button" class="btn btn-outline btn-sm" onclick="deleteSavedList(${list.id}); return false;">Delete</button>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            `}
+                        </div>
+
+                        <div class="dashboard-section">
+                            <h2>My Quotes (RFQs)</h2>
+                            ${rfqsMine.length === 0 ? `
+                                <p style="color: var(--gray-600);">No quote requests yet. Use the RFQ form for bulk or custom quotes.</p>
+                            ` : `
+                                <ul class="rfq-list">
+                                    ${rfqsMine.map(rfq => `
+                                        <li class="rfq-item">
+                                            <span class="rfq-status status-${rfq.status || 'pending'}">${rfq.status || 'pending'}</span>
+                                            ${rfq.quantity ? rfq.quantity + ' • ' : ''}${rfq.type || ''} — ${new Date(rfq.created_at).toLocaleDateString()}
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            `}
+                        </div>
+
+                        <div class="dashboard-section">
+                            <h2>Ship-To Addresses</h2>
+                            ${shipToAddresses.length === 0 ? `
+                                <p style="color: var(--gray-600);">Add multiple ship-to addresses for checkout.</p>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="openShipToModal(); return false;">Add Address</button>
+                            ` : `
+                                <ul class="ship-to-list">
+                                    ${shipToAddresses.map(s => `
+                                        <li>${s.label || 'Primary'}: ${s.address}, ${s.city}, ${s.state} ${s.zip} ${s.is_default ? '(default)' : ''}
+                                            <button type="button" class="btn btn-outline btn-sm" onclick="openShipToModal(${s.id}); return false;">Edit</button>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="openShipToModal(); return false;">Add Address</button>
+                            `}
+                        </div>
+
+                        <div class="dashboard-section">
+                            <h2>Account Details</h2>
+                            <div class="specs-list">
+                                <div class="spec-item">
+                                    <span class="spec-label">Company:</span>
+                                    <span class="spec-value">${user.company_name}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Contact:</span>
+                                    <span class="spec-value">${user.contact_name}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Email:</span>
+                                    <span class="spec-value">${user.email}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Phone:</span>
+                                    <span class="spec-value">${user.phone || 'Not provided'}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Address:</span>
+                                    <span class="spec-value">${user.address ? `${user.address}, ${user.city}, ${user.state} ${user.zip}` : 'Not provided'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <div id="budgetModalOverlay" class="modal-overlay" style="display:none;"></div>
+        <div id="invoiceModalOverlay" class="modal-overlay" style="display:none;"></div>
+        <div id="shipToModalOverlay" class="modal-overlay" style="display:none;"></div>
+    `;
+    // Budget modal content (injected when opened)
+    window._dashboardBudget = budget;
+    window._dashboardShipToList = shipToAddresses;
+}
+
+async function reorderOrder(orderId) {
+    try {
+        await api.post('/api/orders/' + orderId + '/reorder');
+        showToast('Items added to cart', 'success');
+        const cartCount = document.getElementById('cartCount');
+        if (cartCount) { const c = await api.get('/api/cart'); cartCount.textContent = (c && c.length) ? c.length : 0; }
+        navigate('cart');
+    } catch (e) {
+        showToast(e.message || 'Could not reorder', 'error');
+    }
+}
+
+async function openInvoiceModal(orderId) {
+    try {
+        const data = await api.get('/api/orders/' + orderId + '/invoice');
+        const o = data.order;
+        const company = data.company || {};
+        const itemsRows = (o.items || []).map(i => '<tr><td>' + (i.name || '') + '</td><td>' + i.quantity + '</td><td>$' + Number(i.price).toFixed(2) + '</td><td>$' + Number(i.quantity * i.price).toFixed(2) + '</td></tr>').join('');
+        const html = '<div class="invoice-print" style="max-width:700px; margin:0 auto; padding:24px; background:#fff; color:#111;">' +
+            '<h2 style="margin-bottom:8px;">Invoice</h2>' +
+            '<p><strong>' + (company.company_name || '') + '</strong><br>' + (company.contact_name || '') + '<br>' + (company.address || '') + ' ' + (company.city || '') + ', ' + (company.state || '') + ' ' + (company.zip || '') + '<br>' + (company.email || '') + ' ' + (company.phone || '') + '</p>' +
+            '<p>Order #: <strong>' + (o.order_number || '') + '</strong><br>Date: ' + (o.created_at ? new Date(o.created_at).toLocaleDateString() : '') + '</p>' +
+            '<table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid #ddd;"><th style="text-align:left;">Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>' + itemsRows + '</tbody></table>' +
+            '<p>Subtotal: $' + Number(o.subtotal).toFixed(2) + ' | Shipping: $' + Number(o.shipping || 0).toFixed(2) + ' | Tax: $' + Number(o.tax || 0).toFixed(2) + '</p>' +
+            '<p><strong>Total: $' + Number(o.total).toFixed(2) + '</strong></p></div>';
+        const overlay = document.getElementById('invoiceModalOverlay');
+        if (!overlay) return;
+        overlay.innerHTML = '<div class="modal-content" style="max-height:90vh; overflow:auto;">' + html + '<div style="margin-top:16px;"><button type="button" class="btn btn-primary" onclick="window.print();">Print</button> <button type="button" class="btn btn-outline" onclick="closeInvoiceModal();">Close</button></div></div>';
+        overlay.style.display = 'flex';
+        overlay.onclick = function(e) { if (e.target === overlay) closeInvoiceModal(); };
+    } catch (e) {
+        showToast(e.message || 'Could not load invoice', 'error');
+    }
+}
+function closeInvoiceModal() {
+    const el = document.getElementById('invoiceModalOverlay');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+function openBudgetModal() {
+    const budget = window._dashboardBudget || {};
+    const overlay = document.getElementById('budgetModalOverlay');
+    if (!overlay) return;
+    const period = budget.budget_period || 'monthly';
+    overlay.innerHTML = '<div class="modal-content" style="max-width:400px;">' +
+        '<h2>Purchasing Budget</h2>' +
+        '<p style="color:var(--gray-600); font-size:14px;">Set a budget so your staff can see remaining spend when ordering.</p>' +
+        '<label style="display:block; margin-top:12px;">Amount ($)</label>' +
+        '<input type="number" id="budgetAmount" value="' + (budget.budget_amount != null ? budget.budget_amount : '') + '" min="0" step="100" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px;">' +
+        '<label style="display:block; margin-top:12px;">Period</label>' +
+        '<select id="budgetPeriod" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px;">' +
+        '<option value="monthly"' + (period === 'monthly' ? ' selected' : '') + '>Monthly</option>' +
+        '<option value="annual"' + (period === 'annual' ? ' selected' : '') + '>Annual</option>' +
+        '</select>' +
+        '<div style="margin-top:20px; display:flex; gap:10px;">' +
+        '<button type="button" class="btn btn-primary" onclick="saveBudget(); return false;">Save</button>' +
+        '<button type="button" class="btn btn-outline" onclick="closeBudgetModal(); return false;">Cancel</button>' +
+        '</div></div>';
+    overlay.style.display = 'flex';
+    overlay.onclick = function(e) { if (e.target === overlay) closeBudgetModal(); };
+}
+function closeBudgetModal() {
+    const el = document.getElementById('budgetModalOverlay');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+async function saveBudget() {
+    const amount = document.getElementById('budgetAmount');
+    const period = document.getElementById('budgetPeriod');
+    if (!amount || !period) return;
+    try {
+        await api.put('/api/account/budget', { budget_amount: amount.value ? parseFloat(amount.value) : null, budget_period: period.value });
+        showToast('Budget updated', 'success');
+        closeBudgetModal();
+        renderDashboardPage();
+    } catch (e) {
+        showToast(e.message || 'Failed to save budget', 'error');
+    }
+}
+
+async function addSavedListToCart(listId) {
+    try {
+        await api.post('/api/saved-lists/' + listId + '/add-to-cart');
+        showToast('List added to cart', 'success');
+        const cartCount = document.getElementById('cartCount');
+        if (cartCount) { const c = await api.get('/api/cart'); cartCount.textContent = (c && c.length) ? c.length : 0; }
+        navigate('cart');
+    } catch (e) {
+        showToast(e.message || 'Could not add list to cart', 'error');
+    }
+}
+async function deleteSavedList(listId) {
+    if (!confirm('Delete this saved list?')) return;
+    try {
+        await api.delete('/api/saved-lists/' + listId);
+        showToast('List deleted', 'success');
+        renderDashboardPage();
+    } catch (e) {
+        showToast(e.message || 'Could not delete', 'error');
+    }
+}
+
+function openShipToModal(editId) {
+    const list = window._dashboardShipToList || [];
+    const edit = editId ? list.find(s => s.id == editId) : null;
+    const overlay = document.getElementById('shipToModalOverlay');
+    if (!overlay) return;
+    overlay.innerHTML = '<div class="modal-content" style="max-width:420px;">' +
+        '<h2>' + (edit ? 'Edit' : 'Add') + ' Ship-To Address</h2>' +
+        '<input type="hidden" id="shipToId" value="' + (edit ? edit.id : '') + '">' +
+        '<label>Label (e.g. Warehouse A)</label>' +
+        '<input type="text" id="shipToLabel" value="' + (edit ? (edit.label || '') : '') + '" placeholder="Primary" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:10px;">' +
+        '<label>Address</label>' +
+        '<input type="text" id="shipToAddress" value="' + (edit ? (edit.address || '') : '') + '" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:10px;">' +
+        '<label>City</label>' +
+        '<input type="text" id="shipToCity" value="' + (edit ? (edit.city || '') : '') + '" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:10px;">' +
+        '<label>State</label>' +
+        '<input type="text" id="shipToState" value="' + (edit ? (edit.state || '') : '') + '" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:10px;">' +
+        '<label>ZIP</label>' +
+        '<input type="text" id="shipToZip" value="' + (edit ? (edit.zip || '') : '') + '" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:10px;">' +
+        '<label><input type="checkbox" id="shipToDefault"' + (edit && edit.is_default ? ' checked' : '') + '> Default address</label>' +
+        '<div style="margin-top:16px; display:flex; gap:10px;">' +
+        '<button type="button" class="btn btn-primary" onclick="saveShipTo(); return false;">Save</button>' +
+        '<button type="button" class="btn btn-outline" onclick="closeShipToModal(); return false;">Cancel</button>' +
+        (edit ? '<button type="button" class="btn btn-outline" style="color:#c00;" onclick="deleteShipTo(' + edit.id + '); return false;">Delete</button>' : '') +
+        '</div></div>';
+    overlay.style.display = 'flex';
+    overlay.onclick = function(e) { if (e.target === overlay) closeShipToModal(); };
+}
+function closeShipToModal() {
+    const el = document.getElementById('shipToModalOverlay');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+async function saveShipTo() {
+    const id = document.getElementById('shipToId') && document.getElementById('shipToId').value;
+    const label = document.getElementById('shipToLabel').value.trim() || 'Primary';
+    const address = document.getElementById('shipToAddress').value.trim();
+    const city = document.getElementById('shipToCity').value.trim();
+    const state = document.getElementById('shipToState').value.trim();
+    const zip = document.getElementById('shipToZip').value.trim();
+    const isDefault = document.getElementById('shipToDefault').checked;
+    if (!address || !city || !state || !zip) { showToast('Please fill address, city, state, and ZIP', 'error'); return; }
+    try {
+        if (id) {
+            await api.put('/api/ship-to/' + id, { label, address, city, state, zip, is_default: isDefault });
+        } else {
+            await api.post('/api/ship-to', { label, address, city, state, zip, is_default: isDefault });
+        }
+        showToast('Address saved', 'success');
+        closeShipToModal();
+        renderDashboardPage();
+    } catch (e) {
+        showToast(e.message || 'Failed to save', 'error');
+    }
+}
+async function deleteShipTo(id) {
+    try {
+        await api.delete('/api/ship-to/' + id);
+        showToast('Address deleted', 'success');
+        closeShipToModal();
+        renderDashboardPage();
+    } catch (e) {
+        showToast(e.message || 'Failed to delete', 'error');
+    }
+}
+
+// getDiscountPercent moved to top of file for early availability
+
+// ============================================
+// B2B PAGE
+// ============================================
+
+function renderB2BPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="b2b-page">
+            <div class="b2b-hero">
+                <div class="container">
+                    <h1>B2B <span>Wholesale Program</span></h1>
+                    <p>Join our business program and unlock exclusive wholesale pricing, dedicated support, and volume discounts designed for professionals.</p>
+                    <button class="btn btn-primary btn-lg" onclick="navigate('register')">
+                        <i class="fas fa-user-plus"></i> Apply Now
+                    </button>
+                </div>
+            </div>
+
+            <section class="b2b-tiers">
+                <div class="container">
+                    <div class="section-header">
+                        <h2>Discount Tiers</h2>
+                        <p>The more you order, the more you save</p>
+                    </div>
+                    <div class="tiers-grid">
+                        <div class="tier-card">
+                            <div class="tier-icon tier-bronze"><i class="fas fa-medal"></i></div>
+                            <h3>Bronze</h3>
+                            <div class="tier-discount">5% <span>off</span></div>
+                            <div class="tier-min">$1,000+ annual orders</div>
+                            <ul class="tier-features">
+                                <li><i class="fas fa-check"></i> Wholesale pricing</li>
+                                <li><i class="fas fa-check"></i> Online ordering</li>
+                                <li><i class="fas fa-check"></i> Email support</li>
+                                <li><i class="fas fa-check"></i> Order tracking</li>
+                            </ul>
+                        </div>
+                        <div class="tier-card">
+                            <div class="tier-icon tier-silver"><i class="fas fa-medal"></i></div>
+                            <h3>Silver</h3>
+                            <div class="tier-discount">10% <span>off</span></div>
+                            <div class="tier-min">$5,000+ annual orders</div>
+                            <ul class="tier-features">
+                                <li><i class="fas fa-check"></i> All Bronze benefits</li>
+                                <li><i class="fas fa-check"></i> Priority shipping</li>
+                                <li><i class="fas fa-check"></i> Phone support</li>
+                                <li><i class="fas fa-check"></i> Quarterly reviews</li>
+                            </ul>
+                        </div>
+                        <div class="tier-card featured">
+                            <div class="tier-icon tier-gold"><i class="fas fa-crown"></i></div>
+                            <h3>Gold</h3>
+                            <div class="tier-discount">15% <span>off</span></div>
+                            <div class="tier-min">$15,000+ annual orders</div>
+                            <ul class="tier-features">
+                                <li><i class="fas fa-check"></i> All Silver benefits</li>
+                                <li><i class="fas fa-check"></i> Dedicated rep</li>
+                                <li><i class="fas fa-check"></i> Net 30 terms</li>
+                                <li><i class="fas fa-check"></i> Custom orders</li>
+                            </ul>
+                        </div>
+                        <div class="tier-card">
+                            <div class="tier-icon tier-platinum"><i class="fas fa-gem"></i></div>
+                            <h3>Platinum</h3>
+                            <div class="tier-discount">20% <span>off</span></div>
+                            <div class="tier-min">$50,000+ annual orders</div>
+                            <ul class="tier-features">
+                                <li><i class="fas fa-check"></i> All Gold benefits</li>
+                                <li><i class="fas fa-check"></i> Volume rebates</li>
+                                <li><i class="fas fa-check"></i> Net 60 terms</li>
+                                <li><i class="fas fa-check"></i> Private labeling</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="b2b-cta">
+                <div class="container">
+                    <h2>Ready to Get Started?</h2>
+                    <p>Apply for a B2B account today and start saving on your glove orders.</p>
+                    <div style="display: flex; gap: 16px; justify-content: center;">
+                        <button class="btn btn-primary btn-lg" onclick="navigate('register')">
+                            <i class="fas fa-user-plus"></i> Apply Now
+                        </button>
+                        <button class="btn btn-secondary btn-lg" onclick="navigate('contact')">
+                            <i class="fas fa-phone"></i> Contact Sales
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </section>
+    `;
+}
+
+// ============================================
+// CONTACT PAGE
+// ============================================
+
+function renderContactPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="contact-page">
+            <div class="container">
+                <div class="contact-grid">
+                    <div class="contact-info">
+                        <h1>Contact Us</h1>
+                        <p>Have questions about our products or B2B program? We're here to help!</p>
+                        
+                        <div class="contact-cards">
+                            <div class="contact-card">
+                                <i class="fas fa-phone"></i>
+                                <div>
+                                    <h4>Phone</h4>
+                                    <p>1-800-GLOVECUBS<br>Mon-Fri: 8AM - 6PM MST</p>
+                                </div>
+                            </div>
+                            <div class="contact-card">
+                                <i class="fas fa-envelope"></i>
+                                <div>
+                                    <h4>Email</h4>
+                                    <p>sales@glovecubs.com<br>support@glovecubs.com</p>
+                                </div>
+                            </div>
+                            <div class="contact-card">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <div>
+                                    <h4>Headquarters</h4>
+                                    <p>Salt Lake City, UT<br>United States</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 40px; background: #111111; padding: 32px; border-radius: 12px; color: #ffffff;">
+                            <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 12px; color: #FF7A00;">Built Here, Servicing Everywhere</h3>
+                            <p style="color: #E5E7EB; line-height: 1.7; margin-bottom: 24px;">
+                                Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central location, we efficiently distribute quality gloves to businesses across the United States and beyond. Whether you're on the East Coast, West Coast, or anywhere in between, we're here to serve you.
+                            </p>
+                            <div style="width: 100%; height: 400px; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+                                <iframe 
+                                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12190.481301693!2d-111.89104748459382!3d40.76077997932681!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8752f5105c4b0b0b%3A0x5c5c5c5c5c5c5c5c!2sSalt%20Lake%20City%2C%20UT%2C%20USA!5e0!3m2!1sen!2sus!4v1706123456789!5m2!1sen!2sus" 
+                                    width="100%" 
+                                    height="400" 
+                                    style="border:0; border-radius: 8px;" 
+                                    allowfullscreen="" 
+                                    loading="lazy" 
+                                    referrerpolicy="no-referrer-when-downgrade"
+                                    title="Glovecubs Headquarters - Salt Lake City, UT">
+                                </iframe>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="contact-form-container">
+                        <h2>Send us a Message</h2>
+                        <div class="form-group">
+                            <label>Your Name</label>
+                            <input type="text" id="contactName" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" id="contactEmail" placeholder="your@email.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Company (Optional)</label>
+                            <input type="text" id="contactCompany" placeholder="Company name">
+                        </div>
+                        <div class="form-group">
+                            <label>Subject</label>
+                            <select id="contactSubject">
+                                <option>General Inquiry</option>
+                                <option>Product Question</option>
+                                <option>B2B Account</option>
+                                <option>Order Support</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Message</label>
+                            <textarea id="contactMessage" rows="5" placeholder="How can we help you?"></textarea>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="submitContact()">
+                            <i class="fas fa-paper-plane"></i> Send Message
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function renderAboutPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="contact-page" style="padding: 60px 0;">
+            <div class="container">
+                <div style="max-width: 900px; margin: 0 auto;">
+                    <div style="text-align: center; margin-bottom: 48px;">
+                        <h1 style="font-size: 42px; font-weight: 800; margin-bottom: 16px; color: var(--secondary);">About Glovecubs</h1>
+                        <p style="font-size: 18px; color: var(--gray-600);">Real business. Real people. Real trust.</p>
+                    </div>
+
+                    <div style="background: var(--gray-100); padding: 40px; border-radius: var(--radius-lg); margin-bottom: 32px;">
+                        <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; color: var(--secondary);">Our Story</h2>
+                        <p style="color: var(--gray-700); line-height: 1.8; font-size: 16px; margin-bottom: 16px;">
+                            <strong>Glovecubs LLC</strong> was founded in 2018 to serve healthcare facilities, food processors, and manufacturers with reliable, certified glove supply. We're not a pop-up reseller. We're a real business with real inventory, real people, and real commitment to your success.
+                        </p>
+                        <p style="color: var(--gray-700); line-height: 1.8; font-size: 16px;">
+                            After seeing too many businesses struggle with unreliable suppliers, backorders, and quality issues, we built Glovecubs to be different. We focus on transparency, reliability, and building long-term partnerships—not quick sales.
+                        </p>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; margin-bottom: 48px;">
+                        <div style="background: var(--white); padding: 32px; border-radius: var(--radius-lg); border: 1px solid var(--gray-200);">
+                            <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: var(--secondary);">
+                                <i class="fas fa-building" style="color: var(--primary); margin-right: 8px;"></i>
+                                Company Information
+                            </h3>
+                            <ul style="list-style: none; padding: 0; margin: 0;">
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+                                    <strong>Legal Name:</strong> Glovecubs LLC
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+                                    <strong>Founded:</strong> 2018
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+                                    <strong>Headquarters:</strong> Salt Lake City, UT
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+                                    <strong>Phone:</strong> 1-800-GLOVECUBS
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+                                    <strong>Email:</strong> sales@glovecubs.com
+                                </li>
+                                <li style="padding: 8px 0;">
+                                    <strong>Business Hours:</strong> Mon-Fri, 8AM - 6PM MST
+                                </li>
+                            </ul>
+                        </div>
+                        <div style="background: var(--white); padding: 32px; border-radius: var(--radius-lg); border: 1px solid var(--gray-200);">
+                            <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: var(--secondary);">
+                                <i class="fas fa-certificate" style="color: var(--primary); margin-right: 8px;"></i>
+                                Certifications & Affiliations
+                            </h3>
+                            <ul style="list-style: none; padding: 0; margin: 0;">
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                                    <span>FDA Registered Distributor</span>
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                                    <span>ISO Certified Supply Chain</span>
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                                    <span>ASTM Member</span>
+                                </li>
+                                <li style="padding: 8px 0; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                                    <span>NSF Certified Products</span>
+                                </li>
+                                <li style="padding: 8px 0; display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                                    <span>CE Marked Products Available</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--white); padding: 40px; border-radius: var(--radius-lg); border: 1px solid var(--gray-200);">
+                        <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 24px; color: var(--secondary); text-align: center;">Our Team</h2>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px;">
+                            <div style="text-align: center;">
+                                <div style="width: 120px; height: 120px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--white); font-size: 48px;">
+                                    <i class="fas fa-user-tie"></i>
+                                </div>
+                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">John Smith</h3>
+                                <div style="font-size: 14px; color: var(--primary); font-weight: 600; margin-bottom: 8px;">CEO & Founder</div>
+                                <p style="font-size: 13px; color: var(--gray-600);">20+ years in medical supply chain</p>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="width: 120px; height: 120px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--white); font-size: 48px;">
+                                    <i class="fas fa-user-tie"></i>
+                                </div>
+                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">Sarah Johnson</h3>
+                                <div style="font-size: 14px; color: var(--primary); font-weight: 600; margin-bottom: 8px;">VP of Operations</div>
+                                <p style="font-size: 13px; color: var(--gray-600);">Quality assurance & compliance expert</p>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="width: 120px; height: 120px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--white); font-size: 48px;">
+                                    <i class="fas fa-user-tie"></i>
+                                </div>
+                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">Mike Davis</h3>
+                                <div style="font-size: 14px; color: var(--primary); font-weight: 600; margin-bottom: 8px;">Head of Sales</div>
+                                <p style="font-size: 13px; color: var(--gray-600);">B2B account management specialist</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--primary); color: var(--white); padding: 40px; border-radius: var(--radius-lg); text-align: center; margin-top: 48px;">
+                        <h2 style="font-size: 32px; font-weight: 700; margin-bottom: 16px;">Ready to Work Together?</h2>
+                        <p style="font-size: 16px; opacity: 0.95; margin-bottom: 24px;">Let's discuss how we can support your glove supply needs.</p>
+                        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-secondary btn-lg" onclick="navigate('contact')" style="background: var(--white); color: var(--primary);">
+                                <i class="fas fa-phone"></i> Contact Us
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('register')" style="border-color: var(--white); color: var(--white);">
+                                <i class="fas fa-user-plus"></i> Start B2B Account
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+// ============================================
+// FAQ PAGE
+// ============================================
+
+function renderFAQPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="faq-page" style="padding: 80px 0; background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);">
+            <div class="container">
+                <div style="max-width: 1000px; margin: 0 auto;">
+                    <div style="text-align: center; margin-bottom: 60px;">
+                        <h1 style="font-size: 48px; font-weight: 800; margin-bottom: 16px; color: #111111;">Frequently Asked Questions</h1>
+                        <p style="font-size: 18px; color: #4B5563;">Everything you need to know about ordering from Glovecubs</p>
+                    </div>
+
+                    <div style="display: grid; gap: 24px;">
+                        <!-- Ordering & Pricing -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #FF7A00; display: flex; align-items: center; gap: 12px;">
+                                <i class="fas fa-shopping-cart"></i> Ordering & Pricing
+                            </h2>
+                            <div style="display: grid; gap: 20px;">
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        What are your minimum order quantities?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Minimum orders vary by product. Most disposable gloves have a minimum of 1 case (typically 1,000 gloves). Work gloves typically have a minimum of 12 pairs per order. For bulk orders of 100+ cases, please use our RFQ form for custom pricing.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Do you offer volume discounts?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Yes! We offer tiered discount pricing for B2B customers: Bronze (5%), Silver (10%), Gold (15%), and Platinum (20%) based on your annual order volume. Discounts are automatically applied at checkout for approved accounts.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Can I get a quote for a large order?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Absolutely! Use our Quick Bulk Builder on the homepage or submit an RFQ form for orders of 100+ cases. Our team will respond within 24 hours with custom pricing and availability.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Do you offer net terms?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Yes, we offer Net-30 and Net-45 terms for approved B2B accounts. To qualify, complete our B2B registration and provide business information. Approval typically takes 1-2 business days.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shipping & Delivery -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #FF7A00; display: flex; align-items: center; gap: 12px;">
+                                <i class="fas fa-shipping-fast"></i> Shipping & Delivery
+                            </h2>
+                            <div style="display: grid; gap: 20px;">
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        How fast is your shipping?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Orders ship from our Salt Lake City warehouse within 1-2 business days. Standard shipping takes 3-5 business days. Expedited shipping options are available for rush orders.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Do you ship internationally?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Currently, we ship within the United States. For international orders, please contact our sales team to discuss options.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        What if my order is damaged or incorrect?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Contact us within 48 hours of delivery. We'll arrange a replacement or refund immediately. Photos of damaged items help expedite the process.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Product Information -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #FF7A00; display: flex; align-items: center; gap: 12px;">
+                                <i class="fas fa-box"></i> Product Information
+                            </h2>
+                            <div style="display: grid; gap: 20px;">
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Are your products FDA approved?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>All medical-grade gloves are FDA 510(k) cleared. Product pages clearly indicate FDA status, ASTM certifications, and other compliance information. Certificates are available for download on each product page.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Can I get product samples?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Yes! Contact your dedicated account representative or submit a request through our contact form. Samples are typically available for B2B customers evaluating products.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        How do I know which glove is right for my application?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Use our AI Glove Advisor tool! Answer 5-7 questions about your use case, and we'll recommend specific SKUs with explanations. You can also filter products by industry, material, thickness, and certifications.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Account & B2B -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #FF7A00; display: flex; align-items: center; gap: 12px;">
+                                <i class="fas fa-user-tie"></i> Account & B2B
+                            </h2>
+                            <div style="display: grid; gap: 20px;">
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        How do I create a B2B account?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Click "Register" in the header and fill out the B2B registration form. Provide your business information, tax ID, and expected order volume. Our team reviews applications within 1-2 business days.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        What are the benefits of a B2B account?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>B2B accounts get bulk pricing, volume discounts, net terms, dedicated account representatives, order history tracking, and priority customer support.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item">
+                                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #111111; cursor: pointer;" onclick="toggleFAQ(this)">
+                                        <i class="fas fa-chevron-down" style="margin-right: 8px; color: #FF7A00; transition: transform 0.3s;"></i>
+                                        Can I track my orders?
+                                    </h3>
+                                    <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
+                                        <p>Yes! Log into your account and visit your dashboard to view order history, track shipments, download invoices, and manage your account settings.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); color: #ffffff; padding: 48px; border-radius: 16px; text-align: center; margin-top: 48px;">
+                        <h2 style="font-size: 32px; font-weight: 700; margin-bottom: 16px;">Still Have Questions?</h2>
+                        <p style="font-size: 18px; opacity: 0.95; margin-bottom: 32px;">Our team is here to help. Get in touch and we'll respond within 24 hours.</p>
+                        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-secondary btn-lg" onclick="navigate('contact')" style="background: #ffffff; color: #FF7A00; padding: 14px 32px; font-weight: 600;">
+                                <i class="fas fa-envelope"></i> Contact Us
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('b2b')" style="border: 2px solid #ffffff; color: #ffffff; padding: 14px 32px; font-weight: 600;">
+                                <i class="fas fa-phone"></i> Call 1-800-GLOVECUBS
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function toggleFAQ(element) {
+    const answer = element.nextElementSibling;
+    const icon = element.querySelector('i');
+    const isOpen = answer.style.display === 'block';
+    
+    // Close all other FAQs in the same section
+    const section = element.closest('.faq-item').parentElement;
+    section.querySelectorAll('.faq-answer').forEach(ans => {
+        if (ans !== answer) {
+            ans.style.display = 'none';
+            ans.previousElementSibling.querySelector('i').style.transform = 'rotate(0deg)';
+        }
+    });
+    
+    // Toggle current FAQ
+    answer.style.display = isOpen ? 'none' : 'block';
+    icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+// ============================================
+// AI GLOVE ADVISOR
+// ============================================
+
+let aiAdvisorState = {
+    currentStep: 0,
+    answers: {},
+    recommendations: null
+};
+
+const aiQuestions = [
+    {
+        id: 'gloveType',
+        question: 'Do you need disposable gloves or work gloves?',
+        type: 'select',
+        options: [
+            { value: 'disposable', label: 'Disposable gloves', icon: 'fa-hand-paper', desc: 'Single-use for exam, food service, cleaning, light industrial' },
+            { value: 'work', label: 'Work gloves', icon: 'fa-hard-hat', desc: 'Reusable, cut-resistant, impact protection, heavy duty' },
+            { value: 'both', label: 'Not sure — help me decide', icon: 'fa-question-circle', desc: 'Recommend based on my industry and application' }
+        ]
+    },
+    {
+        id: 'industry',
+        question: 'What industry or application will these gloves be used for?',
+        type: 'select',
+        options: [
+            { value: 'healthcare', label: 'Healthcare / Medical', icon: 'fa-hospital' },
+            { value: 'food', label: 'Food Service / Processing', icon: 'fa-utensils' },
+            { value: 'manufacturing', label: 'Manufacturing / Industrial', icon: 'fa-industry' },
+            { value: 'automotive', label: 'Automotive', icon: 'fa-car' },
+            { value: 'janitorial', label: 'Janitorial / Cleaning', icon: 'fa-broom' },
+            { value: 'other', label: 'Other', icon: 'fa-question-circle' }
+        ]
+    },
+    {
+        id: 'environment',
+        question: 'What will the gloves come in contact with?',
+        type: 'multi-select',
+        options: [
+            { value: 'oils', label: 'Oils / Grease', icon: 'fa-tint' },
+            { value: 'chemicals', label: 'Chemicals / Solvents', icon: 'fa-flask' },
+            { value: 'food', label: 'Food Products', icon: 'fa-apple-alt' },
+            { value: 'blood', label: 'Blood / Bodily Fluids', icon: 'fa-heartbeat' },
+            { value: 'sharp', label: 'Sharp Objects / Cut Risk', icon: 'fa-cut' },
+            { value: 'general', label: 'General Use / Light Duty', icon: 'fa-hand-paper' }
+        ]
+    },
+    {
+        id: 'duration',
+        question: 'How long will gloves be worn per use?',
+        type: 'select',
+        options: [
+            { value: 'short', label: 'Short-term (under 15 minutes)', icon: 'fa-clock' },
+            { value: 'medium', label: 'Medium (15-60 minutes)', icon: 'fa-clock' },
+            { value: 'long', label: 'Long-term (over 1 hour)', icon: 'fa-clock' }
+        ]
+    },
+    {
+        id: 'allergies',
+        question: 'Any latex allergies or sensitivities?',
+        type: 'select',
+        options: [
+            { value: 'yes', label: 'Yes, avoid latex', icon: 'fa-exclamation-triangle' },
+            { value: 'no', label: 'No known allergies', icon: 'fa-check-circle' },
+            { value: 'unknown', label: 'Not sure / Mixed users', icon: 'fa-question-circle' }
+        ]
+    },
+    {
+        id: 'compliance',
+        question: 'What compliance standards are required?',
+        type: 'multi-select',
+        options: [
+            { value: 'fda', label: 'FDA 510(k) / Medical Grade', icon: 'fa-certificate' },
+            { value: 'food', label: 'FDA Food Contact Approved', icon: 'fa-certificate' },
+            { value: 'ansi', label: 'ANSI Cut-Resistant (A2-A5)', icon: 'fa-shield-alt' },
+            { value: 'astm', label: 'ASTM Standards', icon: 'fa-certificate' },
+            { value: 'none', label: 'No specific compliance needed', icon: 'fa-check' }
+        ]
+    },
+    {
+        id: 'texture',
+        question: 'Do you need textured/grippy gloves?',
+        type: 'select',
+        options: [
+            { value: 'yes', label: 'Yes, textured for grip', icon: 'fa-hand-rock' },
+            { value: 'no', label: 'No, smooth is fine', icon: 'fa-hand-paper' },
+            { value: 'either', label: 'Either works', icon: 'fa-hand-paper' }
+        ]
+    },
+    {
+        id: 'budget',
+        question: 'What\'s your priority?',
+        type: 'select',
+        options: [
+            { value: 'quality', label: 'Maximum quality / durability', icon: 'fa-award' },
+            { value: 'cost', label: 'Best value / cost-effective', icon: 'fa-dollar-sign' },
+            { value: 'balance', label: 'Balance of quality and cost', icon: 'fa-balance-scale' }
+        ]
+    }
+];
+
+function renderAIAdvisor() {
+    const mainContent = document.getElementById('mainContent');
+    const isLoggedIn = state.user;
+    
+    if (!isLoggedIn) {
+        mainContent.innerHTML = `
+            <section class="contact-page" style="padding: 60px 0;">
+                <div class="container">
+                    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                        <div style="font-size: 64px; color: var(--primary); margin-bottom: 24px;">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">AI Glove Advisor</h1>
+                        <p style="font-size: 18px; color: var(--gray-600); margin-bottom: 32px;">Get personalized glove recommendations based on your specific needs. Login or create an account to get started.</p>
+                        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-lg" onclick="navigate('login')">
+                                <i class="fas fa-sign-in-alt"></i> Login
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('register')">
+                                <i class="fas fa-user-plus"></i> Create Account
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+
+    // Reset state if starting fresh
+    if (aiAdvisorState.currentStep === 0 && Object.keys(aiAdvisorState.answers).length === 0) {
+        aiAdvisorState = {
+            currentStep: 0,
+            answers: {},
+            recommendations: null
+        };
+    }
+
+    const currentQuestion = aiQuestions[aiAdvisorState.currentStep];
+    const progress = ((aiAdvisorState.currentStep + 1) / aiQuestions.length) * 100;
+
+    if (aiAdvisorState.recommendations) {
+        renderAIRecommendations();
+        return;
+    }
+
+    mainContent.innerHTML = `
+        <section class="contact-page" style="padding: 60px 0;">
+            <div class="container">
+                <div style="max-width: 800px; margin: 0 auto;">
+                    <div style="text-align: center; margin-bottom: 48px;">
+                        <div style="font-size: 64px; color: var(--primary); margin-bottom: 16px;">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 8px;">AI Glove Advisor</h1>
+                        <p style="font-size: 16px; color: var(--gray-600);">Answer a few questions to get personalized glove recommendations</p>
+                    </div>
+
+                    <div style="background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 40px; margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                            <div>
+                                <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">Question ${aiAdvisorState.currentStep + 1} of ${aiQuestions.length}</div>
+                                <div style="width: 300px; height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;">
+                                    <div style="width: ${progress}%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 32px; color: var(--secondary);">${currentQuestion.question}</h2>
+
+                        <div id="aiQuestionOptions" style="display: grid; gap: 16px;">
+                            ${renderQuestionOptions(currentQuestion)}
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between;">
+                        <button class="btn btn-outline" onclick="aiAdvisorPrevious()" ${aiAdvisorState.currentStep === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
+                            <i class="fas fa-arrow-left"></i> Previous
+                        </button>
+                        <div style="font-size: 14px; color: var(--gray-600); display: flex; align-items: center;">
+                            <i class="fas fa-shield-alt" style="color: var(--primary); margin-right: 8px;"></i>
+                            Your answers are private and secure
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function renderQuestionOptions(question) {
+    if (question.type === 'select') {
+        return question.options.map(opt => `
+            <button class="ai-option-btn" onclick="selectAIAnswer('${question.id}', '${opt.value}')" style="
+                width: 100%;
+                padding: 20px;
+                text-align: left;
+                background: var(--gray-100);
+                border: 2px solid transparent;
+                border-radius: var(--radius);
+                cursor: pointer;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            " onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--white)';" onmouseout="this.style.borderColor='transparent'; this.style.background='var(--gray-100)';">
+                <div style="font-size: 32px; color: var(--primary); width: 48px; text-align: center;">
+                    <i class="fas ${opt.icon}"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 16px; color: var(--secondary);">${opt.label}</div>
+                    ${opt.desc ? `<div style="font-size: 13px; color: var(--gray-500); margin-top: 4px;">${opt.desc}</div>` : ''}
+                </div>
+                <i class="fas fa-chevron-right" style="color: var(--gray-400);"></i>
+            </button>
+        `).join('');
+    } else if (question.type === 'multi-select') {
+        return question.options.map(opt => `
+            <label style="
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 20px;
+                background: var(--gray-100);
+                border: 2px solid transparent;
+                border-radius: var(--radius);
+                cursor: pointer;
+                transition: all 0.2s;
+            " onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--white)';" onmouseout="this.style.borderColor='transparent'; this.style.background='var(--gray-100)';">
+                <input type="checkbox" value="${opt.value}" style="width: 20px; height: 20px; cursor: pointer;" onchange="updateMultiSelect('${question.id}', this)">
+                <div style="font-size: 24px; color: var(--primary); width: 32px; text-align: center;">
+                    <i class="fas ${opt.icon}"></i>
+                </div>
+                <div style="flex: 1; font-weight: 600; font-size: 16px; color: var(--secondary);">${opt.label}</div>
+            </label>
+        `).join('') + `
+            <div style="margin-top: 16px;">
+                <button class="btn btn-primary" onclick="proceedMultiSelect('${question.id}')" style="width: 100%;" id="proceedBtn" disabled>
+                    Continue
+                </button>
+            </div>
+        `;
+    }
+    return '';
+}
+
+function selectAIAnswer(questionId, value) {
+    aiAdvisorState.answers[questionId] = value;
+    aiAdvisorState.currentStep++;
+    
+    if (aiAdvisorState.currentStep >= aiQuestions.length) {
+        generateRecommendations();
+    } else {
+        renderAIAdvisor();
+    }
+}
+
+function updateMultiSelect(questionId, checkbox) {
+    if (!aiAdvisorState.answers[questionId]) {
+        aiAdvisorState.answers[questionId] = [];
+    }
+    if (checkbox.checked) {
+        if (!aiAdvisorState.answers[questionId].includes(checkbox.value)) {
+            aiAdvisorState.answers[questionId].push(checkbox.value);
+        }
+    } else {
+        aiAdvisorState.answers[questionId] = aiAdvisorState.answers[questionId].filter(v => v !== checkbox.value);
+    }
+    
+    // Enable/disable proceed button
+    const proceedBtn = document.getElementById('proceedBtn');
+    if (proceedBtn) {
+        proceedBtn.disabled = aiAdvisorState.answers[questionId].length === 0;
+        if (aiAdvisorState.answers[questionId].length > 0) {
+            proceedBtn.style.opacity = '1';
+        } else {
+            proceedBtn.style.opacity = '0.5';
+        }
+    }
+}
+
+function proceedMultiSelect(questionId) {
+    if (aiAdvisorState.answers[questionId] && aiAdvisorState.answers[questionId].length > 0) {
+        aiAdvisorState.currentStep++;
+        if (aiAdvisorState.currentStep >= aiQuestions.length) {
+            generateRecommendations();
+        } else {
+            renderAIAdvisor();
+        }
+    }
+}
+
+function aiAdvisorPrevious() {
+    if (aiAdvisorState.currentStep > 0) {
+        aiAdvisorState.currentStep--;
+        renderAIAdvisor();
+    }
+}
+
+async function generateRecommendations() {
+    try {
+        // Get all products
+        const products = await api.get('/api/products');
+        
+        if (!products || !Array.isArray(products) || products.length === 0) {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = `
+                <section class="contact-page" style="padding: 60px 0;">
+                    <div class="container">
+                        <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                            <div style="font-size: 64px; color: var(--danger); margin-bottom: 24px;">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Unable to Load Products</h1>
+                            <p style="font-size: 18px; color: var(--gray-600); margin-bottom: 32px;">There was an error loading products. Please try again.</p>
+                            <button class="btn btn-primary btn-lg" onclick="aiAdvisorState = {currentStep: 0, answers: {}, recommendations: null}; renderAIAdvisor();">
+                                <i class="fas fa-redo"></i> Try Again
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            `;
+            return;
+        }
+        
+        // Rule-based recommendation engine
+        const recommendations = [];
+        const warnings = [];
+        let explanation = '';
+
+    const industry = aiAdvisorState.answers.industry;
+    const environment = aiAdvisorState.answers.environment || [];
+    const allergies = aiAdvisorState.answers.allergies;
+    const compliance = aiAdvisorState.answers.compliance || [];
+    const texture = aiAdvisorState.answers.texture;
+    const budget = aiAdvisorState.answers.budget;
+
+    // Filter products based on answers - use scoring instead of strict filtering
+    let filteredProducts = products.map(product => {
+        const nameDesc = (product.name + ' ' + (product.description || '') + ' ' + (product.useCase || '')).toLowerCase();
+        const certs = (product.certifications || '').toLowerCase();
+        let score = 0;
+        
+        // Industry match - check useCase, description, or category
+        if (industry === 'healthcare') {
+            const isHealthcare = nameDesc.includes('healthcare') || nameDesc.includes('medical') || 
+                                nameDesc.includes('exam') || nameDesc.includes('hospital') ||
+                                (product.useCase && product.useCase.toLowerCase().includes('healthcare'));
+            if (isHealthcare) score += 10;
+            if (product.category === 'Work Gloves' && !isHealthcare) score -= 5;
+        }
+        if (industry === 'food') {
+            const isFood = nameDesc.includes('food') || nameDesc.includes('food service') ||
+                          (product.useCase && product.useCase.toLowerCase().includes('food'));
+            if (isFood) score += 10;
+            if (product.category === 'Work Gloves' && !isFood) score -= 5;
+        }
+        if (industry === 'manufacturing') {
+            const isManufacturing = nameDesc.includes('manufacturing') || nameDesc.includes('industrial') ||
+                                   (product.useCase && product.useCase.toLowerCase().includes('manufacturing'));
+            if (isManufacturing) score += 10;
+            if (product.category === 'Disposable Gloves' && !nameDesc.includes('industrial') && !isManufacturing) score -= 3;
+        }
+        if (industry === 'automotive') {
+            const isAutomotive = nameDesc.includes('automotive') || nameDesc.includes('auto') ||
+                                (product.useCase && product.useCase.toLowerCase().includes('automotive'));
+            if (isAutomotive) score += 10;
+            if (product.category === 'Work Gloves' && !isAutomotive) score -= 3;
+        }
+        if (industry === 'janitorial') {
+            const isJanitorial = nameDesc.includes('janitorial') || nameDesc.includes('cleaning') ||
+                               (product.useCase && product.useCase.toLowerCase().includes('janitorial'));
+            if (isJanitorial) score += 10;
+            if (product.category === 'Work Gloves' && !isJanitorial) score -= 3;
+        }
+        
+        // Allergy check - strict filter
+        if (allergies === 'yes' && product.material === 'Latex') return null;
+        if (allergies === 'unknown' && product.material === 'Latex') {
+            if (!warnings.includes('⚠️ Latex detected. Consider nitrile if allergies are a concern.')) {
+                warnings.push('⚠️ Latex detected. Consider nitrile if allergies are a concern.');
+            }
+        }
+
+        // Compliance check - be more lenient, check description too
+        if (compliance.includes('fda')) {
+            const hasFDA = certs.includes('fda') || nameDesc.includes('fda') || nameDesc.includes('medical grade') || 
+                          nameDesc.includes('exam grade') || product.grade?.toLowerCase().includes('medical');
+            if (hasFDA) score += 5;
+            if (!hasFDA && product.category === 'Disposable Gloves') score -= 3;
+        }
+        if (compliance.includes('food')) {
+            const hasFoodCompliance = certs.includes('food') || nameDesc.includes('food safe') || 
+                                     nameDesc.includes('food service') || nameDesc.includes('fda');
+            if (hasFoodCompliance) score += 5;
+            if (!hasFoodCompliance && industry === 'food') score -= 3;
+        }
+        if (compliance.includes('ansi')) {
+            const hasANSI = certs.includes('ansi') || nameDesc.includes('ansi') || nameDesc.includes('cut resistant') ||
+                           nameDesc.includes('cut-resistant');
+            if (hasANSI) score += 5;
+            if (!hasANSI && product.category === 'Work Gloves') score -= 3;
+        }
+
+        // Environment checks - strict filters for safety
+        if (environment.includes('oils') && product.material === 'Vinyl') {
+            if (!warnings.includes('⚠️ Vinyl gloves will tear with oils. Use nitrile instead.')) {
+                warnings.push('⚠️ Vinyl gloves will tear with oils. Use nitrile instead.');
+            }
+            return null; // Exclude vinyl for oils
+        }
+        if (environment.includes('chemicals') && product.material === 'Vinyl') return null;
+        if (environment.includes('food') && product.material === 'Latex' && allergies !== 'no') return null;
+
+        // Texture preference
+        if (texture === 'yes') {
+            if (nameDesc.includes('textured') || nameDesc.includes('grip')) score += 5;
+        }
+
+        return { product, score };
+    }).filter(item => item !== null); // Remove null items (filtered out)
+
+    // Extract products and add budget/material scoring
+    filteredProducts = filteredProducts.map(({ product, score }) => {
+        // Budget priority
+        if (budget === 'cost') {
+            score -= product.price; // Lower price = higher score
+        } else if (budget === 'quality') {
+            score += product.price; // Higher price = higher score
+        }
+
+        // Material preference
+        if (industry === 'healthcare' || environment.includes('blood')) {
+            if (product.material === 'Nitrile') score += 10;
+        }
+        if (industry === 'food' && product.material === 'Nitrile') score += 5;
+        if (industry === 'automotive' && product.material === 'Nitrile') score += 5;
+
+        return { product, score };
+    });
+
+    // Sort by score (highest first)
+    filteredProducts.sort((a, b) => b.score - a.score);
+    
+    // Extract just the products
+    filteredProducts = filteredProducts.map(({ product }) => product);
+
+    // Generate explanation (glove type + industry/application)
+    const typeLabel = gloveType === 'disposable' ? 'disposable' : gloveType === 'work' ? 'work' : 'disposable and work';
+    if (industry === 'food' && environment.includes('oils')) {
+        explanation = 'For ' + typeLabel + ' gloves in food processing with oils → 6-mil nitrile, textured fingers, FDA compliant. Vinyl will tear and fail audits.';
+    } else if (industry === 'healthcare') {
+        explanation = 'For ' + typeLabel + ' gloves in healthcare, nitrile provides the best balance of protection, durability, and latex-free safety.';
+    } else if (industry === 'manufacturing' || industry === 'automotive') {
+        explanation = 'Based on your industry and application, these ' + typeLabel + ' options match your needs for durability and performance.';
+    } else if (budget === 'cost') {
+        explanation = 'For cost-effective ' + typeLabel + ' gloves, consider vinyl for light-duty or thinner nitrile for better value.';
+    } else {
+        explanation = 'Based on your glove type, industry, and application, these options are the best match for your needs.';
+    }
+
+    // Add warnings
+    if (environment.includes('food') && !compliance.includes('food')) {
+        warnings.push('⚠️ Food contact requires FDA Food Contact approval. Make sure your selected gloves are compliant.');
+    }
+
+    // If no products match, show top products from the chosen glove type (or all)
+    if (filteredProducts.length === 0) {
+        warnings.push('⚠️ No products matched all your criteria exactly. Showing best alternatives below.');
+        filteredProducts = candidateProducts.slice(0, 10);
+        if (filteredProducts.length === 0) filteredProducts = products.slice(0, 10);
+    }
+
+        aiAdvisorState.recommendations = {
+            products: filteredProducts.slice(0, 5),
+            explanation,
+            warnings
+        };
+
+        renderAIRecommendations();
+    } catch (error) {
+        console.error('Error generating recommendations:', error);
+        const mainContent = document.getElementById('mainContent');
+        mainContent.innerHTML = `
+            <section class="contact-page" style="padding: 60px 0;">
+                <div class="container">
+                    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                        <div style="font-size: 64px; color: var(--danger); margin-bottom: 24px;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Error Loading Recommendations</h1>
+                        <p style="font-size: 18px; color: var(--gray-600); margin-bottom: 32px;">${error.message || 'An error occurred while generating recommendations.'}</p>
+                        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-lg" onclick="aiAdvisorState = {currentStep: 0, answers: {}, recommendations: null}; renderAIAdvisor();">
+                                <i class="fas fa-redo"></i> Try Again
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('products')">
+                                <i class="fas fa-shopping-bag"></i> Browse Products
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+}
+
+function renderAIRecommendations() {
+    const mainContent = document.getElementById('mainContent');
+    const rec = aiAdvisorState.recommendations;
+
+    mainContent.innerHTML = `
+        <section class="contact-page" style="padding: 60px 0;">
+            <div class="container">
+                <div style="max-width: 1000px; margin: 0 auto;">
+                    <div style="text-align: center; margin-bottom: 48px;">
+                        <div style="font-size: 64px; color: var(--success); margin-bottom: 16px;">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 8px;">Your Personalized Recommendations</h1>
+                        <p style="font-size: 16px; color: var(--gray-600);">Based on your answers, here are the best glove options for your needs</p>
+                    </div>
+
+                    ${rec.warnings.length > 0 ? `
+                        <div style="background: var(--warning); color: var(--white); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 32px;">
+                            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">
+                                <i class="fas fa-exclamation-triangle"></i> Important Warnings
+                            </h3>
+                            <ul style="margin: 0; padding-left: 24px;">
+                                ${rec.warnings.map(w => `<li style="margin-bottom: 8px;">${w}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    <div style="background: var(--primary); color: var(--white); padding: 32px; border-radius: var(--radius-lg); margin-bottom: 32px;">
+                        <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 12px;">
+                            <i class="fas fa-lightbulb"></i> Why These Gloves?
+                        </h3>
+                        <p style="font-size: 16px; line-height: 1.7; opacity: 0.95;">${rec.explanation}</p>
+                    </div>
+
+                    <div style="margin-bottom: 32px;">
+                        <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 24px;">Recommended Products</h2>
+                        ${rec.products && rec.products.length > 0 ? `
+                            <div class="products-grid">
+                                ${rec.products.map(product => {
+                                    try {
+                                        return renderProductCard(product);
+                                    } catch (error) {
+                                        console.error('Error rendering product card:', error, product);
+                                        return `<div class="product-card" style="padding: 20px; text-align: center;">
+                                            <h3>${product.name || 'Product'}</h3>
+                                            <p>SKU: ${product.sku || 'N/A'}</p>
+                                            <p>$${product.price || 0}</p>
+                                        </div>`;
+                                    }
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <div style="text-align: center; padding: 40px; background: var(--gray-100); border-radius: var(--radius-lg);">
+                                <p style="font-size: 18px; color: var(--gray-600); margin-bottom: 16px;">No products matched your exact criteria.</p>
+                                <button class="btn btn-primary" onclick="navigate('products')">
+                                    <i class="fas fa-shopping-bag"></i> Browse All Products
+                                </button>
+                            </div>
+                        `}
+                    </div>
+
+                    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn btn-primary btn-lg" onclick="aiAdvisorState = {currentStep: 0, answers: {}, recommendations: null}; renderAIAdvisor();">
+                            <i class="fas fa-redo"></i> Start Over
+                        </button>
+                        <button class="btn btn-outline btn-lg" onclick="navigate('products')">
+                            <i class="fas fa-shopping-bag"></i> View All Products
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+// ============================================
+// COST TRANSPARENCY & SPEND CONTROL
+// ============================================
+
+async function renderCostAnalysis() {
+    const mainContent = document.getElementById('mainContent');
+    const isLoggedIn = state.user;
+    
+    if (!isLoggedIn) {
+        mainContent.innerHTML = `
+            <section class="contact-page" style="padding: 60px 0;">
+                <div class="container">
+                    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                        <div style="font-size: 64px; color: var(--primary); margin-bottom: 24px;">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Cost Analysis & Spend Control</h1>
+                        <p style="font-size: 18px; color: var(--gray-600); margin-bottom: 32px;">Analyze your glove spending and discover optimization opportunities. Login to access your cost analysis.</p>
+                        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-lg" onclick="navigate('login')">
+                                <i class="fas fa-sign-in-alt"></i> Login
+                            </button>
+                            <button class="btn btn-outline btn-lg" onclick="navigate('register')">
+                                <i class="fas fa-user-plus"></i> Create Account
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+
+    // Get order history
+    let orders = [];
+    try {
+        orders = await api.get('/api/orders');
+    } catch (e) {
+        // No orders yet
+    }
+
+    // Calculate analytics
+    const analytics = calculateSpendAnalytics(orders);
+    const optimizations = generateOptimizations(orders);
+
+    mainContent.innerHTML = `
+        <section class="contact-page" style="padding: 60px 0;">
+            <div class="container">
+                <div style="max-width: 1200px; margin: 0 auto;">
+                    <div style="text-align: center; margin-bottom: 48px;">
+                        <div style="font-size: 64px; color: var(--primary); margin-bottom: 16px;">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 8px;">Cost Analysis & Spend Control</h1>
+                        <p style="font-size: 16px; color: var(--gray-600);">Analyze your glove spending and discover optimization opportunities</p>
+                    </div>
+
+                    ${orders.length === 0 ? `
+                        <div style="background: var(--gray-100); padding: 60px; border-radius: var(--radius-lg); text-align: center;">
+                            <div style="font-size: 48px; color: var(--gray-400); margin-bottom: 16px;">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--secondary);">No Order History Yet</h2>
+                            <p style="color: var(--gray-600); margin-bottom: 24px;">Once you place orders, we'll analyze your spending patterns and suggest optimizations.</p>
+                            <button class="btn btn-primary" onclick="navigate('products')">
+                                <i class="fas fa-shopping-bag"></i> Start Shopping
+                            </button>
+                        </div>
+                    ` : `
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 32px;">
+                            <div style="background: var(--white); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow); text-align: center; border-top: 4px solid var(--primary);">
+                                <div style="font-size: 32px; font-weight: 700; color: var(--secondary); margin-bottom: 8px;">$${analytics.totalSpend.toLocaleString()}</div>
+                                <div style="font-size: 14px; color: var(--gray-600);">Total Spend</div>
+                            </div>
+                            <div style="background: var(--white); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow); text-align: center; border-top: 4px solid var(--success);">
+                                <div style="font-size: 32px; font-weight: 700; color: var(--secondary); margin-bottom: 8px;">${analytics.totalGloves.toLocaleString()}</div>
+                                <div style="font-size: 14px; color: var(--gray-600);">Total Gloves</div>
+                            </div>
+                            <div style="background: var(--white); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow); text-align: center; border-top: 4px solid var(--info);">
+                                <div style="font-size: 32px; font-weight: 700; color: var(--secondary); margin-bottom: 8px;">$${analytics.avgCostPerGlove.toFixed(3)}</div>
+                                <div style="font-size: 14px; color: var(--gray-600);">Avg Cost/Glove</div>
+                            </div>
+                            <div style="background: var(--white); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow); text-align: center; border-top: 4px solid var(--warning);">
+                                <div style="font-size: 32px; font-weight: 700; color: var(--secondary); margin-bottom: 8px;">$${analytics.potentialSavings.toLocaleString()}</div>
+                                <div style="font-size: 14px; color: var(--gray-600);">Potential Savings</div>
+                            </div>
+                        </div>
+
+                        ${optimizations.length > 0 ? `
+                            <div style="background: var(--success); color: var(--white); padding: 32px; border-radius: var(--radius-lg); margin-bottom: 32px;">
+                                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 16px;">
+                                    <i class="fas fa-lightbulb"></i> Optimization Opportunities
+                                </h2>
+                                <div style="display: grid; gap: 16px;">
+                                    ${optimizations.map(opt => `
+                                        <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: var(--radius); backdrop-filter: blur(10px);">
+                                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                                                <h3 style="font-size: 18px; font-weight: 600;">${opt.title}</h3>
+                                                <div style="font-size: 24px; font-weight: 700; color: var(--white);">$${opt.savings.toLocaleString()}/year</div>
+                                            </div>
+                                            <p style="opacity: 0.95; line-height: 1.6; margin-bottom: 12px;">${opt.description}</p>
+                                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                ${opt.actions.map(action => `
+                                                    <button class="btn btn-secondary" onclick="${action.onclick}" style="background: var(--white); color: var(--success); font-size: 14px; padding: 8px 16px;">
+                                                        ${action.label}
+                                                    </button>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div style="background: var(--white); padding: 32px; border-radius: var(--radius-lg); box-shadow: var(--shadow);">
+                            <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 24px;">Spend Breakdown by Category</h2>
+                            <div style="display: grid; gap: 16px;">
+                                ${analytics.categoryBreakdown.map(cat => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--gray-100); border-radius: var(--radius);">
+                                        <div>
+                                            <div style="font-weight: 600; color: var(--secondary); margin-bottom: 4px;">${cat.category}</div>
+                                            <div style="font-size: 14px; color: var(--gray-600);">${cat.count} orders • ${cat.gloves} gloves</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 20px; font-weight: 700; color: var(--primary);">$${cat.total.toLocaleString()}</div>
+                                            <div style="font-size: 12px; color: var(--gray-600);">$${cat.avgPerGlove.toFixed(3)}/glove</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `}
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function calculateSpendAnalytics(orders) {
+    let totalSpend = 0;
+    let totalGloves = 0;
+    const categoryBreakdown = {};
+
+    orders.forEach(order => {
+        order.items.forEach(item => {
+            totalSpend += item.price * item.quantity;
+            totalGloves += item.quantity;
+            
+            const category = item.category || 'Other';
+            if (!categoryBreakdown[category]) {
+                categoryBreakdown[category] = { total: 0, count: 0, gloves: 0 };
+            }
+            categoryBreakdown[category].total += item.price * item.quantity;
+            categoryBreakdown[category].count += 1;
+            categoryBreakdown[category].gloves += item.quantity;
+        });
+    });
+
+    const breakdown = Object.entries(categoryBreakdown).map(([category, data]) => ({
+        category,
+        total: data.total,
+        count: data.count,
+        gloves: data.gloves,
+        avgPerGlove: data.total / data.gloves
+    })).sort((a, b) => b.total - a.total);
+
+    return {
+        totalSpend,
+        totalGloves,
+        avgCostPerGlove: totalGloves > 0 ? totalSpend / totalGloves : 0,
+        categoryBreakdown: breakdown,
+        potentialSavings: totalSpend * 0.15 // Estimate 15% potential savings
+    };
+}
+
+function generateOptimizations(orders) {
+    const optimizations = [];
+    
+    // Analyze for over-spec'ing
+    const highEndUsage = orders.flatMap(o => o.items).filter(item => 
+        item.material === 'Nitrile' && item.price > 0.15
+    );
+    
+    if (highEndUsage.length > 0) {
+        optimizations.push({
+            title: 'Over-Spec\'ing on Premium Gloves',
+            description: `You're using 8-mil premium nitrile gloves for ${highEndUsage.length} tasks. A 5-mil nitrile meets the same requirements and saves 22% per glove.`,
+            savings: Math.round(highEndUsage.reduce((sum, item) => sum + (item.price * item.quantity * 0.22), 0)),
+            actions: [
+                { label: 'View Alternatives', onclick: "filterByMaterial('Nitrile'); navigate('products');" }
+            ]
+        });
+    }
+
+    // Check for janitorial tasks using expensive gloves
+    const janitorialExpensive = orders.flatMap(o => o.items).filter(item =>
+        item.category === 'Janitorial' && item.price > 0.10
+    );
+
+    if (janitorialExpensive.length > 0) {
+        optimizations.push({
+            title: 'Switch Janitorial Tasks to Economy Options',
+            description: 'You\'re using premium gloves for janitorial tasks. Vinyl or thinner nitrile options can reduce costs by 30-40% without sacrificing performance.',
+            savings: Math.round(janitorialExpensive.reduce((sum, item) => sum + (item.price * item.quantity * 0.35), 0)),
+            actions: [
+                { label: 'View Economy Options', onclick: "filterByCategory('Disposable Gloves'); navigate('products');" }
+            ]
+        });
+    }
+
+    return optimizations;
+}
+
+// ============================================
+// ADMIN PANEL
+// ============================================
+
+function renderAdminPanel(activeTab = 'orders') {
+    const mainContent = document.getElementById('mainContent');
+    const isLoggedIn = state.user?.is_approved;
+    
+    if (!isLoggedIn) {
+        mainContent.innerHTML = `
+            <section class="contact-page" style="padding: 60px 0;">
+                <div class="container">
+                    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                        <div style="font-size: 64px; color: #FF7A00; margin-bottom: 24px;">
+                            <i class="fas fa-lock"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Admin Access Required</h1>
+                        <p style="font-size: 18px; color: #4B5563; margin-bottom: 32px;">Please login with an approved account to access the admin panel.</p>
+                        <button class="btn btn-primary btn-lg" onclick="navigate('login')" style="background: #FF7A00; border: none; padding: 14px 32px; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: 600; cursor: pointer;">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+    
+    // Store active tab in state
+    state.adminTab = activeTab;
+    
+    mainContent.innerHTML = `
+        <section style="padding: 40px 0; background: #f5f5f5; min-height: calc(100vh - 200px);">
+            <div class="container">
+                <div style="max-width: 1400px; margin: 0 auto;">
+                    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
+                        <!-- Header -->
+                        <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); padding: 32px; color: #ffffff;">
+                            <h1 style="font-size: 32px; font-weight: 700; margin-bottom: 8px;">
+                                <i class="fas fa-shield-alt" style="margin-right: 12px;"></i>Admin Dashboard
+                            </h1>
+                            <p style="opacity: 0.9; font-size: 15px;">Manage orders, RFQs, users, and products</p>
+                        </div>
+                        
+                        <!-- Tabs -->
+                        <div style="display: flex; border-bottom: 2px solid #e0e0e0; background: #fafafa;">
+                            <button onclick="renderAdminPanel('orders')" class="admin-tab ${activeTab === 'orders' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'orders' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'orders' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'orders' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-shopping-cart" style="margin-right: 8px;"></i>Orders
+                            </button>
+                            <button onclick="renderAdminPanel('rfqs')" class="admin-tab ${activeTab === 'rfqs' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'rfqs' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'rfqs' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'rfqs' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-file-invoice-dollar" style="margin-right: 8px;"></i>RFQs
+                            </button>
+                            <button onclick="renderAdminPanel('users')" class="admin-tab ${activeTab === 'users' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'users' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'users' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'users' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-users" style="margin-right: 8px;"></i>Users
+                            </button>
+                            <button onclick="renderAdminPanel('products')" class="admin-tab ${activeTab === 'products' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'products' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'products' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'products' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-box" style="margin-right: 8px;"></i>Products
+                            </button>
+                        </div>
+                        
+                        <!-- Tab Content -->
+                        <div id="adminTabContent" style="padding: 32px;">
+                            ${activeTab === 'orders' ? '<div id="adminOrdersContent">Loading orders...</div>' : ''}
+                            ${activeTab === 'rfqs' ? '<div id="adminRFQsContent">Loading RFQs...</div>' : ''}
+                            ${activeTab === 'users' ? '<div id="adminUsersContent">Loading users...</div>' : ''}
+                            ${activeTab === 'products' ? '<div id="adminProductsContent">Loading products...</div>' : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+    
+    // Load data for active tab
+    if (activeTab === 'orders') {
+        loadAdminOrders();
+    } else if (activeTab === 'rfqs') {
+        loadAdminRFQs();
+    } else if (activeTab === 'users') {
+        loadAdminUsers();
+    } else if (activeTab === 'products') {
+        loadAdminProducts();
+    }
+}
+
+async function syncFishbowlInventory() {
+    const btn = document.getElementById('fishbowlSyncBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing…'; }
+    try {
+        const result = await api.post('/api/fishbowl/sync-inventory', {});
+        showToast(result.message || 'Fishbowl sync completed (GLV- products only).', 'success');
+        if (result.updated !== undefined) loadAdminProducts();
+    } catch (err) {
+        const msg = err.message || (err.error || 'Sync failed');
+        showToast(msg, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync from Fishbowl'; }
+    }
+}
+
+async function exportFishbowlCustomers() {
+    const btn = document.getElementById('fishbowlExportCustomersBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting…'; }
+    try {
+        const response = await fetch(api.baseUrl + '/api/fishbowl/export-customers.csv', { headers: api.getHeaders() });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Export failed');
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fishbowl-customers.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Customer export downloaded. Import into Fishbowl to create customers.', 'success');
+    } catch (err) {
+        showToast(err.message || 'Export failed', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-users"></i> Export Customers for Fishbowl'; }
+    }
+}
+
+const ADMIN_PRODUCTS_PAGE_SIZE = 50;
+
+function getAdminProductCardHTML(product) {
+    const esc = (s) => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const name = esc(product.name);
+    const sku = esc(product.sku);
+    const id = product.id != null ? Number(product.id) : 0;
+    const imgUrl = (product.image_url || '').trim();
+    const imgHtml = imgUrl
+        ? '<img src="' + esc(imgUrl) + '" alt="' + name + '" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; display: block; background: #eee;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';" /><div style="display: none; width: 64px; height: 64px; background: #E5E7EB; border-radius: 8px; align-items: center; justify-content: center; color: #9CA3AF;"><i class="fas fa-hand-paper" style="font-size: 24px;"></i></div>'
+        : '<div style="width: 64px; height: 64px; background: #E5E7EB; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #9CA3AF;"><i class="fas fa-hand-paper" style="font-size: 24px;"></i></div>';
+    const price = (product.price != null && !isNaN(product.price)) ? Number(product.price).toFixed(2) : '0.00';
+    const bulkPrice = (product.bulk_price != null && !isNaN(product.bulk_price)) ? Number(product.bulk_price).toFixed(2) : '0.00';
+    const category = esc(product.category || '');
+    const material = esc(product.material || 'N/A');
+    return '<div class="admin-product-card" style="background: #f9f9f9; padding: 24px; border-radius: 12px; border-left: 4px solid #FF7A00;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">' +
+        '<div style="display: flex; gap: 16px; flex: 1; min-width: 0;">' +
+        '<div style="flex-shrink: 0; display: flex; align-items: center;"><label style="cursor: pointer; margin: 0;"><input type="checkbox" class="admin-product-select" data-product-id="' + id + '" style="width: 18px; height: 18px; accent-color: #DC2626;" onclick="event.stopPropagation();" onchange="adminProductsUpdateBatchBar()"></label></div>' +
+        '<div style="flex-shrink: 0; position: relative;">' + imgHtml + '</div>' +
+        '<div style="min-width: 0;">' +
+        '<h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">' + name + '</h3>' +
+        '<p style="color: #4B5563; font-size: 14px; margin-bottom: 4px;">SKU: ' + sku + ' • ' + esc(product.brand || '') + '</p>' +
+        '<p style="color: #4B5563; font-size: 13px;">' + category + ' • ' + material + '</p>' +
+        '</div></div>' +
+        '<div style="text-align: right; margin-left: 24px; flex-shrink: 0;">' +
+        '<div style="font-size: 18px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px;">$' + price + ' <span style="font-size: 14px; color: #4B5563; font-weight: 400;">/ $' + bulkPrice + ' B2B</span></div>' +
+        '<div style="display: flex; gap: 8px; margin-top: 12px;">' +
+        '<button onclick="editProduct(' + id + ')" type="button" style="background: #28a745; color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"><i class="fas fa-edit"></i> Edit</button>' +
+        '<button onclick="deleteProduct(' + id + ')" type="button" style="background: #dc3545; color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"><i class="fas fa-trash"></i> Delete</button>' +
+        '</div></div></div></div>';
+}
+
+function getAdminListFilters() {
+    const searchEl = document.getElementById('adminFilterSearch');
+    const brandEl = document.getElementById('adminFilterBrand');
+    const categoryEl = document.getElementById('adminFilterCategory');
+    const materialEl = document.getElementById('adminFilterMaterial');
+    const colorEl = document.getElementById('adminFilterColor');
+    const colors = colorEl ? Array.from(colorEl.selectedOptions).map(function(o) { return o.value; }).filter(function(v) { return v; }) : [];
+    return {
+        search: (searchEl && searchEl.value) ? (searchEl.value || '').trim() : '',
+        brand: (brandEl && brandEl.value) || '',
+        category: (categoryEl && categoryEl.value) || '',
+        material: (materialEl && materialEl.value) || '',
+        colors: colors
+    };
+}
+
+function applyAdminListFilters(products, filters) {
+    if (!products || !Array.isArray(products)) return [];
+    let list = products;
+    if (filters.search) {
+        const q = filters.search.toLowerCase();
+        list = list.filter(function(p) {
+            const sku = (p.sku || '').toLowerCase();
+            const name = (p.name || '').toLowerCase();
+            const brand = (p.brand || '').toLowerCase();
+            const material = (p.material || '').toLowerCase();
+            return sku.indexOf(q) !== -1 || name.indexOf(q) !== -1 || brand.indexOf(q) !== -1 || material.indexOf(q) !== -1;
+        });
+    }
+    if (filters.brand) list = list.filter(function(p) { return (p.brand || '').trim() === filters.brand; });
+    if (filters.category) list = list.filter(function(p) { return (p.category || '').trim() === filters.category; });
+    if (filters.material) list = list.filter(function(p) { return (p.material || '').trim() === filters.material; });
+    if (filters.colors && filters.colors.length > 0) {
+        const colorSet = new Set(filters.colors.map(function(c) { return (c || '').toLowerCase(); }));
+        list = list.filter(function(p) { return colorSet.has((p.color || '').trim().toLowerCase()); });
+    }
+    return list;
+}
+
+function getAdminFilteredProducts() {
+    const all = window.adminProductsCache;
+    if (!all || !Array.isArray(all)) return [];
+    const filters = getAdminListFilters();
+    const hasFilter = filters.search || filters.brand || filters.category || filters.material || (filters.colors && filters.colors.length > 0);
+    return hasFilter ? applyAdminListFilters(all, filters) : all;
+}
+
+function adminProductsOnFilterChange() {
+    window.adminProductsPage = 1;
+    adminProductsRenderPage();
+    adminProductsUpdateFilterSummary();
+}
+
+function adminProductsClearFilters() {
+    const searchEl = document.getElementById('adminFilterSearch');
+    const brandEl = document.getElementById('adminFilterBrand');
+    const categoryEl = document.getElementById('adminFilterCategory');
+    const materialEl = document.getElementById('adminFilterMaterial');
+    const colorEl = document.getElementById('adminFilterColor');
+    if (searchEl) searchEl.value = '';
+    if (brandEl) brandEl.value = '';
+    if (categoryEl) categoryEl.value = '';
+    if (materialEl) materialEl.value = '';
+    if (colorEl) Array.from(colorEl.options).forEach(function(o) { o.selected = false; });
+    window.adminProductsPage = 1;
+    adminProductsRenderPage();
+    adminProductsUpdateFilterSummary();
+}
+
+function adminProductsUpdateFilterSummary() {
+    const el = document.getElementById('adminProductsFilterSummary');
+    if (!el) return;
+    const all = window.adminProductsCache;
+    const total = (all && all.length) ? all.length : 0;
+    const filtered = getAdminFilteredProducts();
+    const count = filtered.length;
+    if (count < total && total > 0) {
+        el.textContent = 'Showing ' + count + ' of ' + total + ' products.';
+    } else {
+        el.textContent = total ? (total + ' product' + (total === 1 ? '' : 's') + ' total.') : '';
+    }
+}
+
+function populateAdminListFilters(products) {
+    if (!products || !Array.isArray(products)) return;
+    const brands = [...new Set(products.map(function(p) { return (p.brand || '').trim(); }).filter(Boolean))].sort();
+    const materials = [...new Set(products.map(function(p) { return (p.material || '').trim(); }).filter(Boolean))].sort();
+    const colors = [...new Set(products.map(function(p) { return (p.color || '').trim(); }).filter(Boolean))].sort();
+    const brandEl = document.getElementById('adminFilterBrand');
+    const materialEl = document.getElementById('adminFilterMaterial');
+    const colorEl = document.getElementById('adminFilterColor');
+    if (brandEl) {
+        const current = brandEl.value;
+        brandEl.innerHTML = '<option value="">All</option>' + brands.map(function(b) { return '<option value="' + (b || '').replace(/"/g, '&quot;') + '">' + (b || '').replace(/</g, '&lt;') + '</option>'; }).join('');
+        if (current && brands.indexOf(current) !== -1) brandEl.value = current;
+    }
+    if (materialEl) {
+        const current = materialEl.value;
+        materialEl.innerHTML = '<option value="">All</option>' + materials.map(function(m) { return '<option value="' + (m || '').replace(/"/g, '&quot;') + '">' + (m || '').replace(/</g, '&lt;') + '</option>'; }).join('');
+        if (current && materials.indexOf(current) !== -1) materialEl.value = current;
+    }
+    if (colorEl) {
+        const selected = Array.from(colorEl.selectedOptions).map(function(o) { return o.value; });
+        colorEl.innerHTML = colors.map(function(c) { return '<option value="' + (c || '').replace(/"/g, '&quot;') + '">' + (c || '').replace(/</g, '&lt;') + '</option>'; }).join('');
+        Array.from(colorEl.options).forEach(function(o) { o.selected = selected.indexOf(o.value) !== -1; });
+    }
+}
+
+function adminProductsRenderPage() {
+    const products = getAdminFilteredProducts();
+    const page = window.adminProductsPage || 1;
+    if (!products || !Array.isArray(products)) return;
+    const size = ADMIN_PRODUCTS_PAGE_SIZE;
+    const totalPages = Math.max(1, Math.ceil(products.length / size));
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+    window.adminProductsPage = currentPage;
+    const start = (currentPage - 1) * size;
+    const pageProducts = products.slice(start, start + size);
+    const grid = document.getElementById('adminProductsGrid');
+    const paginationEl = document.getElementById('adminProductsPagination');
+    const countEl = document.getElementById('adminProductsCountText');
+    if (countEl) {
+        const totalAll = (window.adminProductsCache && window.adminProductsCache.length) || 0;
+        if (products.length < totalAll) {
+            countEl.textContent = 'Showing ' + products.length + ' of ' + totalAll + ' products';
+        } else {
+            countEl.textContent = 'Total: ' + products.length + ' products';
+        }
+    }
+    if (grid) grid.innerHTML = pageProducts.map(function(p) { return getAdminProductCardHTML(p); }).join('');
+    const selectAllCb = document.getElementById('adminProductsSelectAll');
+    if (selectAllCb) selectAllCb.checked = false;
+    adminProductsUpdateBatchBar();
+    if (paginationEl) {
+        paginationEl.innerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 8px;">' +
+            '<span style="color: #4B5563; font-size: 14px;">Page ' + currentPage + ' of ' + totalPages + ' (showing ' + pageProducts.length + ' of ' + products.length + ' products)</span>' +
+            '<div style="display: flex; gap: 8px;">' +
+            '<button type="button" onclick="adminProductsPrevPage()" ' + (currentPage <= 1 ? 'disabled' : '') + ' style="background: ' + (currentPage <= 1 ? '#E5E7EB' : '#111111') + '; color: ' + (currentPage <= 1 ? '#9CA3AF' : '#ffffff') + '; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: ' + (currentPage <= 1 ? 'not-allowed' : 'pointer') + ';"><i class="fas fa-chevron-left"></i> Previous</button>' +
+            '<button type="button" onclick="adminProductsNextPage()" ' + (currentPage >= totalPages ? 'disabled' : '') + ' style="background: ' + (currentPage >= totalPages ? '#E5E7EB' : '#FF7A00') + '; color: ' + (currentPage >= totalPages ? '#9CA3AF' : '#ffffff') + '; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: ' + (currentPage >= totalPages ? 'not-allowed' : 'pointer') + ';">Next <i class="fas fa-chevron-right"></i></button>' +
+            '</div></div>';
+    }
+}
+
+function adminProductsPrevPage() {
+    if (!window.adminProductsCache || (window.adminProductsPage || 1) <= 1) return;
+    window.adminProductsPage = (window.adminProductsPage || 1) - 1;
+    adminProductsRenderPage();
+}
+
+function adminProductsNextPage() {
+    if (!window.adminProductsCache) return;
+    const totalPages = Math.ceil(window.adminProductsCache.length / ADMIN_PRODUCTS_PAGE_SIZE);
+    if ((window.adminProductsPage || 1) >= totalPages) return;
+    window.adminProductsPage = (window.adminProductsPage || 1) + 1;
+    adminProductsRenderPage();
+}
+
+function getSelectedProductIds() {
+    const grid = document.getElementById('adminProductsGrid');
+    if (!grid) return [];
+    const checkboxes = grid.querySelectorAll('.admin-product-select:checked');
+    return Array.from(checkboxes).map(function(cb) { return parseInt(cb.getAttribute('data-product-id'), 10); }).filter(function(id) { return !isNaN(id); });
+}
+
+function adminProductsUpdateBatchBar() {
+    const ids = getSelectedProductIds();
+    const btn = document.getElementById('adminProductsBatchDeleteBtn');
+    const countEl = document.getElementById('adminProductsSelectedCount');
+    const selectAllCb = document.getElementById('adminProductsSelectAll');
+    if (btn) {
+        btn.disabled = ids.length === 0;
+        btn.style.cursor = ids.length === 0 ? 'not-allowed' : 'pointer';
+        btn.style.background = ids.length === 0 ? '#9CA3AF' : '#DC2626';
+    }
+    if (countEl) countEl.textContent = ids.length > 0 ? ids.length + ' selected' : '';
+    if (selectAllCb) {
+        const grid = document.getElementById('adminProductsGrid');
+        const all = grid ? grid.querySelectorAll('.admin-product-select') : [];
+        const checked = grid ? grid.querySelectorAll('.admin-product-select:checked') : [];
+        selectAllCb.checked = all.length > 0 && all.length === checked.length;
+    }
+}
+
+function adminProductsToggleSelectAll() {
+    const selectAllCb = document.getElementById('adminProductsSelectAll');
+    const grid = document.getElementById('adminProductsGrid');
+    if (!grid || !selectAllCb) return;
+    grid.querySelectorAll('.admin-product-select').forEach(function(cb) { cb.checked = selectAllCb.checked; });
+    adminProductsUpdateBatchBar();
+}
+
+async function batchDeleteProducts() {
+    const ids = getSelectedProductIds();
+    if (ids.length === 0) {
+        showToast('Select one or more products to delete.', 'error');
+        return;
+    }
+    if (!confirm('Delete ' + ids.length + ' product(s)? This cannot be undone.')) return;
+    try {
+        const result = await api.post('/api/products/batch-delete', { ids: ids });
+        const deleted = result.deleted != null ? result.deleted : ids.length;
+        showToast(deleted + ' product(s) deleted.', 'success');
+        loadAdminProducts(true);
+    } catch (error) {
+        showToast('Error deleting products: ' + (error.message || 'Unknown error'), 'error');
+    }
+}
+
+async function loadAdminProducts(keepPage) {
+    const content = document.getElementById('adminProductsContent');
+    if (!content) return;
+
+    try {
+        const products = await api.get('/api/products');
+        window.adminProductsCache = products;
+        const size = ADMIN_PRODUCTS_PAGE_SIZE;
+        const totalPages = Math.max(1, Math.ceil(products.length / size));
+        if (keepPage) {
+            const current = Math.min(window.adminProductsPage || 1, totalPages);
+            window.adminProductsPage = current;
+        } else {
+            window.adminProductsPage = 1;
+        }
+        const currentPage = window.adminProductsPage || 1;
+        const start = (currentPage - 1) * size;
+        const pageProducts = products.slice(start, start + size);
+        const gridHTML = pageProducts.map(function(p) { return getAdminProductCardHTML(p); }).join('');
+        const prevDisabled = currentPage <= 1;
+        const nextDisabled = currentPage >= totalPages;
+        const paginationHTML = '<div id="adminProductsPagination" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 8px;">' +
+            '<span style="color: #4B5563; font-size: 14px;">Page ' + currentPage + ' of ' + totalPages + ' (showing ' + pageProducts.length + ' of ' + products.length + ' products)</span>' +
+            '<div style="display: flex; gap: 8px;">' +
+            '<button type="button" onclick="adminProductsPrevPage()" ' + (prevDisabled ? 'disabled' : '') + ' style="background: ' + (prevDisabled ? '#E5E7EB' : '#111111') + '; color: ' + (prevDisabled ? '#9CA3AF' : '#ffffff') + '; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: ' + (prevDisabled ? 'not-allowed' : 'pointer') + ';"><i class="fas fa-chevron-left"></i> Previous</button>' +
+            '<button type="button" onclick="adminProductsNextPage()" ' + (nextDisabled ? 'disabled' : '') + ' style="background: ' + (nextDisabled ? '#E5E7EB' : '#FF7A00') + '; color: ' + (nextDisabled ? '#9CA3AF' : '#ffffff') + '; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: ' + (nextDisabled ? 'not-allowed' : 'pointer') + ';">Next <i class="fas fa-chevron-right"></i></button>' +
+            '</div></div>';
+        
+        content.innerHTML = `
+            <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Product Management</h2>
+                    <p id="adminProductsCountText" style="color: #4B5563;">Total: ${products.length} products</p>
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button onclick="exportProductsToCSV()" style="background: #6B7280; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#4B5563';" onmouseout="this.style.background='#6B7280';">
+                        <i class="fas fa-download"></i> Export CSV
+                    </button>
+                    <button onclick="showCSVImportSection()" style="background: #111111; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#1F2933';" onmouseout="this.style.background='#111111';">
+                        <i class="fas fa-file-csv"></i> Import CSV
+                    </button>
+                    <button onclick="showAddProductForm()" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='rgba(255,122,0,0.85)';" onmouseout="this.style.background='#FF7A00';">
+                        <i class="fas fa-plus"></i> Add New Product
+                    </button>
+                    <button onclick="syncFishbowlInventory()" id="fishbowlSyncBtn" style="background: #0ea5e9; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#0284c7';" onmouseout="this.style.background='#0ea5e9';">
+                        <i class="fas fa-sync-alt"></i> Sync from Fishbowl
+                    </button>
+                    <button onclick="exportFishbowlCustomers()" id="fishbowlExportCustomersBtn" style="background: #059669; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#047857';" onmouseout="this.style.background='#059669';">
+                        <i class="fas fa-users"></i> Export Customers for Fishbowl
+                    </button>
+                </div>
+            </div>
+            <p style="font-size: 13px; color: #4B5563; margin-top: -8px; margin-bottom: 16px;"><strong>Sync from Fishbowl:</strong> Updates inventory (in_stock, quantity) for products whose SKU starts with <code>GLV-</code> only. <strong>Export Customers:</strong> Download CSV of customers who have placed orders so Fishbowl can create customers and fulfill orders.</p>
+            
+            <!-- Export by filters -->
+            <div id="adminExportBySection" style="background: #F9FAFB; padding: 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #E5E7EB;">
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #111111;"><i class="fas fa-filter" style="color: #FF7A00; margin-right: 8px;"></i>Export by</h3>
+                <p style="font-size: 13px; color: #4B5563; margin-bottom: 16px;">Choose filters below, then click Export CSV to download only matching products. Leave all as "All" to export everything.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; align-items: start;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Manufacturer</label>
+                        <select id="exportFilterBrand" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;">
+                            <option value="">All manufacturers</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Category</label>
+                        <select id="exportFilterCategory" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;">
+                            <option value="">All categories</option>
+                            <option value="Disposable Gloves">Disposable Gloves</option>
+                            <option value="Work Gloves">Work Gloves</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Color(s)</label>
+                        <select id="exportFilterColors" multiple style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff; min-height: 80px;">
+                            <option value="Blue">Blue</option>
+                            <option value="Black">Black</option>
+                            <option value="White">White</option>
+                            <option value="Clear">Clear</option>
+                            <option value="Orange">Orange</option>
+                            <option value="Purple">Purple</option>
+                            <option value="Green">Green</option>
+                            <option value="Natural">Natural</option>
+                            <option value="Gray">Gray</option>
+                            <option value="Tan">Tan</option>
+                            <option value="Yellow">Yellow</option>
+                        </select>
+                        <span style="font-size: 11px; color: #4B5563;">Hold Ctrl/Cmd to select multiple</span>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Material(s)</label>
+                        <select id="exportFilterMaterials" multiple style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff; min-height: 80px;">
+                            <option value="Nitrile">Nitrile</option>
+                            <option value="Latex">Latex</option>
+                            <option value="Vinyl">Vinyl</option>
+                            <option value="Polyethylene (PE)">Polyethylene (PE)</option>
+                        </select>
+                        <span style="font-size: 11px; color: #4B5563;">Hold Ctrl/Cmd to select multiple</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filter products (for list) -->
+            <div id="adminProductsFilterSection" style="background: #F0F9FF; padding: 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #BAE6FD;">
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #111111;"><i class="fas fa-search" style="color: #0ea5e9; margin-right: 8px;"></i>Filter products</h3>
+                <p style="font-size: 13px; color: #4B5563; margin-bottom: 16px;">Narrow the list below by manufacturer, category, material, or color to find products to edit.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; align-items: end; flex-wrap: wrap;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Search (SKU or name)</label>
+                        <input type="text" id="adminFilterSearch" placeholder="e.g. GLV- or Nitrile" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;" oninput="adminProductsOnFilterChange()">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Manufacturer</label>
+                        <select id="adminFilterBrand" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;" onchange="adminProductsOnFilterChange()">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Category</label>
+                        <select id="adminFilterCategory" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;" onchange="adminProductsOnFilterChange()">
+                            <option value="">All</option>
+                            <option value="Disposable Gloves">Disposable Gloves</option>
+                            <option value="Work Gloves">Work Gloves</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Material</label>
+                        <select id="adminFilterMaterial" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;" onchange="adminProductsOnFilterChange()">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #374151;">Color(s)</label>
+                        <select id="adminFilterColor" multiple style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff; min-height: 80px;" onchange="adminProductsOnFilterChange()">
+                            <option value="">All</option>
+                        </select>
+                        <span style="font-size: 11px; color: #4B5563;">Hold Ctrl/Cmd to select multiple</span>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <button type="button" onclick="adminProductsClearFilters()" style="background: #E5E7EB; color: #374151; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;" onmouseover="this.style.background='#D1D5DB';" onmouseout="this.style.background='#E5E7EB';">
+                            <i class="fas fa-times-circle" style="margin-right: 6px;"></i>Clear filters
+                        </button>
+                    </div>
+                </div>
+                <p id="adminProductsFilterSummary" style="font-size: 13px; color: #4B5563; margin-top: 12px; margin-bottom: 0;"></p>
+            </div>
+            
+            <!-- CSV Import Section -->
+            <div id="csvImportSection" style="display: none; background: linear-gradient(135deg, #fff5f0 0%, #ffffff 100%); padding: 32px; border-radius: 12px; margin-bottom: 24px; border: 2px solid #FF7A00;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
+                    <div>
+                        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #111111;">
+                            <i class="fas fa-file-csv" style="color: #FF7A00; margin-right: 8px;"></i>
+                            Import Products from CSV
+                        </h3>
+                        <p style="color: #4B5563; font-size: 14px;">Upload a CSV file to bulk import products. <strong>Tip:</strong> Click 'Export Current Products' above to see the exact format with real data.</p>
+                    </div>
+                    <button onclick="hideCSVImportSection()" style="background: none; border: none; font-size: 24px; color: #4B5563; cursor: pointer; padding: 4px 8px;" onmouseover="this.style.color='#111111';" onmouseout="this.style.color='#6B7280';">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div id="csvDropZone" class="csv-drop-zone" style="background: #ffffff; padding: 48px 32px; border-radius: 12px; border: 2px dashed #E5E7EB; margin-bottom: 20px; min-height: 240px; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s ease, background 0.2s ease;" onclick="if(event.target.closest('button') || event.target.closest('label')) return; document.getElementById('csvFileInput').click();">
+                    <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleCSVFileSelect(event)">
+                    <div style="text-align: center; width: 100%;">
+                        <div style="width: 96px; height: 96px; background: #fff5f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;">
+                            <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #FF7A00;"></i>
+                        </div>
+                        <p style="font-size: 18px; font-weight: 600; color: #111111; margin-bottom: 8px;">Drag and drop your CSV file here</p>
+                        <p style="font-size: 14px; color: #4B5563; margin-bottom: 20px;">or click the button below to browse</p>
+                        <button type="button" onclick="document.getElementById('csvFileInput').click()" style="background: #FF7A00; color: #ffffff; border: none; padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;" onmouseover="this.style.background='rgba(255,122,0,0.85)';" onmouseout="this.style.background='#FF7A00';">
+                            <i class="fas fa-folder-open" style="margin-right: 8px;"></i>Choose CSV File
+                        </button>
+                        <p id="csvFileName" style="color: #4B5563; font-size: 14px; margin-top: 16px; font-style: italic;">No file selected</p>
+                        <label style="display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; cursor: pointer; font-size: 14px; color: #1a1a1a;">
+                            <input type="checkbox" id="csvUpdateImagesOnly" style="width: 18px; height: 18px; accent-color: #FF7A00;" onchange="toggleDeleteNotInImportOption()">
+                            <span><strong>Update images only</strong> — CSV with just <code>sku</code> and <code>image_url</code> columns (matches by SKU, updates only image)</span>
+                        </label>
+                        <label id="csvDeleteNotInImportLabel" style="display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; margin-left: 0; cursor: pointer; font-size: 14px; color: #1a1a1a;">
+                            <input type="checkbox" id="csvDeleteNotInImport" style="width: 18px; height: 18px; accent-color: #DC2626;">
+                            <span><strong>Delete products not in this import</strong> — Remove any existing products whose SKU is not in the CSV (full catalog replace)</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button onclick="importCSV()" id="csvImportBtn" disabled style="background: #111111; color: #ffffff; border: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: not-allowed; opacity: 0.5; display: flex; align-items: center; gap: 8px;" onmouseover="if(!this.disabled) this.style.background='#1F2933';" onmouseout="if(!this.disabled) this.style.background='#111111';">
+                        <i class="fas fa-upload"></i> Import Products
+                    </button>
+                    <button onclick="exportProductsToCSV()" style="background: #6B7280; color: #ffffff; border: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#4B5563';" onmouseout="this.style.background='#6B7280';">
+                        <i class="fas fa-download"></i> Export Current Products
+                    </button>
+                    <a href="/products-template.csv" download style="background: #F9FAFB; color: #111111; border: 2px solid #E5E7EB; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#F3F4F6'; this.style.borderColor='#D1D5DB';" onmouseout="this.style.background='#F9FAFB'; this.style.borderColor='#E5E7EB';">
+                        <i class="fas fa-file-alt"></i> Download Template
+                    </a>
+                    <div id="csvImportStatus" style="flex: 1; min-width: 200px;"></div>
+                </div>
+                
+                <div style="margin-top: 24px; padding: 16px; background: #F9FAFB; border-radius: 8px; border-left: 4px solid #FF7A00;">
+                    <h4 style="font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">CSV Format Requirements:</h4>
+                    <ul style="color: #4B5563; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px; margin-bottom: 12px;">
+                        <li><strong>Tip:</strong> Click "Export Current Products" above to see the exact format with real data</li>
+                        <li><strong>Required columns:</strong> sku, name, brand, category, material, price</li>
+                        <li><strong>Product images:</strong> Include the <code>image_url</code> column so images show on product cards and detail pages. Use a full URL (e.g. https://example.com/image.jpg or https://via.placeholder.com/400x400/FFFFFF/0066CC?text=Product) or a site-relative path like <code>/images/products/yourfile.jpg</code> (upload image files to your server’s <code>public/images/products/</code> folder first).</li>
+                        <li><strong>Basic product info:</strong> subcategory, description, sizes (comma-separated: S,M,L,XL), color, pack_qty, case_qty, bulk_price, image_url, in_stock (1/0), featured (1/0)</li>
+                        <li><strong>Filter fields (for better search/filtering):</strong>
+                            <ul style="margin-top: 8px; padding-left: 20px;">
+                                <li><strong>powder:</strong> Powder-Free or Powdered</li>
+                                <li><strong>thickness:</strong> mil value (e.g., 4, 5, 6, 7)</li>
+                                <li><strong>grade:</strong> Medical / Exam Grade, Industrial Grade, Food Service Grade</li>
+                                <li><strong>useCase:</strong> Comma-separated industries (e.g., Healthcare,Food Service,Automotive)</li>
+                                <li><strong>certifications:</strong> Comma-separated (e.g., FDA Approved,ASTM Tested,Food Safe)</li>
+                                <li><strong>texture:</strong> Smooth, Fingertip Textured, Fully Textured</li>
+                                <li><strong>cuffStyle:</strong> Beaded Cuff, Non-Beaded, Extended Cuff</li>
+                                <li><strong>sterility:</strong> Sterile, Non-Sterile</li>
+                            </ul>
+                        </li>
+                        <li>First row must be headers (exactly as shown in export)</li>
+                        <li>Values with commas should be wrapped in quotes</li>
+                        <li>Boolean values: Use 1 for true, 0 for false (in_stock, featured)</li>
+                    </ul>
+                    <p style="color: #4B5563; font-size: 12px; margin-top: 8px; font-style: italic;">
+                        💡 <strong>Pro Tip:</strong> Export your current products first to see the exact format, then use that as a template for adding new products!
+                    </p>
+                </div>
+            </div>
+            
+            <div id="addProductSection" style="display: none; background: #f9f9f9; padding: 32px; border-radius: 12px; margin-bottom: 24px;">
+                <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 24px;">
+                    <i class="fas fa-plus-circle" style="color: #FF7A00; margin-right: 8px;"></i>
+                    Add New Product
+                </h3>
+                <form id="addProductForm" onsubmit="addProduct(event)">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">SKU *</label>
+                            <input type="text" id="productSku" required placeholder="GLV-BRAND-001" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Product Name *</label>
+                            <input type="text" id="productName" required placeholder="Product Name" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Brand *</label>
+                            <input type="text" id="productBrand" required placeholder="Hospeco, Global Glove, etc." style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Category *</label>
+                            <select id="productCategory" required style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                <option value="Disposable Gloves">Disposable Gloves</option>
+                                <option value="Work Gloves">Work Gloves</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Material *</label>
+                            <input type="text" id="productMaterial" required placeholder="Nitrile, Latex, Vinyl, etc." style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Price (Retail) *</label>
+                            <input type="number" id="productPrice" required step="0.01" min="0" placeholder="12.99" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Bulk Price (B2B)</label>
+                            <input type="number" id="productBulkPrice" step="0.01" min="0" placeholder="9.99" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Primary Image URL</label>
+                            <input type="url" id="productImageUrl" placeholder="https://example.com/image.jpg" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Additional Image URLs (one per line)</label>
+                            <textarea id="productAdditionalImages" rows="3" placeholder="https://example.com/image2.jpg&#10;https://example.com/image3.jpg" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit;"></textarea>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Video URL (YouTube or direct .mp4)</label>
+                            <input type="url" id="productVideoUrl" placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Description</label>
+                            <textarea id="productDescription" rows="3" placeholder="Product description..." style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit;"></textarea>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 16px; align-items: center; margin-top: 24px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="productInStock" checked>
+                            <span>In Stock</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="productFeatured">
+                            <span>Featured Product</span>
+                        </label>
+                    </div>
+                    <div style="margin-top: 32px; display: flex; gap: 16px;">
+                        <button type="submit" style="background: #FF7A00; color: #ffffff; border: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;">
+                            <i class="fas fa-save"></i> Add Product
+                        </button>
+                        <button type="button" onclick="hideAddProductForm()" style="background: #f5f5f5; color: #1a1a1a; border: 2px solid #e0e0e0; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <div id="adminProductsBatchBar" style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 12px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #374151;">
+                    <input type="checkbox" id="adminProductsSelectAll" style="width: 18px; height: 18px; accent-color: #DC2626;" onchange="adminProductsToggleSelectAll()">
+                    <span>Select all on this page</span>
+                </label>
+                <button type="button" onclick="batchDeleteProducts()" id="adminProductsBatchDeleteBtn" disabled style="background: #9CA3AF; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: not-allowed;">
+                    <i class="fas fa-trash-alt" style="margin-right: 6px;"></i>Delete selected
+                </button>
+                <span id="adminProductsSelectedCount" style="color: #4B5563; font-size: 14px;"></span>
+            </div>
+            <div id="adminProductsGridWrapper">
+                <div id="adminProductsGrid" style="display: grid; gap: 16px;">
+                    ${gridHTML}
+                </div>
+                ${paginationHTML}
+            </div>
+            
+            <div id="editProductModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; overflow:auto; padding:24px;" onclick="if(event.target===this) closeEditProductModal()">
+                <div id="editProductModalContent" style="max-width:720px; margin:0 auto; background:#fff; border-radius:12px; padding:32px; margin-bottom:40px; box-shadow:0 20px 60px rgba(0,0,0,0.3);"></div>
+            </div>
+        `;
+        populateExportFilters(products);
+        populateAdminListFilters(products);
+        adminProductsUpdateFilterSummary();
+        initCSVDropZone();
+    } catch (error) {
+        content.innerHTML = `<div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">Error loading products: ${error.message}</div>`;
+    }
+}
+
+function initCSVDropZone() {
+    const dropZone = document.getElementById('csvDropZone');
+    const fileInput = document.getElementById('csvFileInput');
+    if (!dropZone || !fileInput) return;
+
+    function highlight() {
+        dropZone.classList.add('csv-drop-zone-active');
+        dropZone.style.borderColor = '#FF7A00';
+        dropZone.style.background = '#fffaf5';
+    }
+    function unhighlight() {
+        dropZone.classList.remove('csv-drop-zone-active');
+        dropZone.style.borderColor = '';
+        dropZone.style.background = '';
+    }
+
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        highlight();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        unhighlight();
+    });
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        unhighlight();
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        if (!file.name || !file.name.toLowerCase().endsWith('.csv')) {
+            showToast('Please drop a CSV file', 'error');
+            return;
+        }
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+}
+
+// Filter options used on the shop page – same values so product edit dropdowns match filtering
+const EDIT_FILTER_OPTIONS = {
+    categories: ['Disposable Gloves', 'Work Gloves'],
+    materials: ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'],
+    powders: ['Powder-Free', 'Powdered'],
+    thicknesses: ['2', '3', '4', '5', '6', '7+'],
+    sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+    colors: ['Blue', 'Black', 'White', 'Clear', 'Orange', 'Purple', 'Green', 'Natural', 'Gray', 'Tan', 'Yellow'],
+    grades: ['Medical / Exam Grade', 'Industrial Grade', 'Food Service Grade'],
+    useCases: ['Healthcare', 'Food Service', 'Food Processing', 'Janitorial', 'Sanitation', 'Laboratories', 'Pharmaceuticals', 'Beauty & Personal Care', 'Tattoo & Body Art', 'Automotive', 'Education', 'Childcare', 'Cannabis', 'Construction', 'Trades (Electricians, HVAC, Plumbing)', 'Manufacturing', 'Industrial', 'Warehousing', 'Logistics', 'Distribution', 'Transportation', 'Utilities', 'Energy', 'Agriculture', 'Landscaping', 'Mining', 'Heavy Industry', 'Public Works', 'Municipal Services', 'Waste Management', 'Recycling', 'Environmental Services'],
+    certifications: ['FDA Approved', 'ASTM Tested', 'Food Safe', 'Latex Free', 'Chemo Rated', 'EN 455', 'EN 374'],
+    textures: ['Smooth', 'Fingertip Textured', 'Fully Textured'],
+    cuffStyles: ['Beaded Cuff', 'Non-Beaded', 'Extended Cuff'],
+    sterilities: ['Non-Sterile', 'Sterile']
+};
+
+function buildEditProductFormHTML(product, brands) {
+    const p = product || {};
+    const brandsList = Array.isArray(brands) ? brands : [];
+    const images = Array.isArray(p.images) ? p.images : [];
+    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const opt = (arr, current) => {
+        const cur = (current || '').trim();
+        const inList = cur && arr.includes(cur);
+        return '<option value="">— Select —</option>' + arr.map(v => `<option value="${escape(v)}" ${(cur === v) ? 'selected' : ''}>${escape(v)}</option>`).join('') + (cur && !inList ? `<option value="${escape(cur)}" selected>${escape(cur)}</option>` : '');
+    };
+    const sizeArr = (p.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+    const sizesOptions = EDIT_FILTER_OPTIONS.sizes.map(v => `<option value="${v}" ${sizeArr.includes(v) ? 'selected' : ''}>${v}</option>`).join('');
+    const thicknessVal = p.thickness != null ? (String(p.thickness) === '7' || p.thickness >= 7 ? '7+' : String(p.thickness)) : '';
+    const imagesRows = images.map((url, i) => `
+        <div class="edit-image-row" draggable="true" data-index="${i}" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <span style="cursor:grab; color:#9CA3AF;" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
+            <input type="url" value="${escape(url)}" placeholder="Image URL" style="flex:1; padding:8px 12px; border:1px solid #e0e0e0; border-radius:6px;">
+            <button type="button" onclick="moveEditImageRow(this,-1)" title="Move up"><i class="fas fa-chevron-up"></i></button>
+            <button type="button" onclick="moveEditImageRow(this,1)" title="Move down"><i class="fas fa-chevron-down"></i></button>
+            <button type="button" onclick="removeEditImageRow(this)" title="Remove"><i class="fas fa-times" style="color:#dc3545;"></i></button>
+        </div>
+    `).join('');
+    return `
+        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 700; margin: 0;">Edit Product</h2>
+            <button type="button" onclick="closeEditProductModal()" style="background:none; border:none; font-size: 24px; color: #4B5563; cursor: pointer; padding: 4px;">&times;</button>
+        </div>
+        <form id="editProductForm" onsubmit="saveProductEdit(event)">
+            <input type="hidden" id="editProductId" value="${p.id || ''}">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Main SKU</label><input type="text" id="editProductSku" value="${escape(p.sku)}" required placeholder="e.g. GLV-500G" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;" oninput="updateEditVariantSkuPreview()" onchange="updateEditVariantSkuPreview()"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Product Name</label><input type="text" id="editProductName" value="${escape(p.name)}" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Brand</label><select id="editProductBrand" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${brandsList.map(b => `<option value="${escape(b)}" ${(p.brand || '') === b ? 'selected' : ''}>${escape(b)}</option>`).join('')}${p.brand && !brandsList.includes(p.brand) ? `<option value="${escape(p.brand)}" selected>${escape(p.brand)}</option>` : ''}</select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Category</label><select id="editProductCategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option><option value="Disposable Gloves" ${(p.category || '') === 'Disposable Gloves' ? 'selected' : ''}>Disposable Gloves</option><option value="Work Gloves" ${(p.category || '') === 'Work Gloves' ? 'selected' : ''}>Work Gloves</option></select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label><select id="editProductSubcategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${EDIT_FILTER_OPTIONS.materials.map(m => `<option value="${escape(m)}" ${(p.subcategory || '') === m ? 'selected' : ''}>${escape(m)}</option>`).join('')}${p.subcategory && !EDIT_FILTER_OPTIONS.materials.includes(p.subcategory) ? `<option value="${escape(p.subcategory)}" selected>${escape(p.subcategory)}</option>` : ''}</select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label><select id="editProductMaterial" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.materials, p.material)}</select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label><select id="editProductColor" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.colors, p.color)}</select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label><select id="editProductSizes" multiple style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px; min-height:80px;" onchange="updateEditVariantSkuPreview()">${sizesOptions}</select><span style="font-size:11px; color:#6B7280;">Hold Ctrl/Cmd to select multiple. Each size gets a variant SKU: MainSKU-Size (e.g. GLV-500G-S).</span><div id="editVariantSkuPreview" style="margin-top:8px; font-size:12px; color:#6B7280; min-height:20px;"></div></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Pack Qty (per box)</label><input type="number" id="editProductPackQty" value="${p.pack_qty ?? 100}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case Qty</label><input type="number" id="editProductCaseQty" value="${p.case_qty ?? 1000}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Price (Retail)</label><input type="number" id="editProductPrice" value="${p.price ?? 0}" step="0.01" min="0" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Bulk / B2B Price</label><input type="number" id="editProductBulkPrice" value="${p.bulk_price ?? 0}" step="0.01" min="0" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Description</label>
+                <textarea id="editProductDescription" rows="4" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px; font-family:inherit;">${escape(p.description)}</textarea>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Primary Image URL</label>
+                <input type="url" id="editProductImageUrl" value="${escape(p.image_url)}" placeholder="https://..." style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Additional Images <span style="font-weight:400; color:#6B7280;">(drag to reorder)</span></label>
+                <div id="editProductImagesList">${imagesRows}</div>
+                <button type="button" onclick="addEditImageRow()" style="margin-top:8px; padding:8px 16px; border:2px dashed #e0e0e0; border-radius:8px; background:#f9f9f9; cursor:pointer; font-size: 13px;"><i class="fas fa-plus"></i> Add image URL</button>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Video URL (YouTube or .mp4)</label>
+                <input type="url" id="editProductVideoUrl" value="${escape(p.video_url)}" placeholder="https://..." style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Stock &amp; filters</label>
+                <div style="display:flex; flex-wrap:wrap; gap: 16px; align-items: center;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="editProductInStock" ${p.in_stock ? 'checked' : ''}> In stock</label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="editProductFeatured" ${p.featured ? 'checked' : ''}> Featured</label>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Powder</label><select id="editProductPowder" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.powders, p.powder)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Thickness (mil)</label><select id="editProductThickness" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.thicknesses, thicknessVal)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Grade</label><select id="editProductGrade" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.grades, p.grade)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Use case / Industries</label><select id="editProductUseCase" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.useCases, p.useCase)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Certifications</label><select id="editProductCertifications" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.certifications, p.certifications)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Texture</label><select id="editProductTexture" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.textures, p.texture)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Cuff style</label><select id="editProductCuffStyle" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.cuffStyles, p.cuffStyle)}</select></div>
+                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Sterility</label><select id="editProductSterility" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.sterilities, p.sterility)}</select></div>
+                </div>
+            </div>
+            <div style="display:flex; gap: 12px; margin-top: 24px;">
+                <button type="submit" style="background: #FF7A00; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;"><i class="fas fa-save"></i> Save changes</button>
+                <button type="button" onclick="closeEditProductModal()" style="background: #f5f5f5; color: #1a1a1a; border: 2px solid #e0e0e0; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Cancel</button>
+            </div>
+        </form>
+    `;
+}
+
+function updateEditVariantSkuPreview() {
+    const mainSkuEl = document.getElementById('editProductSku');
+    const sizesEl = document.getElementById('editProductSizes');
+    const previewEl = document.getElementById('editVariantSkuPreview');
+    if (!mainSkuEl || !sizesEl || !previewEl) return;
+    const mainSku = (mainSkuEl.value || '').trim();
+    const selectedSizes = Array.from(sizesEl.selectedOptions).map(o => o.value);
+    if (!mainSku) { previewEl.innerHTML = ''; return; }
+    if (selectedSizes.length === 0) { previewEl.innerHTML = 'Select sizes above to see variant SKUs.'; return; }
+    const variants = selectedSizes.map(s => `${s} → <strong>${mainSku}-${s}</strong>`).join(' &nbsp; ');
+    previewEl.innerHTML = 'Variant SKUs: ' + variants;
+}
+
+function addEditImageRow() {
+    const list = document.getElementById('editProductImagesList');
+    if (!list) return;
+    const row = document.createElement('div');
+    row.className = 'edit-image-row';
+    row.draggable = true;
+    row.setAttribute('data-index', String(list.children.length));
+    row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
+    row.innerHTML = '<span style="cursor:grab; color:#9CA3AF;" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span><input type="url" placeholder="Image URL" style="flex:1; padding:8px 12px; border:1px solid #e0e0e0; border-radius:6px;"><button type="button" onclick="moveEditImageRow(this,-1)" title="Move up"><i class="fas fa-chevron-up"></i></button><button type="button" onclick="moveEditImageRow(this,1)" title="Move down"><i class="fas fa-chevron-down"></i></button><button type="button" onclick="removeEditImageRow(this)" title="Remove"><i class="fas fa-times" style="color:#dc3545;"></i></button>';
+    row.ondragstart = (e) => { e.dataTransfer.setData('text/plain', row.dataset.index); e.dataTransfer.effectAllowed = 'move'; };
+    row.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('edit-image-drag-over'); };
+    row.ondragleave = () => row.classList.remove('edit-image-drag-over');
+    row.ondrop = (e) => { e.preventDefault(); row.classList.remove('edit-image-drag-over'); const from = document.querySelector('.edit-image-row[data-index="' + e.dataTransfer.getData('text/plain') + '"]'); if (from && from !== row) list.insertBefore(from, row); };
+    list.appendChild(row);
+}
+
+function removeEditImageRow(btn) {
+    const row = btn.closest('.edit-image-row');
+    if (row) row.remove();
+}
+
+function moveEditImageRow(btn, dir) {
+    const row = btn.closest('.edit-image-row');
+    const list = document.getElementById('editProductImagesList');
+    if (!row || !list) return;
+    const idx = Array.from(list.children).indexOf(row);
+    const next = dir === -1 ? list.children[idx - 1] : list.children[idx + 1];
+    if (next) list.insertBefore(row, dir === -1 ? next : next.nextSibling);
+}
+
+function closeEditProductModal() {
+    const modal = document.getElementById('editProductModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showAddProductForm() {
+    const section = document.getElementById('addProductSection');
+    if (section) section.style.display = 'block';
+    // Hide CSV import if open
+    hideCSVImportSection();
+}
+
+function hideAddProductForm() {
+    const section = document.getElementById('addProductSection');
+    if (section) {
+        section.style.display = 'none';
+        document.getElementById('addProductForm')?.reset();
+    }
+}
+
+function populateExportFilters(products) {
+    const brandEl = document.getElementById('exportFilterBrand');
+    if (!brandEl || !products || !Array.isArray(products)) return;
+    const brands = [...new Set(products.map(p => (p.brand || '').trim()).filter(Boolean))].sort();
+    brandEl.innerHTML = '<option value="">All manufacturers</option>' + brands.map(b => '<option value="' + (b || '').replace(/"/g, '&quot;') + '">' + (b || '').replace(/</g, '&lt;') + '</option>').join('');
+}
+
+function getExportFilters() {
+    const brandEl = document.getElementById('exportFilterBrand');
+    const categoryEl = document.getElementById('exportFilterCategory');
+    const colorsEl = document.getElementById('exportFilterColors');
+    const materialsEl = document.getElementById('exportFilterMaterials');
+    return {
+        brand: (brandEl && brandEl.value) || '',
+        category: (categoryEl && categoryEl.value) || '',
+        colors: colorsEl ? Array.from(colorsEl.selectedOptions).map(o => o.value) : [],
+        materials: materialsEl ? Array.from(materialsEl.selectedOptions).map(o => o.value) : []
+    };
+}
+
+function applyExportFilters(products, filters) {
+    if (!products || !Array.isArray(products)) return [];
+    let list = products;
+    if (filters.brand) {
+        list = list.filter(p => (p.brand || '').trim() === filters.brand);
+    }
+    if (filters.category) {
+        list = list.filter(p => (p.category || '').trim() === filters.category);
+    }
+    if (filters.colors && filters.colors.length > 0) {
+        const colorSet = new Set(filters.colors.map(c => (c || '').toLowerCase()));
+        list = list.filter(p => colorSet.has((p.color || '').trim().toLowerCase()));
+    }
+    if (filters.materials && filters.materials.length > 0) {
+        const matSet = new Set(filters.materials.map(m => (m || '').toLowerCase()));
+        list = list.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
+    }
+    return list;
+}
+
+async function exportProductsToCSV() {
+    try {
+        showToast('Creating CSV export...', 'info');
+        const filters = getExportFilters();
+        const params = new URLSearchParams();
+        if (filters.brand) params.set('brand', filters.brand);
+        if (filters.category) params.set('category', filters.category);
+        if (filters.colors && filters.colors.length) params.set('colors', filters.colors.join(','));
+        if (filters.materials && filters.materials.length) params.set('materials', filters.materials.join(','));
+        const qs = params.toString();
+        const url = api.baseUrl + '/api/products/export.csv' + (qs ? '?' + qs : '');
+        const response = await fetch(url, { headers: api.getHeaders() });
+        if (!response.ok) {
+            const text = await response.text();
+            let errMsg = text;
+            try { const j = JSON.parse(text); if (j.error) errMsg = j.error; } catch (_) {}
+            throw new Error(errMsg || 'Export failed');
+        }
+        const blob = await response.blob();
+        const filename = response.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/)?.[1] || `glovecubs-products-export-${new Date().toISOString().split('T')[0]}.csv`;
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        showToast('Products CSV created and downloaded.', 'success');
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast('Error exporting CSV: ' + (error.message || 'Export failed'), 'error');
+    }
+}
+
+function downloadCSV(products, exportName) {
+    const date = new Date().toISOString().split('T')[0];
+    const safeName = (exportName || 'glovecubs-products').replace(/[\s\/\\:*?"<>|]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'glovecubs-products';
+    const filename = `${safeName}-export-${date}.csv`;
+
+    // CSV Headers (matching import format) - includes all filter fields
+    const headers = [
+        'sku', 'name', 'brand', 'category', 'subcategory', 'description', 
+        'material', 'powder', 'thickness', 'sizes', 'color', 'grade', 
+        'useCase', 'certifications', 'texture', 'cuffStyle', 'sterility',
+        'pack_qty', 'case_qty', 'price', 'bulk_price', 'image_url', 'in_stock', 'featured'
+    ];
+    
+    // Convert products to CSV rows
+    const csvRows = [
+        headers.join(',') // Header row
+    ];
+    
+    products.forEach(product => {
+        const row = [
+            escapeCSV(product.sku || ''),
+            escapeCSV(product.name || ''),
+            escapeCSV(product.brand || ''),
+            escapeCSV(product.category || ''),
+            escapeCSV(product.subcategory || ''),
+            escapeCSV(product.description || ''),
+            escapeCSV(product.material || ''),
+            escapeCSV(product.powder || ''), // Powder-Free or Powdered
+            product.thickness || '', // mil value (e.g., 4, 5, 6)
+            escapeCSV(product.sizes || ''), // Comma-separated: S,M,L,XL
+            escapeCSV(product.color || ''),
+            escapeCSV(product.grade || ''), // Medical/Exam Grade, Industrial Grade, Food Service Grade
+            escapeCSV(product.useCase || ''), // Comma-separated industries: Healthcare,Food Service,Automotive
+            escapeCSV(product.certifications || ''), // Comma-separated: FDA Approved,ASTM Tested,Food Safe
+            escapeCSV(product.texture || ''), // Smooth, Fingertip Textured, Fully Textured
+            escapeCSV(product.cuffStyle || ''), // Beaded Cuff, Non-Beaded, Extended Cuff
+            escapeCSV(product.sterility || ''), // Sterile, Non-Sterile
+            product.pack_qty || 100,
+            product.case_qty || 1000,
+            product.price || 0,
+            product.bulk_price || 0,
+            escapeCSV(product.image_url || ''),
+            product.in_stock ? 1 : 0,
+            product.featured ? 1 : 0
+        ];
+        csvRows.push(row.join(','));
+    });
+    
+    // Create CSV content
+    const csvContent = csvRows.join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Successfully exported ${products.length} products to CSV!`, 'success');
+}
+
+function escapeCSV(value) {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    // If value contains comma, quote, or newline, wrap in quotes and escape quotes
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return '"' + stringValue.replace(/"/g, '""') + '"';
+    }
+    return stringValue;
+}
+
+function showCSVImportSection() {
+    const section = document.getElementById('csvImportSection');
+    if (section) section.style.display = 'block';
+    hideAddProductForm();
+    toggleDeleteNotInImportOption();
+}
+
+function hideCSVImportSection() {
+    const section = document.getElementById('csvImportSection');
+    if (section) {
+        section.style.display = 'none';
+        // Reset file input
+        const fileInput = document.getElementById('csvFileInput');
+        if (fileInput) {
+            fileInput.value = '';
+            const fileName = document.getElementById('csvFileName');
+            const importBtn = document.getElementById('csvImportBtn');
+            if (fileName) fileName.textContent = 'No file selected';
+            if (importBtn) {
+                importBtn.disabled = true;
+                importBtn.style.opacity = '0.5';
+                importBtn.style.cursor = 'not-allowed';
+            }
+        }
+    }
+}
+
+function toggleDeleteNotInImportOption() {
+    const imagesOnly = document.getElementById('csvUpdateImagesOnly');
+    const deleteCb = document.getElementById('csvDeleteNotInImport');
+    const deleteLabel = document.getElementById('csvDeleteNotInImportLabel');
+    if (!imagesOnly || !deleteCb) return;
+    if (imagesOnly.checked) {
+        deleteCb.checked = false;
+        deleteCb.disabled = true;
+        if (deleteLabel) deleteLabel.style.opacity = '0.5';
+    } else {
+        deleteCb.disabled = false;
+        if (deleteLabel) deleteLabel.style.opacity = '1';
+    }
+}
+
+function handleCSVFileSelect(event) {
+    const file = event.target.files[0];
+    const fileName = document.getElementById('csvFileName');
+    const importBtn = document.getElementById('csvImportBtn');
+    
+    if (file) {
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            if (fileName) {
+                fileName.textContent = `Selected: ${file.name}`;
+                fileName.style.color = '#111111';
+                fileName.style.fontWeight = '600';
+            }
+            if (importBtn) {
+                importBtn.disabled = false;
+                importBtn.style.opacity = '1';
+                importBtn.style.cursor = 'pointer';
+            }
+        } else {
+            if (fileName) {
+                fileName.textContent = 'Please select a CSV file';
+                fileName.style.color = '#d32f2f';
+            }
+            if (importBtn) {
+                importBtn.disabled = true;
+                importBtn.style.opacity = '0.5';
+                importBtn.style.cursor = 'not-allowed';
+            }
+            showToast('Please select a CSV file', 'error');
+        }
+    }
+}
+
+async function importCSV() {
+    const fileInput = document.getElementById('csvFileInput');
+    const statusDiv = document.getElementById('csvImportStatus');
+    const importBtn = document.getElementById('csvImportBtn');
+    
+    if (!fileInput || !fileInput.files[0]) {
+        showToast('Please select a CSV file first', 'error');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    
+    // Show loading state
+    if (importBtn) {
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing...';
+    }
+    if (statusDiv) {
+        statusDiv.innerHTML = '<span style="color: #4B5563;"><i class="fas fa-spinner fa-spin"></i> Processing CSV file...</span>';
+    }
+    
+    try {
+        // Read file as text
+        const fileText = await file.text();
+        const updateImagesOnly = document.getElementById('csvUpdateImagesOnly')?.checked;
+        
+        // Send to backend API (full import or images-only update)
+        const endpoint = updateImagesOnly ? '/api/products/update-images-csv' : '/api/products/import-csv';
+        const deleteNotInImport = !updateImagesOnly && (document.getElementById('csvDeleteNotInImport')?.checked === true);
+        const body = updateImagesOnly ? { csvContent: fileText } : { csvContent: fileText, deleteNotInImport };
+        const response = await api.post(endpoint, body);
+        
+        // Show success (and debug if no changes)
+        if (updateImagesOnly) {
+            const msg = response.message || `Updated images for ${response.updated || 0} product(s).`;
+            let html = `<span style="color: #28a745;"><i class="fas fa-check-circle"></i> ${msg}</span>`;
+            if (response.debug) {
+                const d = response.debug;
+                html += `<div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; font-size: 12px; color: #0c4a6e; text-align: left;">`;
+                html += `<strong>Why no updates?</strong><br>Headers seen: ${(d.headers || d.headersLower || []).join(', ')}<br>`;
+                html += `First row SKU: "${d.firstRowSku || ''}" | Image URL (first 60 chars): ${(d.firstRowImageUrl || '') || '(empty)'}<br>`;
+                if (d.dbSkuSample) html += `Your DB SKUs (sample): ${d.dbSkuSample.join(', ')}`;
+                html += `</div>`;
+            }
+            if (statusDiv) statusDiv.innerHTML = html;
+            showToast(msg, 'success');
+        } else {
+            const added = response.added != null ? response.added : 0;
+            const updated = response.updated != null ? response.updated : 0;
+            const deleted = response.deleted != null ? response.deleted : 0;
+            const withImage = response.withImage != null ? response.withImage : null;
+            const parts = [];
+            if (added) parts.push(`${added} added`);
+            if (updated) parts.push(`${updated} updated`);
+            if (deleted) parts.push(`${deleted} deleted`);
+            const summary = parts.length ? parts.join(', ') : (response.count || 0) + ' processed';
+            const msg = response.message || `Import complete: ${summary}.`;
+            const imageLine = withImage !== null
+                ? (withImage ? `${withImage} row(s) had image URLs.` : 'No image_url values were found in the CSV—check column name (use "image_url").')
+                : '';
+            if (statusDiv) {
+                let html = `<span style="color: #28a745;"><i class="fas fa-check-circle"></i> ${msg}</span>` +
+                    (imageLine ? `<div style="margin-top: 8px; font-size: 13px; color: #1a1a1a;">${imageLine}</div>` : '');
+                if (response.debug) {
+                    const d = response.debug;
+                    html += `<div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; font-size: 12px; color: #0c4a6e; text-align: left;">`;
+                    html += `<strong>Why no changes?</strong><br>Headers (${d.headerCount || 0}): ${(d.headers || []).join(', ')}<br>`;
+                    html += `First row columns: ${d.firstRowColumnCount || 0} | First row SKU: "${d.firstRowSku || ''}" | Name: "${d.firstRowName || ''}"<br>`;
+                    html += `Delimiter used: ${d.delimiterUsed || 'comma'}`;
+                    html += `</div>`;
+                }
+                statusDiv.innerHTML = html;
+            }
+            const toastMsg = imageLine ? `${msg} ${imageLine}` : msg;
+            showToast(toastMsg, 'success');
+        }
+        
+        // Reset form
+        fileInput.value = '';
+        const fileName = document.getElementById('csvFileName');
+        if (fileName) fileName.textContent = 'No file selected';
+        if (importBtn) {
+            importBtn.innerHTML = '<i class="fas fa-upload"></i> Import Products';
+            importBtn.disabled = true;
+            importBtn.style.opacity = '0.5';
+            importBtn.style.cursor = 'not-allowed';
+        }
+        
+        // Reload products list
+        setTimeout(() => {
+            loadAdminProducts();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('CSV import error:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = `<span style="color: #d32f2f;"><i class="fas fa-exclamation-circle"></i> Error: ${error.message || 'Failed to import CSV'}</span>`;
+        }
+        showToast('Error importing CSV: ' + (error.message || 'Please check the file format'), 'error');
+        if (importBtn) {
+            importBtn.disabled = false;
+            importBtn.innerHTML = '<i class="fas fa-upload"></i> Import Products';
+        }
+    }
+}
+
+async function loadAdminOrders() {
+    const content = document.getElementById('adminOrdersContent');
+    if (!content) return;
+    
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (!token) {
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Authentication Required</h3>
+                <p style="margin-bottom: 12px;">Please log in to access admin features.</p>
+                <button onclick="navigate('login')" style="background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Go to Login</button>
+            </div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #4B5563;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i><p>Loading orders...</p></div>';
+    
+    try {
+        const orders = await api.get('/api/admin/orders');
+        
+        if (!Array.isArray(orders)) {
+            throw new Error('Invalid response format');
+        }
+        
+        if (orders.length === 0) {
+            content.innerHTML = '<div style="text-align: center; padding: 60px 20px; color: #4B5563;"><i class="fas fa-shopping-cart" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i><p>No orders yet</p></div>';
+            return;
+        }
+        
+        content.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">All Orders</h2>
+                <p style="color: #4B5563;">Total: ${orders.length} orders</p>
+            </div>
+            <div style="display: grid; gap: 16px;">
+                ${orders.map(order => `
+                    <div style="background: #f9f9f9; padding: 24px; border-radius: 12px; border-left: 4px solid #FF7A00;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                            <div>
+                                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">Order ${order.order_number || order.id || 'N/A'}</h3>
+                                <p style="color: #4B5563; font-size: 14px;">${order.user?.company_name || 'Unknown'} • ${order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'}</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="background: ${order.status === 'pending' ? '#fff3cd' : order.status === 'completed' ? '#d4edda' : '#f8d7da'}; color: ${order.status === 'pending' ? '#856404' : order.status === 'completed' ? '#155724' : '#721c24'}; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; display: inline-block; margin-bottom: 8px;">
+                                    ${order.status || 'pending'}
+                                </div>
+                                <div style="font-size: 20px; font-weight: 700; color: #1a1a1a;">$${(order.total || 0).toFixed(2)}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+                            <p style="font-size: 13px; color: #4B5563; margin-bottom: 12px;"><strong>Items:</strong> ${(order.items && order.items.length) || 0} products</p>
+                            <div style="display: grid; gap: 8px; margin-top: 12px;">
+                                ${order.items.map(item => {
+                                    const variantSku = item.variant_sku || (item.size ? `${item.sku}-${item.size.toUpperCase().replace(/\s+/g, '')}` : item.sku);
+                                    return `
+                                    <div style="background: #ffffff; padding: 12px; border-radius: 8px; border-left: 3px solid #FF7A00;">
+                                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 600; color: #111111; margin-bottom: 4px;">${item.name}</div>
+                                                <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">
+                                                    <span style="font-weight: 600;">Base SKU:</span> ${item.sku}
+                                                    ${variantSku !== item.sku ? `<span style="margin-left: 12px;"><span style="color: #FF7A00; font-weight: 700;">Variant SKU:</span> <span style="font-weight: 700; color: #FF7A00; background: #fff5f0; padding: 2px 6px; border-radius: 4px;">${variantSku}</span></span>` : ''}
+                                                </div>
+                                                ${item.size ? `<div style="font-size: 12px; color: #111111; margin-top: 4px;"><span style="font-weight: 600;">Size:</span> <span style="background: #FF7A00; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-left: 4px;">${item.size}</span></div>` : ''}
+                                            </div>
+                                            <div style="text-align: right; margin-left: 16px;">
+                                                <div style="font-size: 13px; color: #4B5563;">Qty: <strong style="color: #111111;">${item.quantity}</strong></div>
+                                                <div style="font-size: 13px; color: #4B5563; margin-top: 4px;">$${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                }).join('')}
+                            </div>
+                            <div style="font-size: 13px; color: #4B5563; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                                <strong>Contact:</strong> ${order.user?.contact_name || 'N/A'} • ${order.user?.email || 'N/A'}
+                            </div>
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                                <strong>Tracking:</strong> ${order.tracking_number || '—'} ${order.tracking_url ? '<a href="' + order.tracking_url + '" target="_blank" rel="noopener">Track</a>' : ''}
+                                <button type="button" onclick="openAdminOrderTrackingModal(${order.id}, this.getAttribute('data-tracking'))" data-tracking="${encodeURIComponent(JSON.stringify({ tracking_number: order.tracking_number || '', tracking_url: order.tracking_url || '', status: order.status || 'pending' }))}" style="margin-left: 12px; background: #FF7A00; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;">Set tracking</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading orders:', error);
+        const errorMsg = error.message || 'Unknown error';
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Error loading orders</h3>
+                <p style="margin-bottom: 12px;">${errorMsg}</p>
+                ${errorMsg.includes('403') || errorMsg.includes('Admin access') ? '<p style="font-size: 13px; color: #4B5563;">Make sure you are logged in as an approved admin user.</p>' : ''}
+                <button onclick="loadAdminOrders()" style="margin-top: 12px; background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Retry</button>
+            </div>
+        `;
+    }
+}
+
+function openAdminOrderTrackingModal(orderId, dataAttr) {
+    let trackingNumber = '', trackingUrl = '', status = 'pending';
+    try {
+        const data = dataAttr ? JSON.parse(decodeURIComponent(dataAttr)) : {};
+        trackingNumber = data.tracking_number || '';
+        trackingUrl = data.tracking_url || '';
+        status = data.status || 'pending';
+    } catch (e) {}
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'adminOrderTrackingOverlay';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:9999;';
+    overlay.innerHTML = '<div class="modal-content" style="background:#fff; padding:24px; border-radius:12px; max-width:420px; width:100%;">' +
+        '<h3 style="margin-bottom:16px;">Order tracking</h3>' +
+        '<label>Tracking number</label>' +
+        '<input type="text" id="adminTrackingNumber" value="' + (trackingNumber || '').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" placeholder="1Z999..." style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:12px;">' +
+        '<label>Tracking URL</label>' +
+        '<input type="url" id="adminTrackingUrl" value="' + (trackingUrl || '').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" placeholder="https://..." style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:12px;">' +
+        '<label>Status</label>' +
+        '<select id="adminOrderStatus" style="width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:16px;">' +
+        '<option value="pending"' + (status === 'pending' ? ' selected' : '') + '>Pending</option>' +
+        '<option value="processing"' + (status === 'processing' ? ' selected' : '') + '>Processing</option>' +
+        '<option value="shipped"' + (status === 'shipped' ? ' selected' : '') + '>Shipped</option>' +
+        '<option value="completed"' + (status === 'completed' ? ' selected' : '') + '>Completed</option>' +
+        '</select>' +
+        '<div style="display:flex; gap:10px;">' +
+        '<button type="button" class="btn btn-primary" onclick="saveAdminOrderTracking(' + orderId + '); return false;">Save</button>' +
+        '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'adminOrderTrackingOverlay\').remove();">Cancel</button>' +
+        '</div></div>';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+}
+async function saveAdminOrderTracking(orderId) {
+    const trackingNumber = document.getElementById('adminTrackingNumber') && document.getElementById('adminTrackingNumber').value.trim();
+    const trackingUrl = document.getElementById('adminTrackingUrl') && document.getElementById('adminTrackingUrl').value.trim();
+    const status = document.getElementById('adminOrderStatus') && document.getElementById('adminOrderStatus').value;
+    try {
+        await api.put('/api/admin/orders/' + orderId, { tracking_number: trackingNumber, tracking_url: trackingUrl, status });
+        showToast('Order updated', 'success');
+        document.getElementById('adminOrderTrackingOverlay') && document.getElementById('adminOrderTrackingOverlay').remove();
+        loadAdminOrders();
+    } catch (e) {
+        showToast(e.message || 'Failed to update', 'error');
+    }
+}
+
+async function loadAdminRFQs() {
+    const content = document.getElementById('adminRFQsContent');
+    if (!content) return;
+    
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (!token) {
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Authentication Required</h3>
+                <p style="margin-bottom: 12px;">Please log in to access admin features.</p>
+                <button onclick="navigate('login')" style="background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Go to Login</button>
+            </div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #4B5563;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i><p>Loading RFQs...</p></div>';
+    
+    try {
+        const rfqs = await api.get('/api/rfqs');
+        
+        if (!Array.isArray(rfqs)) {
+            throw new Error('Invalid response format');
+        }
+        
+        if (rfqs.length === 0) {
+            content.innerHTML = '<div style="text-align: center; padding: 60px 20px; color: #4B5563;"><i class="fas fa-file-invoice-dollar" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i><p>No RFQs yet</p></div>';
+            return;
+        }
+        
+        content.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Request for Quotes</h2>
+                <p style="color: #4B5563;">Total: ${rfqs.length} RFQs</p>
+            </div>
+            <div style="display: grid; gap: 16px;">
+                ${rfqs.map(rfq => `
+                    <div style="background: #f9f9f9; padding: 24px; border-radius: 12px; border-left: 4px solid #FF7A00;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                            <div>
+                                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">${rfq.company_name || 'Unknown Company'}</h3>
+                                <p style="color: #4B5563; font-size: 14px;">${rfq.contact_name || 'N/A'} • ${rfq.email || 'N/A'} • ${rfq.phone || 'N/A'}</p>
+                                <p style="color: #4B5563; font-size: 13px; margin-top: 4px;">Submitted: ${rfq.created_at ? new Date(rfq.created_at).toLocaleString() : 'N/A'}</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="background: ${rfq.status === 'pending' ? '#fff3cd' : rfq.status === 'contacted' ? '#d4edda' : '#f8d7da'}; color: ${rfq.status === 'pending' ? '#856404' : rfq.status === 'contacted' ? '#155724' : '#721c24'}; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; display: inline-block;">
+                                    ${rfq.status || 'pending'}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: #ffffff; padding: 16px; border-radius: 8px; margin-top: 16px;">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 12px;">
+                                <div>
+                                    <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Quantity</div>
+                                    <div style="font-weight: 600; color: #1a1a1a;">${rfq.quantity || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Type</div>
+                                    <div style="font-weight: 600; color: #1a1a1a;">${rfq.type || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Use Case</div>
+                                    <div style="font-weight: 600; color: #1a1a1a;">${rfq.use_case || 'N/A'}</div>
+                                </div>
+                            </div>
+                            ${rfq.notes ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;"><div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Notes</div><div style="color: #1a1a1a;">${rfq.notes}</div></div>` : ''}
+                        </div>
+                        <div style="margin-top: 16px; display: flex; gap: 8px;">
+                            <button onclick="updateRFQStatus(${rfq.id}, 'contacted')" style="background: #28a745; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                                Mark as Contacted
+                            </button>
+                            <button onclick="updateRFQStatus(${rfq.id}, 'closed')" style="background: #6c757d; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading RFQs:', error);
+        const errorMsg = error.message || 'Unknown error';
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Error loading RFQs</h3>
+                <p style="margin-bottom: 12px;">${errorMsg}</p>
+                ${errorMsg.includes('403') || errorMsg.includes('Admin access') ? '<p style="font-size: 13px; color: #4B5563;">Make sure you are logged in as an approved admin user.</p>' : ''}
+                <button onclick="loadAdminRFQs()" style="margin-top: 12px; background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Retry</button>
+            </div>
+        `;
+    }
+}
+
+async function loadAdminUsers() {
+    const content = document.getElementById('adminUsersContent');
+    if (!content) return;
+    
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (!token) {
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Authentication Required</h3>
+                <p style="margin-bottom: 12px;">Please log in to access admin features.</p>
+                <button onclick="navigate('login')" style="background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Go to Login</button>
+            </div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #4B5563;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i><p>Loading users...</p></div>';
+    
+    try {
+        const users = await api.get('/api/admin/users');
+        
+        if (!Array.isArray(users)) {
+            throw new Error('Invalid response format');
+        }
+        
+        if (users.length === 0) {
+            content.innerHTML = '<div style="text-align: center; padding: 60px 20px; color: #4B5563;"><i class="fas fa-users" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i><p>No users yet</p></div>';
+            return;
+        }
+        
+        content.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">All Users</h2>
+                <p style="color: #4B5563;">Total: ${users.length} users</p>
+            </div>
+            <div style="display: grid; gap: 16px;">
+                ${users.map(user => `
+                    <div style="background: #f9f9f9; padding: 24px; border-radius: 12px; border-left: 4px solid ${user.is_approved ? '#28a745' : '#FF7A00'};">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                            <div>
+                                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">${user.company_name || 'Unknown Company'}</h3>
+                                <p style="color: #4B5563; font-size: 14px;">${user.contact_name || 'N/A'} • ${user.email || 'N/A'}</p>
+                                <p style="color: #4B5563; font-size: 13px; margin-top: 4px;">Joined: ${user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</p>
+                                ${user.allow_free_upgrades ? '<p style="color: #059669; font-size: 12px; margin-top: 4px;"><i class="fas fa-arrow-up"></i> Free upgrades enabled</p>' : ''}
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="background: ${user.is_approved ? '#d4edda' : '#fff3cd'}; color: ${user.is_approved ? '#155724' : '#856404'}; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; display: inline-block; margin-bottom: 8px;">
+                                    ${user.is_approved ? 'Approved' : 'Pending'}
+                                </div>
+                                <div style="font-size: 13px; color: #4B5563; text-transform: capitalize;">${user.discount_tier || 'standard'} tier</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; display: flex; gap: 8px;">
+                            ${!user.is_approved ? `<button onclick="updateUserApproval(${user.id}, true)" style="background: #28a745; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Approve User</button>` : ''}
+                            <select onchange="updateUserTier(${user.id}, this.value)" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                                <option value="standard" ${user.discount_tier === 'standard' ? 'selected' : ''}>Standard</option>
+                                <option value="bronze" ${user.discount_tier === 'bronze' ? 'selected' : ''}>Bronze (5%)</option>
+                                <option value="silver" ${user.discount_tier === 'silver' ? 'selected' : ''}>Silver (10%)</option>
+                                <option value="gold" ${user.discount_tier === 'gold' ? 'selected' : ''}>Gold (15%)</option>
+                                <option value="platinum" ${user.discount_tier === 'platinum' ? 'selected' : ''}>Platinum (20%)</option>
+                            </select>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading users:', error);
+        const errorMsg = error.message || 'Unknown error';
+        content.innerHTML = `
+            <div style="color: #d32f2f; padding: 20px; background: #ffebee; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px;"><i class="fas fa-exclamation-triangle"></i> Error loading users</h3>
+                <p style="margin-bottom: 12px;">${errorMsg}</p>
+                ${errorMsg.includes('403') || errorMsg.includes('Admin access') ? '<p style="font-size: 13px; color: #4B5563;">Make sure you are logged in as an approved admin user.</p>' : ''}
+                <button onclick="loadAdminUsers()" style="margin-top: 12px; background: #FF7A00; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Retry</button>
+            </div>
+        `;
+    }
+}
+
+async function updateRFQStatus(rfqId, status) {
+    try {
+        await api.put(`/api/rfqs/${rfqId}`, { status });
+        showToast('RFQ status updated', 'success');
+        loadAdminRFQs();
+    } catch (error) {
+        showToast('Error updating RFQ: ' + error.message, 'error');
+    }
+}
+
+async function updateUserApproval(userId, approved) {
+    try {
+        await api.put(`/api/admin/users/${userId}`, { is_approved: approved });
+        showToast('User approval updated', 'success');
+        loadAdminUsers();
+    } catch (error) {
+        showToast('Error updating user: ' + error.message, 'error');
+    }
+}
+
+async function updateUserTier(userId, tier) {
+    try {
+        await api.put(`/api/admin/users/${userId}`, { discount_tier: tier });
+        showToast('User tier updated', 'success');
+        loadAdminUsers();
+    } catch (error) {
+        showToast('Error updating tier: ' + error.message, 'error');
+    }
+}
+
+async function editProduct(productId) {
+    try {
+        const [product, brands] = await Promise.all([
+            api.get(`/api/products/${productId}`),
+            api.get('/api/brands').catch(() => [])
+        ]);
+        const content = document.getElementById('editProductModalContent');
+        if (!content) return;
+        content.innerHTML = buildEditProductFormHTML(product, brands);
+        const modal = document.getElementById('editProductModal');
+        if (modal) modal.style.display = 'block';
+        initEditImageRowsDrag();
+        updateEditVariantSkuPreview();
+    } catch (error) {
+        showToast('❌ Error editing product: ' + error.message, 'error');
+    }
+}
+
+function initEditImageRowsDrag() {
+    const list = document.getElementById('editProductImagesList');
+    if (!list) return;
+    const rows = list.querySelectorAll('.edit-image-row');
+    rows.forEach((row, i) => {
+        row.setAttribute('data-index', String(i));
+        row.draggable = true;
+        row.ondragstart = (e) => { e.dataTransfer.setData('text/plain', row.dataset.index); e.dataTransfer.effectAllowed = 'move'; };
+        row.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('edit-image-drag-over'); };
+        row.ondragleave = () => row.classList.remove('edit-image-drag-over');
+        row.ondrop = (e) => {
+            e.preventDefault();
+            row.classList.remove('edit-image-drag-over');
+            const from = list.querySelector('.edit-image-row[data-index="' + e.dataTransfer.getData('text/plain') + '"]');
+            if (from && from !== row) list.insertBefore(from, row);
+            // Refresh data-index after reorder
+            list.querySelectorAll('.edit-image-row').forEach((r, j) => r.setAttribute('data-index', String(j)));
+        };
+    });
+}
+
+async function saveProductEdit(event) {
+    event.preventDefault();
+    const idEl = document.getElementById('editProductId');
+    const productId = idEl && idEl.value;
+    if (!productId) {
+        showToast('❌ Product ID missing.', 'error');
+        return;
+    }
+    const list = document.getElementById('editProductImagesList');
+    const images = list ? Array.from(list.querySelectorAll('.edit-image-row input[type="url"]')).map(inp => (inp.value || '').trim()).filter(Boolean) : [];
+    const payload = {
+        sku: (document.getElementById('editProductSku') && document.getElementById('editProductSku').value) || '',
+        name: (document.getElementById('editProductName') && document.getElementById('editProductName').value) || '',
+        brand: (document.getElementById('editProductBrand') && document.getElementById('editProductBrand').value) || '',
+        category: (document.getElementById('editProductCategory') && document.getElementById('editProductCategory').value) || '',
+        subcategory: (document.getElementById('editProductSubcategory') && document.getElementById('editProductSubcategory').value) || '',
+        material: (document.getElementById('editProductMaterial') && document.getElementById('editProductMaterial').value) || '',
+        color: (document.getElementById('editProductColor') && document.getElementById('editProductColor').value) || '',
+        sizes: (() => { const el = document.getElementById('editProductSizes'); return el ? Array.from(el.selectedOptions).map(o => o.value).join(', ') : ''; })(),
+        pack_qty: parseInt((document.getElementById('editProductPackQty') && document.getElementById('editProductPackQty').value) || '100', 10) || 100,
+        case_qty: parseInt((document.getElementById('editProductCaseQty') && document.getElementById('editProductCaseQty').value) || '1000', 10) || 1000,
+        price: parseFloat((document.getElementById('editProductPrice') && document.getElementById('editProductPrice').value) || '0'),
+        bulk_price: parseFloat((document.getElementById('editProductBulkPrice') && document.getElementById('editProductBulkPrice').value) || '0'),
+        description: (document.getElementById('editProductDescription') && document.getElementById('editProductDescription').value) || '',
+        image_url: (document.getElementById('editProductImageUrl') && document.getElementById('editProductImageUrl').value) || '',
+        images: images,
+        video_url: (document.getElementById('editProductVideoUrl') && document.getElementById('editProductVideoUrl').value) || '',
+        in_stock: (document.getElementById('editProductInStock') && document.getElementById('editProductInStock').checked) ? 1 : 0,
+        featured: (document.getElementById('editProductFeatured') && document.getElementById('editProductFeatured').checked) ? 1 : 0,
+        powder: (document.getElementById('editProductPowder') && document.getElementById('editProductPowder').value) || '',
+        thickness: (() => { const el = document.getElementById('editProductThickness'); const v = el && el.value; if (!v) return null; if (v === '7+') return 7; const n = parseFloat(v); return isNaN(n) ? null : n; })(),
+        grade: (document.getElementById('editProductGrade') && document.getElementById('editProductGrade').value) || '',
+        useCase: (document.getElementById('editProductUseCase') && document.getElementById('editProductUseCase').value) || '',
+        certifications: (document.getElementById('editProductCertifications') && document.getElementById('editProductCertifications').value) || '',
+        texture: (document.getElementById('editProductTexture') && document.getElementById('editProductTexture').value) || '',
+        cuffStyle: (document.getElementById('editProductCuffStyle') && document.getElementById('editProductCuffStyle').value) || '',
+        sterility: (document.getElementById('editProductSterility') && document.getElementById('editProductSterility').value) || ''
+    };
+    try {
+        await api.put(`/api/products/${productId}`, payload);
+        showToast('✅ Product updated successfully!', 'success');
+        closeEditProductModal();
+        loadAdminProducts();
+    } catch (error) {
+        showToast('❌ Error saving: ' + (error.message || 'Unknown error'), 'error');
+    }
+}
+
+async function deleteProduct(productId) {
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await api.delete(`/api/products/${productId}`);
+        showToast('✅ Product deleted successfully!', 'success');
+        loadAdminProducts(true);
+    } catch (error) {
+        showToast('❌ Error deleting product: ' + error.message, 'error');
+    }
+}
+
+function showAddProductForm() {
+    const section = document.getElementById('addProductSection');
+    if (section) section.style.display = 'block';
+    // Hide CSV import if open
+    hideCSVImportSection();
+}
+
+function hideAddProductForm() {
+    const section = document.getElementById('addProductSection');
+    if (section) {
+        section.style.display = 'none';
+        document.getElementById('addProductForm')?.reset();
+    }
+}
+
+function generateImageUrl() {
+    const nameInput = document.getElementById('productName');
+    const colorInput = document.getElementById('productColor');
+    const materialInput = document.getElementById('productMaterial');
+    
+    const name = nameInput ? nameInput.value : 'Product';
+    const color = colorInput ? colorInput.value : 'Blue';
+    const material = materialInput ? materialInput.value : 'Nitrile';
+    
+    // Color mapping
+    const colorMap = {
+        'Blue': '0066CC',
+        'Black': '000000',
+        'Orange': 'FF6B00',
+        'Green': '00AA00',
+        'Gray': '666666',
+        'Grey': '666666',
+        'White': 'FFFFFF',
+        'Red': 'FF0000',
+        'Yellow': 'FFCC00',
+        'Purple': '6600CC',
+        'Pink': 'FF66CC',
+        'Tan': 'D2B48C',
+        'Clear': 'CCCCCC'
+    };
+    
+    // Try to match color (case insensitive)
+    let colorCode = '0066CC'; // default blue
+    for (const [key, value] of Object.entries(colorMap)) {
+        if (color.toLowerCase().includes(key.toLowerCase())) {
+            colorCode = value;
+            break;
+        }
+    }
+    
+    // Generate text from product name
+    let text = name.replace(/\s+/g, '+').substring(0, 30);
+    if (!text || text === 'Product') {
+        text = material + '+' + color;
+    }
+    
+    const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
+    
+    const imageInput = document.getElementById('productImageUrl');
+    if (imageInput) {
+        imageInput.value = imageUrl;
+        updateImagePreview(imageUrl);
+        showToast('✅ Image URL generated!');
+    }
+}
+
+function updateImagePreview(url) {
+    const preview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    if (url && preview && previewImg) {
+        previewImg.src = url;
+        preview.style.display = 'block';
+    } else if (preview) {
+        preview.style.display = 'none';
+    }
+}
+
+async function addProduct(event) {
+    event.preventDefault();
+    const additionalImagesEl = document.getElementById('productAdditionalImages');
+    const images = additionalImagesEl ? (additionalImagesEl.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
+    const productData = {
+        sku: document.getElementById('productSku').value,
+        name: document.getElementById('productName').value,
+        brand: document.getElementById('productBrand').value,
+        category: document.getElementById('productCategory').value,
+        subcategory: (document.getElementById('productSubcategory') && document.getElementById('productSubcategory').value) || '',
+        description: document.getElementById('productDescription').value,
+        material: document.getElementById('productMaterial').value,
+        sizes: (document.getElementById('productSizes') && document.getElementById('productSizes').value) || '',
+        color: (document.getElementById('productColor') && document.getElementById('productColor').value) || '',
+        pack_qty: parseInt((document.getElementById('productPackQty') && document.getElementById('productPackQty').value) || '100') || 100,
+        case_qty: parseInt((document.getElementById('productCaseQty') && document.getElementById('productCaseQty').value) || '1000') || 1000,
+        price: parseFloat(document.getElementById('productPrice').value),
+        bulk_price: parseFloat(document.getElementById('productBulkPrice').value) || 0,
+        image_url: document.getElementById('productImageUrl').value,
+        images: images,
+        video_url: (document.getElementById('productVideoUrl') && document.getElementById('productVideoUrl').value) || '',
+        in_stock: document.getElementById('productInStock').checked ? 1 : 0,
+        featured: document.getElementById('productFeatured').checked ? 1 : 0
+    };
+    
+    try {
+        const response = await api.post('/api/products', productData);
+        if (response.success) {
+            showToast('✅ Product added successfully!', 'success');
+            hideAddProductForm();
+            // Reload products if we're in admin panel
+            if (state.currentPage === 'admin' && state.adminTab === 'products') {
+                loadAdminProducts();
+            } else {
+                document.getElementById('addProductForm')?.reset();
+            }
+        }
+    } catch (error) {
+        showToast('❌ Error adding product: ' + (error.message || 'Unknown error'), 'error');
+        console.error(error);
+    }
+}
+
+function generateImageUrl() {
+    const nameInput = document.getElementById('productName');
+    const colorInput = document.getElementById('productColor');
+    const materialInput = document.getElementById('productMaterial');
+    
+    const name = nameInput ? nameInput.value : 'Product';
+    const color = colorInput ? colorInput.value : 'Blue';
+    const material = materialInput ? materialInput.value : 'Nitrile';
+    
+    // Color mapping
+    const colorMap = {
+        'Blue': '0066CC',
+        'Black': '000000',
+        'Orange': 'FF6B00',
+        'Green': '00AA00',
+        'Gray': '666666',
+        'Grey': '666666',
+        'White': 'FFFFFF',
+        'Red': 'FF0000',
+        'Yellow': 'FFCC00',
+        'Purple': '6600CC',
+        'Pink': 'FF66CC',
+        'Tan': 'D2B48C',
+        'Clear': 'CCCCCC'
+    };
+    
+    // Try to match color (case insensitive)
+    let colorCode = '0066CC'; // default blue
+    for (const [key, value] of Object.entries(colorMap)) {
+        if (color.toLowerCase().includes(key.toLowerCase())) {
+            colorCode = value;
+            break;
+        }
+    }
+    
+    // Generate text from product name
+    let text = name.replace(/\s+/g, '+').substring(0, 30);
+    if (!text || text === 'Product') {
+        text = material + '+' + color;
+    }
+    
+    const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
+    
+    const imageInput = document.getElementById('productImageUrl');
+    if (imageInput) {
+        imageInput.value = imageUrl;
+        updateImagePreview(imageUrl);
+        showToast('✅ Image URL generated!');
+    }
+}
+
+function updateImagePreview(url) {
+    const preview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    if (url && preview && previewImg) {
+        previewImg.src = url;
+        preview.style.display = 'block';
+    } else if (preview) {
+        preview.style.display = 'none';
+    }
+}
+
+async function addProduct(event) {
+    event.preventDefault();
+    
+    const productData = {
+        sku: document.getElementById('productSku').value,
+        name: document.getElementById('productName').value,
+        brand: document.getElementById('productBrand').value,
+        category: document.getElementById('productCategory').value,
+        subcategory: document.getElementById('productSubcategory').value,
+        description: document.getElementById('productDescription').value,
+        material: document.getElementById('productMaterial').value,
+        sizes: document.getElementById('productSizes').value,
+        color: document.getElementById('productColor').value,
+        pack_qty: parseInt(document.getElementById('productPackQty').value) || 100,
+        case_qty: parseInt(document.getElementById('productCaseQty').value) || 1000,
+        price: parseFloat(document.getElementById('productPrice').value),
+        bulk_price: parseFloat(document.getElementById('productBulkPrice').value) || 0,
+        image_url: document.getElementById('productImageUrl').value,
+        in_stock: document.getElementById('productInStock').checked ? 1 : 0,
+        featured: document.getElementById('productFeatured').checked ? 1 : 0
+    };
+    
+    try {
+        const response = await api.post('/api/products', productData);
+        if (response.success) {
+            showToast('✅ Product added successfully!');
+            document.getElementById('addProductForm').reset();
+        }
+    } catch (error) {
+        showToast('❌ Error adding product: ' + (error.message || 'Unknown error'), 'error');
+        console.error(error);
+    }
+}
+
+function submitContact() {
+    showToast('Message sent! We\'ll get back to you soon.');
+    document.getElementById('contactName').value = '';
+    document.getElementById('contactEmail').value = '';
+    document.getElementById('contactCompany').value = '';
+    document.getElementById('contactMessage').value = '';
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+async function loadBrands() {
+    const brands = await api.get('/api/brands');
+    const dropdown = document.getElementById('brandDropdown');
+    if (dropdown) {
+        dropdown.innerHTML = brands.map(brand => `
+            <li><a href="#" onclick="filterByBrand('${brand}'); return false;">${brand}</a></li>
+        `).join('');
+    }
+}
+
+function toggleMobileMenu() {
+    const nav = document.querySelector('.header-nav-secondary');
+    if (nav) {
+        nav.classList.toggle('mobile-open');
+    }
+    // Also toggle old nav if it exists
+    const oldNav = document.getElementById('mainNav');
+    if (oldNav) {
+        oldNav.classList.toggle('open');
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    if (!toast || !toastMessage) {
+        console.log('Toast:', message);
+        return;
+    }
+    
+    toastMessage.textContent = message;
+    
+    // Remove previous type classes
+    toast.classList.remove('success', 'error', 'info');
+    
+    // Add type class
+    if (type === 'success' || type === 'error') {
+        toast.classList.add(type);
+    }
+    
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('open');
+}
+
+function openModal(modalId) {
+    document.getElementById(modalId).classList.add('open');
+}
+
+// ============================================
+// THEME (Dark / Light)
+// ============================================
+
+function initTheme() {
+    const saved = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = saved || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+}

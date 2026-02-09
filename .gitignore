@@ -1,0 +1,7 @@
+node_modules/
+*.db
+.env
+.DS_Store
+Thumbs.db
+# Scheduled Fishbowl customer export (generated every 30 min)
+data/
