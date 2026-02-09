@@ -3116,7 +3116,12 @@ function renderLoginPage() {
                         </div>
                         <div class="form-group">
                             <label>Password</label>
-                            <input type="password" id="loginPassword" placeholder="Enter your password">
+                            <div class="password-input-wrap" style="position: relative; display: flex;">
+                                <input type="password" id="loginPassword" placeholder="Enter your password" style="flex: 1; padding-right: 44px;">
+                                <button type="button" class="password-toggle" onclick="toggleLoginPasswordVisibility()" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
+                                    <i class="fas fa-eye" id="loginPasswordToggleIcon"></i>
+                                </button>
+                            </div>
                         </div>
                         <button class="btn btn-primary btn-block" onclick="handleLogin()">
                             <i class="fas fa-sign-in-alt"></i> Sign In
@@ -3144,30 +3149,71 @@ function renderLoginPage() {
     });
 }
 
+function toggleLoginPasswordVisibility() {
+    const input = document.getElementById('loginPassword');
+    const icon = document.getElementById('loginPasswordToggleIcon');
+    togglePasswordVisibility(input, icon);
+}
+
+function toggleRegPasswordVisibility(inputId, iconId) {
+    togglePasswordVisibility(document.getElementById(inputId), document.getElementById(iconId));
+}
+
+function togglePasswordVisibility(input, icon) {
+    if (!input || !icon) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+        icon.parentElement.setAttribute('title', 'Hide password');
+        icon.parentElement.setAttribute('aria-label', 'Hide password');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+        icon.parentElement.setAttribute('title', 'Show password');
+        icon.parentElement.setAttribute('aria-label', 'Hide password');
+    }
+}
+
 async function handleLogin() {
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const errorDiv = document.getElementById('loginError');
+    if (errorDiv) {
+        errorDiv.textContent = '';
+        errorDiv.style.display = 'none';
+    }
 
     if (!email || !password) {
-        errorDiv.textContent = 'Please enter email and password';
-        errorDiv.style.display = 'block';
+        if (errorDiv) {
+            errorDiv.textContent = 'Please enter email and password.';
+            errorDiv.style.display = 'block';
+        }
         return;
     }
 
-    const result = await api.post('/api/auth/login', { email, password });
-
-    if (result.success) {
-        localStorage.setItem('token', result.token);
-        localStorage.setItem('user', JSON.stringify(result.user));
-        state.user = result.user;
-        updateHeaderAccount();
-        await loadCart();
-        showToast('Welcome back, ' + result.user.contact_name + '!');
-        navigate('dashboard');
-    } else {
-        errorDiv.textContent = result.error || 'Login failed';
-        errorDiv.style.display = 'block';
+    try {
+        const result = await api.post('/api/auth/login', { email, password });
+        if (result && result.success) {
+            localStorage.setItem('token', result.token);
+            localStorage.setItem('user', JSON.stringify(result.user));
+            state.user = result.user;
+            updateHeaderAccount();
+            await loadCart();
+            showToast('Welcome back, ' + result.user.contact_name + '!');
+            navigate('dashboard');
+        } else {
+            if (errorDiv) {
+                errorDiv.textContent = result.error || 'Login failed. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        }
+    } catch (err) {
+        if (errorDiv) {
+            errorDiv.textContent = err.message || 'Invalid email or password. Please try again.';
+            errorDiv.style.display = 'block';
+        }
     }
 }
 
@@ -3209,11 +3255,21 @@ function renderRegisterPage() {
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Password *</label>
-                                <input type="password" id="regPassword" placeholder="Min 6 characters">
+                                <div style="position: relative; display: flex;">
+                                    <input type="password" id="regPassword" placeholder="Min 6 characters" style="flex: 1; padding-right: 44px;">
+                                    <button type="button" onclick="toggleRegPasswordVisibility('regPassword', 'regPasswordToggleIcon')" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
+                                        <i class="fas fa-eye" id="regPasswordToggleIcon"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Confirm Password *</label>
-                                <input type="password" id="regPassword2" placeholder="Confirm password">
+                                <div style="position: relative; display: flex;">
+                                    <input type="password" id="regPassword2" placeholder="Confirm password" style="flex: 1; padding-right: 44px;">
+                                    <button type="button" onclick="toggleRegPasswordVisibility('regPassword2', 'regPassword2ToggleIcon')" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
+                                        <i class="fas fa-eye" id="regPassword2ToggleIcon"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">

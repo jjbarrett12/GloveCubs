@@ -148,17 +148,23 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = (req.body.email || '').toString().trim();
+        const password = req.body.password;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Please enter email and password.' });
+        }
         
         db = loadDB();
-        const user = db.users.find(u => u.email === email);
+        const emailLower = email.toLowerCase();
+        const user = db.users.find(u => (u.email || '').toString().trim().toLowerCase() === emailLower);
         if (!user) {
-            return res.status(400).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
-            return res.status(400).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
         const token = jwt.sign(
