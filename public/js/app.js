@@ -268,8 +268,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error loading initial data:', error);
         }
 
-        // Navigate to home page
-        navigate('home');
+        // Check for password reset link (#reset-password?token=...)
+        const resetToken = getResetTokenFromHash();
+        if (resetToken) {
+            navigate('reset-password', { token: resetToken });
+            if (window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        } else {
+            // Navigate to home page
+            navigate('home');
+        }
 
         // Setup search with real-time search and Enter key support
         const searchInput = document.getElementById('searchInput');
@@ -406,8 +415,17 @@ async function navigate(page, params = {}) {
         case 'cost-analysis':
             renderCostAnalysis();
             break;
+        case 'forgot-password':
+            renderForgotPasswordPage();
+            break;
+        case 'reset-password':
+            renderResetPasswordPage(params.token || getResetTokenFromHash());
+            break;
+        case '404':
+            render404Page();
+            break;
         default:
-            await renderHomePage();
+            render404Page();
         }
     } catch (error) {
         console.error('Navigation error:', error);
@@ -437,15 +455,8 @@ async function renderHomePage() {
         return;
     }
     
-    // Load featured products with error handling
-    let products = [];
-    try {
-        const response = await api.get('/api/products');
-        products = Array.isArray(response) ? response : [];
-    } catch (error) {
-        console.error('Error loading products:', error);
-        products = [];
-    }
+    // Show full page immediately with spinner in products section
+    const productsPlaceholder = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);"><div class="spinner" style="margin: 0 auto 16px; width: 40px; height: 40px; border: 3px solid rgba(255,122,0,0.3); border-top-color: #FF7A00; border-radius: 50%; animation: spin 0.8s linear infinite;"></div><p>Loading products...</p></div>';
     
     mainContent.innerHTML = `
         <!-- Hero Section (Two-Column, B2B-Focused) - Dark -->
@@ -782,8 +793,8 @@ async function renderHomePage() {
                     </div>
                     <button class="btn btn-outline-dark" onclick="navigate('products')" style="border: 2px solid #FF7A00; color: #FF7A00; background: transparent; padding: 12px 24px; font-weight: 600; transition: all 0.3s ease;" onmouseover="this.style.background='#FF7A00'; this.style.color='#ffffff'; this.style.borderColor='#FF7A00';" onmouseout="this.style.background='transparent'; this.style.color='#FF7A00'; this.style.borderColor='#FF7A00';">View All <i class="fas fa-arrow-right"></i></button>
                 </div>
-                <div class="products-grid">
-                    ${products.length > 0 ? products.slice(0, 8).map(product => renderProductCard(product)).join('') : '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);">Loading products...</div>'}
+                <div id="homeProductsGrid" class="products-grid">
+                    ${productsPlaceholder}
                 </div>
             </div>
         </section>
@@ -858,6 +869,29 @@ async function renderHomePage() {
             </div>
         </section>
     `;
+    
+    // Fetch products and update the grid (never leave "Loading products" stuck)
+    let products = [];
+    let loadError = false;
+    try {
+        const response = await api.get('/api/products');
+        if (Array.isArray(response)) products = response;
+        else if (response && Array.isArray(response.products)) products = response.products;
+        products = (products || []).filter(p => p && (p.id != null || p.sku));
+    } catch (error) {
+        console.error('Error loading products:', error);
+        loadError = true;
+    }
+    const gridEl = document.getElementById('homeProductsGrid');
+    if (gridEl) {
+        if (loadError) {
+            gridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);"><p style="margin-bottom: 12px;">Unable to load products.</p><button type="button" class="btn btn-outline-dark" onclick="navigate(\'home\')" style="border: 2px solid #FF7A00; color: #FF7A00; background: transparent; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer;">Try again</button></div>';
+        } else if (products.length > 0) {
+            gridEl.innerHTML = products.slice(0, 8).map(product => renderProductCard(product)).join('');
+        } else {
+            gridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);">No products available at the moment.</div>';
+        }
+    }
 }
 
 // ============================================
@@ -1944,10 +1978,15 @@ function searchProducts() {
 // ============================================
 
 function renderProductCard(product) {
+    if (!product || (product.id == null && !product.sku)) return '';
     try {
         const isBulkUser = state.user?.is_approved;
-        let displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
+        const price = Number(product.price);
+        const bulkPrice = Number(product.bulk_price);
+        let displayPrice = (isBulkUser && bulkPrice > 0 ? bulkPrice : price);
+        if (!Number.isFinite(displayPrice)) displayPrice = 0;
         const imgUrl = (product.image_url || '').trim();
+        const productId = product.id != null ? product.id : (product.sku || '');
         
         // Apply discount tier if user is approved
         if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
@@ -1958,58 +1997,57 @@ function renderProductCard(product) {
         }
     
     return `
-        <div class="product-card" onclick="navigate('product', { id: ${product.id} })">
+        <div class="product-card" onclick="navigate('product', { id: ${productId} })">
             ${product.featured ? '<div class="product-badge"><span class="badge badge-featured">Featured</span></div>' : ''}
             <div class="product-image">
-                ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
+                ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '').replace(/"/g, '&quot;')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
                 <div class="product-image-placeholder" style="${imgUrl ? 'display:none;' : 'display:flex;'}">
                     <i class="fas fa-hand-paper"></i>
                 </div>
                 <div class="product-actions" onclick="event.stopPropagation()">
-                    <button class="product-action-btn" onclick="quickAddToCart(${product.id})" title="Add to Cart">
+                    <button class="product-action-btn" onclick="quickAddToCart(${productId})" title="Add to Cart">
                         <i class="fas fa-cart-plus"></i>
                     </button>
-                    <button class="product-action-btn" onclick="navigate('product', { id: ${product.id} })" title="View Details">
+                    <button class="product-action-btn" onclick="navigate('product', { id: ${productId} })" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
                 </div>
             </div>
             <div class="product-info">
-                <div class="product-brand">${product.brand}</div>
-                <h3 class="product-name">${product.name}</h3>
-                <div class="product-sku">${product.sku}</div>
+                <div class="product-brand">${(product.brand || '').replace(/</g, '&lt;')}</div>
+                <h3 class="product-name">${(product.name || '').replace(/</g, '&lt;')}</h3>
+                <div class="product-sku">${(product.sku || '').replace(/</g, '&lt;')}</div>
                 <div class="product-meta">
-                    <span class="product-material">${product.material}</span>
+                    <span class="product-material">${(product.material || '').replace(/</g, '&lt;')}</span>
                     <span class="product-pack">${product.pack_qty || 100}/box</span>
                 </div>
-                ${(product.case_qty || product.pack_qty) ? '<div class="product-case-min" style="font-size:12px; color:var(--gray-600); margin-top:4px;">Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</div>' : ''}
+                ${(product.case_qty || product.pack_qty) ? '<div class="product-case-min">Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</div>' : ''}
                 <div class="product-price">
                     <span class="price-current">$${displayPrice.toFixed(2)}</span>
-                    ${!isBulkUser && product.bulk_price ? `<span class="price-bulk">B2B: <span>$${product.bulk_price.toFixed(2)}</span></span>` : ''}
+                    ${!isBulkUser && bulkPrice > 0 ? `<span class="price-bulk">B2B: <span>$${bulkPrice.toFixed(2)}</span></span>` : ''}
                 </div>
             </div>
         </div>
     `;
     } catch (error) {
         console.error('Error rendering product card:', error, product);
-        // Fallback rendering without discount
-        const isBulkUser = state.user?.is_approved;
-        const displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
-        const imgUrlFallback = (product.image_url || '').trim();
+        const pid = product && (product.id != null ? product.id : product.sku);
+        const dp = Number(product?.bulk_price) || Number(product?.price) || 0;
+        const imgUrlFallback = (product?.image_url || '').trim();
         return `
-        <div class="product-card" onclick="navigate('product', { id: ${product.id} })">
+        <div class="product-card" onclick="navigate('product', { id: ${pid} })">
             <div class="product-image">
-                ${imgUrlFallback ? `<img src="${imgUrlFallback.replace(/"/g, '&quot;')}" alt="${(product.name || '')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
+                ${imgUrlFallback ? `<img src="${String(imgUrlFallback).replace(/"/g, '&quot;')}" alt="" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
                 <div class="product-image-placeholder" style="${imgUrlFallback ? 'display:none;' : 'display:flex;'}">
                     <i class="fas fa-hand-paper"></i>
                 </div>
             </div>
             <div class="product-info">
-                <div class="product-brand">${product.brand}</div>
-                <h3 class="product-name">${product.name}</h3>
-                <div class="product-sku">${product.sku}</div>
+                <div class="product-brand">${(product?.brand || '').replace(/</g, '&lt;')}</div>
+                <h3 class="product-name">${(product?.name || '').replace(/</g, '&lt;')}</h3>
+                <div class="product-sku">${(product?.sku || '').replace(/</g, '&lt;')}</div>
                 <div class="product-price">
-                    <span class="price-current">$${displayPrice.toFixed(2)}</span>
+                    <span class="price-current">$${dp.toFixed(2)}</span>
                 </div>
             </div>
         </div>
@@ -3126,7 +3164,9 @@ function renderLoginPage() {
                         <button class="btn btn-primary btn-block" onclick="handleLogin()">
                             <i class="fas fa-sign-in-alt"></i> Sign In
                         </button>
-                        
+                        <p style="text-align: center; margin-top: 12px;">
+                            <a href="#" onclick="navigate('forgot-password'); return false;" style="color: var(--primary); font-size: 14px;">Forgot password?</a>
+                        </p>
                         <div class="b2b-benefits">
                             <h4>B2B Account Benefits</h4>
                             <ul>
@@ -3215,6 +3255,148 @@ async function handleLogin() {
             errorDiv.style.display = 'block';
         }
     }
+}
+
+function getResetTokenFromHash() {
+    const hash = window.location.hash || '';
+    const match = hash.match(/reset-password\?token=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function renderForgotPasswordPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section class="auth-page" style="padding: 60px 20px;">
+            <div class="container auth-container" style="max-width: 480px;">
+                <div class="auth-form">
+                    <h2><i class="fas fa-key"></i> Forgot Password</h2>
+                    <p class="subtitle">Enter your account email and we'll send you a link to reset your password.</p>
+                    <div id="forgotError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
+                    <div id="forgotSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="forgotEmail" placeholder="your@company.com">
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="handleForgotPassword()">
+                        <i class="fas fa-paper-plane"></i> Send Reset Link
+                    </button>
+                    <p style="text-align: center; margin-top: 16px;">
+                        <a href="#" onclick="navigate('login'); return false;" style="color: var(--primary);">Back to Login</a>
+                    </p>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+async function handleForgotPassword() {
+    const email = document.getElementById('forgotEmail')?.value?.trim();
+    const errorDiv = document.getElementById('forgotError');
+    const successDiv = document.getElementById('forgotSuccess');
+    if (errorDiv) { errorDiv.style.display = 'none'; errorDiv.textContent = ''; }
+    if (successDiv) successDiv.style.display = 'none';
+    if (!email) {
+        if (errorDiv) { errorDiv.textContent = 'Please enter your email.'; errorDiv.style.display = 'block'; }
+        return;
+    }
+    try {
+        await api.post('/api/auth/forgot-password', { email });
+        if (successDiv) {
+            successDiv.textContent = 'If that email is on file, we sent a reset link. Check your inbox (and spam folder).';
+            successDiv.style.display = 'block';
+        }
+    } catch (e) {
+        if (errorDiv) {
+            errorDiv.textContent = e.message || 'Something went wrong. Try again later.';
+            errorDiv.style.display = 'block';
+        }
+    }
+}
+
+function renderResetPasswordPage(token) {
+    const mainContent = document.getElementById('mainContent');
+    if (!token) {
+        mainContent.innerHTML = `
+            <section class="auth-page" style="padding: 60px 20px;">
+                <div class="container auth-container" style="max-width: 480px; text-align: center;">
+                    <h2>Invalid Reset Link</h2>
+                    <p>This link is invalid or has expired. Please <a href="#" onclick="navigate('forgot-password'); return false;">request a new one</a>.</p>
+                    <button class="btn btn-primary" onclick="navigate('login')">Back to Login</button>
+                </div>
+            </section>
+        `;
+        return;
+    }
+    mainContent.innerHTML = `
+        <section class="auth-page" style="padding: 60px 20px;">
+            <div class="container auth-container" style="max-width: 480px;">
+                <div class="auth-form">
+                    <h2><i class="fas fa-lock"></i> Set New Password</h2>
+                    <p class="subtitle">Enter your new password below.</p>
+                    <div id="resetError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
+                    <div id="resetSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" id="resetPassword" placeholder="Min 6 characters">
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm Password</label>
+                        <input type="password" id="resetPassword2" placeholder="Confirm new password">
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="handleResetPassword('${token.replace(/'/g, "\\'")}')">
+                        <i class="fas fa-check"></i> Update Password
+                    </button>
+                    <p style="text-align: center; margin-top: 16px;">
+                        <a href="#" onclick="navigate('login'); return false;" style="color: var(--primary);">Back to Login</a>
+                    </p>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+async function handleResetPassword(token) {
+    const password = document.getElementById('resetPassword')?.value;
+    const password2 = document.getElementById('resetPassword2')?.value;
+    const errorDiv = document.getElementById('resetError');
+    const successDiv = document.getElementById('resetSuccess');
+    if (errorDiv) { errorDiv.style.display = 'none'; errorDiv.textContent = ''; }
+    if (successDiv) successDiv.style.display = 'none';
+    if (!password || password.length < 6) {
+        if (errorDiv) { errorDiv.textContent = 'Password must be at least 6 characters.'; errorDiv.style.display = 'block'; }
+        return;
+    }
+    if (password !== password2) {
+        if (errorDiv) { errorDiv.textContent = 'Passwords do not match.'; errorDiv.style.display = 'block'; }
+        return;
+    }
+    try {
+        await api.post('/api/auth/reset-password', { token, password });
+        if (successDiv) {
+            successDiv.textContent = 'Password updated! You can log in now.';
+            successDiv.style.display = 'block';
+        }
+        setTimeout(() => navigate('login'), 2000);
+    } catch (e) {
+        if (errorDiv) {
+            errorDiv.textContent = e.message || 'Invalid or expired link. Please request a new one.';
+            errorDiv.style.display = 'block';
+        }
+    }
+}
+
+function render404Page() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = `
+        <section style="padding: 80px 20px; text-align: center;">
+            <div style="font-size: 72px; color: var(--primary); margin-bottom: 16px;"><i class="fas fa-search"></i></div>
+            <h1 style="font-size: 32px; font-weight: 700; margin-bottom: 12px;">Page Not Found</h1>
+            <p style="color: var(--gray-600); margin-bottom: 24px; font-size: 18px;">The page you're looking for doesn't exist or has been moved.</p>
+            <button onclick="navigate('home')" class="btn btn-primary" style="padding: 14px 28px; font-size: 16px;">
+                <i class="fas fa-home"></i> Go to Homepage
+            </button>
+        </section>
+    `;
 }
 
 function renderRegisterPage() {
@@ -4946,16 +5128,22 @@ async function renderCostAnalysis() {
         return;
     }
 
-    // Get order history
+    // Get order history and uploaded invoices
     let orders = [];
+    let invoices = [];
     try {
         orders = await api.get('/api/orders');
     } catch (e) {
         // No orders yet
     }
+    try {
+        invoices = await api.get('/api/invoices');
+    } catch (e) {
+        // No invoices yet
+    }
 
-    // Calculate analytics
-    const analytics = calculateSpendAnalytics(orders);
+    // Calculate analytics (orders + uploaded invoices)
+    const analytics = calculateSpendAnalytics(orders, invoices);
     const optimizations = generateOptimizations(orders);
 
     mainContent.innerHTML = `
@@ -4970,13 +5158,48 @@ async function renderCostAnalysis() {
                         <p style="font-size: 16px; color: var(--gray-600);">Analyze your glove spending and discover optimization opportunities</p>
                     </div>
 
-                    ${orders.length === 0 ? `
+                    <!-- Upload Invoice -->
+                    <div style="background: var(--white); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow); margin-bottom: 32px;">
+                        <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px;"><i class="fas fa-file-invoice"></i> Add Invoice (for spend tracking)</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; flex-wrap: wrap;">
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Vendor</label>
+                                <input type="text" id="invoiceVendor" placeholder="Vendor name" style="width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Date</label>
+                                <input type="date" id="invoiceDate" style="width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Total amount ($)</label>
+                                <input type="number" id="invoiceTotal" step="0.01" min="0" placeholder="0.00" style="width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="submitCostAnalysisInvoice()" style="padding: 10px 20px;">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        ${invoices.length > 0 ? `
+                            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                                <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Uploaded invoices</div>
+                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                    ${invoices.map(inv => `
+                                        <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
+                                            <span>${(inv.vendor || 'Unknown').replace(/</g, '&lt;')} – ${inv.invoice_date || ''} – $${Number(inv.total_amount).toLocaleString()}</span>
+                                            <button type="button" onclick="deleteCostAnalysisInvoice(${inv.id}); return false;" style="background: none; border: none; color: #dc2626; cursor: pointer; padding: 4px 8px;" title="Remove"><i class="fas fa-trash-alt"></i></button>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    ${orders.length === 0 && invoices.length === 0 ? `
                         <div style="background: var(--gray-100); padding: 60px; border-radius: var(--radius-lg); text-align: center;">
                             <div style="font-size: 48px; color: var(--gray-400); margin-bottom: 16px;">
                                 <i class="fas fa-chart-bar"></i>
                             </div>
-                            <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--secondary);">No Order History Yet</h2>
-                            <p style="color: var(--gray-600); margin-bottom: 24px;">Once you place orders, we'll analyze your spending patterns and suggest optimizations.</p>
+                            <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--secondary);">No Order or Invoice History Yet</h2>
+                            <p style="color: var(--gray-600); margin-bottom: 24px;">Place orders or add invoices above to see your spend analysis and optimization tips.</p>
                             <button class="btn btn-primary" onclick="navigate('products')">
                                 <i class="fas fa-shopping-bag"></i> Start Shopping
                             </button>
@@ -5051,16 +5274,15 @@ async function renderCostAnalysis() {
     `;
 }
 
-function calculateSpendAnalytics(orders) {
+function calculateSpendAnalytics(orders, invoices = []) {
     let totalSpend = 0;
     let totalGloves = 0;
     const categoryBreakdown = {};
 
-    orders.forEach(order => {
-        order.items.forEach(item => {
+    (orders || []).forEach(order => {
+        (order.items || []).forEach(item => {
             totalSpend += item.price * item.quantity;
             totalGloves += item.quantity;
-            
             const category = item.category || 'Other';
             if (!categoryBreakdown[category]) {
                 categoryBreakdown[category] = { total: 0, count: 0, gloves: 0 };
@@ -5071,12 +5293,21 @@ function calculateSpendAnalytics(orders) {
         });
     });
 
+    let invoiceTotal = 0;
+    (invoices || []).forEach(inv => {
+        invoiceTotal += Number(inv.total_amount) || 0;
+    });
+    totalSpend += invoiceTotal;
+    if (invoiceTotal > 0) {
+        categoryBreakdown['Uploaded invoices'] = { total: invoiceTotal, count: invoices.length, gloves: 0 };
+    }
+
     const breakdown = Object.entries(categoryBreakdown).map(([category, data]) => ({
         category,
         total: data.total,
         count: data.count,
         gloves: data.gloves,
-        avgPerGlove: data.total / data.gloves
+        avgPerGlove: data.gloves > 0 ? data.total / data.gloves : 0
     })).sort((a, b) => b.total - a.total);
 
     return {
@@ -5084,8 +5315,35 @@ function calculateSpendAnalytics(orders) {
         totalGloves,
         avgCostPerGlove: totalGloves > 0 ? totalSpend / totalGloves : 0,
         categoryBreakdown: breakdown,
-        potentialSavings: totalSpend * 0.15 // Estimate 15% potential savings
+        potentialSavings: totalSpend * 0.15
     };
+}
+
+async function submitCostAnalysisInvoice() {
+    const vendor = document.getElementById('invoiceVendor')?.value?.trim() || '';
+    const invoiceDate = document.getElementById('invoiceDate')?.value || new Date().toISOString().split('T')[0];
+    const total = document.getElementById('invoiceTotal')?.value;
+    if (!total || isNaN(parseFloat(total)) || parseFloat(total) <= 0) {
+        showToast('Please enter a valid total amount.', 'error');
+        return;
+    }
+    try {
+        await api.post('/api/invoices', { vendor: vendor || 'Unknown', invoice_date: invoiceDate, total_amount: parseFloat(total) });
+        showToast('Invoice added.');
+        renderCostAnalysis();
+    } catch (e) {
+        showToast(e.message || 'Failed to add invoice.', 'error');
+    }
+}
+
+async function deleteCostAnalysisInvoice(id) {
+    try {
+        await api.delete('/api/invoices/' + id);
+        showToast('Invoice removed.');
+        renderCostAnalysis();
+    } catch (e) {
+        showToast(e.message || 'Failed to remove.', 'error');
+    }
 }
 
 function generateOptimizations(orders) {
@@ -5184,6 +5442,9 @@ function renderAdminPanel(activeTab = 'orders') {
                             <button onclick="renderAdminPanel('products')" class="admin-tab ${activeTab === 'products' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'products' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'products' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'products' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
                                 <i class="fas fa-box" style="margin-right: 8px;"></i>Products
                             </button>
+                            <button onclick="renderAdminPanel('messages')" class="admin-tab ${activeTab === 'messages' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'messages' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'messages' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'messages' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-envelope" style="margin-right: 8px;"></i>Messages
+                            </button>
                         </div>
                         
                         <!-- Tab Content -->
@@ -5192,6 +5453,7 @@ function renderAdminPanel(activeTab = 'orders') {
                             ${activeTab === 'rfqs' ? '<div id="adminRFQsContent">Loading RFQs...</div>' : ''}
                             ${activeTab === 'users' ? '<div id="adminUsersContent">Loading users...</div>' : ''}
                             ${activeTab === 'products' ? '<div id="adminProductsContent">Loading products...</div>' : ''}
+                            ${activeTab === 'messages' ? '<div id="adminMessagesContent">Loading messages...</div>' : ''}
                         </div>
                     </div>
                 </div>
@@ -5208,6 +5470,39 @@ function renderAdminPanel(activeTab = 'orders') {
         loadAdminUsers();
     } else if (activeTab === 'products') {
         loadAdminProducts();
+    } else if (activeTab === 'messages') {
+        loadAdminContactMessages();
+    }
+}
+
+async function loadAdminContactMessages() {
+    const el = document.getElementById('adminMessagesContent');
+    if (!el) return;
+    try {
+        const messages = await api.get('/api/admin/contact-messages');
+        if (messages.length === 0) {
+            el.innerHTML = '<p style="color: #6B7280;">No contact form submissions yet.</p>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="display: grid; gap: 20px;">
+                ${messages.map(m => `
+                    <div style="background: #f9fafb; padding: 20px; border-radius: 12px; border-left: 4px solid #FF7A00;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                            <div>
+                                <strong>${(m.name || '').replace(/</g, '&lt;')}</strong>
+                                ${m.company ? ' · ' + (m.company || '').replace(/</g, '&lt;') : ''}
+                            </div>
+                            <span style="font-size: 13px; color: #6B7280;">${(m.created_at || '').replace('T', ' ').slice(0, 19)}</span>
+                        </div>
+                        <div style="font-size: 14px; color: #374151;"><a href="mailto:${(m.email || '').replace(/"/g, '&quot;')}">${(m.email || '').replace(/</g, '&lt;')}</a></div>
+                        <p style="margin: 12px 0 0; white-space: pre-wrap; color: #4B5563;">${(m.message || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch (e) {
+        el.innerHTML = '<p style="color: #dc2626;">Failed to load messages. ' + (e.message || '') + '</p>';
     }
 }
 
@@ -5649,7 +5944,7 @@ async function loadAdminProducts(keepPage) {
                             <i class="fas fa-file-csv" style="color: #FF7A00; margin-right: 8px;"></i>
                             Import Products from CSV
                         </h3>
-                        <p style="color: #4B5563; font-size: 14px;">Upload a CSV file to bulk import products. <strong>Tip:</strong> Click 'Export Current Products' above to see the exact format with real data.</p>
+                        <p style="color: #4B5563; font-size: 14px;">Upload a CSV file to bulk import products. Different column names work: e.g. <strong>manufacturer</strong> (for brand), <strong>sizing</strong> or <strong>size</strong>, <strong>colour</strong>, <strong>product name</strong>. Duplicates by SKU are never created—same SKU updates the existing product.</p>
                     </div>
                     <button onclick="hideCSVImportSection()" style="background: none; border: none; font-size: 24px; color: #4B5563; cursor: pointer; padding: 4px 8px;" onmouseover="this.style.color='#111111';" onmouseout="this.style.color='#6B7280';">
                         <i class="fas fa-times"></i>
@@ -5695,8 +5990,9 @@ async function loadAdminProducts(keepPage) {
                 <div style="margin-top: 24px; padding: 16px; background: #F9FAFB; border-radius: 8px; border-left: 4px solid #FF7A00;">
                     <h4 style="font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">CSV Format Requirements:</h4>
                     <ul style="color: #4B5563; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px; margin-bottom: 12px;">
-                        <li><strong>Tip:</strong> Click "Export Current Products" above to see the exact format with real data</li>
-                        <li><strong>Required columns:</strong> sku, name, brand, category, material, price</li>
+                        <li><strong>Flexible columns:</strong> Many header names accepted (e.g. manufacturer/brand, sizing/sizes/size, colour/color, product name/name)</li>
+                        <li><strong>Required:</strong> One column for SKU, one for name, one for brand (or manufacturer), one for material, one for price</li>
+                        <li><strong>No duplicates:</strong> Rows with the same SKU update the existing product; duplicate SKUs in the file are skipped</li>
                         <li><strong>Product images:</strong> Include the <code>image_url</code> column so images show on product cards and detail pages. Use a full URL (e.g. https://example.com/image.jpg or https://via.placeholder.com/400x400/FFFFFF/0066CC?text=Product) or a site-relative path like <code>/images/products/yourfile.jpg</code> (upload image files to your server’s <code>public/images/products/</code> folder first).</li>
                         <li><strong>Basic product info:</strong> subcategory, description, sizes (comma-separated: S,M,L,XL), color, pack_qty, case_qty, bulk_price, image_url, in_stock (1/0), featured (1/0)</li>
                         <li><strong>Filter fields (for better search/filtering):</strong>
@@ -6092,6 +6388,7 @@ async function exportProductsToCSV() {
             const text = await response.text();
             let errMsg = text;
             try { const j = JSON.parse(text); if (j.error) errMsg = j.error; } catch (_) {}
+            if (response.status === 403) errMsg = 'Please log in as an admin to export CSV.';
             throw new Error(errMsg || 'Export failed');
         }
         const blob = await response.blob();
@@ -6107,7 +6404,32 @@ async function exportProductsToCSV() {
         showToast('Products CSV created and downloaded.', 'success');
     } catch (error) {
         console.error('Export error:', error);
-        showToast('Error exporting CSV: ' + (error.message || 'Export failed'), 'error');
+        if (state.user && state.user.is_approved) {
+            try {
+                showToast('Server export failed. Building CSV in browser...', 'info');
+                const filters = getExportFilters();
+                let url = '/api/products';
+                const q = [];
+                if (filters.brand) q.push('brand=' + encodeURIComponent(filters.brand));
+                if (filters.category) q.push('category=' + encodeURIComponent(filters.category));
+                if (filters.colors && filters.colors.length) q.push('colors=' + encodeURIComponent(filters.colors.join(',')));
+                if (filters.materials && filters.materials.length) q.push('materials=' + encodeURIComponent(filters.materials.join(',')));
+                if (q.length) url += '?' + q.join('&');
+                const products = await api.get(url);
+                const list = Array.isArray(products) ? products : (products && products.products) || [];
+                if (list.length === 0) {
+                    showToast('No products match the current filters.', 'error');
+                    return;
+                }
+                downloadCSV(list, 'glovecubs-products');
+                showToast('Products CSV created and downloaded.', 'success');
+                return;
+            } catch (fallbackErr) {
+                console.error('Fallback export error:', fallbackErr);
+            }
+        }
+        const msg = error.message || 'Export failed';
+        showToast(msg.startsWith('Please log in') ? msg : 'Error exporting CSV: ' + msg, 'error');
     }
 }
 
@@ -7037,12 +7359,25 @@ async function addProduct(event) {
     }
 }
 
-function submitContact() {
-    showToast('Message sent! We\'ll get back to you soon.');
-    document.getElementById('contactName').value = '';
-    document.getElementById('contactEmail').value = '';
-    document.getElementById('contactCompany').value = '';
-    document.getElementById('contactMessage').value = '';
+async function submitContact() {
+    const name = document.getElementById('contactName')?.value?.trim();
+    const email = document.getElementById('contactEmail')?.value?.trim();
+    const company = document.getElementById('contactCompany')?.value?.trim() || '';
+    const message = document.getElementById('contactMessage')?.value?.trim();
+    if (!name || !email || !message) {
+        showToast('Please fill in name, email, and message.', 'error');
+        return;
+    }
+    try {
+        const res = await api.post('/api/contact', { name, email, company, message });
+        showToast(res.message || 'Message sent! We\'ll get back to you soon.');
+        document.getElementById('contactName').value = '';
+        document.getElementById('contactEmail').value = '';
+        document.getElementById('contactCompany').value = '';
+        document.getElementById('contactMessage').value = '';
+    } catch (e) {
+        showToast(e.message || 'Failed to send message. Please try again.', 'error');
+    }
 }
 
 // ============================================
@@ -7074,6 +7409,7 @@ function toggleMobileMenu() {
 function showToast(message, type = 'info') {
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = toast && toast.querySelector('i');
     
     if (!toast || !toastMessage) {
         console.log('Toast:', message);
@@ -7082,18 +7418,18 @@ function showToast(message, type = 'info') {
     
     toastMessage.textContent = message;
     
-    // Remove previous type classes
     toast.classList.remove('success', 'error', 'info');
-    
-    // Add type class
-    if (type === 'success' || type === 'error') {
+    if (type === 'success' || type === 'error' || type === 'info') {
         toast.classList.add(type);
+    }
+    if (toastIcon) {
+        toastIcon.className = type === 'error' ? 'fas fa-exclamation-circle' : type === 'success' ? 'fas fa-check-circle' : 'fas fa-info-circle';
     }
     
     toast.classList.add('show');
     setTimeout(() => {
         toast.classList.remove('show');
-    }, 3000);
+    }, 4000);
 }
 
 function closeModal(modalId) {

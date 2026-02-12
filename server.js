@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const fishbowl = require('./fishbowl');
+const rateLimit = require('express-rate-limit');
+const { sendMail, isConfigured: emailConfigured } = require('./lib/email');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
@@ -27,6 +29,9 @@ function loadDB() {
             if (!db.rfqs) { db.rfqs = []; changed = true; }
             if (!db.saved_lists) { db.saved_lists = []; changed = true; }
             if (!db.ship_to_addresses) { db.ship_to_addresses = []; changed = true; }
+            if (!db.contact_messages) { db.contact_messages = []; changed = true; }
+            if (!db.password_reset_tokens) { db.password_reset_tokens = []; changed = true; }
+            if (!db.uploaded_invoices) { db.uploaded_invoices = []; changed = true; }
             // Ensure orders can have tracking
             (db.orders || []).forEach(o => {
                 if (o.tracking_number === undefined) o.tracking_number = '';
@@ -40,13 +45,76 @@ function loadDB() {
                 if (u.rep_email === undefined) u.rep_email = '';
                 if (u.rep_phone === undefined) u.rep_phone = '';
             });
+            // Ensure demo user exists so demo@company.com / demo123 always works
+            const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe';
+            const hasDemo = (db.users || []).some(u => (u.email || '').toLowerCase() === 'demo@company.com');
+            if (!hasDemo) {
+                if (!db.users) db.users = [];
+                db.users.push({
+                    id: (db.users.length === 0) ? 1 : Math.max(...db.users.map(u => u.id)) + 1,
+                    company_name: 'Demo Company Inc',
+                    email: 'demo@company.com',
+                    password: demoHash,
+                    contact_name: 'John Demo',
+                    phone: '555-123-4567',
+                    address: '123 Demo Street',
+                    city: 'Chicago',
+                    state: 'IL',
+                    zip: '60601',
+                    is_approved: 1,
+                    discount_tier: 'silver',
+                    created_at: new Date().toISOString()
+                });
+                changed = true;
+            }
             if (changed) saveDB(db);
             return db;
         }
     } catch (e) {
         console.log('Creating new database...');
     }
-    return { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [] };
+    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [] };
+    // Ensure demo user exists so login works even when database.json is missing or empty (e.g. fresh Vercel deploy)
+    const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe'; // bcrypt hash of 'demo123'
+    if (!db.users || db.users.length === 0) {
+        db.users = [{
+            id: 1,
+            company_name: 'Demo Company Inc',
+            email: 'demo@company.com',
+            password: demoHash,
+            contact_name: 'John Demo',
+            phone: '555-123-4567',
+            address: '123 Demo Street',
+            city: 'Chicago',
+            state: 'IL',
+            zip: '60601',
+            is_approved: 1,
+            discount_tier: 'silver',
+            created_at: new Date().toISOString()
+        }];
+        try { saveDB(db); } catch (err) { /* ignore on read-only (e.g. serverless) */ }
+    } else {
+        const hasDemo = db.users.some(u => (u.email || '').toLowerCase() === 'demo@company.com');
+        if (!hasDemo) {
+            db.users.push({
+                id: Math.max(1, ...db.users.map(u => u.id)) + 1,
+                company_name: 'Demo Company Inc',
+                email: 'demo@company.com',
+                password: demoHash,
+                contact_name: 'John Demo',
+                phone: '555-123-4567',
+                address: '123 Demo Street',
+                city: 'Chicago',
+                state: 'IL',
+                zip: '60601',
+                is_approved: 1,
+                discount_tier: 'silver',
+                created_at: new Date().toISOString()
+            });
+            try { saveDB(db); } catch (err) { /* ignore */ }
+        }
+    }
+    return db;
 }
 
 function saveDB(data) {
@@ -61,6 +129,25 @@ app.use(cors());
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// API rate limit: 200 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+app.use('/api', apiLimiter);
+
+// Stricter limit for auth and contact to prevent abuse
+const authContactLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
 
 // Serve CSV template file
 app.get('/products-template.csv', (req, res) => {
@@ -105,7 +192,7 @@ const optionalAuth = (req, res, next) => {
 
 // ============ AUTH ROUTES ============
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authContactLimiter, async (req, res) => {
     try {
         const { company_name, email, password, contact_name, phone, address, city, state, zip, allow_free_upgrades } = req.body;
         
@@ -146,10 +233,10 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authContactLimiter, async (req, res) => {
     try {
         const email = (req.body.email || '').toString().trim();
-        const password = req.body.password;
+        const password = (req.body.password != null && req.body.password !== '') ? String(req.body.password).trim() : '';
         
         if (!email || !password) {
             return res.status(400).json({ error: 'Please enter email and password.' });
@@ -162,7 +249,14 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
-        const validPassword = await bcrypt.compare(password, user.password);
+        let validPassword = await bcrypt.compare(password, user.password);
+        // Always allow demo login; fix stored hash if it was from a different bcrypt/version
+        if (!validPassword && emailLower === 'demo@company.com' && password === 'demo123') {
+            const newHash = bcrypt.hashSync('demo123', 10);
+            user.password = newHash;
+            try { saveDB(db); } catch (e) { /* ignore on read-only */ }
+            validPassword = true;
+        }
         if (!validPassword) {
             return res.status(401).json({ error: 'Invalid email or password.' });
         }
@@ -199,11 +293,138 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
     res.json(safeUser);
 });
 
+// ============ CONTACT ============
+
+app.post('/api/contact', authContactLimiter, async (req, res) => {
+    try {
+        const { name, email, company, message } = req.body;
+        if (!name || !email || !message) {
+            return res.status(400).json({ error: 'Name, email, and message are required.' });
+        }
+        const emailTrim = (email || '').toString().trim();
+        const nameTrim = (name || '').toString().trim();
+        const companyTrim = (company || '').toString().trim();
+        const messageTrim = (message || '').toString().trim();
+        if (!emailTrim || !nameTrim || !messageTrim) {
+            return res.status(400).json({ error: 'Name, email, and message are required.' });
+        }
+        db = loadDB();
+        if (!db.contact_messages) db.contact_messages = [];
+        const contactMsg = {
+            id: Date.now(),
+            name: nameTrim,
+            email: emailTrim,
+            company: companyTrim,
+            message: messageTrim,
+            created_at: new Date().toISOString()
+        };
+        db.contact_messages.push(contactMsg);
+        saveDB(db);
+
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'sales@glovecubs.com';
+        const text = `New contact form submission from Glovecubs\n\nName: ${nameTrim}\nEmail: ${emailTrim}\nCompany: ${companyTrim}\n\nMessage:\n${messageTrim}`;
+        await sendMail({
+            to: adminEmail,
+            subject: `[Glovecubs] Contact from ${nameTrim}`,
+            text
+        });
+        await sendMail({
+            to: emailTrim,
+            subject: 'We received your message - Glovecubs',
+            text: `Hi ${nameTrim},\n\nThank you for contacting Glovecubs. We have received your message and will get back to you soon.\n\nBest regards,\nGlovecubs Team`
+        });
+
+        res.json({ success: true, message: 'Message sent! We\'ll get back to you soon.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to send message.' });
+    }
+});
+
+// ============ PASSWORD RESET ============
+
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+app.post('/api/auth/forgot-password', authContactLimiter, async (req, res) => {
+    try {
+        const email = (req.body.email || '').toString().trim().toLowerCase();
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required.' });
+        }
+        db = loadDB();
+        const user = db.users.find(u => (u.email || '').toLowerCase() === email);
+        if (!user) {
+            // Don't reveal whether email exists
+            return res.json({ success: true, message: 'If that email is on file, we sent a reset link.' });
+        }
+        if (!db.password_reset_tokens) db.password_reset_tokens = [];
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS).toISOString();
+        db.password_reset_tokens.push({
+            token,
+            user_id: user.id,
+            expires_at: expiresAt,
+            created_at: new Date().toISOString()
+        });
+        // Remove old tokens for this user
+        db.password_reset_tokens = db.password_reset_tokens.filter(
+            t => t.user_id !== user.id || t.expires_at > new Date().toISOString()
+        );
+        saveDB(db);
+
+        const baseUrl = process.env.DOMAIN || process.env.BASE_URL || 'http://localhost:3004';
+        const resetLink = `${baseUrl}#reset-password?token=${token}`;
+        const text = `Hi ${user.contact_name || 'there'},\n\nYou requested a password reset for your Glovecubs account. Click the link below to set a new password (valid for 1 hour):\n\n${resetLink}\n\nIf you didn't request this, you can ignore this email.\n\nGlovecubs`;
+        await sendMail({
+            to: user.email,
+            subject: 'Reset your Glovecubs password',
+            text
+        });
+        return res.json({ success: true, message: 'If that email is on file, we sent a reset link.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Request failed.' });
+    }
+});
+
+app.get('/api/auth/reset-check', (req, res) => {
+    const token = (req.query.token || '').toString().trim();
+    if (!token) return res.status(400).json({ error: 'Token required.', valid: false });
+    db = loadDB();
+    const row = (db.password_reset_tokens || []).find(
+        t => t.token === token && new Date(t.expires_at) > new Date()
+    );
+    if (!row) return res.json({ valid: false, error: 'Invalid or expired link.' });
+    return res.json({ valid: true });
+});
+
+app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password || String(password).length < 6) {
+            return res.status(400).json({ error: 'Valid token and password (min 6 characters) are required.' });
+        }
+        db = loadDB();
+        const row = (db.password_reset_tokens || []).find(
+            t => t.token === token && new Date(t.expires_at) > new Date()
+        );
+        if (!row) {
+            return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+        }
+        const user = db.users.find(u => u.id === row.user_id);
+        if (!user) return res.status(400).json({ error: 'User not found.' });
+        user.password = await bcrypt.hash(String(password).trim(), 10);
+        db.password_reset_tokens = db.password_reset_tokens.filter(t => t.token !== token);
+        saveDB(db);
+        return res.json({ success: true, message: 'Password updated. You can log in now.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Reset failed.' });
+    }
+});
+
 // ============ PRODUCT ROUTES ============
 
 app.get('/api/products', (req, res) => {
     db = loadDB();
-    let products = [...db.products];
+    let products = Array.isArray(db.products) ? [...db.products] : [];
 
     // Search filter first so it runs on full catalog
     if (req.query.search && String(req.query.search).trim()) {
@@ -660,11 +881,12 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
         };
         
         const headers = parseCSVLine(lines[0]).map(h => (h.replace(/^"|"$/g, '').trim().replace(/^\ufeff/, '')));
-        const headerLower = headers.map(h => h.toLowerCase().replace(/^\ufeff/, ''));
+        const toKey = (h) => (h || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const headerKeys = headers.map(toKey);
         const col = (name, alternates = []) => {
-            const names = [name, ...(alternates || [])].map(n => n.toLowerCase());
+            const names = [name, ...(alternates || [])].map(toKey);
             for (const n of names) {
-                const i = headerLower.indexOf(n);
+                const i = headerKeys.indexOf(n);
                 if (i !== -1) return i;
             }
             return -1;
@@ -690,27 +912,28 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
             
             if (values.every(v => !(v || '').trim())) continue;
             
-            const sku = getVal(values, 'sku', [], '').trim();
+            const sku = getVal(values, 'sku', ['product_sku', 'item_number', 'item no', 'part_number', 'part number', 'product code', 'item code'], '').trim();
             const skuLower = sku.toLowerCase();
+            if (!sku) continue;
             if (skusSeenInThisImport.has(skuLower)) {
                 skippedDuplicates++;
                 continue;
             }
             skusSeenInThisImport.add(skuLower);
 
-            const name = getVal(values, 'name', []);
-            const brand = getVal(values, 'brand', []);
-            const material = getVal(values, 'material', []);
-            const price = parseFloat(getVal(values, 'price', [], '0')) || 0;
-            if (!sku || !name || !brand || !material || !price) continue;
+            const name = getVal(values, 'name', ['product name', 'product_name', 'title', 'product', 'item name']);
+            const brand = getVal(values, 'brand', ['manufacturer', 'maker', 'vendor', 'supplier', 'brand name', 'mfr']);
+            const material = getVal(values, 'material', ['materials', 'material type']);
+            const price = parseFloat(getVal(values, 'price', ['unit price', 'unit_price', 'list price', 'list_price', 'unit cost', 'msrp'], '0')) || 0;
+            if (!name || !brand || !material || !price) continue;
             
             // image_url: handle quoted/single column, split columns (commas in URL), or different column order
-            const iImage = col('image_url', ['image url', 'image', 'imageurl', 'url', 'image_url']);
+            const iImage = col('image_url', ['image url', 'image', 'imageurl', 'url', 'photo', 'picture']);
             let imageUrl = '';
             if (iImage >= 0 && values.length > headers.length) {
                 imageUrl = values.slice(iImage, values.length - 2).map(v => (v || '').trim()).join(',').trim();
             }
-            if (!imageUrl) imageUrl = getVal(values, 'image_url', ['image url', 'image', 'imageurl', 'url', 'image_url']).trim();
+            if (!imageUrl) imageUrl = getVal(values, 'image_url', ['image url', 'image', 'imageurl', 'url', 'photo', 'picture']).trim();
             if (!imageUrl || !imageUrl.toLowerCase().startsWith('http')) {
                 for (let j = 0; j < values.length; j++) {
                     const v = (values[j] || '').trim();
@@ -737,38 +960,38 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
                 sku,
                 name,
                 brand,
-                category: getVal(values, 'category', [], 'Disposable Gloves'),
-                subcategory: getVal(values, 'subcategory', []),
-                description: getVal(values, 'description', []),
+                category: getVal(values, 'category', ['product category', 'type', 'product type'], 'Disposable Gloves'),
+                subcategory: getVal(values, 'subcategory', ['sub_category', 'sub category']),
+                description: getVal(values, 'description', ['product description', 'desc']),
                 material,
-                powder: getVal(values, 'powder', []),
-                thickness: (() => { const t = getVal(values, 'thickness', []); return t ? parseFloat(t) : null; })(),
-                sizes: getVal(values, 'sizes', ['size']),
-                color: getVal(values, 'color', []),
-                grade: getVal(values, 'grade', []),
-                useCase: getVal(values, 'useCase', ['use case', 'usecase']),
-                certifications: getVal(values, 'certifications', ['compliance']),
+                powder: getVal(values, 'powder', ['powdered', 'powder free']),
+                thickness: (() => { const t = getVal(values, 'thickness', ['thickness (mil)', 'mil']); return t ? parseFloat(t) : null; })(),
+                sizes: getVal(values, 'sizes', ['size', 'sizing', 'size_options', 'sizes available']),
+                color: getVal(values, 'color', ['colour', 'colors']),
+                grade: getVal(values, 'grade', ['grade type']),
+                useCase: getVal(values, 'useCase', ['use case', 'usecase', 'industry', 'industries']),
+                certifications: getVal(values, 'certifications', ['compliance', 'certification']),
                 texture: getVal(values, 'texture', []),
-                cuffStyle: getVal(values, 'cuffStyle', ['cuff style', 'cuffstyle']),
+                cuffStyle: getVal(values, 'cuffStyle', ['cuff style', 'cuffstyle', 'cuff']),
                 sterility: getVal(values, 'sterility', []),
-                pack_qty: parseInt(getVal(values, 'pack_qty', ['pack qty', 'pack_qty'], '100')) || 100,
-                case_qty: parseInt(getVal(values, 'case_qty', ['case qty', 'case_qty'], '1000')) || 1000,
+                pack_qty: parseInt(getVal(values, 'pack_qty', ['pack qty', 'pack_qty', 'packqty', 'box_qty', 'per box', 'qty per box'], '100')) || 100,
+                case_qty: parseInt(getVal(values, 'case_qty', ['case qty', 'case_qty', 'caseqty', 'case_size', 'case size'], '1000')) || 1000,
                 price,
-                bulk_price: parseFloat(getVal(values, 'bulk_price', ['bulk price', 'bulk_price'], '0')) || 0,
+                bulk_price: parseFloat(getVal(values, 'bulk_price', ['bulk price', 'bulk_price', 'wholesale', 'wholesale_price', 'wholesale price'], '0')) || 0,
                 image_url: imageUrl,
                 in_stock: (() => {
-                    const v = values.length > headers.length ? (values[values.length - 2] || '').trim() : getVal(values, 'in_stock', ['in stock', 'instock'], '');
+                    const v = values.length > headers.length ? (values[values.length - 2] || '').trim() : getVal(values, 'in_stock', ['in stock', 'instock', 'stock', 'available', 'availability'], '');
                     return ['1', 'true', 'yes'].includes(String(v).toLowerCase()) ? 1 : 0;
                 })(),
                 featured: (() => {
-                    const v = values.length > headers.length ? (values[values.length - 1] || '').trim() : getVal(values, 'featured', [], '');
+                    const v = values.length > headers.length ? (values[values.length - 1] || '').trim() : getVal(values, 'featured', ['feature'], '');
                     return ['1', 'true', 'yes'].includes(String(v).toLowerCase()) ? 1 : 0;
                 })()
             };
             
             if (imageUrl) withImage++;
-            skusInImport.add(sku.trim().toLowerCase());
-            const existing = db.products.find(p => (p.sku || '').toString().trim().toLowerCase() === sku.toLowerCase());
+            skusInImport.add(skuLower);
+            const existing = db.products.find(p => (p.sku || '').toString().trim().toLowerCase() === skuLower);
             if (existing) {
                 Object.assign(existing, data);
                 updated++;
@@ -1035,12 +1258,13 @@ app.get('/api/brands', (req, res) => {
 
 // Products CSV export: creates CSV file on server and returns it for download
 app.get('/api/products/export.csv', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).send('Admin access required');
-    }
-    let products = [...db.products];
+    try {
+        db = loadDB();
+        const user = db.users.find(u => u.id === req.user.id);
+        if (!user || !user.is_approved) {
+            return res.status(403).send('Admin access required');
+        }
+        let products = Array.isArray(db.products) ? [...db.products] : [];
     const brand = (req.query.brand || '').trim();
     const category = (req.query.category || '').trim();
     const colorsParam = req.query.colors;
@@ -1097,15 +1321,23 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
 
     const dateStr = new Date().toISOString().split('T')[0];
     const exportFileName = `glovecubs-products-export-${dateStr}.csv`;
-    const exportFilePath = path.join(FISHBOWL_EXPORT_DIR, exportFileName);
-    if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
-        fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
+    try {
+        const exportFilePath = path.join(FISHBOWL_EXPORT_DIR, exportFileName);
+        if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
+            fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
+        }
+        fs.writeFileSync(exportFilePath, csvContent, 'utf8');
+    } catch (writeErr) {
+        console.warn('Could not save export file (e.g. read-only FS):', writeErr.message);
     }
-    fs.writeFileSync(exportFilePath, csvContent, 'utf8');
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="' + exportFileName + '"');
     res.send(csvContent);
+    } catch (err) {
+        console.error('Export CSV error:', err);
+        res.status(500).json({ error: err.message || 'Export failed' });
+    }
 });
 
 // ============ FISHBOWL INTEGRATION ============
@@ -1488,6 +1720,19 @@ app.post('/api/orders', authenticateToken, (req, res) => {
     db.carts[cartKey] = [];
     saveDB(db);
 
+    // Order confirmation email
+    const orderUser = db.users.find(u => u.id === req.user.id);
+    if (orderUser && orderUser.email) {
+        const orderSummary = order.items.map(i => `  ${i.name} x${i.quantity} - $${(i.price * i.quantity).toFixed(2)}`).join('\n');
+        const orderText = `Thank you for your order!\n\nOrder: ${orderNumber}\nTotal: $${order.total.toFixed(2)}\n\nItems:\n${orderSummary}\n\nShipping to: ${order.shipping_address}\n\nWe'll notify you when your order ships.\n\nGlovecubs`;
+        sendMail({ to: orderUser.email, subject: `Order confirmed: ${orderNumber}`, text: orderText }).catch(() => {});
+    }
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+    if (adminEmail) {
+        const adminText = `New order ${orderNumber} from ${orderUser?.company_name || orderUser?.email} - Total: $${order.total.toFixed(2)}`;
+        sendMail({ to: adminEmail, subject: `[Glovecubs] New order: ${orderNumber}`, text: adminText }).catch(() => {});
+    }
+
     res.json({
         success: true,
         order_number: orderNumber,
@@ -1772,6 +2017,47 @@ app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, (req, res) => {
     res.json({ success: true, message: 'List items added to cart' });
 });
 
+// ============ UPLOADED INVOICES (for cost analysis) ============
+
+app.get('/api/invoices', authenticateToken, (req, res) => {
+    db = loadDB();
+    const list = (db.uploaded_invoices || []).filter(inv => inv.user_id === req.user.id);
+    res.json(list.sort((a, b) => new Date(b.invoice_date || b.created_at) - new Date(a.invoice_date || a.created_at)));
+});
+
+app.post('/api/invoices', authenticateToken, (req, res) => {
+    const { vendor, invoice_date, total_amount, notes, line_items } = req.body;
+    if (!total_amount || isNaN(parseFloat(total_amount))) {
+        return res.status(400).json({ error: 'Total amount is required.' });
+    }
+    db = loadDB();
+    if (!db.uploaded_invoices) db.uploaded_invoices = [];
+    const inv = {
+        id: Date.now(),
+        user_id: req.user.id,
+        vendor: (vendor || '').toString().trim() || 'Unknown',
+        invoice_date: (invoice_date || '').toString().trim() || new Date().toISOString().split('T')[0],
+        total_amount: parseFloat(total_amount),
+        notes: (notes || '').toString().trim() || '',
+        line_items: Array.isArray(line_items) ? line_items : [],
+        created_at: new Date().toISOString()
+    };
+    db.uploaded_invoices.push(inv);
+    saveDB(db);
+    res.json({ success: true, invoice: inv });
+});
+
+app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
+    db = loadDB();
+    const list = db.uploaded_invoices || [];
+    const idx = list.findIndex(inv => inv.id == req.params.id && inv.user_id === req.user.id);
+    if (idx === -1) return res.status(404).json({ error: 'Invoice not found' });
+    list.splice(idx, 1);
+    db.uploaded_invoices = list;
+    saveDB(db);
+    res.json({ success: true });
+});
+
 // ============ BULK ADD TO CART (CSV / SKU list) ============
 
 app.post('/api/cart/bulk', authenticateToken, (req, res) => {
@@ -1831,6 +2117,18 @@ app.post('/api/rfqs', (req, res) => {
         };
         db.rfqs.push(newRFQ);
         saveDB(db);
+
+        const rfqEmail = newRFQ.email || (user && user.email);
+        if (rfqEmail) {
+            const custText = `Hi ${newRFQ.contact_name || 'there'},\n\nWe received your request for quote (${newRFQ.quantity} ${newRFQ.type || 'gloves'}). Our team will get back to you shortly.\n\nGlovecubs`;
+            sendMail({ to: rfqEmail, subject: 'We received your RFQ - Glovecubs', text: custText }).catch(() => {});
+        }
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+        if (adminEmail) {
+            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nNotes: ${newRFQ.notes}`;
+            sendMail({ to: adminEmail, subject: `[Glovecubs] New RFQ from ${newRFQ.company_name || newRFQ.email}`, text: adminText }).catch(() => {});
+        }
+
         res.json({ success: true, message: 'RFQ submitted successfully', rfq_id: newRFQ.id });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1964,6 +2262,16 @@ app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
     saveDB(db);
     const { password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });
+});
+
+app.get('/api/admin/contact-messages', authenticateToken, (req, res) => {
+    db = loadDB();
+    const adminUser = db.users.find(u => u.id === req.user.id);
+    if (!adminUser || !adminUser.is_approved) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    const messages = (db.contact_messages || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json(messages);
 });
 
 // ============ SERVE FRONTEND ============
