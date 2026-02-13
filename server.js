@@ -8,13 +8,17 @@ const fs = require('fs');
 const fishbowl = require('./fishbowl');
 const rateLimit = require('express-rate-limit');
 const { sendMail, isConfigured: emailConfigured } = require('./lib/email');
+const productStore = require('./lib/product-store');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
 const JWT_SECRET = process.env.JWT_SECRET || 'glovecubs-secret-key-2024';
 
-// Simple JSON file database
-const DB_PATH = path.join(__dirname, 'database.json');
+// Simple JSON file database. In serverless (Vercel/Lambda) the app dir is read-only;
+// we use /tmp when a write fails with EROFS so CSV import and other writes succeed.
+const DB_PATH_BUNDLED = path.join(__dirname, 'database.json');
+const DB_PATH_TMP = path.join('/tmp', 'database.json');
+let dbPathActive = DB_PATH_BUNDLED; // switched to DB_PATH_TMP on first EROFS
 
 // Fishbowl customer export: file path and schedule (every 30 min)
 const FISHBOWL_EXPORT_DIR = path.join(__dirname, 'data');
@@ -23,8 +27,16 @@ const FISHBOWL_EXPORT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 function loadDB() {
     try {
-        if (fs.existsSync(DB_PATH)) {
-            const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        // If we've already switched to /tmp but it's empty (e.g. new instance), seed from bundled
+        if (dbPathActive === DB_PATH_TMP && !fs.existsSync(DB_PATH_TMP) && fs.existsSync(DB_PATH_BUNDLED)) {
+            try {
+                const bundled = fs.readFileSync(DB_PATH_BUNDLED, 'utf8');
+                fs.writeFileSync(DB_PATH_TMP, bundled, 'utf8');
+            } catch (e) { /* ignore */ }
+        }
+        const pathToRead = dbPathActive;
+        if (fs.existsSync(pathToRead)) {
+            const db = JSON.parse(fs.readFileSync(pathToRead, 'utf8'));
             let changed = false;
             if (!db.rfqs) { db.rfqs = []; changed = true; }
             if (!db.saved_lists) { db.saved_lists = []; changed = true; }
@@ -118,7 +130,17 @@ function loadDB() {
 }
 
 function saveDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+    const payload = JSON.stringify(data, null, 2);
+    try {
+        fs.writeFileSync(dbPathActive, payload);
+    } catch (err) {
+        if (err.code === 'EROFS' && dbPathActive === DB_PATH_BUNDLED) {
+            dbPathActive = DB_PATH_TMP;
+            fs.writeFileSync(dbPathActive, payload);
+        } else {
+            throw err;
+        }
+    }
 }
 
 let db = loadDB();
@@ -849,164 +871,14 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
         if (!csvContent) {
             return res.status(400).json({ error: 'CSV content is required' });
         }
-        // Strip BOM if present (Excel/some editors add it)
-        if (csvContent.charCodeAt(0) === 0xFEFF) csvContent = csvContent.slice(1);
-        
         const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
         if (lines.length < 2) {
             return res.status(400).json({ error: 'CSV must have at least a header row and one data row' });
         }
-        // Detect delimiter: semicolon if line has ; but no comma (e.g. European Excel)
-        const firstLine = lines[0];
-        const useSemicolon = firstLine.indexOf(';') !== -1 && firstLine.indexOf(',') === -1;
-        const delimiter = useSemicolon ? ';' : ',';
-        
-        const parseCSVLine = (line) => {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                    if (inQuotes && line[i + 1] === '"') { current += '"'; i++; } else { inQuotes = !inQuotes; }
-                } else if (char === delimiter && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            result.push(current.trim());
-            return result;
-        };
-        
-        const headers = parseCSVLine(lines[0]).map(h => (h.replace(/^"|"$/g, '').trim().replace(/^\ufeff/, '')));
-        const toKey = (h) => (h || '').toLowerCase().replace(/\s+/g, ' ').trim();
-        const headerKeys = headers.map(toKey);
-        const col = (name, alternates = []) => {
-            const names = [name, ...(alternates || [])].map(toKey);
-            for (const n of names) {
-                const i = headerKeys.indexOf(n);
-                if (i !== -1) return i;
-            }
-            return -1;
-        };
-        const getVal = (values, name, alternates, def = '') => {
-            const i = col(name, alternates);
-            if (i === -1) return def;
-            const v = (values[i] || '').trim();
-            return v !== undefined && v !== null ? v : def;
-        };
+
         const deleteNotInImport = !!req.body.deleteNotInImport;
-        let added = 0;
-        let updated = 0;
-        let skippedDuplicates = 0;
-        let withImage = 0;
-        let maxId = db.products.length > 0 ? Math.max(...db.products.map(p => p.id)) : 0;
-        const skusInImport = new Set();
-        const skusSeenInThisImport = new Set();
-
-        for (let i = 1; i < lines.length; i++) {
-            const values = parseCSVLine(lines[i]).map(v => v.replace(/^"|"$/g, ''));
-            if (values.length < headers.length) continue;
-            
-            if (values.every(v => !(v || '').trim())) continue;
-            
-            const sku = getVal(values, 'sku', ['product_sku', 'item_number', 'item no', 'part_number', 'part number', 'product code', 'item code'], '').trim();
-            const skuLower = sku.toLowerCase();
-            if (!sku) continue;
-            if (skusSeenInThisImport.has(skuLower)) {
-                skippedDuplicates++;
-                continue;
-            }
-            skusSeenInThisImport.add(skuLower);
-
-            const name = getVal(values, 'name', ['product name', 'product_name', 'title', 'product', 'item name']);
-            const brand = getVal(values, 'brand', ['manufacturer', 'maker', 'vendor', 'supplier', 'brand name', 'mfr']);
-            const material = getVal(values, 'material', ['materials', 'material type']);
-            const price = parseFloat(getVal(values, 'price', ['unit price', 'unit_price', 'list price', 'list_price', 'unit cost', 'msrp'], '0')) || 0;
-            if (!name || !brand || !material || !price) continue;
-            
-            // image_url: handle quoted/single column, split columns (commas in URL), or different column order
-            const iImage = col('image_url', ['image url', 'image', 'imageurl', 'url', 'photo', 'picture']);
-            let imageUrl = '';
-            if (iImage >= 0 && values.length > headers.length) {
-                imageUrl = values.slice(iImage, values.length - 2).map(v => (v || '').trim()).join(',').trim();
-            }
-            if (!imageUrl) imageUrl = getVal(values, 'image_url', ['image url', 'image', 'imageurl', 'url', 'photo', 'picture']).trim();
-            if (!imageUrl || !imageUrl.toLowerCase().startsWith('http')) {
-                for (let j = 0; j < values.length; j++) {
-                    const v = (values[j] || '').trim();
-                    if (v.toLowerCase().startsWith('http')) {
-                        const parts = [v];
-                        let k = j + 1;
-                        while (k < values.length) {
-                            const next = (values[k] || '').trim();
-                            if (next === '0' || next === '1' || /^(true|yes|false|no)$/i.test(next)) break;
-                            parts.push(next);
-                            k++;
-                        }
-                        imageUrl = parts.join(',').trim();
-                        break;
-                    }
-                }
-            }
-            // Normalize relative paths
-            if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !imageUrl.startsWith('/')) {
-                imageUrl = '/' + imageUrl;
-            }
-
-            const data = {
-                sku,
-                name,
-                brand,
-                category: getVal(values, 'category', ['product category', 'type', 'product type'], 'Disposable Gloves'),
-                subcategory: getVal(values, 'subcategory', ['sub_category', 'sub category']),
-                description: getVal(values, 'description', ['product description', 'desc']),
-                material,
-                powder: getVal(values, 'powder', ['powdered', 'powder free']),
-                thickness: (() => { const t = getVal(values, 'thickness', ['thickness (mil)', 'mil']); return t ? parseFloat(t) : null; })(),
-                sizes: getVal(values, 'sizes', ['size', 'sizing', 'size_options', 'sizes available']),
-                color: getVal(values, 'color', ['colour', 'colors']),
-                grade: getVal(values, 'grade', ['grade type']),
-                useCase: getVal(values, 'useCase', ['use case', 'usecase', 'industry', 'industries']),
-                certifications: getVal(values, 'certifications', ['compliance', 'certification']),
-                texture: getVal(values, 'texture', []),
-                cuffStyle: getVal(values, 'cuffStyle', ['cuff style', 'cuffstyle', 'cuff']),
-                sterility: getVal(values, 'sterility', []),
-                pack_qty: parseInt(getVal(values, 'pack_qty', ['pack qty', 'pack_qty', 'packqty', 'box_qty', 'per box', 'qty per box'], '100')) || 100,
-                case_qty: parseInt(getVal(values, 'case_qty', ['case qty', 'case_qty', 'caseqty', 'case_size', 'case size'], '1000')) || 1000,
-                price,
-                bulk_price: parseFloat(getVal(values, 'bulk_price', ['bulk price', 'bulk_price', 'wholesale', 'wholesale_price', 'wholesale price'], '0')) || 0,
-                image_url: imageUrl,
-                in_stock: (() => {
-                    const v = values.length > headers.length ? (values[values.length - 2] || '').trim() : getVal(values, 'in_stock', ['in stock', 'instock', 'stock', 'available', 'availability'], '');
-                    return ['1', 'true', 'yes'].includes(String(v).toLowerCase()) ? 1 : 0;
-                })(),
-                featured: (() => {
-                    const v = values.length > headers.length ? (values[values.length - 1] || '').trim() : getVal(values, 'featured', ['feature'], '');
-                    return ['1', 'true', 'yes'].includes(String(v).toLowerCase()) ? 1 : 0;
-                })()
-            };
-            
-            if (imageUrl) withImage++;
-            skusInImport.add(skuLower);
-            const existing = db.products.find(p => (p.sku || '').toString().trim().toLowerCase() === skuLower);
-            if (existing) {
-                Object.assign(existing, data);
-                updated++;
-            } else {
-                db.products.push({ id: ++maxId, ...data });
-                added++;
-            }
-        }
-
-        let deleted = 0;
-        if (deleteNotInImport && skusInImport.size > 0) {
-            const before = db.products.length;
-            db.products = db.products.filter(p => skusInImport.has((p.sku || '').toString().trim().toLowerCase()));
-            deleted = before - db.products.length;
-        }
+        const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
+        const { added, updated, deleted, skippedDuplicates, withImage } = result;
 
         saveDB(db);
         const msgParts = [added && `${added} added`, updated && `${updated} updated`, deleted > 0 && `${deleted} deleted`, skippedDuplicates > 0 && `${skippedDuplicates} duplicate SKU(s) skipped`].filter(Boolean);
@@ -1014,13 +886,16 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
         const imageNote = withImage ? ` ${withImage} row(s) had image URLs.` : ' No image_url values were found in the CSV—check column name (use "image_url") and that URLs are in the column.';
         const resBody = { success: true, count: added + updated, added, updated, deleted, skippedDuplicates, withImage, message: `Import complete: ${msg}.${imageNote}` };
         if (added + updated === 0 && lines.length > 1) {
-            const firstValues = parseCSVLine(lines[1]).map(v => v.replace(/^"|"$/g, ''));
+            const delimiter = productStore.detectDelimiter(lines[0]);
+            const headers = productStore.parseCSVLine(lines[0], delimiter).map(h => (h || '').replace(/^"|"$/g, '').trim().replace(/^\ufeff/, ''));
+            const firstValues = productStore.parseCSVLine(lines[1], delimiter).map(v => (v || '').replace(/^"|"$/g, '').trim());
+            const { getVal } = productStore.buildHeaderLookup(headers);
             resBody.debug = {
-                headers: headers,
+                headers,
                 headerCount: headers.length,
                 firstRowColumnCount: firstValues.length,
-                firstRowSku: (firstValues[col('sku', [])] || '').trim() || '(column not found)',
-                firstRowName: (firstValues[col('name', [])] || '').substring(0, 30) || '(column not found)',
+                firstRowSku: (getVal(firstValues, 'sku', ['product_sku', 'item_number', 'part_number'], '') || '').trim() || '(column not found)',
+                firstRowName: (getVal(firstValues, 'name', ['product name', 'title'], '') || '').substring(0, 30) || '(column not found)',
                 delimiterUsed: delimiter
             };
         }
@@ -1256,7 +1131,7 @@ app.get('/api/brands', (req, res) => {
     res.json(brands);
 });
 
-// Products CSV export: creates CSV file on server and returns it for download
+// Products CSV export: stream CSV for download (optionally save to disk when writable)
 app.get('/api/products/export.csv', authenticateToken, (req, res) => {
     try {
         db = loadDB();
@@ -1265,75 +1140,37 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
             return res.status(403).send('Admin access required');
         }
         let products = Array.isArray(db.products) ? [...db.products] : [];
-    const brand = (req.query.brand || '').trim();
-    const category = (req.query.category || '').trim();
-    const colorsParam = req.query.colors;
-    const materialsParam = req.query.materials;
-    const colors = colorsParam ? (Array.isArray(colorsParam) ? colorsParam : colorsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
-    const materials = materialsParam ? (Array.isArray(materialsParam) ? materialsParam : materialsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
+        const brand = (req.query.brand || '').trim();
+        const category = (req.query.category || '').trim();
+        const colorsParam = req.query.colors;
+        const materialsParam = req.query.materials;
+        const colors = colorsParam ? (Array.isArray(colorsParam) ? colorsParam : colorsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
+        const materials = materialsParam ? (Array.isArray(materialsParam) ? materialsParam : materialsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
 
-    if (brand) products = products.filter(p => (p.brand || '').trim() === brand);
-    if (category) products = products.filter(p => (p.category || '').trim() === category);
-    if (colors.length > 0) {
-        const colorSet = new Set(colors.map(c => (c || '').toLowerCase()));
-        products = products.filter(p => colorSet.has((p.color || '').trim().toLowerCase()));
-    }
-    if (materials.length > 0) {
-        const matSet = new Set(materials.map(m => (m || '').toLowerCase()));
-        products = products.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
-    }
-
-    const escapeCsv = (v) => {
-        if (v === null || v === undefined) return '';
-        const s = String(v);
-        if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
-        return s;
-    };
-    const headers = ['sku', 'name', 'brand', 'category', 'subcategory', 'description', 'material', 'powder', 'thickness', 'sizes', 'color', 'grade', 'useCase', 'certifications', 'texture', 'cuffStyle', 'sterility', 'pack_qty', 'case_qty', 'price', 'bulk_price', 'image_url', 'in_stock', 'featured'];
-    const row = (p) => [
-        escapeCsv(p.sku || ''),
-        escapeCsv(p.name || ''),
-        escapeCsv(p.brand || ''),
-        escapeCsv(p.category || ''),
-        escapeCsv(p.subcategory || ''),
-        escapeCsv(p.description || ''),
-        escapeCsv(p.material || ''),
-        escapeCsv(p.powder || ''),
-        p.thickness || '',
-        escapeCsv(p.sizes || ''),
-        escapeCsv(p.color || ''),
-        escapeCsv(p.grade || ''),
-        escapeCsv(p.useCase || ''),
-        escapeCsv(p.certifications || ''),
-        escapeCsv(p.texture || ''),
-        escapeCsv(p.cuffStyle || ''),
-        escapeCsv(p.sterility || ''),
-        p.pack_qty || 100,
-        p.case_qty || 1000,
-        p.price || 0,
-        p.bulk_price || 0,
-        escapeCsv(p.image_url || ''),
-        p.in_stock ? 1 : 0,
-        p.featured ? 1 : 0
-    ];
-    const csvRows = [headers.join(',')].concat(products.map(p => row(p).join(',')));
-    const csvContent = csvRows.join('\n');
-
-    const dateStr = new Date().toISOString().split('T')[0];
-    const exportFileName = `glovecubs-products-export-${dateStr}.csv`;
-    try {
-        const exportFilePath = path.join(FISHBOWL_EXPORT_DIR, exportFileName);
-        if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
-            fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
+        if (brand) products = products.filter(p => (p.brand || '').trim() === brand);
+        if (category) products = products.filter(p => (p.category || '').trim() === category);
+        if (colors.length > 0) {
+            const colorSet = new Set(colors.map(c => (c || '').toLowerCase()));
+            products = products.filter(p => colorSet.has((p.color || '').trim().toLowerCase()));
         }
-        fs.writeFileSync(exportFilePath, csvContent, 'utf8');
-    } catch (writeErr) {
-        console.warn('Could not save export file (e.g. read-only FS):', writeErr.message);
-    }
+        if (materials.length > 0) {
+            const matSet = new Set(materials.map(m => (m || '').toLowerCase()));
+            products = products.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
+        }
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + exportFileName + '"');
-    res.send(csvContent);
+        const { csvContent, filename } = productStore.productsToCsv(products);
+        try {
+            if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
+                fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
+            }
+            fs.writeFileSync(path.join(FISHBOWL_EXPORT_DIR, filename), csvContent, 'utf8');
+        } catch (writeErr) {
+            console.warn('Could not save export file (e.g. read-only FS):', writeErr.message);
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+        res.send(csvContent);
     } catch (err) {
         console.error('Export CSV error:', err);
         res.status(500).json({ error: err.message || 'Export failed' });

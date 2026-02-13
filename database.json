@@ -4,7 +4,7 @@
       "id": 1,
       "company_name": "Demo Company Inc",
       "email": "demo@company.com",
-      "password": "$2a$10$zsI9P17oNckSchdI.1kpe.d6cD4e8bOsQMiJN/l/TUE3hST.Q.gya",
+      "password": "$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe",
       "contact_name": "John Demo",
       "phone": "555-123-4567",
       "address": "123 Demo Street",
@@ -13,7 +13,12 @@
       "zip": "60601",
       "is_approved": 1,
       "discount_tier": "silver",
-      "created_at": "2026-01-27T20:21:09.558Z"
+      "created_at": "2026-01-27T20:21:09.558Z",
+      "budget_amount": null,
+      "budget_period": "monthly",
+      "rep_name": "",
+      "rep_email": "",
+      "rep_phone": ""
     },
     {
       "id": 1769545553676,
@@ -28,7 +33,12 @@
       "zip": "84050",
       "is_approved": 1,
       "discount_tier": "standard",
-      "created_at": "2026-01-27T20:25:53.676Z"
+      "created_at": "2026-01-27T20:25:53.676Z",
+      "budget_amount": null,
+      "budget_period": "monthly",
+      "rep_name": "",
+      "rep_email": "",
+      "rep_phone": ""
     }
   ],
   "products": [
@@ -3392,5 +3402,10 @@
   ],
   "orders": [],
   "carts": {},
-  "rfqs": []
+  "rfqs": [],
+  "saved_lists": [],
+  "ship_to_addresses": [],
+  "contact_messages": [],
+  "password_reset_tokens": [],
+  "uploaded_invoices": []
 }
