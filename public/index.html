@@ -96,10 +96,10 @@
                         <li class="has-dropdown">
                             <a href="#">Industries <i class="fas fa-chevron-down"></i></a>
                             <ul class="dropdown-menu">
-                                <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Healthcare</a></li>
-                                <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Food Service</a></li>
-                                <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Manufacturing</a></li>
-                                <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Janitorial</a></li>
+                                <li><a href="/industries/medical/" onclick="event.preventDefault(); navigate('industry', { industry: 'medical' }); return false;">Medical &amp; Healthcare</a></li>
+                                <li><a href="/industries/foodservice/" onclick="event.preventDefault(); navigate('industry', { industry: 'foodservice' }); return false;">Food Service</a></li>
+                                <li><a href="/industries/janitorial/" onclick="event.preventDefault(); navigate('industry', { industry: 'janitorial' }); return false;">Janitorial</a></li>
+                                <li><a href="/industries/manufacturing/" onclick="event.preventDefault(); navigate('industry', { industry: 'manufacturing' }); return false;">Manufacturing</a></li>
                             </ul>
                         </li>
                         <li class="has-dropdown">

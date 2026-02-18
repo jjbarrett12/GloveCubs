@@ -42,6 +42,16 @@ Glovecubs uses a **single product store** (`lib/product-store.js`) for all CSV i
 
 Required for each row: **sku**, **name**, **brand**, **material**, **price**. Rows missing any of these are skipped.
 
+### Multiple values in one field (color, useCase, certifications, sizes)
+
+Use **comma** to list multiple values in a single cell, e.g. **Blue, Black** for color or **Healthcare, Food Service** for industry. The app treats these as multi-value for display and filtering.
+
+- **In CSV:** If a cell contains commas, **put the whole value in double quotes** so the parser keeps it as one column:  
+  `"Blue, Black"`  
+  `"Healthcare, Food Service, Industrial"`
+- **Semicolon** is also supported when the app splits multi-value fields (e.g. **Blue; Black**), but comma is the standard.
+- **Sizes** work the same way: `XS, S, M, L, XL, 2XL` (quoted in CSV if needed).
+
 ---
 
 ## Import options

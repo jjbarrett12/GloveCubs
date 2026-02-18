@@ -848,6 +848,12 @@ app.get('/api/products', (req, res) => {
     res.json(products);
 });
 
+// SEO: slug from product name (or stored slug)
+function productSlug(p) {
+    const raw = (p.slug || p.name || '').toString().trim();
+    return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
+}
+
 app.get('/api/products/:id', (req, res) => {
     db = loadDB();
     const product = db.products.find(p => p.id == req.params.id || p.sku === req.params.id);
@@ -855,6 +861,110 @@ app.get('/api/products/:id', (req, res) => {
         return res.status(404).json({ error: 'Product not found' });
     }
     res.json(product);
+});
+
+// SEO: get product by URL slug (e.g. black-nitrile-exam-gloves). Optional category/material to disambiguate.
+app.get('/api/products/by-slug', (req, res) => {
+    db = loadDB();
+    const slug = (req.query.slug || '').toString().trim().toLowerCase();
+    const categorySegment = (req.query.category || '').toString().trim().toLowerCase(); // e.g. nitrile, disposable-gloves
+    if (!slug) {
+        return res.status(400).json({ error: 'slug query parameter required' });
+    }
+    let products = db.products.filter(p => productSlug(p) === slug);
+    if (products.length > 1 && categorySegment) {
+        products = products.filter(p => {
+            const mat = (p.material || '').toLowerCase().replace(/\s+/g, '-');
+            const sub = (p.subcategory || '').toLowerCase().replace(/\s+/g, '-');
+            const cat = (p.category || '').toLowerCase().replace(/\s+/g, '-');
+            return mat === categorySegment || sub === categorySegment || cat === categorySegment;
+        });
+    }
+    const product = products.length > 0 ? products[0] : null;
+    if (!product) {
+        return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json({ ...product, slug: productSlug(product) });
+});
+
+// SEO: list industries for landing pages (slug, title, description, useCase param)
+const SEO_INDUSTRIES = [
+    { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
+    { slug: 'foodservice', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
+    { slug: 'medical', title: 'Medical & Healthcare Gloves', useCase: 'Healthcare', description: 'Exam and medical-grade gloves for healthcare facilities. Nitrile, latex-free, and sterile options.' },
+    { slug: 'healthcare', title: 'Healthcare Gloves', useCase: 'Healthcare', description: 'Professional gloves for healthcare and clinical use. B2B pricing and bulk quantities.' },
+    { slug: 'food-processing', title: 'Food Processing Gloves', useCase: 'Food Processing', description: 'Heavy-duty gloves for food processing and manufacturing. Cut-resistant and chemical-resistant options.' },
+    { slug: 'manufacturing', title: 'Manufacturing & Industrial Gloves', useCase: 'Manufacturing', description: 'Work gloves for manufacturing, assembly, and industrial applications.' },
+    { slug: 'automotive', title: 'Automotive Gloves', useCase: 'Automotive', description: 'Mechanic and automotive gloves. Nitrile, impact, and cut-resistant styles.' },
+];
+
+app.get('/api/seo/industries', (req, res) => {
+    res.json(SEO_INDUSTRIES);
+});
+
+// SEO: single industry landing page data (products + meta)
+app.get('/api/seo/industry/:slug', (req, res) => {
+    db = loadDB();
+    const slug = (req.params.slug || '').toString().trim().toLowerCase();
+    const industry = SEO_INDUSTRIES.find(i => i.slug === slug);
+    if (!industry) {
+        return res.status(404).json({ error: 'Industry not found' });
+    }
+    const useCase = industry.useCase;
+    let products = (db.products || []).filter(p => {
+        const nameDesc = (p.name + ' ' + (p.description || '') + ' ' + (p.useCase || '') + ' ' + (p.industry || '')).toLowerCase();
+        const industryLower = (useCase || '').toLowerCase();
+        if (industryLower === 'healthcare') {
+            return nameDesc.includes('healthcare') || nameDesc.includes('medical') || nameDesc.includes('exam') || nameDesc.includes('hospital');
+        }
+        if (industryLower === 'food service') {
+            return nameDesc.includes('food service') || nameDesc.includes('foodservice') || nameDesc.includes('restaurant') || nameDesc.includes('catering');
+        }
+        if (industryLower === 'food processing') {
+            return nameDesc.includes('food processing') || nameDesc.includes('foodprocessing') || nameDesc.includes('food plant') || nameDesc.includes('processing');
+        }
+        if (industryLower === 'janitorial') {
+            return nameDesc.includes('janitorial') || nameDesc.includes('cleaning') || nameDesc.includes('custodial');
+        }
+        if (industryLower === 'manufacturing') {
+            return nameDesc.includes('manufacturing') || nameDesc.includes('factory') || nameDesc.includes('production');
+        }
+        if (industryLower === 'automotive') {
+            return nameDesc.includes('automotive') || nameDesc.includes('auto') || nameDesc.includes('vehicle') || nameDesc.includes('mechanics') || nameDesc.includes('mechanical');
+        }
+        return nameDesc.includes(industryLower);
+    });
+    products.sort((a, b) => (b.featured || 0) - (a.featured || 0) || (a.name || '').localeCompare(b.name || ''));
+    res.json({ industry: { ...industry }, products });
+});
+
+// SEO: sitemap URLs (for generating sitemap.xml or crawlers)
+app.get('/api/seo/sitemap-urls', (req, res) => {
+    db = loadDB();
+    const base = (process.env.DOMAIN || process.env.BASE_URL || 'https://glovecubs.com').replace(/\/$/, '');
+    const pages = [
+        { url: base + '/', priority: '1.0', changefreq: 'weekly' },
+        { url: base + '/gloves/', priority: '0.9', changefreq: 'weekly' },
+        { url: base + '/gloves/nitrile/', priority: '0.9', changefreq: 'weekly' },
+        { url: base + '/gloves/vinyl/', priority: '0.9', changefreq: 'weekly' },
+        { url: base + '/gloves/latex/', priority: '0.9', changefreq: 'weekly' },
+        { url: base + '/gloves/disposable-gloves/', priority: '0.9', changefreq: 'weekly' },
+        { url: base + '/gloves/work-gloves/', priority: '0.9', changefreq: 'weekly' }
+    ];
+    SEO_INDUSTRIES.forEach(ind => {
+        pages.push({ url: base + '/industries/' + ind.slug + '/', priority: '0.8', changefreq: 'weekly' });
+    });
+    (db.products || []).forEach(p => {
+        const slug = productSlug(p);
+        if (!slug) return;
+        const seg = (p.material || p.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
+        pages.push({ url: base + '/gloves/' + seg + '/' + slug + '/', priority: '0.7', changefreq: 'weekly' });
+        const sizes = (p.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+        sizes.forEach(sz => {
+            pages.push({ url: base + '/gloves/' + seg + '/' + slug + '/size/' + sz.toLowerCase().replace(/\s+/g, '-') + '/', priority: '0.6', changefreq: 'weekly' });
+        });
+    });
+    res.json({ pages });
 });
 
 // Add new product (admin only - requires authentication)
@@ -1151,7 +1261,10 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
         if (category) products = products.filter(p => (p.category || '').trim() === category);
         if (colors.length > 0) {
             const colorSet = new Set(colors.map(c => (c || '').toLowerCase()));
-            products = products.filter(p => colorSet.has((p.color || '').trim().toLowerCase()));
+            products = products.filter(p => {
+                const productColors = (p.color || '').split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+                return productColors.some(c => colorSet.has(c)) || colorSet.has((p.color || '').trim().toLowerCase());
+            });
         }
         if (materials.length > 0) {
             const matSet = new Set(materials.map(m => (m || '').toLowerCase()));

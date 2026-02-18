@@ -224,6 +224,56 @@ const api = {
 };
 
 // ============================================
+// SEO: Clean URLs & slug helpers
+// ============================================
+
+function slugify(text) {
+    if (!text) return '';
+    return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function getProductUrl(product) {
+    if (!product) return '#';
+    const slug = product.slug || slugify(product.name || '');
+    const segment = (product.material || product.subcategory || product.category || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
+    if (!slug) return `#products?id=${product.id}`;
+    return `/gloves/${segment}/${slug}/`;
+}
+
+function getProductSizeUrl(product, size) {
+    if (!product || !size) return getProductUrl(product);
+    const slug = product.slug || slugify(product.name || '');
+    const segment = (product.material || product.subcategory || product.category || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
+    if (!slug) return `#products?id=${product.id}`;
+    return `/gloves/${segment}/${slug}/size/${String(size).toLowerCase().replace(/\s+/g, '-')}/`;
+}
+
+function parseSeoPath() {
+    const path = (window.location.pathname || '').replace(/\/+$/, '') || '/';
+    if (path === '/') return null;
+    const industriesMatch = path.match(/^\/industries\/([^/]+)\/?$/);
+    if (industriesMatch) return { type: 'industry', industry: industriesMatch[1] };
+    const sizeMatch = path.match(/^\/gloves\/([^/]+)\/([^/]+)\/size\/([^/]+)\/?$/);
+    if (sizeMatch) return { type: 'product-size', category: sizeMatch[1], slug: sizeMatch[2], size: sizeMatch[3] };
+    const productMatch = path.match(/^\/gloves\/([^/]+)\/([^/]+)\/?$/);
+    if (productMatch) return { type: 'product', category: productMatch[1], slug: productMatch[2] };
+    const categoryMatch = path.match(/^\/gloves\/([^/]+)\/?$/);
+    if (categoryMatch) return { type: 'category', category: categoryMatch[1] };
+    if (path === '/gloves' || path === '/gloves/') return { type: 'products' };
+    return null;
+}
+
+function setPageMeta(title, description) {
+    if (title) document.title = title + (title.indexOf('Glovecubs') === -1 ? ' | Glovecubs' : '');
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (description && metaDesc) metaDesc.setAttribute('content', description);
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (title && ogTitle) ogTitle.setAttribute('content', title);
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if (description && ogDesc) ogDesc.setAttribute('content', description);
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
@@ -276,9 +326,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.history.replaceState(null, '', window.location.pathname + window.location.search);
             }
         } else {
-            // Navigate to home page
-            navigate('home');
+            // SEO: parse clean URL and route to correct page
+            const seo = parseSeoPath();
+            if (seo) {
+                if (seo.type === 'industry') {
+                    navigate('industry', { industry: seo.industry });
+                } else if (seo.type === 'product-size') {
+                    navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
+                } else if (seo.type === 'product') {
+                    navigate('product', { slug: seo.slug, category: seo.category });
+                } else if (seo.type === 'category') {
+                    navigate('products', { categorySegment: seo.category });
+                } else if (seo.type === 'products') {
+                    navigate('products');
+                } else {
+                    navigate('home');
+                }
+            } else {
+                navigate('home');
+            }
         }
+
+        // SEO: handle browser back/forward on clean URLs
+        window.addEventListener('popstate', () => {
+            const seo = parseSeoPath();
+            if (seo && seo.type === 'industry') navigate('industry', { industry: seo.industry });
+            else if (seo && seo.type === 'product-size') navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
+            else if (seo && seo.type === 'product') navigate('product', { slug: seo.slug, category: seo.category });
+            else if (seo && seo.type === 'category') navigate('products', { categorySegment: seo.category });
+            else if (seo && seo.type === 'products') navigate('products');
+            else if (!window.location.pathname || window.location.pathname === '/') navigate('home');
+        });
 
         // Setup search with real-time search and Enter key support
         const searchInput = document.getElementById('searchInput');
@@ -368,10 +446,17 @@ async function navigate(page, params = {}) {
             }
             break;
         case 'products':
-            await renderProductsPage();
+            await renderProductsPage(params.categorySegment ? { categorySegment: params.categorySegment } : undefined);
             break;
         case 'product':
-            await renderProductPage(params.id);
+            if (params.slug) {
+                await renderProductPage(null, { slug: params.slug, category: params.category, size: params.size });
+            } else {
+                await renderProductPage(params.id);
+            }
+            break;
+        case 'industry':
+            await renderIndustryPage(params.industry);
             break;
         case 'cart':
             await renderCartPage();
@@ -449,12 +534,13 @@ async function navigate(page, params = {}) {
 // ============================================
 
 async function renderHomePage() {
+    setPageMeta('Glovecubs - Professional Disposable & Work Gloves | B2B Glove Distributor', 'Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.');
     const mainContent = document.getElementById('mainContent');
     if (!mainContent) {
         console.error('mainContent element not found');
         return;
     }
-    
+
     // Show full page immediately with spinner in products section
     const productsPlaceholder = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);"><div class="spinner" style="margin: 0 auto 16px; width: 40px; height: 40px; border: 3px solid rgba(255,122,0,0.3); border-top-color: #FF7A00; border-radius: 50%; animation: spin 0.8s linear infinite;"></div><p>Loading products...</p></div>';
     
@@ -935,12 +1021,23 @@ function initRotatingText() {
 // PRODUCTS PAGE
 // ============================================
 
-async function renderProductsPage() {
+async function renderProductsPage(opts) {
     const mainContent = document.getElementById('mainContent');
     
     // Sync search bar value into state so loadProducts() uses it (search works even if user typed then navigated)
     const searchInput = document.getElementById('searchInput');
     if (searchInput) state.filters.search = searchInput.value.trim();
+    
+    // SEO: apply category/material from clean URL segment (e.g. /gloves/nitrile/)
+    if (opts && opts.categorySegment) {
+        const seg = (opts.categorySegment || '').toLowerCase().replace(/\s+/g, '-');
+        if (seg === 'nitrile') state.filters.material = ['Nitrile'];
+        else if (seg === 'vinyl') state.filters.material = ['Vinyl'];
+        else if (seg === 'latex') state.filters.material = ['Latex'];
+        else if (seg === 'disposable-gloves') state.filters.category = 'Disposable Gloves';
+        else if (seg === 'work-gloves') state.filters.category = 'Work Gloves';
+        else state.filters.material = [seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' ')];
+    }
     
     mainContent.innerHTML = `
         <section class="shop-page">
@@ -1535,6 +1632,27 @@ async function renderProductsPage() {
     updatePriceRangeBar();
     initPriceRangeBar();
 
+    // SEO: sync sidebar checkboxes/radios from state.filters (e.g. when opened via /gloves/nitrile/)
+    if (opts && opts.categorySegment) {
+        const seg = (opts.categorySegment || '').toLowerCase();
+        const category = state.filters.category;
+        const material = state.filters.material;
+        if (category) {
+            const radio = document.querySelector(`input[name="category"][value="${category.replace(/"/g, '\\"')}"]`);
+            if (radio) { radio.checked = true; document.querySelector('input[name="category"][value=""]').checked = false; }
+        }
+        if (Array.isArray(material) && material.length > 0) {
+            material.forEach(m => {
+                const cb = document.querySelector(`input[name="material"][value="${(m || '').replace(/"/g, '\\"')}"]`);
+                if (cb) cb.checked = true;
+            });
+        }
+        if (window.history && window.history.replaceState) {
+            const path = '/gloves/' + (opts.categorySegment || '') + '/';
+            if (path !== window.location.pathname) window.history.replaceState(null, '', path);
+        }
+    }
+    
     // Load products
     await loadProducts();
 }
@@ -1996,19 +2114,20 @@ function renderProductCard(product) {
             }
         }
     
+        const productUrl = getProductUrl(product);
     return `
-        <div class="product-card" onclick="navigate('product', { id: ${productId} })">
+        <a href="${(productUrl || '#').replace(/"/g, '&quot;')}" class="product-card" onclick="event.preventDefault(); navigate('product', { id: ${productId} }); return false;" style="display:block; text-decoration:none; color:inherit;">
             ${product.featured ? '<div class="product-badge"><span class="badge badge-featured">Featured</span></div>' : ''}
             <div class="product-image">
                 ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '').replace(/"/g, '&quot;')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
                 <div class="product-image-placeholder" style="${imgUrl ? 'display:none;' : 'display:flex;'}">
                     <i class="fas fa-hand-paper"></i>
                 </div>
-                <div class="product-actions" onclick="event.stopPropagation()">
-                    <button class="product-action-btn" onclick="quickAddToCart(${productId})" title="Add to Cart">
+                <div class="product-actions" onclick="event.preventDefault(); event.stopPropagation();">
+                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); quickAddToCart(${productId})" title="Add to Cart">
                         <i class="fas fa-cart-plus"></i>
                     </button>
-                    <button class="product-action-btn" onclick="navigate('product', { id: ${productId} })" title="View Details">
+                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); event.stopPropagation(); navigate('product', { id: ${productId} });" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
                 </div>
@@ -2027,7 +2146,7 @@ function renderProductCard(product) {
                     ${!isBulkUser && bulkPrice > 0 ? `<span class="price-bulk">B2B: <span>$${bulkPrice.toFixed(2)}</span></span>` : ''}
                 </div>
             </div>
-        </div>
+        </a>
     `;
     } catch (error) {
         console.error('Error rendering product card:', error, product);
@@ -2059,11 +2178,18 @@ function renderProductCard(product) {
 // SINGLE PRODUCT PAGE
 // ============================================
 
-async function renderProductPage(productId) {
+async function renderProductPage(productId, opts = {}) {
     const mainContent = document.getElementById('mainContent');
     mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     
-    const product = await api.get(`/api/products/${productId}`);
+    let product;
+    if (opts.slug) {
+        const q = new URLSearchParams({ slug: opts.slug });
+        if (opts.category) q.set('category', opts.category);
+        product = await api.get('/api/products/by-slug?' + q.toString()).catch(() => null);
+    } else {
+        product = await api.get(`/api/products/${productId}`);
+    }
     
     if (!product || product.error) {
         mainContent.innerHTML = `
@@ -2081,7 +2207,16 @@ async function renderProductPage(productId) {
         return;
     }
 
+    // SEO: ensure clean URL is in the bar (whether we arrived by id or slug)
+    if (window.history && window.history.replaceState) {
+        const url = opts.size ? getProductSizeUrl(product, opts.size) : getProductUrl(product);
+        if (url && url !== window.location.pathname) window.history.replaceState(null, '', url);
+    }
+
     const sizes = product.sizes ? product.sizes.split(/[\s,]+/).map(s => s.trim()).filter(Boolean) : [];
+    const preSelectSize = opts.size && sizes.some(s => s.toLowerCase() === String(opts.size).toLowerCase()) ? String(opts.size).toUpperCase() : null;
+    const firstSizeDisplay = preSelectSize || (sizes[0] || '').trim();
+    const categorySeg = (product.material || product.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
     const isBulkUser = state.user?.is_approved;
     let displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
     
@@ -2113,13 +2248,13 @@ async function renderProductPage(productId) {
         <section class="product-page">
             <div class="container">
                 <div class="breadcrumb">
-                    <a href="#" onclick="navigate('home'); return false;">Home</a>
+                    <a href="/" onclick="event.preventDefault(); navigate('home'); return false;">Home</a>
                     <span>/</span>
-                    <a href="#" onclick="navigate('products'); return false;">Products</a>
+                    <a href="/gloves/" onclick="event.preventDefault(); navigate('products'); return false;">Products</a>
                     <span>/</span>
-                    <a href="#" onclick="filterByCategory('${product.category}'); return false;">${product.category}</a>
+                    <a href="/gloves/${(product.material || product.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-')}/" onclick="event.preventDefault(); filterByCategory('${(product.category || '').replace(/'/g, "\\'")}'); navigate('products'); return false;">${product.category}</a>
                     <span>/</span>
-                    <span>${product.name}</span>
+                    <span>${product.name}${preSelectSize ? ' Size ' + preSelectSize : ''}</span>
                 </div>
                 <div class="product-detail">
                     <div class="product-gallery">
@@ -2153,9 +2288,9 @@ async function renderProductPage(productId) {
                     </div>
                     <div class="product-detail-info">
                         <div class="product-detail-brand">${product.brand}</div>
-                        <h1>${product.name}</h1>
+                        <h1>${product.name}${preSelectSize ? ' Size ' + preSelectSize : ''}</h1>
                         <div class="product-detail-sku">SKU: ${product.sku}</div>
-                        ${sizes.length > 0 ? `<div id="productVariantSkuDisplay" class="product-detail-sku" style="margin-top:4px; color:#FF7A00; font-weight:600;" data-base-sku="${(product.sku || '').replace(/"/g, '&quot;')}">Variant SKU(s): <span id="productVariantSkuSize">${product.sku}-${sizes[0].trim()}</span></div>` : ''}
+                        ${sizes.length > 0 ? `<div id="productVariantSkuDisplay" class="product-detail-sku" style="margin-top:4px; color:#FF7A00; font-weight:600;" data-base-sku="${(product.sku || '').replace(/"/g, '&quot;')}">Variant SKU(s): <span id="productVariantSkuSize">${product.sku}-${firstSizeDisplay}</span></div>` : ''}
                         
                         <div class="product-detail-price">
                             <span class="price-current">$${displayPrice.toFixed(2)}</span>
@@ -2201,13 +2336,19 @@ async function renderProductPage(productId) {
                                     ${sizes.map((size, i) => {
                                         const s = size.trim();
                                         const esc = (x) => (x || '').replace(/"/g, '&quot;');
+                                        const checked = preSelectSize ? (s.toUpperCase() === preSelectSize) : (i === 0);
                                         return `
                                         <label class="size-checkbox-label">
-                                            <input type="checkbox" class="size-checkbox" data-size="${esc(s)}" ${i === 0 ? 'checked' : ''} onchange="toggleSizeCheckbox(this)">
+                                            <input type="checkbox" class="size-checkbox" data-size="${esc(s)}" ${checked ? 'checked' : ''} onchange="toggleSizeCheckbox(this)">
                                             <span class="size-checkbox-text">${esc(s)}</span>
                                         </label>`;
                                     }).join('')}
                                 </div>
+                                <p class="size-seo-links" style="font-size: 12px; color: #6B7280; margin-top: 10px;">Shop by size: ${sizes.map(s => {
+                                    const sz = s.trim();
+                                    const u = getProductSizeUrl(product, sz);
+                                    return `<a href="${u.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); navigate('product', { slug: '${(slugify(product.name) || '').replace(/'/g, "\\'")}', category: '${(categorySeg || '').replace(/'/g, "\\'")}', size: '${sz.replace(/'/g, "\\'")}' }); return false;">${sz}</a>`;
+                                }).join(' | ')}</p>
                             </div>
                         ` : ''}
 
@@ -2258,8 +2399,58 @@ async function renderProductPage(productId) {
         </section>
     `;
 
-    // Store selected sizes (array for multi-select)
-    window.selectedSizes = sizes.length > 0 ? [sizes[0].trim()] : [];
+    // Store selected sizes (array for multi-select); pre-select size for programmatic SEO pages
+    window.selectedSizes = sizes.length > 0 ? (preSelectSize ? [preSelectSize] : [sizes[0].trim()]) : [];
+
+    // SEO: document title and meta for product / product size page
+    const seoTitle = product.name + (preSelectSize ? ' Size ' + preSelectSize : '');
+    const seoDesc = (product.description || '').substring(0, 160) || (product.name + ' - ' + (product.material || '') + ' gloves. ' + (product.brand || '') + '. B2B bulk pricing.');
+    setPageMeta(seoTitle, seoDesc);
+}
+
+// ============================================
+// INDUSTRY LANDING PAGES (SEO)
+// ============================================
+
+async function renderIndustryPage(industrySlug) {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const data = await api.get('/api/seo/industry/' + encodeURIComponent(industrySlug));
+        if (!data || !data.industry) {
+            mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>Industry Not Found</h1><p><a href="/gloves/">Browse all gloves</a></p></section>';
+            return;
+        }
+        const { industry, products } = data;
+        setPageMeta(industry.title, industry.description);
+        if (window.history && window.history.replaceState) {
+            const path = '/industries/' + industrySlug + '/';
+            if (path !== window.location.pathname) window.history.replaceState(null, '', path);
+        }
+        const productCardsHtml = (products || []).slice(0, 48).map(p => renderProductCard(p)).join('');
+        mainContent.innerHTML = `
+            <section class="industry-landing">
+                <div class="container">
+                    <nav class="breadcrumb" style="margin-bottom: 16px;">
+                        <a href="/" onclick="event.preventDefault(); navigate('home'); return false;">Home</a>
+                        <span>/</span>
+                        <a href="/industries/" onclick="event.preventDefault(); navigate('products'); return false;">Industries</a>
+                        <span>/</span>
+                        <span>${(industry.title || industrySlug).replace(/</g, '&lt;')}</span>
+                    </nav>
+                    <header class="industry-hero" style="margin-bottom: 32px;">
+                        <h1>${(industry.title || industrySlug).replace(/</g, '&lt;')}</h1>
+                        <p class="industry-description" style="font-size: 1.1rem; color: var(--gray-600); max-width: 720px;">${(industry.description || '').replace(/</g, '&lt;')}</p>
+                    </header>
+                    <div class="products-grid" id="industryProductsGrid">
+                        ${productCardsHtml || '<p>No products found for this industry.</p>'}
+                    </div>
+                </div>
+            </section>
+        `;
+    } catch (e) {
+        mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>Unable to load page</h1><p><a href="/gloves/">Browse all gloves</a></p></section>';
+    }
 }
 
 function setProductMainImage(thumbBtn) {
@@ -5614,7 +5805,10 @@ function applyAdminListFilters(products, filters) {
     if (filters.material) list = list.filter(function(p) { return (p.material || '').trim() === filters.material; });
     if (filters.colors && filters.colors.length > 0) {
         const colorSet = new Set(filters.colors.map(function(c) { return (c || '').toLowerCase(); }));
-        list = list.filter(function(p) { return colorSet.has((p.color || '').trim().toLowerCase()); });
+        list = list.filter(function(p) {
+            const productColors = (p.color || '').split(/[\s,;]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+            return productColors.some(function(c) { return colorSet.has(c); }) || colorSet.has((p.color || '').trim().toLowerCase());
+        });
     }
     return list;
 }
