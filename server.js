@@ -193,23 +193,27 @@ const authenticateToken = (req, res, next) => {
     }
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Invalid token' });
+        if (err) {
+            const isExpired = err.name === 'TokenExpiredError';
+            return res.status(isExpired ? 401 : 403).json({ error: isExpired ? 'Session expired' : 'Invalid token' });
+        }
         req.user = user;
         next();
     });
 };
 
-// Optional auth
+// Optional auth (must call next() only after verify completes so req.user is set for cart routes)
 const optionalAuth = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     
-    if (token) {
-        jwt.verify(token, JWT_SECRET, (err, user) => {
-            if (!err) req.user = user;
-        });
+    if (!token) {
+        return next();
     }
-    next();
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (!err) req.user = user;
+        next();
+    });
 };
 
 // ============ AUTH ROUTES ============
@@ -841,8 +845,8 @@ app.get('/api/products', (req, res) => {
     }
 
     products.sort((a, b) => {
-        if (a.featured !== b.featured) return b.featured - a.featured;
-        return a.name.localeCompare(b.name);
+        if (a.featured !== b.featured) return (b.featured || 0) - (a.featured || 0);
+        return (a.name || '').localeCompare(b.name || '');
     });
 
     res.json(products);
@@ -1231,13 +1235,13 @@ app.post('/api/products/batch-delete', authenticateToken, (req, res) => {
 
 app.get('/api/categories', (req, res) => {
     db = loadDB();
-    const categories = [...new Set(db.products.map(p => p.category))].sort();
+    const categories = [...new Set(db.products.map(p => p.category).filter(Boolean))].sort();
     res.json(categories);
 });
 
 app.get('/api/brands', (req, res) => {
     db = loadDB();
-    const brands = [...new Set(db.products.map(p => p.brand))].sort();
+    const brands = [...new Set(db.products.map(p => p.brand).filter(Boolean))].sort();
     res.json(brands);
 });
 
@@ -1459,7 +1463,10 @@ app.get('/api/fishbowl/export-customers-file', (req, res) => {
             return res.status(401).json({ error: 'Missing auth: use Authorization header or ?secret=FISHBOWL_EXPORT_SECRET' });
         }
         jwt.verify(token, JWT_SECRET, (err, user) => {
-            if (err) return res.status(403).json({ error: 'Invalid token' });
+            if (err) {
+                const isExpired = err.name === 'TokenExpiredError';
+                return res.status(isExpired ? 401 : 403).json({ error: isExpired ? 'Session expired' : 'Invalid token' });
+            }
             const data = loadDB();
             const adminUser = data.users.find(u => u.id === user.id);
             if (!adminUser || !adminUser.is_approved) {

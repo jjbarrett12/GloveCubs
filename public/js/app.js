@@ -46,7 +46,15 @@ function getSessionId() {
     return sessionId;
 }
 
-// API helper
+// API helper: clear token and return friendly error when server says session/token is invalid or expired
+function handleAuthError(response, data) {
+    if (response.status !== 401 && response.status !== 403) return null;
+    const msg = (data && data.error) ? String(data.error) : '';
+    if (!/invalid token|session expired|access denied/i.test(msg)) return null;
+    try { localStorage.removeItem('token'); } catch (e) {}
+    return new Error('Your session has expired. Please log in again.');
+}
+
 const api = {
     baseUrl: '',
     
@@ -90,6 +98,8 @@ const api = {
             }
             
             if (!response.ok) {
+                const authErr = handleAuthError(response, data);
+                if (authErr) throw authErr;
                 throw new Error(data.error || `HTTP error! status: ${response.status}`);
             }
             return data;
@@ -132,6 +142,8 @@ const api = {
             }
             
             if (!response.ok) {
+                const authErr = handleAuthError(response, result);
+                if (authErr) throw authErr;
                 throw new Error(result.error || `HTTP error! status: ${response.status}`);
             }
             return result;
@@ -172,6 +184,8 @@ const api = {
             }
             
             if (!response.ok) {
+                const authErr = handleAuthError(response, result);
+                if (authErr) throw authErr;
                 throw new Error(result.error || `HTTP error! status: ${response.status}`);
             }
             return result;
@@ -211,6 +225,8 @@ const api = {
             }
             
             if (!response.ok) {
+                const authErr = handleAuthError(response, result);
+                if (authErr) throw authErr;
                 throw new Error(result.error || `HTTP error! status: ${response.status}`);
             }
             return result;
@@ -6389,7 +6405,12 @@ function buildEditProductFormHTML(product, brands) {
         return '<option value="">— Select —</option>' + arr.map(v => `<option value="${escape(v)}" ${(cur === v) ? 'selected' : ''}>${escape(v)}</option>`).join('') + (cur && !inList ? `<option value="${escape(cur)}" selected>${escape(cur)}</option>` : '');
     };
     const sizeArr = (p.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-    const sizesOptions = EDIT_FILTER_OPTIONS.sizes.map(v => `<option value="${v}" ${sizeArr.includes(v) ? 'selected' : ''}>${v}</option>`).join('');
+    const sizesChips = EDIT_FILTER_OPTIONS.sizes.map(v => {
+        const selected = sizeArr.includes(v);
+        const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
+        const selectedStyle = 'background:#FF7A00; border-color:#FF7A00; color:#fff;';
+        return `<button type="button" class="edit-product-size-chip${selected ? ' edit-product-size-selected' : ''}" data-size="${escape(v)}" onclick="toggleEditProductSize(this)" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
+    }).join('');
     const thicknessVal = p.thickness != null ? (String(p.thickness) === '7' || p.thickness >= 7 ? '7+' : String(p.thickness)) : '';
     const imagesRows = images.map((url, i) => `
         <div class="edit-image-row" draggable="true" data-index="${i}" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -6415,7 +6436,7 @@ function buildEditProductFormHTML(product, brands) {
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label><select id="editProductSubcategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${EDIT_FILTER_OPTIONS.materials.map(m => `<option value="${escape(m)}" ${(p.subcategory || '') === m ? 'selected' : ''}>${escape(m)}</option>`).join('')}${p.subcategory && !EDIT_FILTER_OPTIONS.materials.includes(p.subcategory) ? `<option value="${escape(p.subcategory)}" selected>${escape(p.subcategory)}</option>` : ''}</select></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label><select id="editProductMaterial" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.materials, p.material)}</select></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label><select id="editProductColor" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.colors, p.color)}</select></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label><select id="editProductSizes" multiple style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px; min-height:80px;" onchange="updateEditVariantSkuPreview()">${sizesOptions}</select><span style="font-size:11px; color:#6B7280;">Hold Ctrl/Cmd to select multiple. Each size gets a variant SKU: MainSKU-Size (e.g. GLV-500G-S).</span><div id="editVariantSkuPreview" style="margin-top:8px; font-size:12px; color:#6B7280; min-height:20px;"></div></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label><div id="editProductSizes" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px;">${sizesChips}</div><span style="font-size:11px; color:#6B7280;">Select all sizes you want to show. Each size gets a variant SKU: MainSKU-Size (e.g. GLV-500G-S).</span><div id="editVariantSkuPreview" style="margin-top:8px; font-size:12px; color:#6B7280; min-height:20px;"></div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Pack Qty (per box)</label><input type="number" id="editProductPackQty" value="${p.pack_qty ?? 100}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case Qty</label><input type="number" id="editProductCaseQty" value="${p.case_qty ?? 1000}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Price (Retail)</label><input type="number" id="editProductPrice" value="${p.price ?? 0}" step="0.01" min="0" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
@@ -6428,6 +6449,10 @@ function buildEditProductFormHTML(product, brands) {
             <div style="margin-bottom: 16px;">
                 <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Primary Image URL</label>
                 <input type="url" id="editProductImageUrl" value="${escape(p.image_url)}" placeholder="https://..." style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">
+                <div id="editProductImagePreviewWrap" style="margin-top:12px; min-height:80px;">
+                    <img id="editProductImagePreview" src="${escape(p.image_url || '')}" alt="Product" style="max-width:200px; max-height:200px; object-fit:contain; border:1px solid #e0e0e0; border-radius:8px; display:${(p.image_url || '').trim() ? 'block' : 'none'};" onerror="this.style.display='none'; document.getElementById('editProductImagePreviewPlaceholder').style.display='block';" onload="this.style.display='block'; var ph=document.getElementById('editProductImagePreviewPlaceholder'); if(ph) ph.style.display='none';">
+                    <span id="editProductImagePreviewPlaceholder" style="display:${(p.image_url || '').trim() ? 'none' : 'block'}; font-size:13px; color:#6B7280;">Enter a URL above to see a preview.</span>
+                </div>
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Additional Images <span style="font-weight:400; color:#6B7280;">(drag to reorder)</span></label>
@@ -6463,13 +6488,41 @@ function buildEditProductFormHTML(product, brands) {
     `;
 }
 
+function updateEditProductImagePreview() {
+    const urlInput = document.getElementById('editProductImageUrl');
+    const imgEl = document.getElementById('editProductImagePreview');
+    const placeholderEl = document.getElementById('editProductImagePreviewPlaceholder');
+    if (!urlInput || !imgEl || !placeholderEl) return;
+    const url = (urlInput.value || '').trim();
+    if (!url) {
+        imgEl.style.display = 'none';
+        imgEl.removeAttribute('src');
+        placeholderEl.style.display = 'block';
+        return;
+    }
+    imgEl.src = url;
+    imgEl.style.display = 'block';
+    placeholderEl.style.display = 'none';
+}
+
+function toggleEditProductSize(btn) {
+    if (!btn || !btn.classList) return;
+    btn.classList.toggle('edit-product-size-selected');
+    updateEditVariantSkuPreview();
+}
+
+function getSelectedEditProductSizes() {
+    const wrap = document.getElementById('editProductSizes');
+    if (!wrap) return [];
+    return Array.from(wrap.querySelectorAll('.edit-product-size-chip.edit-product-size-selected')).map(el => el.getAttribute('data-size')).filter(Boolean);
+}
+
 function updateEditVariantSkuPreview() {
     const mainSkuEl = document.getElementById('editProductSku');
-    const sizesEl = document.getElementById('editProductSizes');
     const previewEl = document.getElementById('editVariantSkuPreview');
-    if (!mainSkuEl || !sizesEl || !previewEl) return;
+    if (!mainSkuEl || !previewEl) return;
     const mainSku = (mainSkuEl.value || '').trim();
-    const selectedSizes = Array.from(sizesEl.selectedOptions).map(o => o.value);
+    const selectedSizes = getSelectedEditProductSizes();
     if (!mainSku) { previewEl.innerHTML = ''; return; }
     if (selectedSizes.length === 0) { previewEl.innerHTML = 'Select sizes above to see variant SKUs.'; return; }
     const variants = selectedSizes.map(s => `${s} → <strong>${mainSku}-${s}</strong>`).join(' &nbsp; ');
@@ -7249,6 +7302,9 @@ async function editProduct(productId) {
         if (modal) modal.style.display = 'block';
         initEditImageRowsDrag();
         updateEditVariantSkuPreview();
+        const urlInput = document.getElementById('editProductImageUrl');
+        if (urlInput) urlInput.addEventListener('input', updateEditProductImagePreview);
+        updateEditProductImagePreview();
     } catch (error) {
         showToast('❌ Error editing product: ' + error.message, 'error');
     }
@@ -7293,7 +7349,7 @@ async function saveProductEdit(event) {
         subcategory: (document.getElementById('editProductSubcategory') && document.getElementById('editProductSubcategory').value) || '',
         material: (document.getElementById('editProductMaterial') && document.getElementById('editProductMaterial').value) || '',
         color: (document.getElementById('editProductColor') && document.getElementById('editProductColor').value) || '',
-        sizes: (() => { const el = document.getElementById('editProductSizes'); return el ? Array.from(el.selectedOptions).map(o => o.value).join(', ') : ''; })(),
+        sizes: getSelectedEditProductSizes().join(', '),
         pack_qty: parseInt((document.getElementById('editProductPackQty') && document.getElementById('editProductPackQty').value) || '100', 10) || 100,
         case_qty: parseInt((document.getElementById('editProductCaseQty') && document.getElementById('editProductCaseQty').value) || '1000', 10) || 1000,
         price: parseFloat((document.getElementById('editProductPrice') && document.getElementById('editProductPrice').value) || '0'),
@@ -7578,13 +7634,23 @@ async function submitContact() {
 // UTILITY FUNCTIONS
 // ============================================
 
+function escapeBrandForAttr(s) {
+    if (s == null) return '';
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+function escapeBrandHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 async function loadBrands() {
     const brands = await api.get('/api/brands');
     const dropdown = document.getElementById('brandDropdown');
     if (dropdown) {
-        dropdown.innerHTML = brands.map(brand => `
-            <li><a href="#" onclick="filterByBrand('${brand}'); return false;">${brand}</a></li>
-        `).join('');
+        dropdown.innerHTML = brands.map(brand => {
+            const safeAttr = escapeBrandForAttr(brand);
+            const safeHtml = escapeBrandHtml(brand);
+            return `<li><a href="#" onclick="filterByBrand('${safeAttr}'); return false;">${safeHtml}</a></li>`;
+        }).join('');
     }
 }
 
