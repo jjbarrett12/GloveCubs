@@ -241,6 +241,7 @@ app.post('/api/auth/register', authContactLimiter, async (req, res) => {
             state: state || '',
             zip: zip || '',
             allow_free_upgrades: !!allow_free_upgrades,
+            payment_terms: 'credit_card',
             is_approved: 0,
             discount_tier: 'standard',
             created_at: new Date().toISOString()
@@ -1587,7 +1588,7 @@ app.delete('/api/cart', optionalAuth, (req, res) => {
 // ============ ORDER ROUTES ============
 
 app.post('/api/orders', authenticateToken, (req, res) => {
-    const { shipping_address, notes, ship_to_id } = req.body;
+    const { shipping_address, notes, ship_to_id, payment_method } = req.body;
     db = loadDB();
     
     let finalShippingAddress = shipping_address;
@@ -1653,12 +1654,15 @@ app.post('/api/orders', authenticateToken, (req, res) => {
     const total = subtotal + shipping + tax;
 
     const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
+    const userPaymentTerms = (user.payment_terms === 'net30') ? 'net30' : 'credit_card';
+    const orderPaymentMethod = (payment_method === 'net30') ? 'net30' : (payment_method === 'credit_card' ? 'credit_card' : userPaymentTerms);
 
     const order = {
         id: Date.now(),
         user_id: req.user.id,
         order_number: orderNumber,
         status: 'pending',
+        payment_method: orderPaymentMethod,
         subtotal,
         discount,
         shipping,
@@ -1822,6 +1826,43 @@ app.put('/api/account/budget', authenticateToken, (req, res) => {
     saveDB(db);
     const { password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });
+});
+
+// Spend, savings, and summary for dashboard (all-time, YTD, last 30 days; savings vs list price)
+app.get('/api/account/summary', authenticateToken, (req, res) => {
+    db = loadDB();
+    const user = db.users.find(u => u.id === req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const allOrders = (db.orders || []).filter(o => o.user_id === req.user.id);
+    const ytdOrders = allOrders.filter(o => o.created_at >= yearStart);
+    const last30Orders = allOrders.filter(o => o.created_at >= thirtyDaysAgo);
+    const totalSpend = allOrders.reduce((s, o) => s + (o.total || 0), 0);
+    const ytdSpend = ytdOrders.reduce((s, o) => s + (o.total || 0), 0);
+    const last30Spend = last30Orders.reduce((s, o) => s + (o.total || 0), 0);
+    let totalSavings = 0;
+    let totalUnits = 0;
+    for (const order of allOrders) {
+        for (const item of order.items || []) {
+            const product = db.products.find(p => p.id === item.product_id);
+            const listPrice = product ? (product.price || 0) : item.price;
+            const paid = (item.price || 0) * (item.quantity || 0);
+            const listTotal = listPrice * (item.quantity || 0);
+            if (listTotal > paid) totalSavings += listTotal - paid;
+            totalUnits += item.quantity || 0;
+        }
+    }
+    res.json({
+        total_spend: Math.round(totalSpend * 100) / 100,
+        ytd_spend: Math.round(ytdSpend * 100) / 100,
+        last_30_days_spend: Math.round(last30Spend * 100) / 100,
+        total_savings: Math.round(totalSavings * 100) / 100,
+        order_count: allOrders.length,
+        total_units: totalUnits,
+        ytd_orders: ytdOrders.length
+    });
 });
 
 // Default rep (from env or first approved user); per-user override in user record
@@ -2180,42 +2221,95 @@ app.put('/api/admin/orders/:id', authenticateToken, (req, res) => {
 
 app.get('/api/admin/users', authenticateToken, (req, res) => {
     db = loadDB();
-    
-    // Check if user is admin
     const user = db.users.find(u => u.id === req.user.id);
     if (!user || !user.is_approved) {
         return res.status(403).json({ error: 'Admin access required' });
     }
-    
     const users = db.users.map(u => {
         const { password, ...safeUser } = u;
         return safeUser;
     }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
     res.json(users);
 });
 
-app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
+// Admin: create new customer (approved, with optional quicklist and payment terms)
+app.post('/api/admin/users', authenticateToken, async (req, res) => {
     db = loadDB();
-    
-    // Check if user is admin
     const adminUser = db.users.find(u => u.id === req.user.id);
     if (!adminUser || !adminUser.is_approved) {
         return res.status(403).json({ error: 'Admin access required' });
     }
-    
+    const { company_name, contact_name, email, password, phone, address, city, state, zip, payment_terms, allow_free_upgrades, quicklist } = req.body;
+    if (!company_name || !contact_name || !email || !password) {
+        return res.status(400).json({ error: 'Company name, contact name, email, and password are required' });
+    }
+    const emailTrim = (email || '').toString().trim().toLowerCase();
+    const existing = db.users.find(u => (u.email || '').toString().trim().toLowerCase() === emailTrim);
+    if (existing) {
+        return res.status(400).json({ error: 'Email already registered' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = {
+        id: Date.now(),
+        company_name: (company_name || '').trim(),
+        contact_name: (contact_name || '').trim(),
+        email: emailTrim,
+        password: hashedPassword,
+        phone: (phone || '').trim(),
+        address: (address || '').trim(),
+        city: (city || '').trim(),
+        state: (state || '').trim(),
+        zip: (zip || '').trim(),
+        payment_terms: payment_terms === 'net30' ? 'net30' : 'credit_card',
+        allow_free_upgrades: !!allow_free_upgrades,
+        is_approved: 1,
+        discount_tier: 'standard',
+        created_at: new Date().toISOString(),
+        budget_amount: null,
+        budget_period: 'monthly',
+        rep_name: '',
+        rep_email: '',
+        rep_phone: ''
+    };
+    db.users.push(newUser);
+    if (quicklist && quicklist.name && Array.isArray(quicklist.items) && quicklist.items.length > 0) {
+        if (!db.saved_lists) db.saved_lists = [];
+        db.saved_lists.push({
+            id: Date.now() + 1,
+            user_id: newUser.id,
+            name: (quicklist.name || 'Quicklist').trim(),
+            items: quicklist.items.map(i => ({
+                product_id: i.product_id,
+                size: i.size || null,
+                quantity: Math.max(1, parseInt(i.quantity, 10) || 1)
+            })),
+            created_at: new Date().toISOString()
+        });
+    }
+    saveDB(db);
+    const { password: _p, ...safeUser } = newUser;
+    res.status(201).json({ success: true, user: safeUser, message: 'Customer created. They can sign in and place orders.' });
+});
+
+app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
+    db = loadDB();
+    const adminUser = db.users.find(u => u.id === req.user.id);
+    if (!adminUser || !adminUser.is_approved) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
     const user = db.users.find(u => u.id == req.params.id);
     if (!user) {
         return res.status(404).json({ error: 'User not found' });
     }
-    
     if (req.body.is_approved !== undefined) {
         user.is_approved = req.body.is_approved ? 1 : 0;
     }
     if (req.body.discount_tier) {
         user.discount_tier = req.body.discount_tier;
     }
-    
+    if (req.body.payment_terms !== undefined) {
+        user.payment_terms = req.body.payment_terms === 'net30' ? 'net30' : 'credit_card';
+    }
     saveDB(db);
     const { password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });

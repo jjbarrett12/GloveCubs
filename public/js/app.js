@@ -2132,7 +2132,7 @@ function renderProductCard(product) {
     
         const productUrl = getProductUrl(product);
     return `
-        <a href="${(productUrl || '#').replace(/"/g, '&quot;')}" class="product-card" onclick="event.preventDefault(); navigate('product', { id: ${productId} }); return false;" style="display:block; text-decoration:none; color:inherit;">
+        <a href="${(productUrl || '#').replace(/"/g, '&quot;')}" class="product-card" onclick="event.preventDefault(); navigate('product', { id: ${productId} }); return false;" style="display:block; text-decoration:none; color:#111111;">
             ${product.featured ? '<div class="product-badge"><span class="badge badge-featured">Featured</span></div>' : ''}
             <div class="product-image">
                 ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '').replace(/"/g, '&quot;')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
@@ -3166,7 +3166,8 @@ async function renderCheckoutPage() {
                 <h1 style="margin-bottom: 32px;">Checkout</h1>
                 <div class="checkout-layout">
                     <div class="checkout-form">
-                        ${user.is_approved ? '<div class="checkout-net-terms" style="background: var(--gray-100); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;"><i class="fas fa-file-invoice-dollar"></i> This order will be invoiced. Net 30 / Net 45 terms apply for approved accounts.</div>' : ''}
+                        ${user.is_approved && (user.payment_terms || 'credit_card') === 'net30' ? '<div class="checkout-net-terms" style="background: #f0f9ff; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bae6fd;"><i class="fas fa-file-invoice-dollar"></i> <strong>Payment: Net 30</strong> — This order will be invoiced. Pay within 30 days.</div>' : ''}
+                        ${user.is_approved && (user.payment_terms || 'credit_card') === 'credit_card' ? '<div style="background: var(--gray-100); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;"><i class="fas fa-credit-card"></i> <strong>Payment: Credit Card</strong> — You will pay by credit card for this order.</div>' : ''}
                         <div class="checkout-section">
                             <h3>Shipping Address</h3>
                             ${shipToAddresses.length > 0 ? `
@@ -3219,6 +3220,7 @@ async function renderCheckoutPage() {
                                 <textarea id="checkoutNotes" rows="3" placeholder="Special instructions for your order..."></textarea>
                             </div>
                         </div>
+                        <input type="hidden" id="checkoutPaymentMethod" value="${(user.payment_terms || 'credit_card')}">
                         <button class="btn btn-primary btn-lg btn-block" onclick="placeOrder()">
                             <i class="fas fa-lock"></i> Place Order - $${total.toFixed(2)}
                         </button>
@@ -3298,11 +3300,14 @@ ${document.getElementById('checkoutCity').value}, ${document.getElementById('che
 Phone: ${document.getElementById('checkoutPhone').value}`;
     
     const notes = document.getElementById('checkoutNotes').value;
+    const paymentMethodEl = document.getElementById('checkoutPaymentMethod');
+    const payment_method = paymentMethodEl ? paymentMethodEl.value : 'credit_card';
 
     const result = await api.post('/api/orders', {
         shipping_address: address,
         ship_to_id: ship_to_id || undefined,
-        notes: notes
+        notes: notes,
+        payment_method: payment_method
     });
 
     if (result.success) {
@@ -3806,9 +3811,10 @@ async function renderDashboardPage() {
     const mainContent = document.getElementById('mainContent');
     mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     
-    const [user, orders, tierProgress, budget, rep, savedLists, rfqsMine, shipToAddresses] = await Promise.all([
+    const [user, orders, summary, tierProgress, budget, rep, savedLists, rfqsMine, shipToAddresses] = await Promise.all([
         api.get('/api/auth/me'),
         api.get('/api/orders'),
+        api.get('/api/account/summary').catch(() => ({ total_spend: 0, ytd_spend: 0, last_30_days_spend: 0, total_savings: 0, order_count: 0, total_units: 0, ytd_orders: 0 })),
         api.get('/api/account/tier-progress').catch(() => null),
         api.get('/api/account/budget').catch(() => null),
         api.get('/api/account/rep').catch(() => ({ name: 'Glovecubs Sales', email: 'sales@glovecubs.com', phone: '1-800-GLOVECUBS' })),
@@ -3816,8 +3822,10 @@ async function renderDashboardPage() {
         api.get('/api/rfqs/mine').catch(() => []),
         api.get('/api/ship-to').catch(() => [])
     ]);
+    const sum = summary || {};
 
-    const netTermsText = user.is_approved ? 'Net 30 / Net 45 available' : 'Net terms after approval';
+    const paymentTermsText = (user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : 'Credit Card';
+    const netTermsText = user.is_approved ? ((user.payment_terms || 'credit_card') === 'net30' ? 'Net 30 terms' : 'Credit card') : 'Net terms after approval';
     const budgetHtml = budget ? `
         <div class="dashboard-section dashboard-budget-card">
             <h2><i class="fas fa-wallet"></i> Purchasing Budget</h2>
@@ -3876,18 +3884,48 @@ async function renderDashboardPage() {
                         </nav>
                     </aside>
                     <div class="dashboard-main">
+                        <div class="dashboard-section dashboard-spend-savings">
+                            <h2><i class="fas fa-chart-pie"></i> Spend &amp; Savings</h2>
+                            <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">Your purchasing activity and savings vs. list price.</p>
+                            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+                                <div class="stat-card" style="background: linear-gradient(135deg, #111 0%, #333 100%); color: #fff;">
+                                    <i class="fas fa-dollar-sign" style="opacity: 0.9;"></i>
+                                    <div class="value">$${Number(sum.total_spend || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                                    <div class="label">Total Spend</div>
+                                    <div class="stat-sub">All time</div>
+                                </div>
+                                <div class="stat-card" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff;">
+                                    <i class="fas fa-calendar-alt" style="opacity: 0.9;"></i>
+                                    <div class="value">$${Number(sum.ytd_spend || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                                    <div class="label">YTD Spend</div>
+                                    <div class="stat-sub">This year</div>
+                                </div>
+                                <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #fff;">
+                                    <i class="fas fa-piggy-bank" style="opacity: 0.9;"></i>
+                                    <div class="value">$${Number(sum.total_savings || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                                    <div class="label">Total Savings</div>
+                                    <div class="stat-sub">vs. list price</div>
+                                </div>
+                                <div class="stat-card" style="background: linear-gradient(135deg, #FF7A00 0%, #E66A00 100%); color: #fff;">
+                                    <i class="fas fa-boxes" style="opacity: 0.9;"></i>
+                                    <div class="value">${Number(sum.total_units || 0).toLocaleString()}</div>
+                                    <div class="label">Units Ordered</div>
+                                    <div class="stat-sub">Gloves / items</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <div><strong>Last 30 days:</strong> $${Number(sum.last_30_days_spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                                <div><strong>Orders this year:</strong> ${sum.ytd_orders || 0}</div>
+                                ${(user.payment_terms || 'credit_card') === 'net30' ? '<div><i class="fas fa-file-invoice-dollar"></i> <strong>Payment:</strong> Net 30</div>' : '<div><i class="fas fa-credit-card"></i> <strong>Payment:</strong> Credit Card</div>'}
+                            </div>
+                        </div>
                         <div class="dashboard-section">
-                            <h2>Account Overview</h2>
+                            <h2>Account at a Glance</h2>
                             <div class="stats-grid">
                                 <div class="stat-card">
                                     <i class="fas fa-shopping-bag"></i>
-                                    <div class="value">${orders.length}</div>
+                                    <div class="value">${sum.order_count || orders.length}</div>
                                     <div class="label">Total Orders</div>
-                                </div>
-                                <div class="stat-card">
-                                    <i class="fas fa-dollar-sign"></i>
-                                    <div class="value">$${orders.reduce((sum, o) => sum + o.total, 0).toFixed(0)}</div>
-                                    <div class="label">Total Spent</div>
                                 </div>
                                 <div class="stat-card">
                                     <i class="fas fa-percent"></i>
@@ -3898,6 +3936,11 @@ async function renderDashboardPage() {
                                     <i class="fas fa-${user.is_approved ? 'check-circle' : 'clock'}"></i>
                                     <div class="value">${user.is_approved ? 'Active' : 'Pending'}</div>
                                     <div class="label">Account Status</div>
+                                </div>
+                                <div class="stat-card">
+                                    <i class="fas fa-${(user.payment_terms || 'credit_card') === 'net30' ? 'file-invoice-dollar' : 'credit-card'}"></i>
+                                    <div class="value">${paymentTermsText}</div>
+                                    <div class="label">Payment Terms</div>
                                 </div>
                             </div>
                         </div>
@@ -7210,9 +7253,100 @@ async function loadAdminUsers() {
         }
         
         content.innerHTML = `
-            <div style="margin-bottom: 24px;">
-                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">All Users</h2>
-                <p style="color: #4B5563;">Total: ${users.length} users</p>
+            <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">All Users</h2>
+                    <p style="color: #4B5563;">Total: ${users.length} users</p>
+                </div>
+                <button type="button" onclick="showAddCustomerModal()" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-user-plus"></i> Add Customer
+                </button>
+            </div>
+            <div id="addCustomerModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; overflow: auto; padding: 24px;" onclick="if(event.target===this) hideAddCustomerModal()">
+                <div style="max-width: 560px; margin: 24px auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h3 style="font-size: 20px; font-weight: 700;">Add New Customer</h3>
+                        <button type="button" onclick="hideAddCustomerModal()" style="background: none; border: none; font-size: 24px; color: #6B7280; cursor: pointer;">&times;</button>
+                    </div>
+                    <div id="addCustomerError" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px; color: #c62828;"></div>
+                    <form id="addCustomerForm" onsubmit="submitAddCustomer(event)">
+                        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="form-group">
+                                <label>Company Name *</label>
+                                <input type="text" id="newCustomerCompany" required placeholder="Company name">
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Name *</label>
+                                <input type="text" id="newCustomerContact" required placeholder="Full name">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" id="newCustomerEmail" required placeholder="email@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" id="newCustomerPassword" required placeholder="Min 6 characters" minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="newCustomerPhone" placeholder="(555) 123-4567">
+                        </div>
+                        <div class="form-group">
+                            <label>Address</label>
+                            <input type="text" id="newCustomerAddress" placeholder="Street address">
+                        </div>
+                        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 80px; gap: 12px;">
+                            <div class="form-group">
+                                <label>City</label>
+                                <input type="text" id="newCustomerCity" placeholder="City">
+                            </div>
+                            <div class="form-group">
+                                <label>State</label>
+                                <input type="text" id="newCustomerState" placeholder="State">
+                            </div>
+                            <div class="form-group">
+                                <label>ZIP</label>
+                                <input type="text" id="newCustomerZip" placeholder="ZIP">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Payment terms *</label>
+                            <select id="newCustomerPaymentTerms" style="width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                                <option value="credit_card">Credit Card</option>
+                                <option value="net30">Net 30</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="newCustomerAllowFreeUpgrades" style="width: 18px; height: 18px; accent-color: #FF7A00;">
+                            <label for="newCustomerAllowFreeUpgrades" style="margin: 0;">Allow free upgrades (substitute if out of stock)</label>
+                        </div>
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #E5E7EB;">
+                            <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Quicklist (optional)</h4>
+                            <p style="font-size: 13px; color: #4B5563; margin-bottom: 12px;">Add a saved list so this customer can reorder quickly.</p>
+                            <div class="form-group">
+                                <label>Quicklist name</label>
+                                <input type="text" id="newCustomerQuicklistName" placeholder="e.g. Monthly restock">
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-size: 13px;">Add product</label>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+                                    <select id="newCustomerQuicklistProduct" style="flex: 1; min-width: 180px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                                        <option value="">Select product</option>
+                                    </select>
+                                    <input type="text" id="newCustomerQuicklistSize" placeholder="Size" style="width: 80px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                                    <input type="number" id="newCustomerQuicklistQty" placeholder="Qty" value="1" min="1" style="width: 70px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;">
+                                    <button type="button" onclick="addQuicklistRow()" style="background: #111; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">Add</button>
+                                </div>
+                            </div>
+                            <ul id="newCustomerQuicklistItems" style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;"></ul>
+                        </div>
+                        <div style="margin-top: 24px; display: flex; gap: 12px;">
+                            <button type="submit" style="background: #FF7A00; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">Create Customer</button>
+                            <button type="button" onclick="hideAddCustomerModal()" style="background: #E5E7EB; color: #374151; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">Cancel</button>
+                        </div>
+                    </form>
+                </div>
             </div>
             <div style="display: grid; gap: 16px;">
                 ${users.map(user => `
@@ -7229,9 +7363,10 @@ async function loadAdminUsers() {
                                     ${user.is_approved ? 'Approved' : 'Pending'}
                                 </div>
                                 <div style="font-size: 13px; color: #4B5563; text-transform: capitalize;">${user.discount_tier || 'standard'} tier</div>
+                                <div style="font-size: 12px; color: #4B5563; margin-top: 4px;">${(user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : 'Credit Card'}</div>
                             </div>
                         </div>
-                        <div style="margin-top: 16px; display: flex; gap: 8px;">
+                        <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
                             ${!user.is_approved ? `<button onclick="updateUserApproval(${user.id}, true)" style="background: #28a745; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Approve User</button>` : ''}
                             <select onchange="updateUserTier(${user.id}, this.value)" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 13px; cursor: pointer;">
                                 <option value="standard" ${user.discount_tier === 'standard' ? 'selected' : ''}>Standard</option>
@@ -7239,6 +7374,10 @@ async function loadAdminUsers() {
                                 <option value="silver" ${user.discount_tier === 'silver' ? 'selected' : ''}>Silver (10%)</option>
                                 <option value="gold" ${user.discount_tier === 'gold' ? 'selected' : ''}>Gold (15%)</option>
                                 <option value="platinum" ${user.discount_tier === 'platinum' ? 'selected' : ''}>Platinum (20%)</option>
+                            </select>
+                            <select onchange="updateUserPaymentTerms(${user.id}, this.value)" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                                <option value="credit_card" ${(user.payment_terms || 'credit_card') === 'credit_card' ? 'selected' : ''}>Credit Card</option>
+                                <option value="net30" ${user.payment_terms === 'net30' ? 'selected' : ''}>Net 30</option>
                             </select>
                         </div>
                     </div>
@@ -7286,6 +7425,111 @@ async function updateUserTier(userId, tier) {
         loadAdminUsers();
     } catch (error) {
         showToast('Error updating tier: ' + error.message, 'error');
+    }
+}
+
+async function updateUserPaymentTerms(userId, payment_terms) {
+    try {
+        await api.put(`/api/admin/users/${userId}`, { payment_terms });
+        showToast('Payment terms updated', 'success');
+        loadAdminUsers();
+    } catch (error) {
+        showToast('Error updating payment terms: ' + error.message, 'error');
+    }
+}
+
+window.addCustomerQuicklistItems = [];
+
+async function showAddCustomerModal() {
+    const modal = document.getElementById('addCustomerModal');
+    if (!modal) return;
+    window.addCustomerQuicklistItems = [];
+    document.getElementById('addCustomerError').style.display = 'none';
+    document.getElementById('addCustomerForm').reset();
+    document.getElementById('newCustomerQuicklistQty').value = 1;
+    document.getElementById('newCustomerQuicklistItems').innerHTML = '';
+    const productSelect = document.getElementById('newCustomerQuicklistProduct');
+    if (productSelect) {
+        const products = await api.get('/api/products').catch(() => []);
+        productSelect.innerHTML = '<option value="">Select product</option>' + (products || []).map(p => '<option value="' + p.id + '">' + (p.sku || '') + ' – ' + (p.name || '').substring(0, 40) + '</option>').join('');
+    }
+    modal.style.display = 'block';
+}
+
+function hideAddCustomerModal() {
+    const modal = document.getElementById('addCustomerModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function addQuicklistRow() {
+    const productSelect = document.getElementById('newCustomerQuicklistProduct');
+    const sizeInput = document.getElementById('newCustomerQuicklistSize');
+    const qtyInput = document.getElementById('newCustomerQuicklistQty');
+    if (!productSelect || !productSelect.value) return;
+    const productId = parseInt(productSelect.value, 10);
+    const opt = productSelect.options[productSelect.selectedIndex];
+    const label = opt ? opt.textContent : 'Product ' + productId;
+    const size = (sizeInput && sizeInput.value) ? sizeInput.value.trim() : null;
+    const quantity = Math.max(1, parseInt((qtyInput && qtyInput.value) ? qtyInput.value : 1, 10));
+    window.addCustomerQuicklistItems.push({ product_id: productId, size: size || null, quantity });
+    const ul = document.getElementById('newCustomerQuicklistItems');
+    if (ul) {
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 8px 12px; background: #f3f4f6; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;';
+        li.innerHTML = '<span style="font-size: 13px;">' + label.substring(0, 50) + (label.length > 50 ? '…' : '') + ' × ' + quantity + (size ? ' (' + size + ')' : '') + '</span><button type="button" class="remove-quicklist-row" style="background: #dc3545; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">Remove</button>';
+    li.querySelector('.remove-quicklist-row').addEventListener('click', function() {
+        const idx = Array.from(ul.children).indexOf(li);
+        if (idx !== -1) window.addCustomerQuicklistItems.splice(idx, 1);
+        li.remove();
+    });
+        ul.appendChild(li);
+    }
+    if (qtyInput) qtyInput.value = 1;
+}
+
+async function submitAddCustomer(event) {
+    event.preventDefault();
+    const errEl = document.getElementById('addCustomerError');
+    errEl.style.display = 'none';
+    const company_name = document.getElementById('newCustomerCompany').value.trim();
+    const contact_name = document.getElementById('newCustomerContact').value.trim();
+    const email = document.getElementById('newCustomerEmail').value.trim();
+    const password = document.getElementById('newCustomerPassword').value;
+    if (!company_name || !contact_name || !email || !password) {
+        errEl.textContent = 'Company name, contact name, email, and password are required.';
+        errEl.style.display = 'block';
+        return;
+    }
+    if (password.length < 6) {
+        errEl.textContent = 'Password must be at least 6 characters.';
+        errEl.style.display = 'block';
+        return;
+    }
+    const payload = {
+        company_name,
+        contact_name,
+        email,
+        password,
+        phone: (document.getElementById('newCustomerPhone') && document.getElementById('newCustomerPhone').value) || '',
+        address: (document.getElementById('newCustomerAddress') && document.getElementById('newCustomerAddress').value) || '',
+        city: (document.getElementById('newCustomerCity') && document.getElementById('newCustomerCity').value) || '',
+        state: (document.getElementById('newCustomerState') && document.getElementById('newCustomerState').value) || '',
+        zip: (document.getElementById('newCustomerZip') && document.getElementById('newCustomerZip').value) || '',
+        payment_terms: (document.getElementById('newCustomerPaymentTerms') && document.getElementById('newCustomerPaymentTerms').value) || 'credit_card',
+        allow_free_upgrades: !!(document.getElementById('newCustomerAllowFreeUpgrades') && document.getElementById('newCustomerAllowFreeUpgrades').checked)
+    };
+    const quicklistName = document.getElementById('newCustomerQuicklistName') && document.getElementById('newCustomerQuicklistName').value.trim();
+    if (quicklistName && window.addCustomerQuicklistItems && window.addCustomerQuicklistItems.length > 0) {
+        payload.quicklist = { name: quicklistName, items: window.addCustomerQuicklistItems };
+    }
+    try {
+        await api.post('/api/admin/users', payload);
+        showToast('Customer created. They can sign in and place orders.', 'success');
+        hideAddCustomerModal();
+        loadAdminUsers();
+    } catch (error) {
+        errEl.textContent = error.message || 'Failed to create customer.';
+        errEl.style.display = 'block';
     }
 }
 
