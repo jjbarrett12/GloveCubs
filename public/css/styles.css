@@ -576,6 +576,67 @@ img {
     font-size: 13px;
 }
 
+/* Brands strip (home) – manufacturer logos */
+.brands-strip-logos {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 24px 32px;
+}
+.brand-logo-link,
+.brand-logo-fallback-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.brand-logo-link:hover,
+.brand-logo-fallback-only:hover {
+    opacity: 0.85;
+    transform: translateY(-2px);
+}
+.brand-logo-img {
+    max-height: 36px;
+    width: auto;
+    max-width: 120px;
+    object-fit: contain;
+    vertical-align: middle;
+}
+.brand-logo-fallback,
+.brand-logo-fallback-only {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-500);
+}
+
+/* Footer brand logos */
+.footer-brand-logos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 20px;
+    align-items: center;
+}
+.footer-brand-logos a {
+    display: inline-flex;
+    align-items: center;
+    transition: opacity 0.2s ease;
+}
+.footer-brand-logos a:hover {
+    opacity: 0.8;
+}
+.footer-brand-logo {
+    max-height: 28px;
+    width: auto;
+    max-width: 90px;
+    object-fit: contain;
+}
+.footer-brand-fallback {
+    font-size: 13px;
+    color: var(--gray-500);
+}
+
 .header-nav {
     display: none; /* Hidden - moved to middle banner */
 }
@@ -668,7 +729,9 @@ img {
 
 .header-nav-menu-secondary .dropdown-menu a {
     padding: 10px 20px;
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     color: var(--secondary);
     font-size: 13px;
     transition: var(--transition);
@@ -677,6 +740,13 @@ img {
 .header-nav-menu-secondary .dropdown-menu a:hover {
     background: var(--gray-100);
     color: var(--primary);
+}
+
+.dropdown-brand-logo {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 
 .header-nav-menu li {

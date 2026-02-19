@@ -2,6 +2,26 @@
 // GLOVECUBS - Main Application JavaScript
 // ============================================
 
+// Brand name -> logo filename (without .png). Used for brands strip and footer.
+const BRAND_TO_LOGO_SLUG = {
+    'Hospeco': 'hospeco',
+    'Global Glove': 'global-glove',
+    'Safeko': 'safeko',
+    'Ambitex': 'ambitex',
+    'PIP': 'pip',
+    'MCR Safety': 'mcr-safety',
+    'Ansell': 'ansell',
+    'SHOWA': 'showa',
+    'Wells Lamont': 'wells-lamont',
+    'Growl Gloves': 'growl-gloves',
+    'Semper Guard': 'semper-guard'
+};
+function getBrandLogoPath(brand) {
+    if (!brand) return null;
+    const slug = BRAND_TO_LOGO_SLUG[brand];
+    return slug ? '/images/logos/' + slug + '.png' : null;
+}
+
 // State management
 let state = {
     user: null,
@@ -806,8 +826,8 @@ async function renderHomePage() {
         <section class="who-this-is-for" style="background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%); padding: 64px 0 72px;">
             <div class="container">
                 <div class="section-header" style="text-align: center; margin-bottom: 40px;">
-                    <h2 style="color: #111111; font-size: 32px; font-weight: 800; margin-bottom: 12px;">Who This Is For</h2>
-                    <p style="color: #4B5563; font-size: 17px; max-width: 560px; margin: 0 auto;">Because your buyer is not a random shopper.</p>
+                    <h2 style="color: #111111; font-size: 32px; font-weight: 800; margin-bottom: 12px;">Built for the People Doing the Buying</h2>
+                    <p style="color: #4B5563; font-size: 17px; max-width: 560px; margin: 0 auto;">Operators, procurement, and facilities teams—not random shoppers.</p>
                 </div>
                 <div class="who-blocks-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
                     <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
@@ -831,16 +851,14 @@ async function renderHomePage() {
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Cut-resistant, chemical, and task-specific gloves at scale.</p>
                     </div>
                 </div>
-                <!-- Authorized / trusted brands -->
+                <!-- Authorized / trusted brands (logos) -->
                 <div class="brands-strip" style="margin-top: 48px; padding-top: 40px; border-top: 1px solid #E5E7EB;">
                     <p style="text-align: center; font-size: 12px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 20px;">Authorized distributor for</p>
-                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 28px 40px;">
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Adenna</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Global Glove</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">SHOWA</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Magid</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">McCrory</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #374151;">+ more</span>
+                    <div class="brands-strip-logos">
+                        ${['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'].map(function(b){
+                            var logo = getBrandLogoPath(b);
+                            return logo ? '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + (b || '').replace(/'/g, "\\'") + '\'); return false;" title="' + (b || '').replace(/"/g, '&quot;') + '"><img src="' + logo + '" alt="' + (b || '').replace(/"/g, '&quot;') + '" class="brand-logo-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling && (this.nextElementSibling.style.display=\'inline\');"><span class="brand-logo-fallback" style="display:none;">' + (b || '').replace(/</g, '&lt;') + '</span></a>' : '<a href="#" onclick="filterByBrand(\'' + (b || '').replace(/'/g, "\\'") + '\'); return false;" class="brand-logo-fallback-only">' + (b || '').replace(/</g, '&lt;') + '</a>';
+                        }).join('')}
                     </div>
                 </div>
             </div>
@@ -7947,7 +7965,11 @@ async function loadBrands() {
         dropdown.innerHTML = brands.map(brand => {
             const safeAttr = escapeBrandForAttr(brand);
             const safeHtml = escapeBrandHtml(brand);
-            return `<li><a href="#" onclick="filterByBrand('${safeAttr}'); return false;">${safeHtml}</a></li>`;
+            const logoPath = getBrandLogoPath(brand);
+            const logoHtml = logoPath
+                ? '<img src="' + logoPath + '" alt="" class="dropdown-brand-logo" onerror="this.style.display=\'none\'">'
+                : '';
+            return '<li><a href="#" onclick="filterByBrand(\'' + safeAttr + '\'); return false;">' + logoHtml + '<span>' + safeHtml + '</span></a></li>';
         }).join('');
     }
 }
