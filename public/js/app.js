@@ -18,15 +18,19 @@ const BRAND_TO_LOGO_SLUG = {
 };
 function getBrandLogoPath(brand) {
     if (!brand) return null;
-    const slug = BRAND_TO_LOGO_SLUG[brand];
-    return slug ? '/images/logos/' + slug + '.png' : null;
+    var slug = BRAND_TO_LOGO_SLUG[brand];
+    if (!slug) return null;
+    var name = (brand || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    var fs = (brand || '').length > 12 ? 11 : (brand || '').length > 8 ? 12 : 14;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" width="120" height="40"><rect width="120" height="40" rx="8" fill="#f3f4f6"/><text x="60" y="26" font-family="Arial,sans-serif" font-size="' + fs + '" font-weight="700" fill="#374151" text-anchor="middle">' + name + '</text></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 var HOME_BRAND_LIST = ['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'];
 function getBrandLogoItemHtml(b) {
     var logo = getBrandLogoPath(b);
     var q = (b || '').replace(/'/g, "\\'");
     var esc = function(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
-    if (logo) return '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + q + '\'); return false;" title="' + esc(b) + '"><img src="' + logo + '" alt="' + esc(b) + '" class="brand-logo-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling && (this.nextElementSibling.style.display=\'inline\');"><span class="brand-logo-fallback" style="display:none;">' + esc(b) + '</span></a>';
+    if (logo) return '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + q + '\'); return false;" title="' + esc(b) + '"><img src="' + logo + '" alt="' + esc(b) + '" class="brand-logo-img" loading="lazy"><span class="brand-logo-fallback" style="display:none;">' + esc(b) + '</span></a>';
     return '<a href="#" onclick="filterByBrand(\'' + q + '\'); return false;" class="brand-logo-fallback-only">' + esc(b) + '</a>';
 }
 
@@ -943,8 +947,8 @@ async function renderHomePage() {
                         <strong style="font-size: 15px; color: #111111;">Latex</strong>
                         <div style="font-size: 12px; color: #4B5563; margin-top: 6px;">Powder-free available</div>
                     </div>
-                    <div style="background: #ffffff; padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease;" onclick="filterByMaterial('Vinyl')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)'; this.style.borderColor='#FF7A00';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'; this.style.borderColor='rgba(255,255,255,0.3)';">
-                        <div style="font-size: 36px; color: #FF7A00; margin-bottom: 10px;"><i class="fas fa-hand-paper"></i></div>
+                    <div style="background: #ffffff; padding: 24px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease;" onclick="filterByMaterial('Vinyl')" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 25px rgba(37,99,235,0.3)'; this.style.borderColor='#2563EB';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'; this.style.borderColor='rgba(255,255,255,0.3)';">
+                        <div style="font-size: 36px; color: #2563EB; margin-bottom: 10px;"><i class="fas fa-hand-paper"></i></div>
                         <strong style="font-size: 15px; color: #1a1a1a;">Vinyl</strong>
                         <div style="font-size: 12px; color: #4B5563; margin-top: 6px;">Economy option</div>
                     </div>
