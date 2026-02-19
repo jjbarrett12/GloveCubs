@@ -576,7 +576,38 @@ img {
     font-size: 13px;
 }
 
-/* Brands strip (home) – manufacturer logos */
+/* Brands strip (home) – revolving logo carousel */
+.brands-carousel-outer {
+    overflow: hidden;
+    width: 100%;
+    margin: 0 -16px;
+}
+.brands-carousel-track {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 40px;
+    width: max-content;
+    animation: brands-scroll 45s linear infinite;
+}
+.brands-carousel-track:hover {
+    animation-play-state: paused;
+}
+@keyframes brands-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .brands-carousel-track {
+        animation: none;
+        justify-content: center;
+    }
+    .brands-carousel-outer { margin: 0; }
+}
+.brands-carousel-track .brand-logo-link,
+.brands-carousel-track .brand-logo-fallback-only {
+    flex-shrink: 0;
+}
 .brands-strip-logos {
     display: flex;
     flex-wrap: wrap;
@@ -598,9 +629,9 @@ img {
     transform: translateY(-2px);
 }
 .brand-logo-img {
-    max-height: 36px;
+    max-height: 44px;
     width: auto;
-    max-width: 120px;
+    max-width: 140px;
     object-fit: contain;
     vertical-align: middle;
 }

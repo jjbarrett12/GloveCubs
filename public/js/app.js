@@ -21,6 +21,14 @@ function getBrandLogoPath(brand) {
     const slug = BRAND_TO_LOGO_SLUG[brand];
     return slug ? '/images/logos/' + slug + '.png' : null;
 }
+var HOME_BRAND_LIST = ['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'];
+function getBrandLogoItemHtml(b) {
+    var logo = getBrandLogoPath(b);
+    var q = (b || '').replace(/'/g, "\\'");
+    var esc = function(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
+    if (logo) return '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + q + '\'); return false;" title="' + esc(b) + '"><img src="' + logo + '" alt="' + esc(b) + '" class="brand-logo-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling && (this.nextElementSibling.style.display=\'inline\');"><span class="brand-logo-fallback" style="display:none;">' + esc(b) + '</span></a>';
+    return '<a href="#" onclick="filterByBrand(\'' + q + '\'); return false;" class="brand-logo-fallback-only">' + esc(b) + '</a>';
+}
 
 // State management
 let state = {
@@ -815,13 +823,6 @@ async function renderHomePage() {
             <p style="margin: 0; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9); letter-spacing: 0.02em;">Serving Restaurants • Janitorial Contractors • Healthcare Facilities • Industrial Operators</p>
         </div>
 
-        <!-- Powered by / Distributor network -->
-        <div class="powered-by-strip" style="background: #111111; padding: 24px 24px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1);">
-            <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.12em;">Powered by a national distributor network</p>
-            <p style="margin: 0; font-size: 16px; font-weight: 600; color: #ffffff;">Bear Facility Supply • SourceIt • GloveCubs</p>
-            <p style="margin: 10px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.7);">Procurement relationships you can count on.</p>
-        </div>
-
         <!-- Who This Is For -->
         <section class="who-this-is-for" style="background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%); padding: 64px 0 72px;">
             <div class="container">
@@ -851,14 +852,14 @@ async function renderHomePage() {
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Cut-resistant, chemical, and task-specific gloves at scale.</p>
                     </div>
                 </div>
-                <!-- Authorized / trusted brands (logos) -->
+                <!-- Authorized / trusted brands – revolving logo carousel -->
                 <div class="brands-strip" style="margin-top: 48px; padding-top: 40px; border-top: 1px solid #E5E7EB;">
                     <p style="text-align: center; font-size: 12px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 20px;">Authorized distributor for</p>
-                    <div class="brands-strip-logos">
-                        ${['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'].map(function(b){
-                            var logo = getBrandLogoPath(b);
-                            return logo ? '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + (b || '').replace(/'/g, "\\'") + '\'); return false;" title="' + (b || '').replace(/"/g, '&quot;') + '"><img src="' + logo + '" alt="' + (b || '').replace(/"/g, '&quot;') + '" class="brand-logo-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling && (this.nextElementSibling.style.display=\'inline\');"><span class="brand-logo-fallback" style="display:none;">' + (b || '').replace(/</g, '&lt;') + '</span></a>' : '<a href="#" onclick="filterByBrand(\'' + (b || '').replace(/'/g, "\\'") + '\'); return false;" class="brand-logo-fallback-only">' + (b || '').replace(/</g, '&lt;') + '</a>';
-                        }).join('')}
+                    <div class="brands-carousel-outer">
+                        <div class="brands-carousel-track">
+                            ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
+                            ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
+                        </div>
                     </div>
                 </div>
             </div>
