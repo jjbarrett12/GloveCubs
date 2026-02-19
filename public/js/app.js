@@ -588,13 +588,10 @@ async function renderHomePage() {
                         </div>
                         
                         <h1 style="font-size: 56px; font-weight: 900; line-height: 1.1; margin-bottom: 20px; color: #ffffff;">
-                            Your One-Stop Shop for Bulk Gloves
+                            Built for Operators Who Buy by the Case
                         </h1>
-                        <p style="font-size: 20px; color: rgba(255,255,255,0.9); line-height: 1.6; margin-bottom: 20px; font-weight: 400;">
-                            Let our <span style="color: #FF7A00; font-weight: 600;">AI analyze your needs</span> and spending patterns to recommend the <span style="color: #FF7A00; font-weight: 600;">best-value gloves</span> for your specific use case—saving you time and money without compromising on quality or compliance.
-                        </p>
-                        <p style="font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 28px; font-style: italic; border-left: 3px solid #FF7A00; padding-left: 16px;">
-                            Built for safety managers, procurement teams, and operators who need reliability—not surprises.
+                        <p style="font-size: 20px; color: rgba(255,255,255,0.9); line-height: 1.6; margin-bottom: 28px; font-weight: 400;">
+                            Distributor-level pricing. No contracts. No games.
                         </p>
                         
                         <!-- Primary CTAs -->
@@ -650,9 +647,10 @@ async function renderHomePage() {
                                 <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; z-index: 0;"></div>
                                 
                                 <div style="position: relative; z-index: 1;">
-                                    <h3 style="font-size: 24px; font-weight: 800; margin-bottom: 24px; color: #111111; display: flex; align-items: center; gap: 12px;">
+                                    <h3 style="font-size: 24px; font-weight: 800; margin-bottom: 8px; color: #111111; display: flex; align-items: center; gap: 12px;">
                                         Quick Bulk Builder
                                     </h3>
+                                    <p style="font-size: 14px; color: #6B7280; margin-bottom: 24px; font-weight: 500;">Build a 10+ case order in under 30 seconds</p>
                                     <div style="display: grid; gap: 16px;">
                                         <div>
                                             <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;">
@@ -787,6 +785,62 @@ async function renderHomePage() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trust block: who we serve -->
+        <div class="trust-block-below-fold" style="background: #1a1a1a; padding: 20px 24px; text-align: center; border-top: 1px solid rgba(255,255,255,0.08);">
+            <p style="margin: 0; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9); letter-spacing: 0.02em;">Serving Restaurants • Janitorial Contractors • Healthcare Facilities • Industrial Operators</p>
+        </div>
+
+        <!-- Powered by / Distributor network -->
+        <div class="powered-by-strip" style="background: #111111; padding: 24px 24px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1);">
+            <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.12em;">Powered by a national distributor network</p>
+            <p style="margin: 0; font-size: 16px; font-weight: 600; color: #ffffff;">Bear Facility Supply • SourceIt • GloveCubs</p>
+            <p style="margin: 10px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.7);">Procurement relationships you can count on.</p>
+        </div>
+
+        <!-- Who This Is For -->
+        <section class="who-this-is-for" style="background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%); padding: 64px 0 72px;">
+            <div class="container">
+                <div class="section-header" style="text-align: center; margin-bottom: 40px;">
+                    <h2 style="color: #111111; font-size: 32px; font-weight: 800; margin-bottom: 12px;">Who This Is For</h2>
+                    <p style="color: #4B5563; font-size: 17px; max-width: 560px; margin: 0 auto;">Because your buyer is not a random shopper.</p>
+                </div>
+                <div class="who-blocks-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
+                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <div style="font-size: 36px; margin-bottom: 16px;">🧼</div>
+                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Janitorial Contractors</h3>
+                        <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Reduce cost per building. Standardize SKUs.</p>
+                    </div>
+                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <div style="font-size: 36px; margin-bottom: 16px;">🍽</div>
+                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Restaurants</h3>
+                        <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Food-safe vinyl & nitrile at competitive case pricing.</p>
+                    </div>
+                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <div style="font-size: 36px; margin-bottom: 16px;">🏥</div>
+                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Healthcare</h3>
+                        <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Medical-grade compliance with reliable stock.</p>
+                    </div>
+                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <div style="font-size: 36px; margin-bottom: 16px;">🏭</div>
+                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Industrial & Manufacturing</h3>
+                        <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Cut-resistant, chemical, and task-specific gloves at scale.</p>
+                    </div>
+                </div>
+                <!-- Authorized / trusted brands -->
+                <div class="brands-strip" style="margin-top: 48px; padding-top: 40px; border-top: 1px solid #E5E7EB;">
+                    <p style="text-align: center; font-size: 12px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 20px;">Authorized distributor for</p>
+                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 28px 40px;">
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Adenna</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Global Glove</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">SHOWA</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">Magid</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">McCrory</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #374151;">+ more</span>
                     </div>
                 </div>
             </div>
