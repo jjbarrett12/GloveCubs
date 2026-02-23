@@ -4,10 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
-        (function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();
+        (function(){
+            var token = localStorage.getItem('token');
+            if (!token) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            } else {
+                var t = localStorage.getItem('theme');
+                if (t) document.documentElement.setAttribute('data-theme', t);
+            }
+        })();
     </script>
     <title>Glovecubs - Professional Disposable & Work Gloves | B2B Glove Distributor</title>
-    <meta name="description" content="Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers including Hospeco, Global Glove, Safeko, MCR Safety, and more. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.">
+    <meta name="description" content="Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers including Hospeco, Global Glove, Safeko, and more. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.">
     <meta name="keywords" content="disposable gloves, work gloves, nitrile gloves, latex gloves, vinyl gloves, B2B gloves, bulk gloves, industrial gloves, medical gloves, food service gloves, glove distributor, Salt Lake City">
     <meta name="author" content="Glovecubs">
     <meta property="og:title" content="Glovecubs - Professional Disposable & Work Gloves">
@@ -72,7 +80,7 @@
                     <button class="btn-request-quote" onclick="navigate('b2b')">
                         Request Quote
                     </button>
-                    <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode">
+                    <button type="button" id="headerThemeToggle" class="theme-toggle theme-toggle-auth-only" onclick="toggleTheme()" aria-label="Toggle dark mode">
                         <i class="fas fa-moon icon-dark" aria-hidden="true"></i>
                         <i class="fas fa-sun icon-light" aria-hidden="true"></i>
                     </button>
@@ -95,18 +103,29 @@
                         <li><a href="#" onclick="navigate('products'); return false;">Shop Gloves</a></li>
                         <li class="has-dropdown">
                             <a href="#">Industries <i class="fas fa-chevron-down"></i></a>
-                            <ul class="dropdown-menu">
-                                <li><a href="/industries/medical/" onclick="event.preventDefault(); navigate('industry', { industry: 'medical' }); return false;">Medical &amp; Healthcare</a></li>
-                                <li><a href="/industries/foodservice/" onclick="event.preventDefault(); navigate('industry', { industry: 'foodservice' }); return false;">Food Service</a></li>
-                                <li><a href="/industries/janitorial/" onclick="event.preventDefault(); navigate('industry', { industry: 'janitorial' }); return false;">Janitorial</a></li>
-                                <li><a href="/industries/manufacturing/" onclick="event.preventDefault(); navigate('industry', { industry: 'manufacturing' }); return false;">Manufacturing</a></li>
-                            </ul>
+                            <div class="dropdown-menu dropdown-menu-mega">
+                                <div class="dropdown-megamenu-inner">
+                                    <h4 class="dropdown-megamenu-heading">Shop by industry</h4>
+                                    <ul class="dropdown-megamenu-list">
+                                        <li><a href="/industries/medical/" onclick="event.preventDefault(); navigate('industry', { industry: 'medical' }); return false;">Medical &amp; Healthcare</a></li>
+                                        <li><a href="/industries/janitorial/" onclick="event.preventDefault(); navigate('industry', { industry: 'janitorial' }); return false;">Janitorial</a></li>
+                                        <li><a href="/industries/food-service/" onclick="event.preventDefault(); navigate('industry', { industry: 'food-service' }); return false;">Food Service</a></li>
+                                        <li><a href="/industries/industrial/" onclick="event.preventDefault(); navigate('industry', { industry: 'industrial' }); return false;">Industrial</a></li>
+                                        <li><a href="/industries/automotive/" onclick="event.preventDefault(); navigate('industry', { industry: 'automotive' }); return false;">Automotive</a></li>
+                                    </ul>
+                                </div>
+                            </div>
                         </li>
                         <li class="has-dropdown">
                             <a href="#">Brands <i class="fas fa-chevron-down"></i></a>
-                            <ul class="dropdown-menu" id="brandDropdown">
-                                <!-- Populated dynamically -->
-                            </ul>
+                            <div class="dropdown-menu dropdown-menu-mega">
+                                <div class="dropdown-megamenu-inner">
+                                    <h4 class="dropdown-megamenu-heading">Shop by brand</h4>
+                                    <ul class="dropdown-megamenu-list dropdown-megamenu-list--brands" id="brandDropdown">
+                                        <!-- Populated dynamically -->
+                                    </ul>
+                                </div>
+                            </div>
                         </li>
                         <li><a href="#" onclick="navigate('ai-advisor'); return false;">AI Recommender</a></li>
                         <li><a href="#" onclick="navigate('b2b'); return false;">Bulk / RFQ</a></li>
@@ -161,10 +180,8 @@
                         <a href="#" onclick="filterByBrand('Global Glove'); return false;" title="Global Glove"><img src="/images/logos/global-glove.svg" alt="Global Glove" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Global Glove</span></a>
                         <a href="#" onclick="filterByBrand('Safeko'); return false;" title="Safeko"><img src="/images/logos/safeko.svg" alt="Safeko" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Safeko</span></a>
                         <a href="#" onclick="filterByBrand('PIP'); return false;" title="PIP"><img src="/images/logos/pip.svg" alt="PIP" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">PIP</span></a>
-                        <a href="#" onclick="filterByBrand('MCR Safety'); return false;" title="MCR Safety"><img src="/images/logos/mcr-safety.svg" alt="MCR Safety" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">MCR Safety</span></a>
-                        <a href="#" onclick="filterByBrand('Ambitex'); return false;" title="Ambitex"><img src="/images/logos/ambitex.svg" alt="Ambitex" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Ambitex</span></a>
                         <a href="#" onclick="filterByBrand('Growl Gloves'); return false;" title="Growl Gloves"><img src="/images/logos/growl-gloves.svg" alt="Growl Gloves" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Growl Gloves</span></a>
-                        <a href="#" onclick="filterByBrand('Semper Guard'); return false;" title="Semper Guard"><img src="/images/logos/semper-guard.svg" alt="Semper Guard" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Semper Guard</span></a>
+                        <a href="#" onclick="filterByBrand('Semper Guard'); return false;" title="Semper Guard"><img src="/images/logos/Semper.png" alt="Semper Guard" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Semper Guard</span></a>
                     </div>
                 </div>
                 <div class="footer-col">
@@ -226,6 +243,7 @@
         </div>
     </div>
 
+    <script src="/js/industry-config.js"></script>
     <script src="/js/app.js?v=3"></script>
 </body>
 </html>

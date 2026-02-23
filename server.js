@@ -898,14 +898,17 @@ app.get('/api/products/by-slug', (req, res) => {
 });
 
 // SEO: list industries for landing pages (slug, title, description, useCase param)
+// Routes: /industries/medical, janitorial, food-service, industrial, automotive (+ legacy slugs)
 const SEO_INDUSTRIES = [
-    { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
-    { slug: 'foodservice', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
     { slug: 'medical', title: 'Medical & Healthcare Gloves', useCase: 'Healthcare', description: 'Exam and medical-grade gloves for healthcare facilities. Nitrile, latex-free, and sterile options.' },
-    { slug: 'healthcare', title: 'Healthcare Gloves', useCase: 'Healthcare', description: 'Professional gloves for healthcare and clinical use. B2B pricing and bulk quantities.' },
-    { slug: 'food-processing', title: 'Food Processing Gloves', useCase: 'Food Processing', description: 'Heavy-duty gloves for food processing and manufacturing. Cut-resistant and chemical-resistant options.' },
+    { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
+    { slug: 'food-service', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
+    { slug: 'foodservice', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
+    { slug: 'industrial', title: 'Industrial & Manufacturing Gloves', useCase: 'Manufacturing', description: 'Work gloves for manufacturing, assembly, and industrial applications.' },
     { slug: 'manufacturing', title: 'Manufacturing & Industrial Gloves', useCase: 'Manufacturing', description: 'Work gloves for manufacturing, assembly, and industrial applications.' },
     { slug: 'automotive', title: 'Automotive Gloves', useCase: 'Automotive', description: 'Mechanic and automotive gloves. Nitrile, impact, and cut-resistant styles.' },
+    { slug: 'healthcare', title: 'Healthcare Gloves', useCase: 'Healthcare', description: 'Professional gloves for healthcare and clinical use. B2B pricing and bulk quantities.' },
+    { slug: 'food-processing', title: 'Food Processing Gloves', useCase: 'Food Processing', description: 'Heavy-duty gloves for food processing and manufacturing. Cut-resistant and chemical-resistant options.' },
 ];
 
 app.get('/api/seo/industries', (req, res) => {
@@ -1136,6 +1139,10 @@ app.post('/api/products', authenticateToken, (req, res) => {
     }
     
     const images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : [];
+    const thicknessVal = req.body.thickness;
+    const thickness = thicknessVal !== undefined && thicknessVal !== null && thicknessVal !== ''
+        ? (thicknessVal === '7+' || thicknessVal === 7 ? 7 : parseFloat(thicknessVal))
+        : null;
     const newProduct = {
         id: db.products.length > 0 ? Math.max(...db.products.map(p => p.id)) + 1 : 1,
         sku: req.body.sku || '',
@@ -1155,7 +1162,19 @@ app.post('/api/products', authenticateToken, (req, res) => {
         images: images,
         video_url: (req.body.video_url || '').trim() || '',
         in_stock: req.body.in_stock ? 1 : 0,
-        featured: req.body.featured ? 1 : 0
+        featured: req.body.featured ? 1 : 0,
+        powder: req.body.powder || '',
+        thickness: isNaN(thickness) ? null : thickness,
+        sterility: req.body.sterility || '',
+        grade: req.body.grade || '',
+        useCase: req.body.useCase || '',
+        certifications: req.body.certifications || '',
+        texture: req.body.texture || '',
+        cuffStyle: req.body.cuffStyle || '',
+        case_weight: req.body.case_weight != null && req.body.case_weight !== '' ? parseFloat(req.body.case_weight) : null,
+        case_length: req.body.case_length != null && req.body.case_length !== '' ? parseFloat(req.body.case_length) : null,
+        case_width: req.body.case_width != null && req.body.case_width !== '' ? parseFloat(req.body.case_width) : null,
+        case_height: req.body.case_height != null && req.body.case_height !== '' ? parseFloat(req.body.case_height) : null
     };
     
     db.products.push(newProduct);
@@ -1206,7 +1225,11 @@ app.put('/api/products/:id', authenticateToken, (req, res) => {
     if (req.body.texture !== undefined) product.texture = req.body.texture || '';
     if (req.body.cuffStyle !== undefined) product.cuffStyle = req.body.cuffStyle || '';
     if (req.body.sterility !== undefined) product.sterility = req.body.sterility || '';
-    
+    if (req.body.case_weight !== undefined) product.case_weight = req.body.case_weight != null && req.body.case_weight !== '' ? parseFloat(req.body.case_weight) : null;
+    if (req.body.case_length !== undefined) product.case_length = req.body.case_length != null && req.body.case_length !== '' ? parseFloat(req.body.case_length) : null;
+    if (req.body.case_width !== undefined) product.case_width = req.body.case_width != null && req.body.case_width !== '' ? parseFloat(req.body.case_width) : null;
+    if (req.body.case_height !== undefined) product.case_height = req.body.case_height != null && req.body.case_height !== '' ? parseFloat(req.body.case_height) : null;
+
     saveDB(db);
     res.json({ success: true, product });
 });

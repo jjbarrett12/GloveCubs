@@ -7,14 +7,13 @@ const BRAND_TO_LOGO_SLUG = {
     'Hospeco': 'hospeco',
     'Global Glove': 'global-glove',
     'Safeko': 'safeko',
-    'Ambitex': 'ambitex',
     'PIP': 'pip',
-    'MCR Safety': 'mcr-safety',
     'Ansell': 'ansell',
     'SHOWA': 'showa',
-    'Wells Lamont': 'wells-lamont',
     'Growl Gloves': 'growl-gloves',
-    'Semper Guard': 'semper-guard'
+    'Semper Guard': 'semper-guard',
+    'Ammex': 'ammex',
+    'Tradex': 'tradex'
 };
 // Logo filename overrides: brand -> exact filename in public/images/logos/ (when different from slug.svg)
 var BRAND_LOGO_FILENAME = {
@@ -22,7 +21,12 @@ var BRAND_LOGO_FILENAME = {
     'Global Glove': 'Global_Glove.png',
     'Safeko': 'Safeko.png',
     'PIP': 'pip-global-safety-logo.png',
-    'Growl Gloves': 'Growl Gloves.webp'
+    'Growl Gloves': 'Growl Gloves.webp',
+    'Ansell': 'Ansell.png',
+    'SHOWA': 'SHOWA.png',
+    'Semper Guard': 'Semper.png',
+    'Ammex': 'Ammex.png',
+    'Tradex': 'Tradex.png'
 };
 function getBrandLogoPath(brand) {
     if (!brand) return null;
@@ -31,7 +35,7 @@ function getBrandLogoPath(brand) {
     var slug = BRAND_TO_LOGO_SLUG[brand];
     return slug ? '/images/logos/' + slug + '.svg' : null;
 }
-var HOME_BRAND_LIST = ['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'];
+var HOME_BRAND_LIST = ['Hospeco','Global Glove','Safeko','PIP','Ansell','SHOWA','Growl Gloves','Semper Guard','Ammex','Tradex'];
 function getBrandLogoItemHtml(b) {
     var logo = getBrandLogoPath(b);
     var q = (b || '').replace(/'/g, "\\'");
@@ -549,6 +553,7 @@ async function navigate(page, params = {}) {
             renderAdminPanel();
             break;
         case 'ai-advisor':
+            state.aiAdvisorPrefill = params.prefill || null;
             renderAIAdvisor();
             break;
         case 'cost-analysis':
@@ -653,22 +658,22 @@ async function renderHomePage() {
                         </div>
                         
                         <!-- Card 3: Trust + Operations (Moved to Left) -->
-                        <div class="hero-card" style="background: #ffffff; border: 2px solid rgba(255,122,0,0.4); border-radius: 16px; padding: 24px; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 13px;">
-                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                        <div class="hero-card hero-trust-badges-card" style="background: #ffffff; border: 2px solid rgba(255,122,0,0.4); border-radius: 16px; padding: 24px; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                            <div class="hero-trust-badges" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 13px;">
+                                <div class="hero-trust-badge" style="padding: 14px; border-radius: 10px; transition: all 0.3s ease;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background=''; this.style.transform='translateY(0)'; this.style.borderColor='';">
                                     <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-file-invoice-dollar"></i></div>
-                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Net Terms</div>
-                                    <div style="color: #4B5563; font-size: 11px;">Approved accounts</div>
+                                    <div class="hero-trust-badge-title">Net Terms</div>
+                                    <div class="hero-trust-badge-subtitle">Approved accounts</div>
                                 </div>
-                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                                <div class="hero-trust-badge" style="padding: 14px; border-radius: 10px; transition: all 0.3s ease;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background=''; this.style.transform='translateY(0)'; this.style.borderColor='';">
                                     <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-boxes"></i></div>
-                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Case & Pallet</div>
-                                    <div style="color: #4B5563; font-size: 11px;">Bulk ordering</div>
+                                    <div class="hero-trust-badge-title">Case & Pallet</div>
+                                    <div class="hero-trust-badge-subtitle">Bulk ordering</div>
                                 </div>
-                                <div style="padding: 12px; background: #f9f9f9; border-radius: 10px; transition: all 0.3s ease; border: 1px solid #E5E7EB;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background='#f9f9f9'; this.style.transform='translateY(0)'; this.style.borderColor='#E5E7EB';">
+                                <div class="hero-trust-badge" style="padding: 14px; border-radius: 10px; transition: all 0.3s ease;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background=''; this.style.transform='translateY(0)'; this.style.borderColor='';">
                                     <div style="font-size: 24px; color: #FF7A00; margin-bottom: 8px;"><i class="fas fa-user-tie"></i></div>
-                                    <div style="font-weight: 700; color: #111111; margin-bottom: 4px;">Dedicated Rep</div>
-                                    <div style="color: #4B5563; font-size: 11px;">Repeat ordering</div>
+                                    <div class="hero-trust-badge-title">Dedicated Rep</div>
+                                    <div class="hero-trust-badge-subtitle">Repeat ordering</div>
                                 </div>
                             </div>
                         </div>
@@ -791,9 +796,9 @@ async function renderHomePage() {
                             </div>
                             
                             <!-- Card 2: AI Spend Snapshot -->
-                            <div class="hero-card" style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 16px; padding: 28px; color: #ffffff; box-shadow: 0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 16px 50px rgba(255,122,0,0.6), inset 0 0 80px rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1)';">
-                                <!-- Shine effect -->
-                                <div style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); animation: shine 3s infinite; pointer-events: none;"></div>
+                            <div class="hero-card hero-card-ai-spend" style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 16px; padding: 28px; color: #ffffff; box-shadow: 0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 16px 50px rgba(255,122,0,0.6), inset 0 0 80px rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1)';">
+                                <!-- Shine effect (class prevents dark theme from turning it into a black panel) -->
+                                <div class="hero-card-shine" style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); animation: shine 3s infinite; pointer-events: none;"></div>
                                 <style>
                                     @keyframes shine {
                                         0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
@@ -1143,19 +1148,25 @@ async function renderProductsPage(opts) {
             <div class="container">
                 <div class="shop-layout">
                     <aside class="shop-sidebar" style="max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 10px;">
-                        <div class="filter-section">
-                            <h3>Price range</h3>
+                        <div class="filter-section filter-section-price">
+                            <h3 class="filter-section-price-title">Price range</h3>
                             <div class="filter-price-range filter-price-range-bar">
+                                <div class="filter-price-range-labels filter-price-range-labels-top">
+                                    <span id="priceMinLabel">$0</span>
+                                    <span id="priceMaxLabel">$300</span>
+                                </div>
                                 <div class="filter-price-track">
                                     <div class="filter-price-filled" id="priceRangeFilled"></div>
                                 </div>
                                 <input type="range" id="priceMinSlider" min="0" max="300" value="0" step="5" class="filter-price-thumb filter-price-thumb-min" oninput="updatePriceRangeBar(); updatePriceLabels(); applyFilters();">
                                 <input type="range" id="priceMaxSlider" min="0" max="300" value="300" step="5" class="filter-price-thumb filter-price-thumb-max" oninput="updatePriceRangeBar(); updatePriceLabels(); applyFilters();">
-                                <div class="filter-price-range-labels">
-                                    <span id="priceMinLabel">$0</span>
-                                    <span id="priceMaxLabel">$300</span>
-                                </div>
                             </div>
+                        </div>
+                        <div class="shop-ai-cta" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #fff5f0 0%, #ffffff 100%); border: 2px solid var(--primary); border-radius: var(--radius);">
+                            <p style="font-size: 13px; font-weight: 600; color: var(--secondary); margin-bottom: 10px;"><i class="fas fa-robot" style="color: var(--primary); margin-right: 6px;"></i>Not sure what you need?</p>
+                            <button type="button" class="btn btn-primary" style="width: 100%; font-size: 14px; padding: 10px 16px;" onclick="navigate('ai-advisor', { prefill: getShopPrefill() }); return false;">
+                                Get a recommendation
+                            </button>
                         </div>
                         <div class="filter-section">
                             <h3>Categories</h3>
@@ -1229,7 +1240,11 @@ async function renderProductsPage(opts) {
                             <div class="filter-color-swatches" id="colorFilters">
                                 <label class="filter-color-swatch-wrap" title="Blue">
                                     <input type="checkbox" name="color" value="Blue" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#0066CC;"></span>
+                                    <span class="filter-color-swatch" style="background:#2563EB;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Violet/Blue">
+                                    <input type="checkbox" name="color" value="Violet/Blue" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#5B21B6;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Black">
                                     <input type="checkbox" name="color" value="Black" onchange="applyFilters()">
@@ -1241,35 +1256,43 @@ async function renderProductsPage(opts) {
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Clear">
                                     <input type="checkbox" name="color" value="Clear" onchange="applyFilters()">
-                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#E8F4FC;"></span>
+                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#BFDBFE;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Orange">
                                     <input type="checkbox" name="color" value="Orange" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#FF7A00;"></span>
+                                    <span class="filter-color-swatch" style="background:#EA580C;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Purple">
                                     <input type="checkbox" name="color" value="Purple" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#800080;"></span>
+                                    <span class="filter-color-swatch" style="background:#7C3AED;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Green">
                                     <input type="checkbox" name="color" value="Green" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#00AA00;"></span>
+                                    <span class="filter-color-swatch" style="background:#16A34A;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Natural">
                                     <input type="checkbox" name="color" value="Natural" onchange="applyFilters()">
-                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#F5DEB3;"></span>
+                                    <span class="filter-color-swatch filter-color-swatch-light" style="background:#E7C9A0;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Gray">
                                     <input type="checkbox" name="color" value="Gray" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#808080;"></span>
+                                    <span class="filter-color-swatch" style="background:#6B7280;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Tan">
                                     <input type="checkbox" name="color" value="Tan" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#D2B48C;"></span>
+                                    <span class="filter-color-swatch" style="background:#C4A574;"></span>
                                 </label>
                                 <label class="filter-color-swatch-wrap" title="Yellow">
                                     <input type="checkbox" name="color" value="Yellow" onchange="applyFilters()">
-                                    <span class="filter-color-swatch" style="background:#FFD700;"></span>
+                                    <span class="filter-color-swatch" style="background:#EAB308;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Brown">
+                                    <input type="checkbox" name="color" value="Brown" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#92400E;"></span>
+                                </label>
+                                <label class="filter-color-swatch-wrap" title="Pink">
+                                    <input type="checkbox" name="color" value="Pink" onchange="applyFilters()">
+                                    <span class="filter-color-swatch" style="background:#DB2777;"></span>
                                 </label>
                             </div>
                         </div>
@@ -2423,6 +2446,12 @@ async function renderProductPage(productId, opts = {}) {
                                     <span class="spec-label">Case Qty:</span>
                                     <span class="spec-value">${product.case_qty}/case</span>
                                 </div>
+                                ${(product.case_weight != null && product.case_weight > 0) || (product.case_length != null || product.case_width != null || product.case_height != null) ? `
+                                <div class="spec-item">
+                                    <span class="spec-label">Shipping:</span>
+                                    <span class="spec-value">${[product.case_weight != null && product.case_weight > 0 ? product.case_weight + ' lbs/case' : '', (product.case_length != null && product.case_width != null && product.case_height != null) ? product.case_length + '×' + product.case_width + '×' + product.case_height + ' in' : ''].filter(Boolean).join(' • ')}</span>
+                                </div>
+                                ` : ''}
                             </div>
                             ${(product.case_qty || product.pack_qty) ? '<p style="font-size: 13px; color: var(--gray-600); margin-top: 12px;"><i class="fas fa-box"></i> Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</p>' : ''}
                         </div>
@@ -2492,12 +2521,19 @@ async function renderProductPage(productId, opts = {}) {
                                 <i class="fas fa-cart-plus"></i> Add to Cart
                             </button>
                         </div>
+                        <div class="product-ai-cta" style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--gray-200);">
+                            <p style="font-size: 14px; color: var(--gray-600); margin-bottom: 10px;">Not the right fit?</p>
+                            <button type="button" class="btn btn-outline" onclick="navigate('ai-advisor', { prefill: getProductPrefill(window.__currentProduct) }); return false;" style="font-size: 14px;">
+                                <i class="fas fa-robot" style="margin-right: 8px;"></i>Get a recommendation
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
     `;
 
+    window.__currentProduct = product;
     // Store selected sizes (array for multi-select); pre-select size for programmatic SEO pages
     window.selectedSizes = sizes.length > 0 ? (preSelectSize ? [preSelectSize] : [sizes[0].trim()]) : [];
 
@@ -2508,48 +2544,215 @@ async function renderProductPage(productId, opts = {}) {
 }
 
 // ============================================
-// INDUSTRY LANDING PAGES (SEO)
+// INDUSTRY LANDING PAGES (config-driven template)
 // ============================================
 
+function industryEsc(s) {
+    if (s == null || s === undefined) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function buildIndustryLandingHTML(slug, industry, products, config) {
+    const c = config || {};
+    const headline = c.heroHeadline || industry.title || slug;
+    const subheadline = c.heroSubheadline || industry.description || '';
+    const heroImage = (c.heroImage || '').trim() || '';
+    const heroImageAlt = c.heroImageAlt || headline;
+    const ctaPrimary = c.ctaPrimary || { text: 'Shop Gloves', href: '#shop', action: 'scroll' };
+    const ctaSecondary = c.ctaSecondary || { text: 'Bulk Pricing', href: '#bulk', action: 'scroll' };
+    const features = Array.isArray(c.features) ? c.features : [];
+    const complianceBadges = Array.isArray(c.complianceBadges) ? c.complianceBadges : [];
+    const proofStats = Array.isArray(c.proofStats) ? c.proofStats : [];
+    const faq = Array.isArray(c.faq) ? c.faq : [];
+    const filterDefaults = c.filterDefaults || { materials: [], thicknesses: [], certifications: [] };
+
+    const proofStripHtml = proofStats.length > 0
+        ? '<div class="industry-proof-strip"><div class="container"><div class="industry-proof-inner">' +
+          proofStats.map(function (s) { return '<div class="industry-proof-stat"><span class="industry-proof-value">' + industryEsc(s.value) + '</span><span class="industry-proof-label">' + industryEsc(s.label) + '</span></div>'; }).join('') +
+          '</div></div></div>'
+        : '';
+
+    const materialOpts = ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'];
+    const thicknessOpts = ['2', '3', '4', '5', '6', '7+'];
+    const defaultMaterials = filterDefaults.materials || [];
+    const defaultThicknesses = filterDefaults.thicknesses || [];
+    const quickPickerHtml = '<div class="industry-quick-picker" id="industryQuickPicker"><div class="container"><p class="industry-quick-picker-title">Quick filters</p><div class="industry-quick-picker-chips"><span class="industry-chip-label">Material:</span>' +
+        materialOpts.map(function (m) {
+            const active = defaultMaterials.indexOf(m) !== -1 ? ' industry-chip-active' : '';
+            return '<button type="button" class="industry-chip' + active + '" data-filter="material" data-value="' + industryEsc(m) + '" onclick="industryQuickPickerChip(this)">' + industryEsc(m) + '</button>';
+        }).join('') +
+        '</div><div class="industry-quick-picker-chips"><span class="industry-chip-label">Thickness (mil):</span>' +
+        thicknessOpts.map(function (t) {
+            const active = defaultThicknesses.indexOf(t) !== -1 ? ' industry-chip-active' : '';
+            return '<button type="button" class="industry-chip' + active + '" data-filter="thickness" data-value="' + industryEsc(t) + '" onclick="industryQuickPickerChip(this)">' + industryEsc(t) + '</button>';
+        }).join('') +
+        '</div></div></div>';
+
+    const highlightsHtml = features.length > 0
+        ? '<div class="industry-highlights"><div class="container"><div class="industry-highlights-grid">' +
+          features.slice(0, 3).map(function (f) { return '<div class="industry-highlight-card"><h4 class="industry-highlight-title">' + industryEsc(f.title) + '</h4><p class="industry-highlight-desc">' + industryEsc(f.description) + '</p></div>'; }).join('') +
+          '</div></div></div>'
+        : '';
+
+    const badgesHtml = complianceBadges.length > 0
+        ? '<div class="industry-badges"><div class="container"><div class="industry-badges-inner">' +
+          complianceBadges.map(function (b) { return '<span class="industry-badge">' + industryEsc(b) + '</span>'; }).join('') +
+          '</div></div></div>'
+        : '';
+
+    const productCardsHtml = (products || []).slice(0, 48).map(function (p) { return renderProductCard(p); }).join('');
+
+    const faqHtml = faq.length > 0
+        ? '<div class="industry-faq"><div class="container"><h2 class="industry-faq-title">Frequently asked questions</h2><div class="industry-faq-list" id="industryFaqList">' +
+          faq.map(function (item, i) {
+            return '<div class="industry-faq-item"><button type="button" class="industry-faq-q" aria-expanded="false" aria-controls="industry-faq-a-' + i + '" id="industry-faq-q-' + i + '" onclick="industryFaqToggle(this)">' + industryEsc(item.q) + '</button><div class="industry-faq-a" id="industry-faq-a-' + i + '" role="region" aria-labelledby="industry-faq-q-' + i + '">' + industryEsc(item.a) + '</div></div>';
+          }).join('') +
+          '</div></div></div>'
+        : '';
+
+    const primaryAction = ctaPrimary.action === 'scroll' ? 'onclick="document.getElementById(\'shop\')&&document.getElementById(\'shop\').scrollIntoView({behavior:\'smooth\'}); return false;"' : '';
+    const secondaryAction = ctaSecondary.action === 'scroll' && ctaSecondary.href === '#bulk' ? 'onclick="document.getElementById(\'bulk\')&&document.getElementById(\'bulk\').scrollIntoView({behavior:\'smooth\'}); return false;"' : (ctaSecondary.href === '#bulk' ? 'onclick="event.preventDefault(); navigate(\'b2b\'); return false;"' : '');
+
+    return '<section class="industry-landing" data-industry="' + industryEsc(slug) + '" id="industryLanding">' +
+        '<div class="industry-hero" style="' + (heroImage ? 'background-image:url(' + industryEsc(heroImage) + ');' : '') + '">' +
+        '<div class="industry-hero-overlay"></div><div class="industry-hero-content"><div class="container"><h1 class="industry-hero-title">' + industryEsc(headline) + '</h1><p class="industry-hero-sub">' + industryEsc(subheadline) + '</p>' +
+        '<div class="industry-hero-ctas"><a href="#shop" class="btn btn-primary industry-cta-primary" ' + primaryAction + '>' + industryEsc(ctaPrimary.text) + '</a><a href="#bulk" class="btn btn-outline industry-cta-secondary" ' + secondaryAction + '>' + industryEsc(ctaSecondary.text) + '</a></div></div></div></div>' +
+        proofStripHtml +
+        quickPickerHtml +
+        highlightsHtml +
+        badgesHtml +
+        '<div class="industry-shop-section" id="shop"><div class="container"><h2 class="industry-section-title">Shop gloves</h2><div class="products-grid industry-products-grid" id="industryProductsGrid">' + (productCardsHtml || '<p class="industry-no-products">No products found. Try adjusting filters above.</p>') + '</div></div></div>' +
+        '<div class="industry-bulk-panel" id="bulk"><div class="container"><div class="industry-bulk-inner"><h2 class="industry-section-title">Bulk pricing &amp; reorders</h2><p class="industry-bulk-desc">Get case pricing and net terms. Tell us your volume and we’ll respond with a quote.</p><button type="button" class="btn btn-primary" onclick="event.preventDefault(); navigate(\'b2b\'); return false;">Request bulk quote</button></div></div></div>' +
+        faqHtml +
+        '<div class="industry-sticky-cta" id="industryStickyCta" aria-label="Mobile actions"><a href="#shop" class="industry-sticky-btn" onclick="document.getElementById(\'shop\')&&document.getElementById(\'shop\').scrollIntoView({behavior:\'smooth\'}); return false;">Shop Now</a><button type="button" class="industry-sticky-btn industry-sticky-btn-secondary" onclick="navigate(\'b2b\')">Bulk Pricing</button></div>' +
+        '</section>';
+}
+
+function industryQuickPickerChip(btn) {
+    if (!btn || !btn.classList) return;
+    btn.classList.toggle('industry-chip-active');
+    industryApplyQuickPickerToUrl();
+    industryFilterGridFromParams();
+}
+
+function industryApplyQuickPickerToUrl() {
+    var picker = document.getElementById('industryQuickPicker');
+    if (!picker) return;
+    var materials = [];
+    var thicknesses = [];
+    picker.querySelectorAll('.industry-chip.industry-chip-active[data-filter="material"]').forEach(function (b) { materials.push(b.getAttribute('data-value')); });
+    picker.querySelectorAll('.industry-chip.industry-chip-active[data-filter="thickness"]').forEach(function (b) { thicknesses.push(b.getAttribute('data-value')); });
+    var params = new URLSearchParams(window.location.search);
+    if (materials.length) params.set('material', materials.join(',')); else params.delete('material');
+    if (thicknesses.length) params.set('thickness', thicknesses.join(',')); else params.delete('thickness');
+    var qs = params.toString();
+    var url = window.location.pathname + (qs ? '?' + qs : '');
+    if (window.history && window.history.replaceState) window.history.replaceState(null, '', url);
+}
+
+function industryFilterGridFromParams() {
+    var products = window.__industryProducts;
+    if (!Array.isArray(products)) return;
+    var params = new URLSearchParams(window.location.search);
+    var materialParam = (params.get('material') || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    var thicknessParam = (params.get('thickness') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    var filtered = products.filter(function (p) {
+        if (materialParam.length) {
+            var pm = (p.material || '').toLowerCase();
+            if (!materialParam.some(function (m) { return pm.indexOf(m) !== -1 || m.indexOf(pm) !== -1; })) return false;
+        }
+        if (thicknessParam.length) {
+            var pt = p.thickness != null ? (p.thickness >= 7 ? '7+' : String(p.thickness)) : '';
+            if (!pt && thicknessParam.length) return false;
+            if (pt && thicknessParam.indexOf(pt) === -1) return false;
+        }
+        return true;
+    });
+    var grid = document.getElementById('industryProductsGrid');
+    if (!grid) return;
+    grid.innerHTML = filtered.length ? filtered.slice(0, 48).map(function (p) { return renderProductCard(p); }).join('') : '<p class="industry-no-products">No products match. Try adjusting filters.</p>';
+}
+
+function industryFaqToggle(btn) {
+    if (!btn || !btn.getAttribute) return;
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
+    var id = btn.getAttribute('aria-controls');
+    var panel = id ? document.getElementById(id) : btn.nextElementSibling;
+    btn.setAttribute('aria-expanded', !expanded);
+    if (panel) panel.classList.toggle('industry-faq-a-open', !expanded);
+}
+
 async function renderIndustryPage(industrySlug) {
-    const mainContent = document.getElementById('mainContent');
+    var mainContent = document.getElementById('mainContent');
+    if (!mainContent) return;
     mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    var slug = (industrySlug || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+    var configSlug = slug;
+    if (slug === 'foodservice' || slug === 'food-processing') configSlug = 'food-service';
+    if (slug === 'manufacturing') configSlug = 'industrial';
+    var config = (typeof window.industryConfig !== 'undefined' && window.industryConfig[configSlug]) ? window.industryConfig[configSlug] : null;
     try {
-        const data = await api.get('/api/seo/industry/' + encodeURIComponent(industrySlug));
+        var data = await api.get('/api/seo/industry/' + encodeURIComponent(slug));
         if (!data || !data.industry) {
-            mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>Industry Not Found</h1><p><a href="/gloves/">Browse all gloves</a></p></section>';
+            setPageMeta('Industry Not Found', '');
+            mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>Industry Not Found</h1><p><a href="#" onclick="navigate(\'products\'); return false;">Browse all gloves</a></p></section>';
             return;
         }
-        const { industry, products } = data;
+        var industry = data.industry;
+        var products = data.products || [];
         setPageMeta(industry.title, industry.description);
         if (window.history && window.history.replaceState) {
-            const path = '/industries/' + industrySlug + '/';
+            var path = '/industries/' + slug + '/';
             if (path !== window.location.pathname) window.history.replaceState(null, '', path);
         }
-        const productCardsHtml = (products || []).slice(0, 48).map(p => renderProductCard(p)).join('');
-        mainContent.innerHTML = `
-            <section class="industry-landing">
-                <div class="container">
-                    <nav class="breadcrumb" style="margin-bottom: 16px;">
-                        <a href="/" onclick="event.preventDefault(); navigate('home'); return false;">Home</a>
-                        <span>/</span>
-                        <a href="/industries/" onclick="event.preventDefault(); navigate('products'); return false;">Industries</a>
-                        <span>/</span>
-                        <span>${(industry.title || industrySlug).replace(/</g, '&lt;')}</span>
-                    </nav>
-                    <header class="industry-hero" style="margin-bottom: 32px;">
-                        <h1>${(industry.title || industrySlug).replace(/</g, '&lt;')}</h1>
-                        <p class="industry-description" style="font-size: 1.1rem; color: var(--gray-600); max-width: 720px;">${(industry.description || '').replace(/</g, '&lt;')}</p>
-                    </header>
-                    <div class="products-grid" id="industryProductsGrid">
-                        ${productCardsHtml || '<p>No products found for this industry.</p>'}
-                    </div>
-                </div>
-            </section>
-        `;
+        window.__industryProducts = products;
+        window.__industrySlug = slug;
+        var qs = window.location.search;
+        var params = new URLSearchParams(qs);
+        var materialParam = (params.get('material') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var thicknessParam = (params.get('thickness') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (config && config.filterDefaults) {
+            if (materialParam.length === 0 && config.filterDefaults.materials && config.filterDefaults.materials.length) materialParam = config.filterDefaults.materials;
+            if (thicknessParam.length === 0 && config.filterDefaults.thicknesses && config.filterDefaults.thicknesses.length) thicknessParam = config.filterDefaults.thicknesses;
+            if (materialParam.length || thicknessParam.length) {
+                var p2 = new URLSearchParams();
+                if (materialParam.length) p2.set('material', materialParam.join(','));
+                if (thicknessParam.length) p2.set('thickness', thicknessParam.join(','));
+                var newUrl = window.location.pathname + (p2.toString() ? '?' + p2.toString() : '');
+                if (newUrl !== window.location.pathname + window.location.search) window.history.replaceState(null, '', newUrl);
+            }
+        }
+        mainContent.innerHTML = buildIndustryLandingHTML(slug, industry, products, config);
+        (function syncChipsFromUrl() {
+            var params = new URLSearchParams(window.location.search);
+            var hasParams = params.has('material') || params.has('thickness');
+            if (!hasParams) return;
+            var materials = (params.get('material') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            var thicknesses = (params.get('thickness') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            var picker = document.getElementById('industryQuickPicker');
+            if (picker) {
+                picker.querySelectorAll('.industry-chip[data-filter="material"]').forEach(function (b) {
+                    var v = b.getAttribute('data-value');
+                    if (materials.indexOf(v) !== -1) b.classList.add('industry-chip-active'); else b.classList.remove('industry-chip-active');
+                });
+                picker.querySelectorAll('.industry-chip[data-filter="thickness"]').forEach(function (b) {
+                    var v = b.getAttribute('data-value');
+                    if (thicknesses.indexOf(v) !== -1) b.classList.add('industry-chip-active'); else b.classList.remove('industry-chip-active');
+                });
+            }
+        })();
+        industryFilterGridFromParams();
     } catch (e) {
-        mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>Unable to load page</h1><p><a href="/gloves/">Browse all gloves</a></p></section>';
+        var is404 = (e && e.message && /not found|404/i.test(e.message));
+        setPageMeta(is404 ? 'Industry Not Found' : 'Error', '');
+        mainContent.innerHTML = '<section class="container" style="padding: 60px 20px;"><h1>' + (is404 ? 'Industry Not Found' : 'Unable to load page') + '</h1><p>The page you requested may not exist or a network error occurred.</p><p><a href="#" onclick="navigate(\'products\'); return false;">Browse all gloves</a></p></section>';
     }
+}
+
+function isElementInViewport(el) {
+    if (!el) return false;
+    var r = el.getBoundingClientRect();
+    return r.top < window.innerHeight && r.bottom > 0;
 }
 
 function setProductMainImage(thumbBtn) {
@@ -3850,7 +4053,7 @@ async function handleRegister() {
 function updateHeaderAccount() {
     const accountDiv = document.getElementById('headerAccount');
     if (!accountDiv) return;
-    
+
     if (state.user) {
         const adminLink = state.user.is_approved ? `
             <a href="#" onclick="navigate('admin'); return false;" style="margin-right: 12px; color: #FF7A00; font-weight: 600;">
@@ -3865,6 +4068,8 @@ function updateHeaderAccount() {
                 <span>${state.user.company_name}</span>
             </a>
         `;
+        var themeToggle = document.getElementById('headerThemeToggle');
+        if (themeToggle) themeToggle.classList.remove('theme-toggle-auth-only');
     } else {
         accountDiv.innerHTML = `
             <a href="#" onclick="navigate('login'); return false;">
@@ -3872,6 +4077,8 @@ function updateHeaderAccount() {
                 <span>B2B Login</span>
             </a>
         `;
+        var themeToggle = document.getElementById('headerThemeToggle');
+        if (themeToggle) themeToggle.classList.add('theme-toggle-auth-only');
     }
 }
 
@@ -3880,6 +4087,7 @@ function logout() {
     localStorage.removeItem('user');
     state.user = null;
     state.cart = [];
+    document.documentElement.setAttribute('data-theme', 'light');
     updateHeaderAccount();
     updateCartCount();
     showToast('You have been logged out');
@@ -4855,6 +5063,53 @@ let aiAdvisorState = {
     recommendations: null
 };
 
+/** Build prefill from current product (for product page CTA). */
+function getProductPrefill(product) {
+    if (!product) return {};
+    var prefill = {};
+    var cat = (product.category || '').toLowerCase();
+    if (cat.indexOf('disposable') !== -1) prefill.gloveType = 'disposable';
+    else if (cat.indexOf('work') !== -1) prefill.gloveType = 'work';
+    var nameDesc = ((product.name || '') + ' ' + (product.description || '') + ' ' + (product.useCase || '')).toLowerCase();
+    if (nameDesc.indexOf('healthcare') !== -1 || nameDesc.indexOf('medical') !== -1 || nameDesc.indexOf('exam') !== -1) prefill.industry = 'healthcare';
+    else if (nameDesc.indexOf('food') !== -1) prefill.industry = 'food';
+    else if (nameDesc.indexOf('manufacturing') !== -1 || nameDesc.indexOf('industrial') !== -1) prefill.industry = 'manufacturing';
+    else if (nameDesc.indexOf('automotive') !== -1 || nameDesc.indexOf('auto') !== -1) prefill.industry = 'automotive';
+    else if (nameDesc.indexOf('janitorial') !== -1 || nameDesc.indexOf('cleaning') !== -1) prefill.industry = 'janitorial';
+    if ((product.material || '').toLowerCase() === 'nitrile') prefill.allergies = 'yes';
+    return prefill;
+}
+
+/** Build prefill from current shop filters (for shop page CTA). */
+function getShopPrefill() {
+    var prefill = {};
+    var cat = state.filters && state.filters.category;
+    if (cat === 'Disposable Gloves') prefill.gloveType = 'disposable';
+    else if (cat === 'Work Gloves') prefill.gloveType = 'work';
+    var materials = state.filters && state.filters.material;
+    if (Array.isArray(materials) && materials.length === 1 && materials[0] === 'Nitrile') prefill.allergies = 'yes';
+    return prefill;
+}
+
+/** Apply prefill to advisor state and set currentStep to first unanswered question. */
+function applyAIAdvisorPrefill(prefill) {
+    if (!prefill || typeof prefill !== 'object') return;
+    var ids = aiQuestions.map(function(q) { return q.id; });
+    for (var key in prefill) {
+        if (prefill.hasOwnProperty(key) && ids.indexOf(key) !== -1) {
+            var val = prefill[key];
+            if (val !== undefined && val !== null && val !== '') aiAdvisorState.answers[key] = val;
+        }
+    }
+    for (var i = 0; i < aiQuestions.length; i++) {
+        if (aiAdvisorState.answers[aiQuestions[i].id] === undefined) {
+            aiAdvisorState.currentStep = i;
+            return;
+        }
+    }
+    aiAdvisorState.currentStep = aiQuestions.length - 1;
+}
+
 const aiQuestions = [
     {
         id: 'gloveType',
@@ -4975,13 +5230,14 @@ function renderAIAdvisor() {
         return;
     }
 
-    // Reset state if starting fresh
-    if (aiAdvisorState.currentStep === 0 && Object.keys(aiAdvisorState.answers).length === 0) {
-        aiAdvisorState = {
-            currentStep: 0,
-            answers: {},
-            recommendations: null
-        };
+    var hadPrefill = !!(state.aiAdvisorPrefill);
+    if (hadPrefill) {
+        aiAdvisorState = { currentStep: 0, answers: {}, recommendations: null };
+        applyAIAdvisorPrefill(state.aiAdvisorPrefill);
+        state.aiAdvisorPrefill = null;
+    }
+    if (!hadPrefill && aiAdvisorState.currentStep === 0 && Object.keys(aiAdvisorState.answers).length === 0) {
+        aiAdvisorState = { currentStep: 0, answers: {}, recommendations: null };
     }
 
     const currentQuestion = aiQuestions[aiAdvisorState.currentStep];
@@ -5176,10 +5432,11 @@ async function generateRecommendations() {
         const warnings = [];
         let explanation = '';
 
+    const gloveType = aiAdvisorState.answers.gloveType;
     const industry = aiAdvisorState.answers.industry;
-    const environment = aiAdvisorState.answers.environment || [];
+    const environment = Array.isArray(aiAdvisorState.answers.environment) ? aiAdvisorState.answers.environment : (aiAdvisorState.answers.environment ? [aiAdvisorState.answers.environment] : []);
     const allergies = aiAdvisorState.answers.allergies;
-    const compliance = aiAdvisorState.answers.compliance || [];
+    const compliance = Array.isArray(aiAdvisorState.answers.compliance) ? aiAdvisorState.answers.compliance : (aiAdvisorState.answers.compliance ? [aiAdvisorState.answers.compliance] : []);
     const texture = aiAdvisorState.answers.texture;
     const budget = aiAdvisorState.answers.budget;
 
@@ -5315,6 +5572,7 @@ async function generateRecommendations() {
     // If no products match, show top products from the chosen glove type (or all)
     if (filteredProducts.length === 0) {
         warnings.push('⚠️ No products matched all your criteria exactly. Showing best alternatives below.');
+        const candidateProducts = (gloveType === 'work' ? products.filter(p => p.category === 'Work Gloves') : gloveType === 'disposable' ? products.filter(p => p.category === 'Disposable Gloves') : products);
         filteredProducts = candidateProducts.slice(0, 10);
         if (filteredProducts.length === 0) filteredProducts = products.slice(0, 10);
     }
@@ -6379,17 +6637,86 @@ async function loadAdminProducts(keepPage) {
                                 <option value="Work Gloves">Work Gloves</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Subcategory</label>
+                            <div id="addProductSubcategoryChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('subcategories', 'addProductSubcategoryChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Material *</label>
-                            <input type="text" id="productMaterial" required placeholder="Nitrile, Latex, Vinyl, etc." style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <div id="addProductMaterialChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('materials', 'addProductMaterialChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Color</label>
+                            <div id="addProductColorChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('colors', 'addProductColorChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Sizes</label>
+                            <div id="addProductSizes" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormSizesHTML()}</div>
+                            <span style="font-size:11px; color:#6B7280;">Select all sizes for this product. Variant SKUs: MainSKU-Size (e.g. GLV-500G-S).</span>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Pack Qty (per box)</label>
+                            <input type="number" id="productPackQty" value="100" min="1" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Case Qty</label>
+                            <input type="number" id="productCaseQty" value="1000" min="1" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Case Weight (lbs)</label>
+                            <input type="number" id="productCaseWeight" min="0" step="0.1" placeholder="e.g. 25" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Case Length (in)</label>
+                            <input type="number" id="productCaseLength" min="0" step="0.1" placeholder="L" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Case Width (in)</label>
+                            <input type="number" id="productCaseWidth" min="0" step="0.1" placeholder="W" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Case Height (in)</label>
+                            <input type="number" id="productCaseHeight" min="0" step="0.1" placeholder="H" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Powder</label>
+                            <select id="productPowder" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">${buildAddFormSelectOptions('powders')}</select>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Thickness (mil)</label>
+                            <select id="productThickness" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">${buildAddFormSelectOptions('thicknesses')}</select>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Sterility</label>
+                            <select id="productSterility" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">${buildAddFormSelectOptions('sterilities')}</select>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Grade</label>
+                            <div id="addProductGradeChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('grades', 'addProductGradeChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Use case / Industries</label>
+                            <div id="addProductUseCaseChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('useCases', 'addProductUseCaseChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Certifications</label>
+                            <div id="addProductCertificationsChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('certifications', 'addProductCertificationsChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Texture</label>
+                            <div id="addProductTextureChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('textures', 'addProductTextureChips')}</div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Cuff style</label>
+                            <div id="addProductCuffStyleChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${buildAddFormChipsHTML('cuffStyles', 'addProductCuffStyleChips')}</div>
                         </div>
                         <div class="form-group">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Price (Retail) *</label>
-                            <input type="number" id="productPrice" required step="0.01" min="0" placeholder="12.99" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <input type="text" id="productPrice" inputmode="decimal" required placeholder="12.99 or 10/.6" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;" onblur="evaluatePriceInput(this)">
                         </div>
                         <div class="form-group">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Bulk Price (B2B)</label>
-                            <input type="number" id="productBulkPrice" step="0.01" min="0" placeholder="9.99" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <input type="text" id="productBulkPrice" inputmode="decimal" placeholder="9.99 or 10/.6" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;" onblur="evaluatePriceInput(this)">
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Primary Image URL</label>
@@ -6405,7 +6732,7 @@ async function loadAdminProducts(keepPage) {
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Description</label>
-                            <textarea id="productDescription" rows="3" placeholder="Product description..." style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit;"></textarea>
+                            <textarea id="productDescription" rows="6" placeholder="Product description..." style="width: 100%; min-height: 140px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit;"></textarea>
                         </div>
                     </div>
                     <div style="display: flex; gap: 16px; align-items: center; margin-top: 24px;">
@@ -6507,7 +6834,7 @@ function initCSVDropZone() {
 // Filter options used on the shop page – same values so product edit multi-selects match filtering
 const EDIT_FILTER_OPTIONS = {
     categories: ['Disposable Gloves', 'Work Gloves'],
-    subcategories: ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'],
+    subcategories: ['Fentanyl Protected', 'Chemo-Approved', 'Heat Resistant', 'Impact Resistant', 'Puncture Resistant', 'Cut Resistant', 'Coated', 'Insulated', 'Chemical Resistant', 'General Purpose'],
     materials: ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'],
     powders: ['Powder-Free', 'Powdered'],
     thicknesses: ['2', '3', '4', '5', '6', '7+'],
@@ -6515,11 +6842,46 @@ const EDIT_FILTER_OPTIONS = {
     colors: ['Blue', 'Black', 'White', 'Clear', 'Orange', 'Purple', 'Green', 'Natural', 'Gray', 'Tan', 'Yellow'],
     grades: ['Medical / Exam Grade', 'Industrial Grade', 'Food Service Grade'],
     useCases: ['Healthcare', 'Food Service', 'Food Processing', 'Janitorial', 'Sanitation', 'Laboratories', 'Pharmaceuticals', 'Beauty & Personal Care', 'Tattoo & Body Art', 'Automotive', 'Education', 'Childcare', 'Cannabis', 'Construction', 'Trades (Electricians, HVAC, Plumbing)', 'Manufacturing', 'Industrial', 'Warehousing', 'Logistics', 'Distribution', 'Transportation', 'Utilities', 'Energy', 'Agriculture', 'Landscaping', 'Mining', 'Heavy Industry', 'Public Works', 'Municipal Services', 'Waste Management', 'Recycling', 'Environmental Services'],
-    certifications: ['FDA Approved', 'ASTM Tested', 'Food Safe', 'Latex Free', 'Chemo Rated', 'EN 455', 'EN 374'],
+    certifications: [
+        'Food Safe',
+        'FDA Approved',
+        'Complies with FDA CFR Title 21 Part 177 (Indirect Food Additive)',
+        'Meets ASTM D6319',
+        'Latex Free',
+        'EN 455',
+        'EN 374',
+        'Chemo Rated / Chemo-Therapy',
+        'Protection against Fentanyl',
+        'Fentanyl Resistant',
+        'Cut Resistance A1', 'Cut Resistance A2', 'Cut Resistance A3', 'Cut Resistance A4', 'Cut Resistance A5', 'Cut Resistance A6', 'Cut Resistance A7', 'Cut Resistance A8', 'Cut Resistance A9',
+        'Puncture Resistance Level 1', 'Puncture Resistance Level 2', 'Puncture Resistance Level 3', 'Puncture Resistance Level 4', 'Puncture Resistance Level 5',
+        'ASTM F2992 (Cut)', 'ASTM F1342 (Puncture)', 'ANSI/ISEA 105 (Cut)'
+    ],
     textures: ['Smooth', 'Fingertip Textured', 'Fully Textured'],
     cuffStyles: ['Beaded Cuff', 'Non-Beaded', 'Extended Cuff'],
     sterilities: ['Non-Sterile', 'Sterile']
 };
+
+function buildAddFormChipsHTML(optionKey, containerId) {
+    const options = EDIT_FILTER_OPTIONS[optionKey];
+    if (!Array.isArray(options)) return '';
+    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
+    return options.map(v => `<button type="button" class="edit-product-multi-chip" data-value="${escape(v)}" data-container="${escape(containerId)}" style="${baseStyle}">${escape(v)}</button>`).join('');
+}
+function buildAddFormSizesHTML() {
+    const options = EDIT_FILTER_OPTIONS.sizes;
+    if (!Array.isArray(options)) return '';
+    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
+    return options.map(v => `<button type="button" class="edit-product-size-chip" data-size="${escape(v)}" style="${baseStyle}">${escape(v)}</button>`).join('');
+}
+function buildAddFormSelectOptions(optionKey) {
+    const options = EDIT_FILTER_OPTIONS[optionKey];
+    if (!Array.isArray(options)) return '';
+    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    return '<option value="">— Select —</option>' + options.map(v => `<option value="${escape(v)}">${escape(v)}</option>`).join('');
+}
 
 function buildEditProductFormHTML(product, brands) {
     const p = product || {};
@@ -6539,10 +6901,10 @@ function buildEditProductFormHTML(product, brands) {
         const selectedStyle = 'background:#FF7A00; border-color:#FF7A00; color:#fff;';
         const optionChips = options.map(v => {
             const selected = currentArr.includes(v);
-            return `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId}${selected ? ' edit-product-multi-selected' : ''}" data-value="${escape(v)}" data-container="${escape(containerId)}" onclick="toggleEditProductMultiChip(this)" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
+            return `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId}${selected ? ' edit-product-multi-selected' : ''}" data-value="${escape(v)}" data-container="${escape(containerId)}" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
         }).join('');
         const extra = currentArr.filter(v => !options.includes(v));
-        const extraChips = extra.map(v => `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId} edit-product-multi-selected" data-value="${escape(v)}" data-container="${escape(containerId)}" onclick="toggleEditProductMultiChip(this)" style="${baseStyle}${selectedStyle}">${escape(v)}</button>`).join('');
+        const extraChips = extra.map(v => `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId} edit-product-multi-selected" data-value="${escape(v)}" data-container="${escape(containerId)}" style="${baseStyle}${selectedStyle}">${escape(v)}</button>`).join('');
         return optionChips + extraChips;
     };
     const sizeArr = parseMulti(p.sizes);
@@ -6550,7 +6912,7 @@ function buildEditProductFormHTML(product, brands) {
         const selected = sizeArr.includes(v);
         const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
         const selectedStyle = 'background:#FF7A00; border-color:#FF7A00; color:#fff;';
-        return `<button type="button" class="edit-product-size-chip${selected ? ' edit-product-size-selected' : ''}" data-size="${escape(v)}" onclick="toggleEditProductSize(this)" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
+        return `<button type="button" class="edit-product-size-chip${selected ? ' edit-product-size-selected' : ''}" data-size="${escape(v)}" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
     }).join('');
     const thicknessVal = p.thickness != null ? (String(p.thickness) === '7' || p.thickness >= 7 ? '7+' : String(p.thickness)) : '';
     const imagesRows = images.map((url, i) => `
@@ -6580,12 +6942,16 @@ function buildEditProductFormHTML(product, brands) {
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label><div id="editProductSizes" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px;">${sizesChips}</div><span style="font-size:11px; color:#6B7280;">Select all sizes you want to show. Each size gets a variant SKU: MainSKU-Size (e.g. GLV-500G-S).</span><div id="editVariantSkuPreview" style="margin-top:8px; font-size:12px; color:#6B7280; min-height:20px;"></div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Pack Qty (per box)</label><input type="number" id="editProductPackQty" value="${p.pack_qty ?? 100}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case Qty</label><input type="number" id="editProductCaseQty" value="${p.case_qty ?? 1000}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Price (Retail)</label><input type="number" id="editProductPrice" value="${p.price ?? 0}" step="0.01" min="0" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Bulk / B2B Price</label><input type="number" id="editProductBulkPrice" value="${p.bulk_price ?? 0}" step="0.01" min="0" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case Weight (lbs)</label><input type="number" id="editProductCaseWeight" value="${p.case_weight ?? ''}" min="0" step="0.1" placeholder="e.g. 25" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case L (in)</label><input type="number" id="editProductCaseLength" value="${p.case_length ?? ''}" min="0" step="0.1" placeholder="Length" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case W (in)</label><input type="number" id="editProductCaseWidth" value="${p.case_width ?? ''}" min="0" step="0.1" placeholder="Width" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case H (in)</label><input type="number" id="editProductCaseHeight" value="${p.case_height ?? ''}" min="0" step="0.1" placeholder="Height" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Price (Retail)</label><input type="text" id="editProductPrice" value="${p.price ?? 0}" inputmode="decimal" placeholder="e.g. 12.99 or 10/.6" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;" onblur="evaluatePriceInput(this)"></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Bulk / B2B Price</label><input type="text" id="editProductBulkPrice" value="${p.bulk_price ?? 0}" inputmode="decimal" placeholder="e.g. 9.99 or 10/.6" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;" onblur="evaluatePriceInput(this)"></div>
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Description</label>
-                <textarea id="editProductDescription" rows="4" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px; font-family:inherit;">${escape(p.description)}</textarea>
+                <textarea id="editProductDescription" rows="8" style="width:100%; min-height: 180px; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px; font-family:inherit;">${escape(p.description)}</textarea>
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Primary Image URL</label>
@@ -6654,15 +7020,40 @@ function toggleEditProductSize(btn) {
     updateEditVariantSkuPreview();
 }
 
-function getSelectedEditProductSizes() {
-    const wrap = document.getElementById('editProductSizes');
+function getSelectedSizesFromContainer(containerId) {
+    const wrap = document.getElementById(containerId);
     if (!wrap) return [];
     return Array.from(wrap.querySelectorAll('.edit-product-size-chip.edit-product-size-selected')).map(el => el.getAttribute('data-size')).filter(Boolean);
+}
+function getSelectedEditProductSizes() {
+    return getSelectedSizesFromContainer('editProductSizes');
 }
 
 function toggleEditProductMultiChip(btn) {
     if (!btn || !btn.classList) return;
     btn.classList.toggle('edit-product-multi-selected');
+}
+// Delegated click handler so Add Product chips work (they have no inline onclick)
+function initChipClickDelegation() {
+    document.body.addEventListener('click', function chipClickHandler(e) {
+        const multi = e.target && e.target.closest && e.target.closest('.edit-product-multi-chip');
+        if (multi) {
+            multi.classList.toggle('edit-product-multi-selected');
+            e.preventDefault();
+            return;
+        }
+        const size = e.target && e.target.closest && e.target.closest('.edit-product-size-chip');
+        if (size) {
+            size.classList.toggle('edit-product-size-selected');
+            if (typeof updateEditVariantSkuPreview === 'function') updateEditVariantSkuPreview();
+            e.preventDefault();
+        }
+    });
+}
+if (typeof document !== 'undefined' && document.body) {
+    initChipClickDelegation();
+} else if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', initChipClickDelegation);
 }
 
 function getSelectedEditProductMulti(containerId) {
@@ -6711,6 +7102,29 @@ function moveEditImageRow(btn, dir) {
     const idx = Array.from(list.children).indexOf(row);
     const next = dir === -1 ? list.children[idx - 1] : list.children[idx + 1];
     if (next) list.insertBefore(row, dir === -1 ? next : next.nextSibling);
+}
+
+/** Safe eval for price fields: e.g. "10/.6" -> 16.67. Only numbers and + - * / ( ) allowed. */
+function evaluatePriceExpression(str) {
+    var s = (str || '').trim().replace(/\s+/g, '');
+    if (!s) return null;
+    if (!/^[\d.+\-*/()]+$/.test(s)) return null;
+    try {
+        var result = Function('"use strict"; return (' + s + ')')();
+        return typeof result === 'number' ? result : null;
+    } catch (e) { return null; }
+}
+
+/** On blur: if value looks like a math expression, replace with result (2 decimals). */
+function evaluatePriceInput(inputEl) {
+    if (!inputEl || !inputEl.value) return;
+    var s = inputEl.value.trim();
+    if (!s) return;
+    if (/^[\d.]+$/.test(s)) return;
+    var num = evaluatePriceExpression(s);
+    if (num !== null && !isNaN(num) && isFinite(num) && num >= 0) {
+        inputEl.value = Number(num).toFixed(2);
+    }
 }
 
 function closeEditProductModal() {
@@ -7694,6 +8108,10 @@ function initEditImageRowsDrag() {
 
 async function saveProductEdit(event) {
     event.preventDefault();
+    var priceEl = document.getElementById('editProductPrice');
+    var bulkEl = document.getElementById('editProductBulkPrice');
+    if (priceEl) evaluatePriceInput(priceEl);
+    if (bulkEl) evaluatePriceInput(bulkEl);
     const idEl = document.getElementById('editProductId');
     const productId = idEl && idEl.value;
     if (!productId) {
@@ -7713,6 +8131,10 @@ async function saveProductEdit(event) {
         sizes: getSelectedEditProductSizes().join(', '),
         pack_qty: parseInt((document.getElementById('editProductPackQty') && document.getElementById('editProductPackQty').value) || '100', 10) || 100,
         case_qty: parseInt((document.getElementById('editProductCaseQty') && document.getElementById('editProductCaseQty').value) || '1000', 10) || 1000,
+        case_weight: parseFloat((document.getElementById('editProductCaseWeight') && document.getElementById('editProductCaseWeight').value) || '') || null,
+        case_length: parseFloat((document.getElementById('editProductCaseLength') && document.getElementById('editProductCaseLength').value) || '') || null,
+        case_width: parseFloat((document.getElementById('editProductCaseWidth') && document.getElementById('editProductCaseWidth').value) || '') || null,
+        case_height: parseFloat((document.getElementById('editProductCaseHeight') && document.getElementById('editProductCaseHeight').value) || '') || null,
         price: parseFloat((document.getElementById('editProductPrice') && document.getElementById('editProductPrice').value) || '0'),
         bulk_price: parseFloat((document.getElementById('editProductBulkPrice') && document.getElementById('editProductBulkPrice').value) || '0'),
         description: (document.getElementById('editProductDescription') && document.getElementById('editProductDescription').value) || '',
@@ -7771,14 +8193,11 @@ function hideAddProductForm() {
 
 function generateImageUrl() {
     const nameInput = document.getElementById('productName');
-    const colorInput = document.getElementById('productColor');
-    const materialInput = document.getElementById('productMaterial');
-    
+    const colorChips = typeof getSelectedEditProductMulti === 'function' ? getSelectedEditProductMulti('addProductColorChips') : [];
+    const materialChips = typeof getSelectedEditProductMulti === 'function' ? getSelectedEditProductMulti('addProductMaterialChips') : [];
     const name = nameInput ? nameInput.value : 'Product';
-    const color = colorInput ? colorInput.value : 'Blue';
-    const material = materialInput ? materialInput.value : 'Nitrile';
-    
-    // Color mapping
+    const color = (colorChips && colorChips[0]) || 'Blue';
+    const material = (materialChips && materialChips[0]) || 'Nitrile';
     const colorMap = {
         'Blue': '0066CC',
         'Black': '000000',
@@ -7792,26 +8211,21 @@ function generateImageUrl() {
         'Purple': '6600CC',
         'Pink': 'FF66CC',
         'Tan': 'D2B48C',
-        'Clear': 'CCCCCC'
+        'Clear': 'CCCCCC',
+        'Natural': 'D2B48C'
     };
-    
-    // Try to match color (case insensitive)
-    let colorCode = '0066CC'; // default blue
+    let colorCode = '0066CC';
     for (const [key, value] of Object.entries(colorMap)) {
         if (color.toLowerCase().includes(key.toLowerCase())) {
             colorCode = value;
             break;
         }
     }
-    
-    // Generate text from product name
     let text = name.replace(/\s+/g, '+').substring(0, 30);
     if (!text || text === 'Product') {
         text = material + '+' + color;
     }
-    
     const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
-    
     const imageInput = document.getElementById('productImageUrl');
     if (imageInput) {
         imageInput.value = imageUrl;
@@ -7833,136 +8247,61 @@ function updateImagePreview(url) {
 
 async function addProduct(event) {
     event.preventDefault();
+    var priceEl = document.getElementById('productPrice');
+    var bulkEl = document.getElementById('productBulkPrice');
+    if (priceEl) evaluatePriceInput(priceEl);
+    if (bulkEl) evaluatePriceInput(bulkEl);
+    const materialSelected = getSelectedEditProductMulti('addProductMaterialChips');
+    if (!materialSelected || materialSelected.length === 0) {
+        showToast('Please select at least one Material.', 'error');
+        return;
+    }
     const additionalImagesEl = document.getElementById('productAdditionalImages');
     const images = additionalImagesEl ? (additionalImagesEl.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
+    const thicknessEl = document.getElementById('productThickness');
+    const thicknessVal = thicknessEl && thicknessEl.value;
     const productData = {
-        sku: document.getElementById('productSku').value,
-        name: document.getElementById('productName').value,
-        brand: document.getElementById('productBrand').value,
-        category: document.getElementById('productCategory').value,
-        subcategory: (document.getElementById('productSubcategory') && document.getElementById('productSubcategory').value) || '',
-        description: document.getElementById('productDescription').value,
-        material: document.getElementById('productMaterial').value,
-        sizes: (document.getElementById('productSizes') && document.getElementById('productSizes').value) || '',
-        color: (document.getElementById('productColor') && document.getElementById('productColor').value) || '',
-        pack_qty: parseInt((document.getElementById('productPackQty') && document.getElementById('productPackQty').value) || '100') || 100,
-        case_qty: parseInt((document.getElementById('productCaseQty') && document.getElementById('productCaseQty').value) || '1000') || 1000,
-        price: parseFloat(document.getElementById('productPrice').value),
-        bulk_price: parseFloat(document.getElementById('productBulkPrice').value) || 0,
-        image_url: document.getElementById('productImageUrl').value,
+        sku: (document.getElementById('productSku') && document.getElementById('productSku').value) || '',
+        name: (document.getElementById('productName') && document.getElementById('productName').value) || '',
+        brand: (document.getElementById('productBrand') && document.getElementById('productBrand').value) || '',
+        category: (document.getElementById('productCategory') && document.getElementById('productCategory').value) || 'Disposable Gloves',
+        subcategory: getSelectedEditProductMulti('addProductSubcategoryChips').join(', '),
+        description: (document.getElementById('productDescription') && document.getElementById('productDescription').value) || '',
+        material: getSelectedEditProductMulti('addProductMaterialChips').join(', '),
+        sizes: getSelectedSizesFromContainer('addProductSizes').join(', '),
+        color: getSelectedEditProductMulti('addProductColorChips').join(', '),
+        pack_qty: parseInt((document.getElementById('productPackQty') && document.getElementById('productPackQty').value) || '100', 10) || 100,
+        case_qty: parseInt((document.getElementById('productCaseQty') && document.getElementById('productCaseQty').value) || '1000', 10) || 1000,
+        case_weight: parseFloat((document.getElementById('productCaseWeight') && document.getElementById('productCaseWeight').value) || '') || null,
+        case_length: parseFloat((document.getElementById('productCaseLength') && document.getElementById('productCaseLength').value) || '') || null,
+        case_width: parseFloat((document.getElementById('productCaseWidth') && document.getElementById('productCaseWidth').value) || '') || null,
+        case_height: parseFloat((document.getElementById('productCaseHeight') && document.getElementById('productCaseHeight').value) || '') || null,
+        price: parseFloat((document.getElementById('productPrice') && document.getElementById('productPrice').value) || '0') || 0,
+        bulk_price: parseFloat((document.getElementById('productBulkPrice') && document.getElementById('productBulkPrice').value) || '0') || 0,
+        image_url: (document.getElementById('productImageUrl') && document.getElementById('productImageUrl').value) || '',
         images: images,
         video_url: (document.getElementById('productVideoUrl') && document.getElementById('productVideoUrl').value) || '',
-        in_stock: document.getElementById('productInStock').checked ? 1 : 0,
-        featured: document.getElementById('productFeatured').checked ? 1 : 0
+        in_stock: (document.getElementById('productInStock') && document.getElementById('productInStock').checked) ? 1 : 0,
+        featured: (document.getElementById('productFeatured') && document.getElementById('productFeatured').checked) ? 1 : 0,
+        powder: (document.getElementById('productPowder') && document.getElementById('productPowder').value) || '',
+        thickness: thicknessVal === '7+' ? 7 : (thicknessVal ? parseFloat(thicknessVal) : null),
+        sterility: (document.getElementById('productSterility') && document.getElementById('productSterility').value) || '',
+        grade: getSelectedEditProductMulti('addProductGradeChips').join(', '),
+        useCase: getSelectedEditProductMulti('addProductUseCaseChips').join(', '),
+        certifications: getSelectedEditProductMulti('addProductCertificationsChips').join(', '),
+        texture: getSelectedEditProductMulti('addProductTextureChips').join(', '),
+        cuffStyle: getSelectedEditProductMulti('addProductCuffStyleChips').join(', ')
     };
-    
     try {
         const response = await api.post('/api/products', productData);
         if (response.success) {
             showToast('✅ Product added successfully!', 'success');
             hideAddProductForm();
-            // Reload products if we're in admin panel
             if (state.currentPage === 'admin' && state.adminTab === 'products') {
                 loadAdminProducts();
             } else {
-                document.getElementById('addProductForm')?.reset();
+                document.getElementById('addProductForm').reset();
             }
-        }
-    } catch (error) {
-        showToast('❌ Error adding product: ' + (error.message || 'Unknown error'), 'error');
-        console.error(error);
-    }
-}
-
-function generateImageUrl() {
-    const nameInput = document.getElementById('productName');
-    const colorInput = document.getElementById('productColor');
-    const materialInput = document.getElementById('productMaterial');
-    
-    const name = nameInput ? nameInput.value : 'Product';
-    const color = colorInput ? colorInput.value : 'Blue';
-    const material = materialInput ? materialInput.value : 'Nitrile';
-    
-    // Color mapping
-    const colorMap = {
-        'Blue': '0066CC',
-        'Black': '000000',
-        'Orange': 'FF6B00',
-        'Green': '00AA00',
-        'Gray': '666666',
-        'Grey': '666666',
-        'White': 'FFFFFF',
-        'Red': 'FF0000',
-        'Yellow': 'FFCC00',
-        'Purple': '6600CC',
-        'Pink': 'FF66CC',
-        'Tan': 'D2B48C',
-        'Clear': 'CCCCCC'
-    };
-    
-    // Try to match color (case insensitive)
-    let colorCode = '0066CC'; // default blue
-    for (const [key, value] of Object.entries(colorMap)) {
-        if (color.toLowerCase().includes(key.toLowerCase())) {
-            colorCode = value;
-            break;
-        }
-    }
-    
-    // Generate text from product name
-    let text = name.replace(/\s+/g, '+').substring(0, 30);
-    if (!text || text === 'Product') {
-        text = material + '+' + color;
-    }
-    
-    const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
-    
-    const imageInput = document.getElementById('productImageUrl');
-    if (imageInput) {
-        imageInput.value = imageUrl;
-        updateImagePreview(imageUrl);
-        showToast('✅ Image URL generated!');
-    }
-}
-
-function updateImagePreview(url) {
-    const preview = document.getElementById('imagePreview');
-    const previewImg = document.getElementById('previewImg');
-    if (url && preview && previewImg) {
-        previewImg.src = url;
-        preview.style.display = 'block';
-    } else if (preview) {
-        preview.style.display = 'none';
-    }
-}
-
-async function addProduct(event) {
-    event.preventDefault();
-    
-    const productData = {
-        sku: document.getElementById('productSku').value,
-        name: document.getElementById('productName').value,
-        brand: document.getElementById('productBrand').value,
-        category: document.getElementById('productCategory').value,
-        subcategory: document.getElementById('productSubcategory').value,
-        description: document.getElementById('productDescription').value,
-        material: document.getElementById('productMaterial').value,
-        sizes: document.getElementById('productSizes').value,
-        color: document.getElementById('productColor').value,
-        pack_qty: parseInt(document.getElementById('productPackQty').value) || 100,
-        case_qty: parseInt(document.getElementById('productCaseQty').value) || 1000,
-        price: parseFloat(document.getElementById('productPrice').value),
-        bulk_price: parseFloat(document.getElementById('productBulkPrice').value) || 0,
-        image_url: document.getElementById('productImageUrl').value,
-        in_stock: document.getElementById('productInStock').checked ? 1 : 0,
-        featured: document.getElementById('productFeatured').checked ? 1 : 0
-    };
-    
-    try {
-        const response = await api.post('/api/products', productData);
-        if (response.success) {
-            showToast('✅ Product added successfully!');
-            document.getElementById('addProductForm').reset();
         }
     } catch (error) {
         showToast('❌ Error adding product: ' + (error.message || 'Unknown error'), 'error');
@@ -8070,6 +8409,11 @@ function openModal(modalId) {
 // ============================================
 
 function initTheme() {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        return;
+    }
     const saved = localStorage.getItem('theme');
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const theme = saved || (prefersDark ? 'dark' : 'light');
@@ -8081,5 +8425,242 @@ function toggleTheme() {
     const current = root.getAttribute('data-theme') || 'light';
     const next = current === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+}
+[];
+    const materialChips = typeof getSelectedEditProductMulti === 'function' ? getSelectedEditProductMulti('addProductMaterialChips') : [];
+    const name = nameInput ? nameInput.value : 'Product';
+    const color = (colorChips && colorChips[0]) || 'Blue';
+    const material = (materialChips && materialChips[0]) || 'Nitrile';
+    const colorMap = {
+        'Blue': '0066CC',
+        'Black': '000000',
+        'Orange': 'FF6B00',
+        'Green': '00AA00',
+        'Gray': '666666',
+        'Grey': '666666',
+        'White': 'FFFFFF',
+        'Red': 'FF0000',
+        'Yellow': 'FFCC00',
+        'Purple': '6600CC',
+        'Pink': 'FF66CC',
+        'Tan': 'D2B48C',
+        'Clear': 'CCCCCC',
+        'Natural': 'D2B48C'
+    };
+    let colorCode = '0066CC';
+    for (const [key, value] of Object.entries(colorMap)) {
+        if (color.toLowerCase().includes(key.toLowerCase())) {
+            colorCode = value;
+            break;
+        }
+    }
+    let text = name.replace(/\s+/g, '+').substring(0, 30);
+    if (!text || text === 'Product') {
+        text = material + '+' + color;
+    }
+    const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
+    const imageInput = document.getElementById('productImageUrl');
+    if (imageInput) {
+        imageInput.value = imageUrl;
+        updateImagePreview(imageUrl);
+        showToast('✅ Image URL generated!');
+    }
+}
+
+function updateImagePreview(url) {
+    const preview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    if (url && preview && previewImg) {
+        previewImg.src = url;
+        preview.style.display = 'block';
+    } else if (preview) {
+        preview.style.display = 'none';
+    }
+}
+
+async function addProduct(event) {
+    event.preventDefault();
+    var priceEl = document.getElementById('productPrice');
+    var bulkEl = document.getElementById('productBulkPrice');
+    if (priceEl) evaluatePriceInput(priceEl);
+    if (bulkEl) evaluatePriceInput(bulkEl);
+    const materialSelected = getSelectedEditProductMulti('addProductMaterialChips');
+    if (!materialSelected || materialSelected.length === 0) {
+        showToast('Please select at least one Material.', 'error');
+        return;
+    }
+    const additionalImagesEl = document.getElementById('productAdditionalImages');
+    const images = additionalImagesEl ? (additionalImagesEl.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
+    const thicknessEl = document.getElementById('productThickness');
+    const thicknessVal = thicknessEl && thicknessEl.value;
+    const productData = {
+        sku: (document.getElementById('productSku') && document.getElementById('productSku').value) || '',
+        name: (document.getElementById('productName') && document.getElementById('productName').value) || '',
+        brand: (document.getElementById('productBrand') && document.getElementById('productBrand').value) || '',
+        category: (document.getElementById('productCategory') && document.getElementById('productCategory').value) || 'Disposable Gloves',
+        subcategory: getSelectedEditProductMulti('addProductSubcategoryChips').join(', '),
+        description: (document.getElementById('productDescription') && document.getElementById('productDescription').value) || '',
+        material: getSelectedEditProductMulti('addProductMaterialChips').join(', '),
+        sizes: getSelectedSizesFromContainer('addProductSizes').join(', '),
+        color: getSelectedEditProductMulti('addProductColorChips').join(', '),
+        pack_qty: parseInt((document.getElementById('productPackQty') && document.getElementById('productPackQty').value) || '100', 10) || 100,
+        case_qty: parseInt((document.getElementById('productCaseQty') && document.getElementById('productCaseQty').value) || '1000', 10) || 1000,
+        case_weight: parseFloat((document.getElementById('productCaseWeight') && document.getElementById('productCaseWeight').value) || '') || null,
+        case_length: parseFloat((document.getElementById('productCaseLength') && document.getElementById('productCaseLength').value) || '') || null,
+        case_width: parseFloat((document.getElementById('productCaseWidth') && document.getElementById('productCaseWidth').value) || '') || null,
+        case_height: parseFloat((document.getElementById('productCaseHeight') && document.getElementById('productCaseHeight').value) || '') || null,
+        price: parseFloat((document.getElementById('productPrice') && document.getElementById('productPrice').value) || '0') || 0,
+        bulk_price: parseFloat((document.getElementById('productBulkPrice') && document.getElementById('productBulkPrice').value) || '0') || 0,
+        image_url: (document.getElementById('productImageUrl') && document.getElementById('productImageUrl').value) || '',
+        images: images,
+        video_url: (document.getElementById('productVideoUrl') && document.getElementById('productVideoUrl').value) || '',
+        in_stock: (document.getElementById('productInStock') && document.getElementById('productInStock').checked) ? 1 : 0,
+        featured: (document.getElementById('productFeatured') && document.getElementById('productFeatured').checked) ? 1 : 0,
+        powder: (document.getElementById('productPowder') && document.getElementById('productPowder').value) || '',
+        thickness: thicknessVal === '7+' ? 7 : (thicknessVal ? parseFloat(thicknessVal) : null),
+        sterility: (document.getElementById('productSterility') && document.getElementById('productSterility').value) || '',
+        grade: getSelectedEditProductMulti('addProductGradeChips').join(', '),
+        useCase: getSelectedEditProductMulti('addProductUseCaseChips').join(', '),
+        certifications: getSelectedEditProductMulti('addProductCertificationsChips').join(', '),
+        texture: getSelectedEditProductMulti('addProductTextureChips').join(', '),
+        cuffStyle: getSelectedEditProductMulti('addProductCuffStyleChips').join(', ')
+    };
+    try {
+        const response = await api.post('/api/products', productData);
+        if (response.success) {
+            showToast('✅ Product added successfully!', 'success');
+            hideAddProductForm();
+            if (state.currentPage === 'admin' && state.adminTab === 'products') {
+                loadAdminProducts();
+            } else {
+                document.getElementById('addProductForm').reset();
+            }
+        }
+    } catch (error) {
+        showToast('❌ Error adding product: ' + (error.message || 'Unknown error'), 'error');
+        console.error(error);
+    }
+}
+
+async function submitContact() {
+    const name = document.getElementById('contactName')?.value?.trim();
+    const email = document.getElementById('contactEmail')?.value?.trim();
+    const company = document.getElementById('contactCompany')?.value?.trim() || '';
+    const message = document.getElementById('contactMessage')?.value?.trim();
+    if (!name || !email || !message) {
+        showToast('Please fill in name, email, and message.', 'error');
+        return;
+    }
+    try {
+        const res = await api.post('/api/contact', { name, email, company, message });
+        showToast(res.message || 'Message sent! We\'ll get back to you soon.');
+        document.getElementById('contactName').value = '';
+        document.getElementById('contactEmail').value = '';
+        document.getElementById('contactCompany').value = '';
+        document.getElementById('contactMessage').value = '';
+    } catch (e) {
+        showToast(e.message || 'Failed to send message. Please try again.', 'error');
+    }
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+function escapeBrandForAttr(s) {
+    if (s == null) return '';
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+function escapeBrandHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+async function loadBrands() {
+    const brands = await api.get('/api/brands');
+    const dropdown = document.getElementById('brandDropdown');
+    if (dropdown) {
+        dropdown.innerHTML = brands.map(brand => {
+            const safeAttr = escapeBrandForAttr(brand);
+            const safeHtml = escapeBrandHtml(brand);
+            const logoPath = getBrandLogoPath(brand);
+            const logoHtml = logoPath
+                ? '<img src="' + logoPath + '" alt="" class="dropdown-brand-logo" onerror="this.style.display=\'none\'">'
+                : '';
+            return '<li><a href="#" onclick="filterByBrand(\'' + safeAttr + '\'); return false;">' + logoHtml + '<span>' + safeHtml + '</span></a></li>';
+        }).join('');
+    }
+}
+
+function toggleMobileMenu() {
+    const nav = document.querySelector('.header-nav-secondary');
+    if (nav) {
+        nav.classList.toggle('mobile-open');
+    }
+    // Also toggle old nav if it exists
+    const oldNav = document.getElementById('mainNav');
+    if (oldNav) {
+        oldNav.classList.toggle('open');
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = toast && toast.querySelector('i');
+    
+    if (!toast || !toastMessage) {
+        console.log('Toast:', message);
+        return;
+    }
+    
+    toastMessage.textContent = message;
+    
+    toast.classList.remove('success', 'error', 'info');
+    if (type === 'success' || type === 'error' || type === 'info') {
+        toast.classList.add(type);
+    }
+    if (toastIcon) {
+        toastIcon.className = type === 'error' ? 'fas fa-exclamation-circle' : type === 'success' ? 'fas fa-check-circle' : 'fas fa-info-circle';
+    }
+    
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 4000);
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('open');
+}
+
+function openModal(modalId) {
+    document.getElementById(modalId).classList.add('open');
+}
+
+// ============================================
+// THEME (Dark / Light)
+// ============================================
+
+function initTheme() {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        return;
+    }
+    const saved = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = saved || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+}
+ next);
     localStorage.setItem('theme', next);
 }
