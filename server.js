@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const os = require('os');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
@@ -11,13 +12,13 @@ const { sendMail, isConfigured: emailConfigured } = require('./lib/email');
 const productStore = require('./lib/product-store');
 
 const app = express();
-const PORT = process.env.PORT || 3004;
+const PORT = parseInt(process.env.PORT, 10) || 3004;
 const JWT_SECRET = process.env.JWT_SECRET || 'glovecubs-secret-key-2024';
 
 // Simple JSON file database. In serverless (Vercel/Lambda) the app dir is read-only;
-// we use /tmp when a write fails with EROFS so CSV import and other writes succeed.
+// we use os.tmpdir() when a write fails with EROFS so CSV import and other writes succeed.
 const DB_PATH_BUNDLED = path.join(__dirname, 'database.json');
-const DB_PATH_TMP = path.join('/tmp', 'database.json');
+const DB_PATH_TMP = path.join(os.tmpdir(), 'glovecubs-database.json');
 let dbPathActive = DB_PATH_BUNDLED; // switched to DB_PATH_TMP on first EROFS
 
 // Fishbowl customer export: file path and schedule (every 30 min)
@@ -27,7 +28,7 @@ const FISHBOWL_EXPORT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 function loadDB() {
     try {
-        // If we've already switched to /tmp but it's empty (e.g. new instance), seed from bundled
+        // If we've already switched to temp dir but it's empty (e.g. new instance), seed from bundled
         if (dbPathActive === DB_PATH_TMP && !fs.existsSync(DB_PATH_TMP) && fs.existsSync(DB_PATH_BUNDLED)) {
             try {
                 const bundled = fs.readFileSync(DB_PATH_BUNDLED, 'utf8');
@@ -486,10 +487,14 @@ app.get('/api/products', (req, res) => {
         products = products.filter(p => p.brand === req.query.brand);
     }
     
-    // Material filter (multiple values possible)
+    // Material filter (multiple values possible); product.material can be comma-separated
     if (req.query.material) {
         const materials = Array.isArray(req.query.material) ? req.query.material : [req.query.material];
-        products = products.filter(p => materials.includes(p.material));
+        const materialSet = new Set(materials.map(m => (m || '').trim().toLowerCase()));
+        products = products.filter(p => {
+            const productMaterials = (p.material || '').split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+            return productMaterials.some(m => materialSet.has(m)) || (productMaterials.length === 0 && (p.material || '').trim() && materialSet.has((p.material || '').trim().toLowerCase()));
+        });
     }
     
     // Powder filter (multiple values possible)
@@ -1118,6 +1123,17 @@ app.post('/api/products', authenticateToken, (req, res) => {
     if (!user || !user.is_approved) {
         return res.status(403).json({ error: 'Admin access required' });
     }
+
+    // Prevent duplicates: reject if a product with this SKU already exists (case-insensitive)
+    const skuRaw = (req.body.sku || '').toString().trim();
+    if (!skuRaw) {
+        return res.status(400).json({ error: 'Product SKU is required.' });
+    }
+    const skuLower = skuRaw.toLowerCase();
+    const existingBySku = (db.products || []).find(p => (p.sku || '').toString().trim().toLowerCase() === skuLower);
+    if (existingBySku) {
+        return res.status(409).json({ error: 'A product with this SKU already exists. Use Edit to update it instead of adding a duplicate.' });
+    }
     
     const images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : [];
     const newProduct = {
@@ -1525,6 +1541,12 @@ app.post('/api/cart', optionalAuth, (req, res) => {
     const { product_id, size, quantity } = req.body;
     db = loadDB();
     
+    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    const product = db.products && db.products.find(p => p.id == product_id);
+    if (!product) {
+        return res.status(404).json({ error: 'Product not found' });
+    }
+    
     const sessionId = req.headers['x-session-id'] || 'anonymous';
     const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
     if (!db.carts[cartKey]) db.carts[cartKey] = [];
@@ -1532,13 +1554,13 @@ app.post('/api/cart', optionalAuth, (req, res) => {
     const existing = db.carts[cartKey].find(item => item.product_id === product_id && item.size === size);
     
     if (existing) {
-        existing.quantity += quantity;
+        existing.quantity += qty;
     } else {
         db.carts[cartKey].push({
             id: Date.now(),
             product_id,
-            size,
-            quantity
+            size: size || null,
+            quantity: qty
         });
     }
     
@@ -1547,14 +1569,14 @@ app.post('/api/cart', optionalAuth, (req, res) => {
 });
 
 app.put('/api/cart/:id', optionalAuth, (req, res) => {
-    const { quantity } = req.body;
+    const quantity = parseInt(req.body?.quantity, 10);
     db = loadDB();
     
     const sessionId = req.headers['x-session-id'] || 'anonymous';
     const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
     if (!db.carts[cartKey]) return res.json({ success: true });
     
-    if (quantity <= 0) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
         db.carts[cartKey] = db.carts[cartKey].filter(item => item.id != req.params.id);
     } else {
         const item = db.carts[cartKey].find(item => item.id == req.params.id);
@@ -1606,11 +1628,23 @@ app.post('/api/orders', authenticateToken, (req, res) => {
         return res.status(400).json({ error: 'Cart is empty' });
     }
 
+    // Reject checkout if any cart item references a missing or out-of-stock product
+    const missing = cartItems.filter(item => {
+        const product = db.products.find(p => p.id === item.product_id);
+        return !product || !product.in_stock;
+    });
+    if (missing.length > 0) {
+        return res.status(400).json({
+            error: 'Some items in your cart are no longer available. Please update your cart.',
+            unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
+        });
+    }
+
     const user = db.users.find(u => u.id === req.user.id);
     
     // Get discount percent for tier
     let discountPercent = 0;
-    if (user.is_approved) {
+    if (user && user.is_approved) {
         switch (user.discount_tier) {
             case 'bronze': discountPercent = 5; break;
             case 'silver': discountPercent = 10; break;
@@ -1622,7 +1656,7 @@ app.post('/api/orders', authenticateToken, (req, res) => {
     let subtotal = 0;
     const orderItems = cartItems.map(item => {
         const product = db.products.find(p => p.id === item.product_id);
-        let price = user.is_approved && product.bulk_price ? product.bulk_price : product.price;
+        let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
         // Apply discount tier to price
         if (discountPercent > 0) {
             price = price * (1 - discountPercent / 100);
@@ -1630,17 +1664,17 @@ app.post('/api/orders', authenticateToken, (req, res) => {
         subtotal += price * item.quantity;
         
         // Generate variant SKU with size suffix (e.g., GLV-AMS-N400-M)
-        let variantSku = product.sku;
-        if (item.size) {
+        let variantSku = product.sku || '';
+        if (item.size && product.sku) {
             const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
             variantSku = `${product.sku}-${sizeSuffix}`;
         }
         
         return {
             product_id: item.product_id,
-            sku: product.sku,
-            variant_sku: variantSku, // Size-specific SKU for inventory
-            name: product.name,
+            sku: product.sku || '',
+            variant_sku: variantSku,
+            name: product.name || 'Unknown',
             size: item.size || null,
             quantity: item.quantity,
             price
@@ -2331,10 +2365,31 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-    console.log(`\n🧤 Glovecubs server running at http://localhost:${PORT}\n`);
-    // Export customers for Fishbowl: run once on startup, then every 30 minutes
-    setTimeout(() => writeFishbowlCustomersExport(), 2000);
-    setInterval(writeFishbowlCustomersExport, FISHBOWL_EXPORT_INTERVAL_MS);
-    console.log('[Fishbowl] Customer export scheduled every 30 min -> data/fishbowl-customers.csv');
-});
+// If default port is in use, try next ports (e.g. previous instance still running)
+function startServer(tryPort) {
+    const port = Number(tryPort);
+    if (port < 0 || port > 65535) {
+        console.error('Server error: no valid port available (tried up to', tryPort, ')');
+        process.exit(1);
+    }
+    const server = app.listen(port, () => {
+        const actualPort = server.address().port;
+        console.log(`\n🧤 Glovecubs server running at http://localhost:${actualPort}\n`);
+        if (actualPort !== PORT) {
+            console.log(`   (Port ${PORT} was in use; using ${actualPort} instead.)\n`);
+        }
+        setTimeout(() => writeFishbowlCustomersExport(), 2000);
+        setInterval(writeFishbowlCustomersExport, FISHBOWL_EXPORT_INTERVAL_MS);
+        console.log('[Fishbowl] Customer export scheduled every 30 min -> data/fishbowl-customers.csv');
+    });
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE' && port < 65535 && port < PORT + 20) {
+            console.log(`Port ${port} in use, trying ${port + 1}...`);
+            startServer(port + 1);
+        } else {
+            console.error('Server error:', err.message);
+            process.exit(1);
+        }
+    });
+}
+startServer(PORT);

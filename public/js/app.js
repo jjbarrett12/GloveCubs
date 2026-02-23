@@ -16,21 +16,27 @@ const BRAND_TO_LOGO_SLUG = {
     'Growl Gloves': 'growl-gloves',
     'Semper Guard': 'semper-guard'
 };
+// Logo filename overrides: brand -> exact filename in public/images/logos/ (when different from slug.svg)
+var BRAND_LOGO_FILENAME = {
+    'Hospeco': 'Hospeco.jpg',
+    'Global Glove': 'Global_Glove.png',
+    'Safeko': 'Safeko.png',
+    'PIP': 'pip-global-safety-logo.png',
+    'Growl Gloves': 'Growl Gloves.webp'
+};
 function getBrandLogoPath(brand) {
     if (!brand) return null;
+    var exact = BRAND_LOGO_FILENAME[brand];
+    if (exact) return '/images/logos/' + exact;
     var slug = BRAND_TO_LOGO_SLUG[brand];
-    if (!slug) return null;
-    var name = (brand || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    var fs = (brand || '').length > 12 ? 11 : (brand || '').length > 8 ? 12 : 14;
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" width="120" height="40"><rect width="120" height="40" rx="8" fill="#f3f4f6"/><text x="60" y="26" font-family="Arial,sans-serif" font-size="' + fs + '" font-weight="700" fill="#374151" text-anchor="middle">' + name + '</text></svg>';
-    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+    return slug ? '/images/logos/' + slug + '.svg' : null;
 }
 var HOME_BRAND_LIST = ['Hospeco','Global Glove','Safeko','Ambitex','PIP','MCR Safety','Ansell','SHOWA','Wells Lamont','Growl Gloves','Semper Guard'];
 function getBrandLogoItemHtml(b) {
     var logo = getBrandLogoPath(b);
     var q = (b || '').replace(/'/g, "\\'");
     var esc = function(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
-    if (logo) return '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + q + '\'); return false;" title="' + esc(b) + '"><img src="' + logo + '" alt="' + esc(b) + '" class="brand-logo-img" loading="lazy"><span class="brand-logo-fallback" style="display:none;">' + esc(b) + '</span></a>';
+    if (logo) return '<a href="#" class="brand-logo-link" onclick="filterByBrand(\'' + q + '\'); return false;" title="' + esc(b) + '"><img src="' + logo + '" alt="' + esc(b) + '" class="brand-logo-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling && (this.nextElementSibling.style.display=\'inline\');"><span class="brand-logo-fallback" style="display:none;">' + esc(b) + '</span></a>';
     return '<a href="#" onclick="filterByBrand(\'' + q + '\'); return false;" class="brand-logo-fallback-only">' + esc(b) + '</a>';
 }
 
@@ -870,7 +876,7 @@ async function renderHomePage() {
         </section>
 
         <!-- Product Finder Section -->
-        <section style="background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%); padding: 80px 0;">
+        <section class="product-finder-section" style="background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%); padding: 80px 0;">
             <div class="container">
                 <div class="section-header">
                     <h2 style="color: #111111; font-size: 36px; font-weight: 700; margin-bottom: 12px;">Find the Exact Gloves You Need</h2>
@@ -6498,9 +6504,10 @@ function initCSVDropZone() {
     });
 }
 
-// Filter options used on the shop page – same values so product edit dropdowns match filtering
+// Filter options used on the shop page – same values so product edit multi-selects match filtering
 const EDIT_FILTER_OPTIONS = {
     categories: ['Disposable Gloves', 'Work Gloves'],
+    subcategories: ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'],
     materials: ['Nitrile', 'Latex', 'Vinyl', 'Polyethylene (PE)'],
     powders: ['Powder-Free', 'Powdered'],
     thicknesses: ['2', '3', '4', '5', '6', '7+'],
@@ -6524,7 +6531,21 @@ function buildEditProductFormHTML(product, brands) {
         const inList = cur && arr.includes(cur);
         return '<option value="">— Select —</option>' + arr.map(v => `<option value="${escape(v)}" ${(cur === v) ? 'selected' : ''}>${escape(v)}</option>`).join('') + (cur && !inList ? `<option value="${escape(cur)}" selected>${escape(cur)}</option>` : '');
     };
-    const sizeArr = (p.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+    // Parse comma/semicolon/space-separated string to array of trimmed non-empty values
+    const parseMulti = (str) => (str || '').split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+    const multiChip = (options, currentStr, containerId) => {
+        const currentArr = parseMulti(currentStr);
+        const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
+        const selectedStyle = 'background:#FF7A00; border-color:#FF7A00; color:#fff;';
+        const optionChips = options.map(v => {
+            const selected = currentArr.includes(v);
+            return `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId}${selected ? ' edit-product-multi-selected' : ''}" data-value="${escape(v)}" data-container="${escape(containerId)}" onclick="toggleEditProductMultiChip(this)" style="${baseStyle}${selected ? selectedStyle : ''}">${escape(v)}</button>`;
+        }).join('');
+        const extra = currentArr.filter(v => !options.includes(v));
+        const extraChips = extra.map(v => `<button type="button" class="edit-product-multi-chip edit-product-multi-selected-${containerId} edit-product-multi-selected" data-value="${escape(v)}" data-container="${escape(containerId)}" onclick="toggleEditProductMultiChip(this)" style="${baseStyle}${selectedStyle}">${escape(v)}</button>`).join('');
+        return optionChips + extraChips;
+    };
+    const sizeArr = parseMulti(p.sizes);
     const sizesChips = EDIT_FILTER_OPTIONS.sizes.map(v => {
         const selected = sizeArr.includes(v);
         const baseStyle = 'padding:8px 14px; border:2px solid #e0e0e0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#374151;';
@@ -6553,9 +6574,9 @@ function buildEditProductFormHTML(product, brands) {
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Product Name</label><input type="text" id="editProductName" value="${escape(p.name)}" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Brand</label><select id="editProductBrand" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${brandsList.map(b => `<option value="${escape(b)}" ${(p.brand || '') === b ? 'selected' : ''}>${escape(b)}</option>`).join('')}${p.brand && !brandsList.includes(p.brand) ? `<option value="${escape(p.brand)}" selected>${escape(p.brand)}</option>` : ''}</select></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Category</label><select id="editProductCategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option><option value="Disposable Gloves" ${(p.category || '') === 'Disposable Gloves' ? 'selected' : ''}>Disposable Gloves</option><option value="Work Gloves" ${(p.category || '') === 'Work Gloves' ? 'selected' : ''}>Work Gloves</option></select></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label><select id="editProductSubcategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${EDIT_FILTER_OPTIONS.materials.map(m => `<option value="${escape(m)}" ${(p.subcategory || '') === m ? 'selected' : ''}>${escape(m)}</option>`).join('')}${p.subcategory && !EDIT_FILTER_OPTIONS.materials.includes(p.subcategory) ? `<option value="${escape(p.subcategory)}" selected>${escape(p.subcategory)}</option>` : ''}</select></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label><select id="editProductMaterial" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.materials, p.material)}</select></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label><select id="editProductColor" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;">${opt(EDIT_FILTER_OPTIONS.colors, p.color)}</select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label><div id="editProductSubcategoryChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.subcategories, p.subcategory, 'editProductSubcategoryChips')}</div></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label><div id="editProductMaterialChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.materials, p.material, 'editProductMaterialChips')}</div></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label><div id="editProductColorChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.colors, p.color, 'editProductColorChips')}</div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label><div id="editProductSizes" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px;">${sizesChips}</div><span style="font-size:11px; color:#6B7280;">Select all sizes you want to show. Each size gets a variant SKU: MainSKU-Size (e.g. GLV-500G-S).</span><div id="editVariantSkuPreview" style="margin-top:8px; font-size:12px; color:#6B7280; min-height:20px;"></div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Pack Qty (per box)</label><input type="number" id="editProductPackQty" value="${p.pack_qty ?? 100}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case Qty</label><input type="number" id="editProductCaseQty" value="${p.case_qty ?? 1000}" min="1" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
@@ -6592,12 +6613,14 @@ function buildEditProductFormHTML(product, brands) {
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
                     <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Powder</label><select id="editProductPowder" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.powders, p.powder)}</select></div>
                     <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Thickness (mil)</label><select id="editProductThickness" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.thicknesses, thicknessVal)}</select></div>
-                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Grade</label><select id="editProductGrade" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.grades, p.grade)}</select></div>
-                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Use case / Industries</label><select id="editProductUseCase" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.useCases, p.useCase)}</select></div>
-                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Certifications</label><select id="editProductCertifications" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.certifications, p.certifications)}</select></div>
-                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Texture</label><select id="editProductTexture" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.textures, p.texture)}</select></div>
-                    <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Cuff style</label><select id="editProductCuffStyle" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.cuffStyles, p.cuffStyle)}</select></div>
                     <div><label style="display:block; font-size: 12px; margin-bottom: 2px;">Sterility</label><select id="editProductSterility" style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:6px;">${opt(EDIT_FILTER_OPTIONS.sterilities, p.sterility)}</select></div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <div style="margin-bottom: 12px;"><label style="display:block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Grade</label><div id="editProductGradeChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.grades, p.grade, 'editProductGradeChips')}</div></div>
+                    <div style="margin-bottom: 12px;"><label style="display:block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Use case / Industries</label><div id="editProductUseCaseChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.useCases, p.useCase, 'editProductUseCaseChips')}</div></div>
+                    <div style="margin-bottom: 12px;"><label style="display:block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Certifications</label><div id="editProductCertificationsChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.certifications, p.certifications, 'editProductCertificationsChips')}</div></div>
+                    <div style="margin-bottom: 12px;"><label style="display:block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Texture</label><div id="editProductTextureChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.textures, p.texture, 'editProductTextureChips')}</div></div>
+                    <div><label style="display:block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Cuff style</label><div id="editProductCuffStyleChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.cuffStyles, p.cuffStyle, 'editProductCuffStyleChips')}</div></div>
                 </div>
             </div>
             <div style="display:flex; gap: 12px; margin-top: 24px;">
@@ -6635,6 +6658,17 @@ function getSelectedEditProductSizes() {
     const wrap = document.getElementById('editProductSizes');
     if (!wrap) return [];
     return Array.from(wrap.querySelectorAll('.edit-product-size-chip.edit-product-size-selected')).map(el => el.getAttribute('data-size')).filter(Boolean);
+}
+
+function toggleEditProductMultiChip(btn) {
+    if (!btn || !btn.classList) return;
+    btn.classList.toggle('edit-product-multi-selected');
+}
+
+function getSelectedEditProductMulti(containerId) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap) return [];
+    return Array.from(wrap.querySelectorAll('.edit-product-multi-chip.edit-product-multi-selected')).map(el => el.getAttribute('data-value')).filter(Boolean);
 }
 
 function updateEditVariantSkuPreview() {
@@ -6730,11 +6764,17 @@ function applyExportFilters(products, filters) {
     }
     if (filters.colors && filters.colors.length > 0) {
         const colorSet = new Set(filters.colors.map(c => (c || '').toLowerCase()));
-        list = list.filter(p => colorSet.has((p.color || '').trim().toLowerCase()));
+        list = list.filter(p => {
+            const productColors = (p.color || '').split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+            return productColors.some(c => colorSet.has(c)) || (productColors.length === 0 && colorSet.has((p.color || '').trim().toLowerCase()));
+        });
     }
     if (filters.materials && filters.materials.length > 0) {
         const matSet = new Set(filters.materials.map(m => (m || '').toLowerCase()));
-        list = list.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
+        list = list.filter(p => {
+            const productMaterials = (p.material || '').split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+            return productMaterials.some(m => matSet.has(m)) || (productMaterials.length === 0 && matSet.has((p.material || '').trim().toLowerCase()));
+        });
     }
     return list;
 }
@@ -7667,9 +7707,9 @@ async function saveProductEdit(event) {
         name: (document.getElementById('editProductName') && document.getElementById('editProductName').value) || '',
         brand: (document.getElementById('editProductBrand') && document.getElementById('editProductBrand').value) || '',
         category: (document.getElementById('editProductCategory') && document.getElementById('editProductCategory').value) || '',
-        subcategory: (document.getElementById('editProductSubcategory') && document.getElementById('editProductSubcategory').value) || '',
-        material: (document.getElementById('editProductMaterial') && document.getElementById('editProductMaterial').value) || '',
-        color: (document.getElementById('editProductColor') && document.getElementById('editProductColor').value) || '',
+        subcategory: getSelectedEditProductMulti('editProductSubcategoryChips').join(', '),
+        material: getSelectedEditProductMulti('editProductMaterialChips').join(', '),
+        color: getSelectedEditProductMulti('editProductColorChips').join(', '),
         sizes: getSelectedEditProductSizes().join(', '),
         pack_qty: parseInt((document.getElementById('editProductPackQty') && document.getElementById('editProductPackQty').value) || '100', 10) || 100,
         case_qty: parseInt((document.getElementById('editProductCaseQty') && document.getElementById('editProductCaseQty').value) || '1000', 10) || 1000,
@@ -7683,11 +7723,11 @@ async function saveProductEdit(event) {
         featured: (document.getElementById('editProductFeatured') && document.getElementById('editProductFeatured').checked) ? 1 : 0,
         powder: (document.getElementById('editProductPowder') && document.getElementById('editProductPowder').value) || '',
         thickness: (() => { const el = document.getElementById('editProductThickness'); const v = el && el.value; if (!v) return null; if (v === '7+') return 7; const n = parseFloat(v); return isNaN(n) ? null : n; })(),
-        grade: (document.getElementById('editProductGrade') && document.getElementById('editProductGrade').value) || '',
-        useCase: (document.getElementById('editProductUseCase') && document.getElementById('editProductUseCase').value) || '',
-        certifications: (document.getElementById('editProductCertifications') && document.getElementById('editProductCertifications').value) || '',
-        texture: (document.getElementById('editProductTexture') && document.getElementById('editProductTexture').value) || '',
-        cuffStyle: (document.getElementById('editProductCuffStyle') && document.getElementById('editProductCuffStyle').value) || '',
+        grade: getSelectedEditProductMulti('editProductGradeChips').join(', '),
+        useCase: getSelectedEditProductMulti('editProductUseCaseChips').join(', '),
+        certifications: getSelectedEditProductMulti('editProductCertificationsChips').join(', '),
+        texture: getSelectedEditProductMulti('editProductTextureChips').join(', '),
+        cuffStyle: getSelectedEditProductMulti('editProductCuffStyleChips').join(', '),
         sterility: (document.getElementById('editProductSterility') && document.getElementById('editProductSterility').value) || ''
     };
     try {

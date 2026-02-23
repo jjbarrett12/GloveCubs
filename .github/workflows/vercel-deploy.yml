@@ -1,0 +1,43 @@
+# Optional: trigger Vercel deploy on push to main.
+# If your repo is already connected in the Vercel dashboard, Vercel will
+# deploy automatically on push; this workflow is only needed for
+# extra steps (e.g. run tests) or to force a redeploy via API.
+
+name: Vercel Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel (optional)
+        if: env.VERCEL_TOKEN != ''
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx vercel --prod --token "$VERCEL_TOKEN" --yes
+        continue-on-error: true
+
+      - name: Deploy note
+        if: env.VERCEL_TOKEN == ''
+        run: |
+          echo "Repo connected in Vercel? Deploys happen automatically on push to main."
+          echo "To use this workflow with Vercel CLI, add secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID"

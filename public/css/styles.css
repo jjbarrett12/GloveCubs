@@ -191,10 +191,10 @@
     color: var(--gray-500);
 }
 
-/* Admin dashboard: always dark text on light (readable in any theme) */
+/* Admin dashboard: follow site theme – dark mode = dark bg + light text */
 [data-theme="dark"] #adminTabContent {
-    background: #ffffff !important;
-    color: #111111;
+    background: var(--dark) !important;
+    color: var(--secondary);
 }
 
 [data-theme="dark"] #adminTabContent h1,
@@ -203,7 +203,7 @@
 [data-theme="dark"] #adminTabContent h4,
 [data-theme="dark"] #adminTabContent h5,
 [data-theme="dark"] #adminTabContent h6 {
-    color: #111111;
+    color: var(--secondary) !important;
 }
 
 [data-theme="dark"] #adminTabContent p,
@@ -212,36 +212,103 @@
 [data-theme="dark"] #adminTabContent td,
 [data-theme="dark"] #adminTabContent th,
 [data-theme="dark"] #adminTabContent li {
-    color: #111111;
+    color: var(--secondary) !important;
 }
 
 [data-theme="dark"] #adminTabContent input,
 [data-theme="dark"] #adminTabContent select,
 [data-theme="dark"] #adminTabContent textarea {
-    background: #ffffff !important;
-    color: #111111 !important;
-    border-color: #E5E7EB !important;
+    background: var(--surface) !important;
+    color: var(--secondary) !important;
+    border-color: var(--gray-200) !important;
+}
+
+[data-theme="dark"] #adminTabContent select option {
+    background: var(--surface);
+    color: var(--secondary);
 }
 
 [data-theme="dark"] #adminTabContent input::placeholder,
 [data-theme="dark"] #adminTabContent textarea::placeholder {
-    color: #9CA3AF;
+    color: var(--gray-500);
 }
 
 [data-theme="dark"] #adminTabContent a {
-    color: #111111;
+    color: var(--primary);
 }
 
 [data-theme="dark"] #adminTabContent a:hover {
-    color: #FF7A00;
+    color: var(--primary-dark);
 }
 
 [data-theme="dark"] #adminTabContent .admin-tab {
-    color: #9CA3AF !important;
+    color: var(--gray-500) !important;
 }
 
 [data-theme="dark"] #adminTabContent .admin-tab.active {
-    color: #FF7A00 !important;
+    color: var(--primary) !important;
+}
+
+/* Admin products: force light text and dark surfaces (override inline styles) */
+[data-theme="dark"] #adminTabContent #adminProductsContent,
+[data-theme="dark"] #adminTabContent #adminProductsFilterSection,
+[data-theme="dark"] #adminTabContent #adminExportBySection,
+[data-theme="dark"] #adminTabContent #adminProductsPagination,
+[data-theme="dark"] #adminTabContent #csvImportSection {
+    background: var(--surface) !important;
+    border-color: var(--gray-200) !important;
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent #adminProductsContent h2,
+[data-theme="dark"] #adminTabContent #adminProductsContent h3,
+[data-theme="dark"] #adminTabContent #adminProductsContent p,
+[data-theme="dark"] #adminTabContent #adminProductsContent span,
+[data-theme="dark"] #adminTabContent #adminProductsContent label {
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent #adminProductsContent code {
+    background: var(--gray-200);
+    color: var(--secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+[data-theme="dark"] #adminTabContent .admin-product-card {
+    background: var(--surface) !important;
+    border-left-color: var(--primary) !important;
+    border-color: var(--gray-200) !important;
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent .admin-product-card * {
+    color: inherit;
+}
+[data-theme="dark"] #adminTabContent .admin-product-card .product-name,
+[data-theme="dark"] #adminTabContent .admin-product-card .product-sku,
+[data-theme="dark"] #adminTabContent .admin-product-card a {
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent .admin-product-card .product-meta,
+[data-theme="dark"] #adminTabContent .admin-product-card .product-price {
+    color: var(--gray-500) !important;
+}
+[data-theme="dark"] #adminTabContent button[style*="background: #E5E7EB"] {
+    background: var(--gray-200) !important;
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent button[style*="background: #E5E7EB"]:hover {
+    background: var(--gray-300) !important;
+}
+[data-theme="dark"] #adminTabContent div[style*="background: #F9FAFB"],
+[data-theme="dark"] #adminTabContent div[style*="background: #F0F9FF"],
+[data-theme="dark"] #adminTabContent div[style*="background: #f9f9f9"] {
+    background: var(--surface) !important;
+    border-color: var(--gray-200) !important;
+}
+[data-theme="dark"] #adminTabContent div[style*="background: #f9f9f9"] *,
+[data-theme="dark"] #adminTabContent #adminProductsPagination span {
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #adminTabContent #adminProductsPagination button:not([disabled]) {
+    color: #ffffff !important;
 }
 
 /* Dark theme: ensure text is light on dark everywhere */
@@ -254,6 +321,10 @@
     background: var(--gray-100);
     color: var(--secondary);
     border-color: var(--gray-200);
+}
+[data-theme="dark"] select option {
+    background: var(--surface);
+    color: var(--secondary);
 }
 
 [data-theme="dark"] input::placeholder,
@@ -382,6 +453,21 @@ html:not([data-theme]) .theme-toggle .icon-light {
 [data-theme="dark"] #mainContent p[style*="4B5563"] {
     color: var(--gray-500) !important;
 }
+
+/* Product finder "Find the Exact Gloves You Need" – ensure all text visible in dark mode */
+[data-theme="dark"] #mainContent .product-finder-section h2,
+[data-theme="dark"] #mainContent .product-finder-section h3,
+[data-theme="dark"] #mainContent .product-finder-section p,
+[data-theme="dark"] #mainContent .product-finder-section strong,
+[data-theme="dark"] #mainContent .product-finder-section div[style*="color"] {
+    color: var(--secondary) !important;
+}
+[data-theme="dark"] #mainContent .product-finder-section .section-header p,
+[data-theme="dark"] #mainContent .product-finder-section div[style*="4B5563"],
+[data-theme="dark"] #mainContent .product-finder-section div[style*="374151"] {
+    color: var(--gray-500) !important;
+}
+
 [data-theme="dark"] #mainContent .product-card,
 [data-theme="dark"] #mainContent .products-grid .product-card {
     background: var(--surface) !important;
