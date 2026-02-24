@@ -4600,20 +4600,23 @@ img {
         min-width: 200px;
     }
     
+    .utility-bar {
+        padding: 4px 0;
+    }
+    
     .utility-bar-content {
-        flex-direction: column;
-        gap: 8px;
-        text-align: center;
+        flex-direction: row;
+        justify-content: flex-end;
     }
     
     .utility-left {
-        flex-wrap: wrap;
-        justify-content: center;
+        display: none;
     }
     
     .utility-right {
         flex-wrap: wrap;
-        justify-content: center;
+        justify-content: flex-end;
+        gap: 12px;
     }
     
     .hero-content {

@@ -366,15 +366,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        // Load initial data
-        try {
-            await Promise.all([
-                loadCart(),
-                loadBrands()
-            ]);
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-        }
+        // Load cart and brands in background — don't block showing the page
+        Promise.all([loadCart(), loadBrands()]).catch(err => console.error('Error loading initial data:', err));
 
         // Check for password reset link (#reset-password?token=...)
         const resetToken = getResetTokenFromHash();
@@ -386,22 +379,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             // SEO: parse clean URL and route to correct page
             const seo = parseSeoPath();
-            if (seo) {
-                if (seo.type === 'industry') {
-                    navigate('industry', { industry: seo.industry });
-                } else if (seo.type === 'product-size') {
-                    navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
-                } else if (seo.type === 'product') {
-                    navigate('product', { slug: seo.slug, category: seo.category });
-                } else if (seo.type === 'category') {
-                    navigate('products', { categorySegment: seo.category });
-                } else if (seo.type === 'products') {
-                    navigate('products');
+            try {
+                if (seo) {
+                    if (seo.type === 'industry') {
+                        await navigate('industry', { industry: seo.industry });
+                    } else if (seo.type === 'product-size') {
+                        await navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
+                    } else if (seo.type === 'product') {
+                        await navigate('product', { slug: seo.slug, category: seo.category });
+                    } else if (seo.type === 'category') {
+                        await navigate('products', { categorySegment: seo.category });
+                    } else if (seo.type === 'products') {
+                        await navigate('products');
+                    } else {
+                        await navigate('home');
+                    }
                 } else {
-                    navigate('home');
+                    await navigate('home');
                 }
-            } else {
-                navigate('home');
+            } catch (navError) {
+                console.error('Initial navigation failed:', navError);
+                const main = document.getElementById('mainContent');
+                if (main) {
+                    main.innerHTML = '<div class="container" style="padding: 60px 20px; text-align: center;"><h2 style="margin-bottom: 12px;">Something went wrong</h2><p style="color: var(--gray-600); margin-bottom: 16px;">The page could not load. Try <a href="/">going to the home page</a> or <a href="#" onclick="window.location.reload(); return false;">refreshing</a>.</p><p style="font-size: 14px; color: var(--gray-500);">If the problem continues, check the browser console (F12) for errors.</p></div>';
+                }
             }
         }
 
@@ -1060,11 +1061,15 @@ async function renderHomePage() {
         </section>
     `;
     
-    // Fetch products and update the grid (never leave "Loading products" stuck)
+    // Fetch products and update the grid (timeout so we never leave "Loading products" stuck)
     let products = [];
     let loadError = false;
+    const productFetchTimeout = 12000;
     try {
-        const response = await api.get('/api/products');
+        const response = await Promise.race([
+            api.get('/api/products'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Products request timed out')), productFetchTimeout))
+        ]);
         if (Array.isArray(response)) products = response;
         else if (response && Array.isArray(response.products)) products = response.products;
         products = (products || []).filter(p => p && (p.id != null || p.sku));
