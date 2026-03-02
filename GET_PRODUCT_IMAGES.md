@@ -102,7 +102,7 @@ https://via.placeholder.com/400x400/BGCOLOR/TEXTCOLOR?text=PRODUCT+NAME
 **Example:**
 - Blue Nitrile: `https://via.placeholder.com/400x400/FFFFFF/0066CC?text=Blue+Nitrile`
 - Black Nitrile: `https://via.placeholder.com/400x400/FFFFFF/000000?text=Black+Nitrile`
-- Work Gloves: `https://via.placeholder.com/400x400/FFFFFF/666666?text=Work+Gloves`
+- Reusable Work Gloves: `https://via.placeholder.com/400x400/FFFFFF/666666?text=Reusable+Work+Gloves`
 
 ---
 

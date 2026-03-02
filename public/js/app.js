@@ -2,6 +2,12 @@
 // GLOVECUBS - Main Application JavaScript
 // ============================================
 
+// Category display name: internal value "Work Gloves" is shown as "Reusable Work Gloves" site-wide.
+function getCategoryDisplayName(category) {
+    if (category === 'Work Gloves') return 'Reusable Work Gloves';
+    return category || '';
+}
+
 // Brand name -> logo filename (without .png). Used for brands strip and footer.
 const BRAND_TO_LOGO_SLUG = {
     'Hospeco': 'hospeco',
@@ -318,7 +324,22 @@ function parseSeoPath() {
     const categoryMatch = path.match(/^\/gloves\/([^/]+)\/?$/);
     if (categoryMatch) return { type: 'category', category: categoryMatch[1] };
     if (path === '/gloves' || path === '/gloves/') return { type: 'products' };
+    if (path === '/b2b') return { type: 'b2b' };
+    if (path === '/contact') return { type: 'contact' };
+    if (path === '/glove-finder') return { type: 'glove-finder' };
+    if (path === '/invoice-savings') return { type: 'invoice-savings' };
+    if (path === '/admin' || path === '/admin/') return { type: 'admin', subPath: '' };
+    if (path === '/admin/products/new-from-url') return { type: 'admin', subPath: 'products/new-from-url' };
+    if (path.indexOf('/admin/') === 0) return { type: 'admin', subPath: path.replace(/^\/admin\/?/, '') };
     return null;
+}
+
+function parseProductsSearchParams() {
+    var search = (window.location.search || '').replace(/^\?/, '');
+    if (!search) return;
+    var params = new URLSearchParams(search);
+    var brand = params.get('brand');
+    if (brand) state.filters.brand = decodeURIComponent(brand);
 }
 
 function setPageMeta(title, description) {
@@ -350,11 +371,47 @@ function getDiscountPercent(tier) {
 // INITIALIZATION
 // ============================================
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function runAppInit() {
+    if (window.__glovecubsInitDone) return;
+    window.__glovecubsInitDone = true;
+    clearOverlaysAndModals();
+    const main = document.getElementById('mainContent');
+    const showNavError = () => {
+        if (main) main.innerHTML = '<div class="container" style="padding: 60px 20px; text-align: center;"><h2 style="margin-bottom: 12px;">Something went wrong</h2><p style="color: var(--gray-600); margin-bottom: 16px;">The page could not load. Try <a href="/">going to the home page</a> or <a href="#" onclick="window.location.reload(); return false;">refreshing</a>.</p><p style="font-size: 14px; color: var(--gray-500);">If the problem continues, check the browser console (F12) for errors.</p></div>';
+    };
+    try {
+        const resetToken = getResetTokenFromHash();
+        if (resetToken) {
+            await navigate('reset-password', { token: resetToken });
+            if (window.history.replaceState) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } else {
+            const seo = parseSeoPath();
+            if (seo) {
+                if (seo.type === 'industry') await navigate('industry', { industry: seo.industry });
+                else if (seo.type === 'product-size') await navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
+                else if (seo.type === 'product') await navigate('product', { slug: seo.slug, category: seo.category });
+                else if (seo.type === 'category') await navigate('products', { categorySegment: seo.category });
+                else if (seo.type === 'products') {
+                    parseProductsSearchParams();
+                    await navigate('products');
+                }
+                else if (seo.type === 'b2b') await navigate('b2b');
+                else if (seo.type === 'contact') await navigate('contact');
+                else if (seo.type === 'glove-finder') await navigate('glove-finder');
+                else if (seo.type === 'invoice-savings') await navigate('invoice-savings');
+                else if (seo.type === 'admin') await navigate('admin', { subPath: seo.subPath || '' });
+                else await navigate('home');
+            } else {
+                await navigate('home');
+            }
+        }
+    } catch (navError) {
+        console.error('Initial navigation failed:', navError);
+        showNavError();
+    }
+
     try {
         initTheme();
-
-        // Check for stored user
         const token = localStorage.getItem('token');
         const userData = localStorage.getItem('user');
         if (token && userData) {
@@ -365,46 +422,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error('Error parsing user data:', e);
             }
         }
-
-        // Load cart and brands in background — don't block showing the page
         Promise.all([loadCart(), loadBrands()]).catch(err => console.error('Error loading initial data:', err));
-
-        // Check for password reset link (#reset-password?token=...)
-        const resetToken = getResetTokenFromHash();
-        if (resetToken) {
-            navigate('reset-password', { token: resetToken });
-            if (window.history.replaceState) {
-                window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            }
-        } else {
-            // SEO: parse clean URL and route to correct page
-            const seo = parseSeoPath();
-            try {
-                if (seo) {
-                    if (seo.type === 'industry') {
-                        await navigate('industry', { industry: seo.industry });
-                    } else if (seo.type === 'product-size') {
-                        await navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
-                    } else if (seo.type === 'product') {
-                        await navigate('product', { slug: seo.slug, category: seo.category });
-                    } else if (seo.type === 'category') {
-                        await navigate('products', { categorySegment: seo.category });
-                    } else if (seo.type === 'products') {
-                        await navigate('products');
-                    } else {
-                        await navigate('home');
-                    }
-                } else {
-                    await navigate('home');
-                }
-            } catch (navError) {
-                console.error('Initial navigation failed:', navError);
-                const main = document.getElementById('mainContent');
-                if (main) {
-                    main.innerHTML = '<div class="container" style="padding: 60px 20px; text-align: center;"><h2 style="margin-bottom: 12px;">Something went wrong</h2><p style="color: var(--gray-600); margin-bottom: 16px;">The page could not load. Try <a href="/">going to the home page</a> or <a href="#" onclick="window.location.reload(); return false;">refreshing</a>.</p><p style="font-size: 14px; color: var(--gray-500);">If the problem continues, check the browser console (F12) for errors.</p></div>';
-                }
-            }
-        }
+        initFooter();
 
         // SEO: handle browser back/forward on clean URLs
         window.addEventListener('popstate', () => {
@@ -413,7 +432,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             else if (seo && seo.type === 'product-size') navigate('product', { slug: seo.slug, category: seo.category, size: seo.size });
             else if (seo && seo.type === 'product') navigate('product', { slug: seo.slug, category: seo.category });
             else if (seo && seo.type === 'category') navigate('products', { categorySegment: seo.category });
-            else if (seo && seo.type === 'products') navigate('products');
+            else if (seo && seo.type === 'products') { parseProductsSearchParams(); navigate('products'); }
+            else if (seo && seo.type === 'b2b') navigate('b2b');
+            else if (seo && seo.type === 'contact') navigate('contact');
+            else if (seo && seo.type === 'glove-finder') navigate('glove-finder');
+            else if (seo && seo.type === 'invoice-savings') navigate('invoice-savings');
+            else if (seo && seo.type === 'admin') navigate('admin', { subPath: seo.subPath || '' });
             else if (!window.location.pathname || window.location.pathname === '/') navigate('home');
         });
 
@@ -462,20 +486,125 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
         }
     }
-});
+}
+
+function initFooter() {
+    var config = typeof window.FOOTER_LINKS !== 'undefined' ? window.FOOTER_LINKS : null;
+    if (!config) return;
+    var container = document.getElementById('footerContainer');
+    if (!container) return;
+    function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    function quickLinkAttrs(link) {
+        var href = link.href || '#';
+        if (link.navigatePage) {
+            var params = link.navigateParams || {};
+            var parts = [];
+            for (var k in params) { if (params.hasOwnProperty(k)) parts.push(k + ":\'" + String(params[k]).replace(/'/g, "\\'") + "\'"); }
+            var arg2 = parts.length ? '{' + parts.join(',') + '}' : '{}';
+            return ' href="' + esc(href) + '" onclick="event.preventDefault(); navigate(\'' + esc(link.navigatePage) + '\', ' + arg2 + '); return false;"';
+        }
+        return ' href="' + esc(href) + '"';
+    }
+    var quickHtml = '';
+    (config.quickLinks || []).forEach(function (link) {
+        var attrs = quickLinkAttrs(link);
+        quickHtml += '<li><a' + attrs + '>' + esc(link.label) + '</a></li>';
+    });
+    var brandHtml = '';
+    (config.topBrands || []).forEach(function (b) {
+        var logoPath = typeof getBrandLogoPath === 'function' ? getBrandLogoPath(b.name) : null;
+        var attrs = ' href="' + esc(b.href) + '" onclick="event.preventDefault(); navigate(\'products\', { brand: \'' + esc(b.name).replace(/'/g, "\\'") + '\' }); return false;" title="' + esc(b.name) + '"';
+        brandHtml += '<a' + attrs + ' class="footer-brand-link">';
+        if (logoPath) {
+            var ext = (logoPath || '').split('.').pop();
+            var isSvg = ext && ext.toLowerCase() === 'svg';
+            brandHtml += '<img src="' + esc(logoPath) + '" alt="' + esc(b.name) + '" class="footer-brand-logo" loading="lazy" onerror="this.style.display=\'none\';if(this.nextElementSibling){this.nextElementSibling.style.display=\'inline\';}">';
+            brandHtml += '<span class="footer-brand-fallback" style="display:none;">' + esc(b.name) + '</span>';
+        } else {
+            brandHtml += '<span class="footer-brand-fallback">' + esc(b.name) + '</span>';
+        }
+        brandHtml += '</a>';
+    });
+    var contactHtml = '';
+    (config.contactLinks || []).forEach(function (c) {
+        if (c.href && !c.external) {
+            contactHtml += '<li><i class="fas fa-' + (c.type === 'phone' ? 'phone' : c.type === 'email' ? 'envelope' : c.type === 'address' ? 'map-marker-alt' : 'clock') + '"></i> <a href="' + esc(c.href) + '">' + esc(c.label) + '</a></li>';
+        } else if (c.href && c.external) {
+            contactHtml += '<li><i class="fas fa-map-marker-alt"></i> <a href="' + esc(c.href) + '" target="_blank" rel="noopener noreferrer">' + esc(c.label) + '</a></li>';
+        } else {
+            contactHtml += '<li><i class="fas fa-clock"></i> ' + esc(c.label) + '</li>';
+        }
+    });
+    var socialHtml = '';
+    (config.socialLinks || []).forEach(function (s) {
+        socialHtml += '<a href="' + esc(s.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(s.label) + '"><i class="' + (s.icon || 'fas fa-link') + '"></i></a>';
+    });
+    var logoHref = config.footerLogoHref || config.homeHref || '/';
+    var logoOnclick = ' onclick="event.preventDefault(); navigate(\'home\'); return false;"';
+    container.innerHTML =
+        '<div class="footer-grid">' +
+            '<div class="footer-col">' +
+                '<div class="footer-logo">' +
+                    '<a href="' + esc(logoHref) + '" class="footer-logo-link"' + logoOnclick + '><img src="/images/logo.png" alt="Glovecubs" class="footer-logo-image"><span class="sr-only">Home</span></a>' +
+                '</div>' +
+                '<p>Your trusted source for professional-grade disposable and reusable work gloves. Serving businesses nationwide with quality products from top manufacturers.</p>' +
+                '<div class="social-links">' + socialHtml + '</div>' +
+            '</div>' +
+            '<div class="footer-col"><h4>Quick Links</h4><ul>' + quickHtml + '</ul></div>' +
+            '<div class="footer-col"><h4>Top Brands</h4><div class="footer-brand-logos">' + brandHtml + '</div></div>' +
+            '<div class="footer-col"><h4>Contact Us</h4><ul class="contact-info">' + contactHtml + '</ul></div>' +
+        '</div>' +
+        '<div class="footer-bottom">' +
+            '<p>&copy; 2026 Glovecubs. All rights reserved.</p>' +
+            '<div class="payment-icons"><i class="fab fa-cc-visa"></i><i class="fab fa-cc-mastercard"></i><i class="fab fa-cc-amex"></i><i class="fab fa-cc-discover"></i><i class="fab fa-cc-paypal"></i></div>' +
+        '</div>';
+}
+window.initFooter = initFooter;
+
+window.runAppInit = runAppInit;
+window.navigate = navigate;
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', runAppInit);
+else runAppInit();
 
 // ============================================
 // NAVIGATION
 // ============================================
 
+function clearOverlaysAndModals() {
+    var sidebar = document.getElementById('cartSidebar');
+    var overlay = document.getElementById('cartOverlay');
+    if (sidebar && overlay) {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+    }
+    var loginModal = document.getElementById('loginModal');
+    if (loginModal) loginModal.classList.remove('open');
+    var rfq = document.getElementById('rfqModalOverlay');
+    if (rfq) rfq.remove();
+    var budget = document.getElementById('budgetModalOverlay');
+    if (budget) { budget.style.display = 'none'; budget.onclick = null; }
+    var invoice = document.getElementById('invoiceModalOverlay');
+    if (invoice) { invoice.style.display = 'none'; invoice.innerHTML = ''; invoice.onclick = null; }
+    var shipTo = document.getElementById('shipToModalOverlay');
+    if (shipTo) { shipTo.style.display = 'none'; shipTo.onclick = null; }
+    var importResults = document.getElementById('importResultsModalOverlay');
+    if (importResults) importResults.remove();
+    if (document.body && document.body.style) document.body.style.overflow = '';
+}
+window.clearOverlaysAndModals = clearOverlaysAndModals;
+
 async function navigate(page, params = {}) {
     try {
         state.currentPage = page;
-        const mainContent = document.getElementById('mainContent');
-        
+        clearOverlaysAndModals();
+        let mainContent = document.getElementById('mainContent');
+        if (!mainContent) {
+            console.warn('mainContent not found, retrying...');
+            await new Promise(r => setTimeout(r, 50));
+            mainContent = document.getElementById('mainContent');
+        }
         if (!mainContent) {
             console.error('mainContent element not found');
-            // Try again after a short delay
             setTimeout(() => navigate(page, params), 100);
             return;
         }
@@ -505,6 +634,7 @@ async function navigate(page, params = {}) {
             }
             break;
         case 'products':
+            if (params.brand) state.filters.brand = params.brand;
             await renderProductsPage(params.categorySegment ? { categorySegment: params.categorySegment } : undefined);
             break;
         case 'product':
@@ -544,6 +674,12 @@ async function navigate(page, params = {}) {
         case 'contact':
             renderContactPage();
             break;
+        case 'glove-finder':
+            renderGloveFinderPage();
+            break;
+        case 'invoice-savings':
+            renderInvoiceSavingsPage();
+            break;
         case 'about':
             renderAboutPage();
             break;
@@ -551,7 +687,14 @@ async function navigate(page, params = {}) {
             renderFAQPage();
             break;
         case 'admin':
-            renderAdminPanel();
+            if (params && params.subPath === 'products/new-from-url') {
+                state.adminTab = 'products';
+                state.adminProductsView = 'new-from-url';
+                state.adminNewFromUrlPayload = null;
+                state.adminNewFromUrlParseResult = null;
+                state.adminNewFromUrlUrl = '';
+            }
+            renderAdminPanel(state.adminTab || 'orders');
             break;
         case 'ai-advisor':
             state.aiAdvisorPrefill = params.prefill || null;
@@ -572,6 +715,8 @@ async function navigate(page, params = {}) {
         default:
             render404Page();
         }
+        updateThemeForPage(page);
+        updateHeaderAccount();
     } catch (error) {
         console.error('Navigation error:', error);
         const mainContent = document.getElementById('mainContent');
@@ -594,7 +739,7 @@ async function navigate(page, params = {}) {
 // ============================================
 
 async function renderHomePage() {
-    setPageMeta('Glovecubs - Professional Disposable & Work Gloves | B2B Glove Distributor', 'Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.');
+    setPageMeta('Glovecubs - Professional Disposable & Reusable Work Gloves | B2B Glove Distributor', 'Glovecubs is your trusted B2B distributor for disposable and reusable work gloves. 1,000+ SKUs from top manufacturers. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.');
     const mainContent = document.getElementById('mainContent');
     if (!mainContent) {
         console.error('mainContent element not found');
@@ -607,48 +752,32 @@ async function renderHomePage() {
     mainContent.innerHTML = `
         <!-- Hero Section (Two-Column, B2B-Focused) - Dark -->
         <section class="hero-new home-hero-dark" style="position: relative; overflow: hidden; background: linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d1117 100%); padding: 80px 0 60px;">
-            <!-- Subtle orange glow -->
             <div style="position: absolute; top: -100px; right: -100px; width: 400px; height: 400px; background: radial-gradient(circle, rgba(255,122,0,0.15) 0%, transparent 70%); border-radius: 50%; animation: pulse 8s ease-in-out infinite; pointer-events: none; z-index: 0;"></div>
             <div style="position: absolute; bottom: -150px; left: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; animation: pulse 10s ease-in-out infinite; animation-delay: 2s; pointer-events: none; z-index: 0;"></div>
-            
             <style>
-                @keyframes pulse {
-                    0%, 100% { transform: scale(1); opacity: 0.5; }
-                    50% { transform: scale(1.1); opacity: 0.8; }
-                }
-                @keyframes float {
-                    0%, 100% { transform: translateY(0px); }
-                    50% { transform: translateY(-10px); }
-                }
+                @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.1); opacity: 0.8; } }
+                @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
             </style>
-            
             <div class="container" style="position: relative; z-index: 1;">
                 <div class="hero-new-content" style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; max-width: 1400px; margin: 0 auto;">
-                    <!-- Left Column: Copy + CTAs -->
                     <div class="hero-left">
-                        <!-- Badge -->
                         <div style="display: inline-block; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); color: #ffffff; padding: 8px 20px; border-radius: 30px; font-size: 13px; font-weight: 600; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(255,122,0,0.4); animation: float 3s ease-in-out infinite;">
                             <i class="fas fa-star" style="margin-right: 6px;"></i>1,000+ SKUs Available
                         </div>
-                        
                         <h1 style="font-size: 56px; font-weight: 900; line-height: 1.1; margin-bottom: 20px; color: #ffffff;">
                             Built for Operators Who Buy by the Case
                         </h1>
                         <p style="font-size: 20px; color: rgba(255,255,255,0.9); line-height: 1.6; margin-bottom: 28px; font-weight: 400;">
                             Distributor-level pricing. No contracts. No games.
                         </p>
-                        
-                        <!-- Primary CTAs -->
                         <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
-                            <button class="btn btn-primary btn-lg" onclick="navigate('b2b')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 12px; color: #ffffff; box-shadow: 0 8px 25px rgba(255,122,0,0.4); transition: all 0.3s ease; cursor: pointer; position: relative; overflow: hidden;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 12px 35px rgba(255,122,0,0.6)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.4)';">
+                            <button class="btn btn-primary btn-lg" onclick="navigate('b2b')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 12px; color: #ffffff; box-shadow: 0 8px 25px rgba(255,122,0,0.4); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 12px 35px rgba(255,122,0,0.6)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.4)';">
                                 <i class="fas fa-tag" style="margin-right: 8px;"></i>Get Distributor Pricing
                             </button>
                             <button class="btn btn-outline btn-lg" onclick="navigate('ai-advisor')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; border: 3px solid #FF7A00; color: #FF7A00; background: rgba(255,122,0,0.1); border-radius: 12px; transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.background='rgba(255,122,0,0.2)'; this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)';" onmouseout="this.style.background='rgba(255,122,0,0.1)'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
                                 <i class="fas fa-robot" style="margin-right: 8px;"></i>Try AI Glove Finder
                             </button>
                         </div>
-                        
-                        <!-- Secondary Links -->
                         <div style="display: flex; gap: 32px; flex-wrap: wrap; font-size: 15px; margin-bottom: 32px;">
                             <a href="#" onclick="showRFQModal(); return false;" style="color: #FF7A00; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;" onmouseover="this.style.color='rgba(255,122,0,0.85)'; this.style.transform='translateX(5px)';" onmouseout="this.style.color='#FF7A00'; this.style.transform='translateX(0)';">
                                 <i class="fas fa-bolt" style="font-size: 14px;"></i>Request an RFQ in 60 seconds <i class="fas fa-arrow-right" style="font-size: 12px;"></i>
@@ -657,8 +786,6 @@ async function renderHomePage() {
                                 <i class="fas fa-headset" style="font-size: 14px;"></i>Talk to a glove specialist <i class="fas fa-arrow-right" style="font-size: 12px;"></i>
                             </a>
                         </div>
-                        
-                        <!-- Card 3: Trust + Operations (Moved to Left) -->
                         <div class="hero-card hero-trust-badges-card" style="background: #ffffff; border: 2px solid rgba(255,122,0,0.4); border-radius: 16px; padding: 24px; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
                             <div class="hero-trust-badges" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 13px;">
                                 <div class="hero-trust-badge" style="padding: 14px; border-radius: 10px; transition: all 0.3s ease;" onmouseover="this.style.background='rgba(255,122,0,0.12)'; this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(255,122,0,0.3)';" onmouseout="this.style.background=''; this.style.transform='translateY(0)'; this.style.borderColor='';">
@@ -679,28 +806,17 @@ async function renderHomePage() {
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Right Column: Interactive AI + Bulk Module -->
                     <div class="hero-right">
                         <div style="display: flex; flex-direction: column; gap: 16px;">
-                            <!-- Card 1: Quick Bulk Builder -->
-                            <div class="hero-card" style="background: #ffffff; border: 3px solid #FF7A00; border-radius: 20px; padding: 32px; box-shadow: 0 12px 40px rgba(0,0,0,0.3); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 16px 50px rgba(0,0,0,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(0,0,0,0.3)';">
-                                <!-- Decorative background elements -->
+                            <div class="hero-card hero-card-builder" style="background: #ffffff; border: 3px solid #FF7A00; border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.3); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 16px 50px rgba(0,0,0,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(0,0,0,0.3)';">
                                 <div style="position: absolute; top: -30px; right: -30px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(255,122,0,0.25) 0%, rgba(255,122,0,0.1) 50%, transparent 100%); border-radius: 50%; z-index: 0; animation: float 4s ease-in-out infinite;"></div>
-                                <div style="position: absolute; bottom: -40px; left: -40px; width: 130px; height: 130px; background: radial-gradient(circle, rgba(255,122,0,0.2) 0%, rgba(255,122,0,0.05) 50%, transparent 100%); border-radius: 50%; z-index: 0; animation: float 5s ease-in-out infinite; animation-delay: 1s;"></div>
-                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; z-index: 0;"></div>
-                                
                                 <div style="position: relative; z-index: 1;">
-                                    <h3 style="font-size: 24px; font-weight: 800; margin-bottom: 8px; color: #111111; display: flex; align-items: center; gap: 12px;">
-                                        Quick Bulk Builder
-                                    </h3>
+                                    <h3 style="font-size: 24px; font-weight: 800; margin-bottom: 8px; color: #111111; display: flex; align-items: center; gap: 12px;">Quick Bulk Builder</h3>
                                     <p style="font-size: 14px; color: #6B7280; margin-bottom: 24px; font-weight: 500;">Build a 10+ case order in under 30 seconds</p>
-                                    <div style="display: grid; gap: 16px;">
+                                    <div class="hero-builder-fields" style="display: grid; gap: 16px;">
                                         <div>
-                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;">
-                                                <i class="fas fa-hand-paper" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Type:
-                                            </label>
-                                            <select id="bulkBuilderType" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer; transition: all 0.3s ease;" onfocus="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onblur="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;"><i class="fas fa-hand-paper" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Type:</label>
+                                            <select id="bulkBuilderType" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer;">
                                                 <option value="">Select Glove Type</option>
                                                 <option>Disposable Gloves</option>
                                                 <option>Reusable Gloves</option>
@@ -708,10 +824,8 @@ async function renderHomePage() {
                                             </select>
                                         </div>
                                         <div>
-                                            <label style="font-size: 13px; color: #111111; margin-bottom: 8px; display: block; font-weight: 600;">
-                                                <i class="fas fa-industry" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Use (Select Multiple):
-                                            </label>
-                                            <div id="bulkBuilderUse" style="max-height: 200px; overflow-y: auto; border: 2px solid #FF7A00; border-radius: 10px; padding: 12px; background: #ffffff; transition: all 0.3s ease;" onfocusin="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onfocusout="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 8px; display: block; font-weight: 600;"><i class="fas fa-industry" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Use (Select Multiple):</label>
+                                            <div id="bulkBuilderUse" class="hero-bulk-builder-use" style="border: 2px solid #FF7A00; border-radius: 10px; padding: 12px; background: #ffffff;">
                                                 <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
                                                     <input type="checkbox" name="bulkBuilderUse" value="Food Service" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
                                                     <span style="font-size: 13px; color: #111111;">Food Service</span>
@@ -768,21 +882,19 @@ async function renderHomePage() {
                                                     <input type="checkbox" name="bulkBuilderUse" value="Manufacturing" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
                                                     <span style="font-size: 13px; color: #111111;">Manufacturing</span>
                                                 </label>
-                                                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
-                                                    <input type="checkbox" name="bulkBuilderUse" value="Warehousing" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
-                                                    <span style="font-size: 13px; color: #1a1a1a;">Warehousing</span>
+                                                <label style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 2px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
+                                                    <input type="checkbox" name="bulkBuilderUse" value="Warehousing" style="width: 16px; height: 16px; accent-color: #FF7A00; cursor: pointer;">
+                                                    <span style="font-size: 12px; color: #1a1a1a;">Warehousing</span>
                                                 </label>
                                                 <label style="display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease; margin-bottom: 4px;" onmouseover="this.style.background='#fff5f0';" onmouseout="this.style.background='transparent';">
                                                     <input type="checkbox" name="bulkBuilderUse" value="Logistics" style="width: 18px; height: 18px; accent-color: #FF7A00; cursor: pointer;">
-                                                    <span style="font-size: 13px; color: #1a1a1a;">Logistics</span>
+                                                    <span style="font-size: 13px; color: #111111;">Logistics</span>
                                                 </label>
                                             </div>
                                         </div>
                                         <div>
-                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;">
-                                                <i class="fas fa-cube" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Qty:
-                                            </label>
-                                            <select id="bulkBuilderQty" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer; transition: all 0.3s ease;" onchange="handleBulkBuilderQtyChange(this)" onfocus="this.style.borderColor='rgba(255,122,0,0.85)'; this.style.boxShadow='0 0 0 3px rgba(255,122,0,0.2)';" onblur="this.style.borderColor='#FF7A00'; this.style.boxShadow='none';">
+                                            <label style="font-size: 13px; color: #111111; margin-bottom: 6px; display: block; font-weight: 600;"><i class="fas fa-cube" style="color: #FF7A00; margin-right: 6px; font-size: 11px;"></i>Qty:</label>
+                                            <select id="bulkBuilderQty" style="width: 100%; padding: 12px; border: 2px solid #FF7A00; border-radius: 10px; font-size: 14px; background: #ffffff; color: #111111; font-weight: 500; cursor: pointer;" onchange="handleBulkBuilderQtyChange(this)">
                                                 <option>10 cases</option>
                                                 <option>25 cases</option>
                                                 <option>50 cases</option>
@@ -795,36 +907,16 @@ async function renderHomePage() {
                                     </div>
                                 </div>
                             </div>
-                            
-                            <!-- Card 2: AI Spend Snapshot -->
-                            <div class="hero-card hero-card-ai-spend" style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 16px; padding: 28px; color: #ffffff; box-shadow: 0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 16px 50px rgba(255,122,0,0.6), inset 0 0 80px rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1)';">
-                                <!-- Shine effect (class prevents dark theme from turning it into a black panel) -->
+                            <div class="hero-card hero-card-ai-spend" style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border-radius: 16px; color: #ffffff; box-shadow: 0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 16px 50px rgba(255,122,0,0.6), inset 0 0 80px rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 12px 40px rgba(255,122,0,0.5), inset 0 0 60px rgba(255,255,255,0.1)';">
                                 <div class="hero-card-shine" style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); animation: shine 3s infinite; pointer-events: none;"></div>
-                                <style>
-                                    @keyframes shine {
-                                        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-                                        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-                                    }
-                                </style>
-                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #ffffff;">
-                                    <i class="fas fa-chart-line" style="margin-right: 8px;"></i>
-                                    AI Spend Snapshot
-                                </h3>
-                                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; line-height: 1.6;">
-                                    <div style="margin-bottom: 12px;">
-                                        <i class="fas fa-exclamation-circle" style="margin-right: 8px;"></i>
-                                        "You may be overbuying thickness for this task."
-                                    </div>
-                                    <div style="margin-bottom: 12px;">
-                                        <i class="fas fa-dollar-sign" style="margin-right: 8px;"></i>
-                                        "Switching from Brand A → Brand B could save ~12%."
-                                    </div>
-                                    <div>
-                                        <i class="fas fa-check-circle" style="margin-right: 8px;"></i>
-                                        "Standardize to 2 SKUs to reduce variance."
-                                    </div>
+                                <style>@keyframes shine { 0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); } 100% { transform: translateX(100%) translateY(100%) rotate(45deg); } }</style>
+                                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #ffffff;"><i class="fas fa-chart-line" style="margin-right: 8px;"></i>AI Spend Snapshot</h3>
+                                <div class="hero-ai-bullets-scroll" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 12px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; line-height: 1.6;">
+                                    <div style="margin-bottom: 10px;"><i class="fas fa-exclamation-circle" style="margin-right: 8px;"></i>"You may be overbuying thickness for this task."</div>
+                                    <div style="margin-bottom: 10px;"><i class="fas fa-dollar-sign" style="margin-right: 8px;"></i>"Switching from Brand A → Brand B could save ~12%."</div>
+                                    <div><i class="fas fa-check-circle" style="margin-right: 8px;"></i>"Standardize to 2 SKUs to reduce variance."</div>
                                 </div>
-                                <button class="btn btn-secondary" onclick="navigate('cost-analysis')" style="width: 100%; background: #ffffff; color: #FF7A00; font-weight: 600; border: none; padding: 12px;">
+                                <button class="btn btn-secondary" onclick="navigate('cost-analysis')" style="width: 100%; background: #ffffff; color: #FF7A00; font-weight: 600; border: none; padding: 12px; border-radius: 10px;">
                                     Upload Invoice for Savings Suggestions
                                 </button>
                             </div>
@@ -924,7 +1016,7 @@ async function renderHomePage() {
                                 <i class="fas fa-hard-hat"></i>
                             </div>
                             <div>
-                                <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #111111;">Work Gloves</h3>
+                                <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #111111;">Reusable Work Gloves</h3>
                                 <p style="color: #374151; font-size: 14px;">Cut-Resistant • Impact • Chemical</p>
                             </div>
                         </div>
@@ -1060,7 +1152,6 @@ async function renderHomePage() {
             </div>
         </section>
     `;
-    
     // Fetch products and update the grid (timeout so we never leave "Loading products" stuck)
     let products = [];
     let loadError = false;
@@ -1147,7 +1238,9 @@ async function renderProductsPage(opts) {
         else if (seg === 'work-gloves') state.filters.category = 'Work Gloves';
         else state.filters.material = [seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' ')];
     }
-    
+    if (state.filters.category === 'Work Gloves') {
+        setPageMeta('Reusable Work Gloves | Glovecubs', 'Shop reusable work gloves — cut-resistant, impact, coated, and leather. Bulk pricing and fast shipping.');
+    }
     mainContent.innerHTML = `
         <section class="shop-page">
             <div class="container">
@@ -1186,7 +1279,7 @@ async function renderProductsPage(opts) {
                                 </label>
                                 <label class="filter-option">
                                     <input type="radio" name="category" value="Work Gloves" onchange="applyFilters()">
-                                    <span>Work Gloves</span>
+                                    <span>Reusable Work Gloves</span>
                                 </label>
                             </div>
                         </div>
@@ -1417,7 +1510,7 @@ async function renderProductsPage(opts) {
                                     <span>Cannabis</span>
                                 </label>
                                 
-                                <div style="margin-top: 20px; margin-bottom: 12px; font-weight: 600; color: var(--primary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Work Gloves</div>
+                                <div style="margin-top: 20px; margin-bottom: 12px; font-weight: 600; color: var(--primary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Reusable Work Gloves</div>
                                 <label class="filter-option">
                                     <input type="checkbox" name="useCase" value="Construction" onchange="applyFilters()">
                                     <span>Construction</span>
@@ -1678,7 +1771,8 @@ async function renderProductsPage(opts) {
                     </aside>
                     <div class="shop-main">
                         <div class="shop-header">
-                            <h1>All Products</h1>
+                            ${state.filters.category ? `<div class="breadcrumb shop-page-breadcrumb"><a href="/" onclick="event.preventDefault(); navigate('home'); return false;">Home</a><span>/</span><a href="/gloves/" onclick="event.preventDefault(); navigate('products'); return false;">Products</a><span>/</span><span>${(state.filters.category && typeof getCategoryDisplayName === 'function' ? getCategoryDisplayName(state.filters.category) : state.filters.category) || 'Category'}</span></div>` : ''}
+                            <h1 class="shop-header-title">${state.filters.category ? (typeof getCategoryDisplayName === 'function' ? getCategoryDisplayName(state.filters.category) : state.filters.category) : 'All Products'}</h1>
                             <div class="shop-controls">
                                 <span class="results-count" id="resultsCount">Loading...</span>
                             </div>
@@ -1691,6 +1785,8 @@ async function renderProductsPage(opts) {
             </div>
         </section>
     `;
+    var shopH1 = mainContent.querySelector('.shop-header h1');
+    if (shopH1 && state.filters.category) shopH1.textContent = getCategoryDisplayName(state.filters.category);
 
     // Load brands for filter
     const brands = await api.get('/api/brands');
@@ -2228,7 +2324,8 @@ function renderProductCard(product) {
         const isBulkUser = state.user?.is_approved;
         const price = Number(product.price);
         const bulkPrice = Number(product.bulk_price);
-        let displayPrice = (isBulkUser && bulkPrice > 0 ? bulkPrice : price);
+        const customerPrice = product.sell_price != null && Number.isFinite(Number(product.sell_price)) ? Number(product.sell_price) : null;
+        let displayPrice = customerPrice != null ? customerPrice : (isBulkUser && bulkPrice > 0 ? bulkPrice : price);
         if (!Number.isFinite(displayPrice)) displayPrice = 0;
         const imgUrl = (product.image_url || '').trim();
         const productId = product.id != null ? product.id : (product.sku || '');
@@ -2345,7 +2442,8 @@ async function renderProductPage(productId, opts = {}) {
     const firstSizeDisplay = preSelectSize || (sizes[0] || '').trim();
     const categorySeg = (product.material || product.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
     const isBulkUser = state.user?.is_approved;
-    let displayPrice = isBulkUser && product.bulk_price ? product.bulk_price : product.price;
+    const customerPrice = product.sell_price != null && Number.isFinite(Number(product.sell_price)) ? Number(product.sell_price) : null;
+    let displayPrice = customerPrice != null ? customerPrice : (isBulkUser && product.bulk_price ? product.bulk_price : product.price);
     
     // Apply discount tier if user is approved
     if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
@@ -2379,7 +2477,7 @@ async function renderProductPage(productId, opts = {}) {
                     <span>/</span>
                     <a href="/gloves/" onclick="event.preventDefault(); navigate('products'); return false;">Products</a>
                     <span>/</span>
-                    <a href="/gloves/${(product.material || product.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-')}/" onclick="event.preventDefault(); filterByCategory('${(product.category || '').replace(/'/g, "\\'")}'); navigate('products'); return false;">${product.category}</a>
+                    <a href="/gloves/${(product.material || product.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-')}/" onclick="event.preventDefault(); filterByCategory('${(product.category || '').replace(/'/g, "\\'")}'); navigate('products'); return false;">${getCategoryDisplayName(product.category)}</a>
                     <span>/</span>
                     <span>${product.name}${preSelectSize ? ' Size ' + preSelectSize : ''}</span>
                 </div>
@@ -3174,18 +3272,12 @@ async function submitRFQ(event) {
     submitBtn.disabled = true;
     
     try {
-        // Send RFQ to backend API
         const response = await api.post('/api/rfqs', data);
-        
-        // Show success message
         showToast('RFQ submitted successfully! We\'ll contact you within 24 hours.', 'success');
-        
-        // Close modal
         closeRFQModal();
-        
-        // Optionally navigate to thank you page or reset form
     } catch (error) {
         showToast('Error submitting RFQ. Please try again or contact us directly.', 'error');
+    } finally {
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     }
@@ -4074,7 +4166,10 @@ function updateHeaderAccount() {
             </a>
         `;
         var themeToggle = document.getElementById('headerThemeToggle');
-        if (themeToggle) themeToggle.classList.remove('theme-toggle-auth-only');
+        if (themeToggle) {
+            if (isPortalPage()) themeToggle.classList.remove('theme-toggle-auth-only');
+            else themeToggle.classList.add('theme-toggle-auth-only');
+        }
     } else {
         accountDiv.innerHTML = `
             <a href="#" onclick="navigate('login'); return false;">
@@ -4725,6 +4820,142 @@ function renderContactPage() {
     `;
 }
 
+// ============================================
+// GLOVE FINDER (AI)
+// ============================================
+
+function renderGloveFinderPage() {
+    setPageMeta('Glove Finder | Glovecubs', 'AI-powered glove recommendations by industry and use case.');
+    const mainContent = document.getElementById('mainContent');
+    const results = state.gloveFinderResults || null;
+    mainContent.innerHTML = `
+        <section class="container" style="padding: 48px 24px; max-width: 800px; margin: 0 auto;">
+            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #111;">Glove Finder</h1>
+            <p style="color: #6B7280; margin-bottom: 32px;">Answer a few questions and get AI-powered product recommendations.</p>
+            <div id="gloveFinderWizard" style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Industry / Use case</label>
+                    <input type="text" id="gfIndustry" placeholder="e.g. Healthcare, Food Service" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Material preference</label>
+                    <input type="text" id="gfMaterial" placeholder="e.g. Nitrile, Vinyl" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Quantity per month (optional)</label>
+                    <input type="text" id="gfQuantity" placeholder="e.g. 5000" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Budget or constraints (optional)</label>
+                    <input type="text" id="gfConstraints" placeholder="e.g. budget-conscious" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
+                </div>
+                <button type="button" id="gfSubmitBtn" class="btn btn-primary" onclick="submitGloveFinder()" style="padding: 12px 24px;">
+                    <i class="fas fa-search"></i> Get recommendations
+                </button>
+            </div>
+            <div id="gloveFinderStatus" style="min-height: 24px; margin-bottom: 16px; font-size: 14px;"></div>
+            <div id="gloveFinderResults" style="display: ${results ? 'block' : 'none'}; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px;">
+                ${results ? '<h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px;">Recommendations</h2>' + (results.recommendations || []).map(function(r) {
+                    return '<div style="padding: 12px 0; border-bottom: 1px solid #F3F4F6;"><strong>' + (r.name || '').replace(/</g, '&lt;') + '</strong>' + (r.brand ? ' &middot; ' + (r.brand || '').replace(/</g, '&lt;') : '') + '<p style="margin: 8px 0 0; color: #6B7280; font-size: 14px;">' + (r.reason || '').replace(/</g, '&lt;') + '</p></div>';
+                }).join('') + (results.summary ? '<p style="margin-top: 16px; color: #374151;">' + (results.summary || '').replace(/</g, '&lt;') + '</p>' : '') : ''}
+            </div>
+        </section>
+    `;
+}
+
+async function submitGloveFinder() {
+    const btn = document.getElementById('gfSubmitBtn');
+    const statusEl = document.getElementById('gloveFinderStatus');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding...'; }
+    if (statusEl) statusEl.textContent = '';
+    try {
+        const res = await fetch(api.baseUrl + '/api/ai/glove-finder', {
+            method: 'POST',
+            headers: api.getHeaders(),
+            body: JSON.stringify({
+                industry: (document.getElementById('gfIndustry') && document.getElementById('gfIndustry').value) || undefined,
+                use_case: (document.getElementById('gfIndustry') && document.getElementById('gfIndustry').value) || undefined,
+                material_preference: (document.getElementById('gfMaterial') && document.getElementById('gfMaterial').value) || undefined,
+                quantity_per_month: (document.getElementById('gfQuantity') && document.getElementById('gfQuantity').value) || undefined,
+                constraints: (document.getElementById('gfConstraints') && document.getElementById('gfConstraints').value) || undefined,
+            }),
+        });
+        const data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Request failed') + '</span>';
+            return;
+        }
+        state.gloveFinderResults = data;
+        renderGloveFinderPage();
+    } catch (err) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> Get recommendations'; }
+    }
+}
+
+// ============================================
+// INVOICE SAVINGS (AI)
+// ============================================
+
+function renderInvoiceSavingsPage() {
+    setPageMeta('Invoice Savings | Glovecubs', 'Upload an invoice to get AI-powered swap recommendations.');
+    const mainContent = document.getElementById('mainContent');
+    const report = state.invoiceSavingsReport || null;
+    mainContent.innerHTML = `
+        <section class="container" style="padding: 48px 24px; max-width: 900px; margin: 0 auto;">
+            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #111;">Invoice Savings</h1>
+            <p style="color: #6B7280; margin-bottom: 32px;">Paste invoice text to extract line items, then get product swap recommendations.</p>
+            <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Invoice text (paste from PDF or email)</label>
+                <textarea id="invoiceText" rows="8" placeholder="Paste invoice content here..." style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;"></textarea>
+                <button type="button" id="invExtractBtn" class="btn btn-primary" onclick="submitInvoiceExtract()" style="margin-top: 12px; padding: 12px 24px;">
+                    <i class="fas fa-file-alt"></i> Extract &amp; recommend
+                </button>
+            </div>
+            <div id="invoiceStatus" style="min-height: 24px; margin-bottom: 16px; font-size: 14px;"></div>
+            <div id="invoiceReport" style="display: ${report ? 'block' : 'none'}; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px;">
+                ${report ? (report.summary ? '<p style="margin-bottom: 16px;">' + (report.summary || '').replace(/</g, '&lt;') + '</p>' : '') + (report.total_estimated_savings != null ? '<p style="font-weight: 600; margin-bottom: 16px;">Estimated savings: $' + Number(report.total_estimated_savings).toFixed(2) + '</p>' : '') + (report.recommendations || []).map(function(r) {
+                    return '<div style="padding: 12px 0; border-bottom: 1px solid #F3F4F6;"><strong>' + (r.recommended_name || '').replace(/</g, '&lt;') + '</strong>' + (r.reason ? ' &middot; ' + (r.reason || '').replace(/</g, '&lt;') : '') + '</div>';
+                }).join('') : ''}
+            </div>
+        </section>
+    `;
+}
+
+async function submitInvoiceExtract() {
+    const btn = document.getElementById('invExtractBtn');
+    const statusEl = document.getElementById('invoiceStatus');
+    const text = (document.getElementById('invoiceText') && document.getElementById('invoiceText').value) || '';
+    if (!text.trim() || text.trim().length < 10) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Enter at least 10 characters of invoice text.</span>';
+        return;
+    }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...'; }
+    if (statusEl) statusEl.textContent = '';
+    try {
+        let res = await fetch(api.baseUrl + '/api/ai/invoice/extract', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ text: text }) });
+        let data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Extract failed') + '</span>';
+            return;
+        }
+        if (statusEl) statusEl.textContent = 'Getting recommendations...';
+        res = await fetch(api.baseUrl + '/api/ai/invoice/recommend', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ extract: data, upload_id: data.upload_id }) });
+        data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Recommend failed') + '</span>';
+            return;
+        }
+        state.invoiceSavingsReport = data;
+        renderInvoiceSavingsPage();
+    } catch (err) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-alt"></i> Extract &amp; recommend'; }
+    }
+}
+
 function renderAboutPage() {
     const mainContent = document.getElementById('mainContent');
     mainContent.innerHTML = `
@@ -4879,7 +5110,7 @@ function renderFAQPage() {
                                         What are your minimum order quantities?
                                     </h3>
                                     <div class="faq-answer" style="display: none; padding-left: 28px; color: #4B5563; line-height: 1.7;">
-                                        <p>Minimum orders vary by product. Most disposable gloves have a minimum of 1 case (typically 1,000 gloves). Work gloves typically have a minimum of 12 pairs per order. For bulk orders of 100+ cases, please use our RFQ form for custom pricing.</p>
+                                        <p>Minimum orders vary by product. Most disposable gloves have a minimum of 1 case (typically 1,000 gloves). Reusable work gloves typically have a minimum of 12 pairs per order. For bulk orders of 100+ cases, please use our RFQ form for custom pricing.</p>
                                     </div>
                                 </div>
                                 <div class="faq-item">
@@ -5118,11 +5349,11 @@ function applyAIAdvisorPrefill(prefill) {
 const aiQuestions = [
     {
         id: 'gloveType',
-        question: 'Do you need disposable gloves or work gloves?',
+        question: 'Do you need disposable gloves or reusable work gloves?',
         type: 'select',
         options: [
             { value: 'disposable', label: 'Disposable gloves', icon: 'fa-hand-paper', desc: 'Single-use for exam, food service, cleaning, light industrial' },
-            { value: 'work', label: 'Work gloves', icon: 'fa-hard-hat', desc: 'Reusable, cut-resistant, impact protection, heavy duty' },
+            { value: 'work', label: 'Reusable work gloves', icon: 'fa-hard-hat', desc: 'Reusable, cut-resistant, impact protection, heavy duty' },
             { value: 'both', label: 'Not sure — help me decide', icon: 'fa-question-circle', desc: 'Recommend based on my industry and application' }
         ]
     },
@@ -6041,6 +6272,9 @@ function renderAdminPanel(activeTab = 'orders') {
                             <button onclick="renderAdminPanel('messages')" class="admin-tab ${activeTab === 'messages' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'messages' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'messages' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'messages' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
                                 <i class="fas fa-envelope" style="margin-right: 8px;"></i>Messages
                             </button>
+                            <button onclick="renderAdminPanel('customers')" class="admin-tab ${activeTab === 'customers' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'customers' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'customers' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'customers' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-building" style="margin-right: 8px;"></i>Customers
+                            </button>
                         </div>
                         
                         <!-- Tab Content -->
@@ -6050,6 +6284,7 @@ function renderAdminPanel(activeTab = 'orders') {
                             ${activeTab === 'users' ? '<div id="adminUsersContent">Loading users...</div>' : ''}
                             ${activeTab === 'products' ? '<div id="adminProductsContent">Loading products...</div>' : ''}
                             ${activeTab === 'messages' ? '<div id="adminMessagesContent">Loading messages...</div>' : ''}
+                            ${activeTab === 'customers' ? '<div id="adminCustomersContent">Loading customers...</div>' : ''}
                         </div>
                     </div>
                 </div>
@@ -6068,6 +6303,9 @@ function renderAdminPanel(activeTab = 'orders') {
         loadAdminProducts();
     } else if (activeTab === 'messages') {
         loadAdminContactMessages();
+    } else if (activeTab === 'customers') {
+        if (state.adminCustomerId) loadAdminCustomerDetail(state.adminCustomerId);
+        else loadAdminCustomersList();
     }
 }
 
@@ -6099,6 +6337,174 @@ async function loadAdminContactMessages() {
         `;
     } catch (e) {
         el.innerHTML = '<p style="color: #dc2626;">Failed to load messages. ' + (e.message || '') + '</p>';
+    }
+}
+
+async function loadAdminCustomersList() {
+    const el = document.getElementById('adminCustomersContent');
+    if (!el) return;
+    state.adminCustomerId = null;
+    try {
+        const companies = await api.get('/api/admin/companies');
+        if (!companies.length) {
+            el.innerHTML = '<p style="color: #6B7280;">No companies yet. Companies are seeded from user company names.</p>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="margin-bottom: 20px;">
+                <h2 style="font-size: 20px; font-weight: 600; color: #111; margin-bottom: 16px;">Customer pricing</h2>
+                <p style="color: #6B7280; font-size: 14px;">Click a company to set default margin and manufacturer-specific overrides. Sell price = cost / (1 − margin/100).</p>
+            </div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e5e7eb;">
+                            <th style="text-align: left; padding: 12px; font-weight: 600;">Company</th>
+                            <th style="text-align: left; padding: 12px; font-weight: 600;">Default margin %</th>
+                            <th style="text-align: left; padding: 12px; font-weight: 600;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${companies.map(function(c) {
+                            const margin = c.default_gross_margin_percent != null ? c.default_gross_margin_percent : '—';
+                            const name = (c.name || '').replace(/</g, '&lt;');
+                            return '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 12px;">' + name + '</td><td style="padding: 12px;">' + margin + '</td><td style="padding: 12px;"><button type="button" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;" onclick="state.adminCustomerId = ' + c.id + '; loadAdminCustomerDetail(' + c.id + ');">Edit pricing</button></td></tr>';
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (e) {
+        el.innerHTML = '<p style="color: #dc2626;">Failed to load companies. ' + (e.message || '') + '</p>';
+    }
+}
+
+async function loadAdminCustomerDetail(companyId) {
+    const el = document.getElementById('adminCustomersContent');
+    if (!el) return;
+    state.adminCustomerId = companyId;
+    try {
+        const [company, manufacturers] = await Promise.all([
+            api.get('/api/admin/companies/' + companyId),
+            api.get('/api/admin/manufacturers')
+        ]);
+        const name = (company.name || '').replace(/</g, '&lt;');
+        const defaultMargin = company.default_gross_margin_percent != null ? company.default_gross_margin_percent : 30;
+        const overrides = company.overrides || [];
+        el.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <button type="button" class="btn btn-secondary" style="margin-bottom: 16px;" onclick="state.adminCustomerId = null; loadAdminCustomersList();"><i class="fas fa-arrow-left" style="margin-right: 6px;"></i>Back to list</button>
+                <h2 style="font-size: 22px; font-weight: 700; color: #111;">${name}</h2>
+            </div>
+            <div style="background: #f9fafb; padding: 20px; border-radius: 12px; margin-bottom: 24px;">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Default gross margin %</h3>
+                <p style="color: #6B7280; font-size: 13px; margin-bottom: 12px;">Used when no manufacturer override exists. 0 ≤ margin &lt; 100. Sell = cost / (1 − margin/100).</p>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <input type="number" id="adminDefaultMargin" min="0" max="99.99" step="0.01" value="${defaultMargin}" style="width: 100px; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                    <button type="button" class="btn btn-primary" onclick="saveAdminDefaultMargin(${companyId})">Save default margin</button>
+                </div>
+            </div>
+            <div style="margin-bottom: 24px;">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Manufacturer overrides</h3>
+                <p style="color: #6B7280; font-size: 13px; margin-bottom: 12px;">Per-manufacturer margin overrides for this customer.</p>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #e5e7eb;">
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Manufacturer</th>
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Margin %</th>
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminCustomerOverridesBody">
+                            ${overrides.length ? overrides.map(function(o) {
+                                const mname = (o.manufacturer_name || '').replace(/</g, '&lt;');
+                                const marginVal = (o.gross_margin_percent != null ? o.gross_margin_percent : o.margin_percent) != null ? (o.gross_margin_percent != null ? o.gross_margin_percent : o.margin_percent) : '';
+                                return '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 12px;">' + mname + '</td><td style="padding: 12px;"><input type="number" id="overrideMargin_' + companyId + '_' + (o.manufacturer_id != null ? o.manufacturer_id : '') + '" min="0" max="99.99" step="0.01" value="' + marginVal + '" style="width: 80px; padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px;"></td><td style="padding: 12px;"><button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="saveAdminOverride(' + companyId + ',' + (o.manufacturer_id != null ? o.manufacturer_id : 'null') + ')">Save</button> <button type="button" class="btn" style="background: #dc2626; color: #fff; padding: 6px 12px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer;" onclick="deleteAdminOverride(' + companyId + ',' + o.id + ')">Delete</button></td></tr>';
+                            }).join('') : '<tr><td colspan="3" style="padding: 16px; color: #6B7280;">No overrides. Add one below.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div style="background: #f0f9ff; padding: 20px; border-radius: 12px; border: 1px solid #bae6fd;">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Add override</h3>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <select id="adminOverrideManufacturer" style="min-width: 180px; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                        <option value="">— Select manufacturer —</option>
+                        ${(manufacturers || []).filter(function(m) { return !(overrides || []).some(function(o) { return o.manufacturer_id === m.id; }); }).map(function(m) {
+                            return '<option value="' + m.id + '">' + (m.name || '').replace(/</g, '&lt;') + '</option>';
+                        }).join('')}
+                    </select>
+                    <input type="number" id="adminOverrideMargin" min="0" max="99.99" step="0.01" placeholder="Margin %" style="width: 100px; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                    <button type="button" class="btn btn-primary" onclick="addAdminOverride(${companyId})">Add override</button>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        el.innerHTML = '<p style="color: #dc2626;">Failed to load company. ' + (e.message || '') + '</p><button type="button" class="btn btn-secondary" onclick="state.adminCustomerId = null; loadAdminCustomersList();">Back to list</button>';
+    }
+}
+
+async function saveAdminDefaultMargin(companyId) {
+    const input = document.getElementById('adminDefaultMargin');
+    if (!input) return;
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val < 0 || val >= 100) {
+        showToast('Margin must be 0 ≤ value < 100', 'error');
+        return;
+    }
+    try {
+        await api.post('/api/admin/companies/' + companyId + '/default-margin', { default_gross_margin_percent: val });
+        showToast('Default margin saved.', 'success');
+    } catch (e) {
+        showToast(e.message || 'Save failed', 'error');
+    }
+}
+
+async function addAdminOverride(companyId) {
+    const sel = document.getElementById('adminOverrideManufacturer');
+    const input = document.getElementById('adminOverrideMargin');
+    if (!sel || !input) return;
+    const manufacturerId = sel.value ? parseInt(sel.value, 10) : null;
+    const margin = parseFloat(input.value);
+    if (!manufacturerId || isNaN(margin) || margin < 0 || margin >= 100) {
+        showToast('Select a manufacturer and enter margin 0–99.99', 'error');
+        return;
+    }
+    try {
+        await api.post('/api/admin/companies/' + companyId + '/overrides', { manufacturer_id: manufacturerId, gross_margin_percent: margin });
+        showToast('Override added.', 'success');
+        loadAdminCustomerDetail(companyId);
+    } catch (e) {
+        showToast(e.message || 'Add failed', 'error');
+    }
+}
+
+async function saveAdminOverride(companyId, manufacturerId) {
+    const input = document.getElementById('overrideMargin_' + companyId + '_' + manufacturerId);
+    if (!input) return;
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val < 0 || val >= 100) {
+        showToast('Margin must be 0 ≤ value < 100', 'error');
+        return;
+    }
+    try {
+        await api.post('/api/admin/companies/' + companyId + '/overrides', { manufacturer_id: manufacturerId, gross_margin_percent: val });
+        showToast('Override saved.', 'success');
+        loadAdminCustomerDetail(companyId);
+    } catch (e) {
+        showToast(e.message || 'Save failed', 'error');
+    }
+}
+
+async function deleteAdminOverride(companyId, overrideId) {
+    if (!confirm('Remove this manufacturer override?')) return;
+    try {
+        await api.delete('/api/admin/companies/' + companyId + '/overrides/' + overrideId);
+        showToast('Override removed.', 'success');
+        loadAdminCustomerDetail(companyId);
+    } catch (e) {
+        showToast(e.message || 'Delete failed', 'error');
     }
 }
 
@@ -6156,7 +6562,7 @@ function getAdminProductCardHTML(product) {
         : '<div style="width: 64px; height: 64px; background: #E5E7EB; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #9CA3AF;"><i class="fas fa-hand-paper" style="font-size: 24px;"></i></div>';
     const price = (product.price != null && !isNaN(product.price)) ? Number(product.price).toFixed(2) : '0.00';
     const bulkPrice = (product.bulk_price != null && !isNaN(product.bulk_price)) ? Number(product.bulk_price).toFixed(2) : '0.00';
-    const category = esc(product.category || '');
+    const category = esc(getCategoryDisplayName(product.category) || '');
     const material = esc(product.material || 'N/A');
     return '<div class="admin-product-card" style="background: #f9f9f9; padding: 24px; border-radius: 12px; border-left: 4px solid #FF7A00;">' +
         '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">' +
@@ -6205,7 +6611,7 @@ function applyAdminListFilters(products, filters) {
             return sku.indexOf(q) !== -1 || name.indexOf(q) !== -1 || brand.indexOf(q) !== -1 || material.indexOf(q) !== -1;
         });
     }
-    if (filters.brand) list = list.filter(function(p) { return (p.brand || '').trim() === filters.brand; });
+    if (filters.brand) list = list.filter(function(p) { return (p.brand || '').trim().toLowerCase() === (filters.brand || '').trim().toLowerCase(); });
     if (filters.category) list = list.filter(function(p) { return (p.category || '').trim() === filters.category; });
     if (filters.material) list = list.filter(function(p) { return (p.material || '').trim() === filters.material; });
     if (filters.colors && filters.colors.length > 0) {
@@ -6387,9 +6793,304 @@ async function batchDeleteProducts() {
     }
 }
 
+function showAdminNewFromUrlView() {
+    state.adminProductsView = 'new-from-url';
+    state.adminNewFromUrlPayload = null;
+    state.adminNewFromUrlParseResult = null;
+    state.adminNewFromUrlUrl = '';
+    if (window.history && window.history.pushState) window.history.pushState(null, '', '/admin/products/new-from-url');
+    loadAdminProducts();
+}
+
+function hideAdminNewFromUrlView() {
+    state.adminProductsView = null;
+    state.adminNewFromUrlPayload = null;
+    state.adminNewFromUrlParseResult = null;
+    if (window.history && window.history.replaceState) window.history.replaceState(null, '', '/admin');
+    loadAdminProducts();
+}
+
+function renderAdminNewFromUrl() {
+    const content = document.getElementById('adminProductsContent');
+    if (!content) return;
+    const draft = state.adminNewFromUrlPayload || {};
+    const imageUrls = Array.isArray(draft.image_urls) ? draft.image_urls : [];
+    var assetImg = (state.adminNewFromUrlAssetResult && state.adminNewFromUrlAssetResult.hints && (state.adminNewFromUrlAssetResult.hints.image_urls || state.adminNewFromUrlAssetResult.hints.images)) ? (state.adminNewFromUrlAssetResult.hints.image_urls || state.adminNewFromUrlAssetResult.hints.images)[0] : '';
+    const primaryImage = imageUrls[0] || '';
+    const additionalImages = imageUrls.length > 1 ? imageUrls.slice(1).join('\n') : '';
+    content.innerHTML = `
+        <div style="margin-bottom: 24px;">
+            <button type="button" class="btn btn-secondary" onclick="hideAdminNewFromUrlView()"><i class="fas fa-arrow-left" style="margin-right: 6px;"></i>Back to Products</button>
+            <h2 style="font-size: 22px; font-weight: 700; margin: 16px 0 8px;">Add Product by URL (AI-assisted)</h2>
+            <p style="color: #6B7280; font-size: 14px;">Paste a product page URL (e.g. hospecobrands.com), fetch preview, then review and save to Supabase.</p>
+        </div>
+        <div style="background: #F9FAFB; padding: 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #E5E7EB;">
+            <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px;">URL (product page or image/PDF)</label>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                <input type="url" id="newFromUrlInput" value="${(state.adminNewFromUrlUrl || '').replace(/"/g, '&quot;')}" placeholder="https://globalglove.com/801 or https://.../image.png" style="flex: 1; min-width: 280px; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                <button type="button" id="newFromUrlFetchBtn" class="btn btn-primary" onclick="fetchAdminNewFromUrlPreview()"><i class="fas fa-download"></i> Fetch Preview</button>
+            </div>
+            <div id="newFromUrlStatus" style="margin-top: 12px; font-size: 13px; min-height: 24px;"></div>
+            <div id="newFromUrlAssetSection" style="display: ${state.adminNewFromUrlAssetResult ? 'block' : 'none'}; margin-top: 20px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+                <p style="color: #B45309; font-size: 13px; margin-bottom: 12px;"><strong>This is a media file URL, not a product page.</strong> We saved it as the product image. Paste the product page URL below to auto-fill SKU and details.</p>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                    <input type="url" id="newFromUrlProductPageInput" placeholder="https://www.globalglove.com/801" style="flex: 1; min-width: 260px; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                    <button type="button" id="newFromUrlFetchDetailsBtn" class="btn btn-primary" onclick="fetchAdminNewFromUrlProductPageDetails()"><i class="fas fa-link"></i> Fetch details</button>
+                </div>
+                ${assetImg ? '<div style="margin-top: 12px;"><img src="' + (assetImg.replace(/"/g, '&quot;')) + '" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #E5E7EB;" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'"></div>' : ''}
+            </div>
+        </div>
+        <div id="newFromUrlFormSection" style="display: ${state.adminNewFromUrlPayload != null ? 'block' : 'none'}; background: #fff; padding: 24px; border-radius: 12px; border: 1px solid #E5E7EB; margin-bottom: 24px;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Product draft — edit and save</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">SKU / Item number *</label>
+                    <input type="text" id="newFromUrlSku" value="${(draft.sku || '').replace(/"/g, '&quot;')}" placeholder="e.g. 500G" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Name / Title *</label>
+                    <input type="text" id="newFromUrlName" value="${(draft.name || '').replace(/"/g, '&quot;')}" placeholder="Product name" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Brand / Manufacturer</label>
+                    <input type="text" id="newFromUrlBrand" value="${(draft.brand || '').replace(/"/g, '&quot;')}" placeholder="e.g. Hospeco" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Category</label>
+                    <select id="newFromUrlCategory" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                        <option value="">— Select —</option>
+                        <option value="Disposable Gloves" ${(draft.category || '') === 'Disposable Gloves' ? 'selected' : ''}>Disposable Gloves</option>
+                        <option value="Work Gloves" ${(draft.category || '') === 'Work Gloves' || (draft.category || '') === 'Reusable Work Gloves' ? 'selected' : ''}>Reusable Work Gloves</option>
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Description</label>
+                    <textarea id="newFromUrlDescription" rows="4" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">${(draft.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Primary image URL</label>
+                    <input type="url" id="newFromUrlImagePrimary" value="${(primaryImage || '').replace(/"/g, '&quot;')}" placeholder="https://..." style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Additional image URLs (one per line)</label>
+                    <textarea id="newFromUrlImagesExtra" rows="2" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">${(additionalImages || '').replace(/</g, '&lt;')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label>
+                    <input type="text" id="newFromUrlColor" value="${(draft.color || '').replace(/"/g, '&quot;')}" placeholder="e.g. Blue" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Thickness (mil)</label>
+                    <input type="text" id="newFromUrlThickness" value="${(draft.thickness || draft.thickness_mil || '').replace(/"/g, '&quot;')}" placeholder="e.g. 4 mil" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label>
+                    <input type="text" id="newFromUrlMaterial" value="${(draft.material || '').replace(/"/g, '&quot;')}" placeholder="e.g. Nitrile" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Sizes</label>
+                    <input type="text" id="newFromUrlSizes" value="${(draft.sizes || '').replace(/"/g, '&quot;')}" placeholder="e.g. S, M, L, XL" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Pack qty</label>
+                    <input type="number" id="newFromUrlPackQty" min="0" step="1" value="${draft.pack_qty != null ? draft.pack_qty : ''}" placeholder="e.g. 100" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Case qty</label>
+                    <input type="number" id="newFromUrlCaseQty" min="0" step="1" value="${draft.case_qty != null ? draft.case_qty : ''}" placeholder="e.g. 1000" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label>
+                    <input type="text" id="newFromUrlSubcategory" value="${(draft.subcategory || '').replace(/"/g, '&quot;')}" placeholder="e.g. Exam Gloves" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                </div>
+            </div>
+            <div id="newFromUrlSaveError" style="margin-top: 12px; color: #DC2626; font-size: 13px;"></div>
+            <div style="margin-top: 20px;">
+                <button type="button" class="btn btn-primary" onclick="saveAdminNewFromUrlProduct()"><i class="fas fa-save"></i> Save Product</button>
+            </div>
+        </div>
+    `;
+}
+
+async function fetchAdminNewFromUrlPreview() {
+    const input = document.getElementById('newFromUrlInput');
+    const btn = document.getElementById('newFromUrlFetchBtn');
+    const statusEl = document.getElementById('newFromUrlStatus');
+    const url = (input && input.value) ? input.value.trim() : '';
+    if (!url) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Enter a product page URL.</span>';
+        return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">URL must start with http:// or https://</span>';
+        return;
+    }
+    state.adminNewFromUrlUrl = url;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...'; }
+    if (statusEl) statusEl.innerHTML = 'Fetching page...';
+    try {
+        let res = await fetch(api.baseUrl + '/api/admin/products/parse-url', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ url: url }) });
+        let data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || res.statusText || 'Fetch failed') + '</span>';
+            return;
+        }
+        if (data.kind === 'asset') {
+            var assetUrls = (data.hints && (data.hints.image_urls || data.hints.images)) ? (data.hints.image_urls || data.hints.images) : (data.asset && data.asset.finalUrl ? [data.asset.finalUrl] : [data.url]);
+            state.adminNewFromUrlAssetResult = data;
+            state.adminNewFromUrlPayload = { name: '', sku: '', image_urls: assetUrls };
+            if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Media file detected. Use the product page URL below to fetch SKU/details, or edit the form and save.</span>';
+            renderAdminNewFromUrl();
+            return;
+        }
+        state.adminNewFromUrlAssetResult = null;
+        if (data.kind !== 'page' || !data.extracted) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">Could not parse as product page.</span>';
+            return;
+        }
+        state.adminNewFromUrlParseResult = data;
+        if (statusEl) statusEl.innerHTML = 'Running AI normalization...';
+        var aiBody = { kind: 'page', url: url, extracted: data.extracted, hints: data.hints || {}, logParse: true };
+        res = await fetch(api.baseUrl + '/api/admin/products/ai-normalize', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify(aiBody) });
+        data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'AI normalization failed') + '</span>';
+            return;
+        }
+        let normalized = data.normalized || {};
+        var extracted = state.adminNewFromUrlParseResult.extracted || {};
+        if (extracted.sku) normalized.sku = extracted.sku;
+        if (extracted.image_urls && extracted.image_urls.length > 0) {
+            normalized.image_urls = extracted.image_urls;
+        } else if (normalized.image_urls && normalized.image_urls.length > 0) {
+            if (statusEl) statusEl.innerHTML = 'Validating image URLs...';
+            res = await fetch(api.baseUrl + '/api/admin/products/validate-images', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ image_urls: normalized.image_urls }) });
+            var valData = await res.json().catch(function() { return {}; });
+            if (valData.valid_urls && valData.valid_urls.length >= 0) normalized.image_urls = valData.valid_urls || [];
+        }
+        state.adminNewFromUrlPayload = normalized;
+        if (statusEl) statusEl.innerHTML = '<span style="color: #059669;">Preview ready. Edit fields below and click Save Product.</span>' + (data.fromFallback ? ' <span style="color: #B45309;">(OPENAI_API_KEY not set; basic extraction only. Add key in .env for AI.)</span>' : '');
+        renderAdminNewFromUrl();
+    } catch (err) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Fetch Preview'; }
+    }
+}
+
+async function fetchAdminNewFromUrlProductPageDetails() {
+    var pageInput = document.getElementById('newFromUrlProductPageInput');
+    var btn = document.getElementById('newFromUrlFetchDetailsBtn');
+    var statusEl = document.getElementById('newFromUrlStatus');
+    var pageUrl = (pageInput && pageInput.value) ? pageInput.value.trim() : '';
+    if (!pageUrl || !pageUrl.startsWith('http')) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Enter a product page URL (e.g. https://www.globalglove.com/801).</span>';
+        return;
+    }
+    var assetResult = state.adminNewFromUrlAssetResult;
+    if (!assetResult || !assetResult.hints) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">Paste an image/asset URL first, then enter the product page URL.</span>';
+        return;
+    }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...'; }
+    if (statusEl) statusEl.innerHTML = 'Fetching product page...';
+    try {
+        var res = await fetch(api.baseUrl + '/api/admin/products/parse-url', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ url: pageUrl }) });
+        var data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Fetch failed') + '</span>';
+            return;
+        }
+        if (data.kind !== 'page' || !data.extracted) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">Not a product page. Use a URL that returns HTML (e.g. https://www.globalglove.com/801).</span>';
+            return;
+        }
+        state.adminNewFromUrlParseResult = data;
+        if (statusEl) statusEl.innerHTML = 'Running AI normalization...';
+        var hints = assetResult.hints || {};
+        var aiBody = { kind: 'page', url: pageUrl, extracted: data.extracted, hints: hints, logParse: true };
+        res = await fetch(api.baseUrl + '/api/admin/products/ai-normalize', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify(aiBody) });
+        data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'AI normalization failed') + '</span>';
+            return;
+        }
+        var normalized = data.normalized || {};
+        var extracted = state.adminNewFromUrlParseResult.extracted || {};
+        if (extracted.sku) normalized.sku = extracted.sku;
+        var assetUrls = hints.image_urls || hints.images || [];
+        var primaryAsset = assetUrls[0];
+        var mergedImages = primaryAsset ? [primaryAsset] : [];
+        (normalized.image_urls || []).forEach(function(u) { if (u && mergedImages.indexOf(u) === -1) mergedImages.push(u); });
+        normalized.image_urls = mergedImages.length ? mergedImages : (primaryAsset ? [primaryAsset] : []);
+        state.adminNewFromUrlPayload = normalized;
+        state.adminNewFromUrlAssetResult = null;
+        if (statusEl) statusEl.innerHTML = '<span style="color: #059669;">Details filled from product page. Edit and save.</span>';
+        renderAdminNewFromUrl();
+    } catch (err) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-link"></i> Fetch details'; }
+    }
+}
+
+async function saveAdminNewFromUrlProduct() {
+    const errEl = document.getElementById('newFromUrlSaveError');
+    if (errEl) errEl.textContent = '';
+    const sku = (document.getElementById('newFromUrlSku') && document.getElementById('newFromUrlSku').value) ? document.getElementById('newFromUrlSku').value.trim() : '';
+    const name = (document.getElementById('newFromUrlName') && document.getElementById('newFromUrlName').value) ? document.getElementById('newFromUrlName').value.trim() : '';
+    if (!sku || !name) {
+        if (errEl) errEl.textContent = 'SKU and Name are required. Please fill them in.';
+        showToast('SKU and Name are required.', 'error');
+        return;
+    }
+    const primary = (document.getElementById('newFromUrlImagePrimary') && document.getElementById('newFromUrlImagePrimary').value) ? document.getElementById('newFromUrlImagePrimary').value.trim() : '';
+    const extraText = (document.getElementById('newFromUrlImagesExtra') && document.getElementById('newFromUrlImagesExtra').value) ? document.getElementById('newFromUrlImagesExtra').value : '';
+    const extraUrls = extraText.split(/[\r\n]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+    const image_urls = primary ? [primary].concat(extraUrls) : extraUrls;
+    const payload = {
+        sku: sku,
+        name: name,
+        brand: (document.getElementById('newFromUrlBrand') && document.getElementById('newFromUrlBrand').value) ? document.getElementById('newFromUrlBrand').value.trim() : '',
+        description: (document.getElementById('newFromUrlDescription') && document.getElementById('newFromUrlDescription').value) ? document.getElementById('newFromUrlDescription').value.trim() : '',
+        image_urls: image_urls,
+        color: (document.getElementById('newFromUrlColor') && document.getElementById('newFromUrlColor').value) ? document.getElementById('newFromUrlColor').value.trim() : '',
+        thickness: (document.getElementById('newFromUrlThickness') && document.getElementById('newFromUrlThickness').value) ? document.getElementById('newFromUrlThickness').value.trim() : '',
+        material: (document.getElementById('newFromUrlMaterial') && document.getElementById('newFromUrlMaterial').value) ? document.getElementById('newFromUrlMaterial').value.trim() : '',
+        sizes: (document.getElementById('newFromUrlSizes') && document.getElementById('newFromUrlSizes').value) ? document.getElementById('newFromUrlSizes').value.trim() : '',
+        pack_qty: (document.getElementById('newFromUrlPackQty') && document.getElementById('newFromUrlPackQty').value) ? parseInt(document.getElementById('newFromUrlPackQty').value, 10) : null,
+        case_qty: (document.getElementById('newFromUrlCaseQty') && document.getElementById('newFromUrlCaseQty').value) ? parseInt(document.getElementById('newFromUrlCaseQty').value, 10) : null,
+        category: (document.getElementById('newFromUrlCategory') && document.getElementById('newFromUrlCategory').value) ? document.getElementById('newFromUrlCategory').value.trim() : '',
+        subcategory: (document.getElementById('newFromUrlSubcategory') && document.getElementById('newFromUrlSubcategory').value) ? document.getElementById('newFromUrlSubcategory').value.trim() : ''
+    };
+    if (payload.pack_qty !== null && isNaN(payload.pack_qty)) payload.pack_qty = null;
+    if (payload.case_qty !== null && isNaN(payload.case_qty)) payload.case_qty = null;
+    try {
+        const res = await fetch(api.baseUrl + '/api/admin/products/save', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify(payload) });
+        const data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+            if (errEl) errEl.textContent = data.error || 'Save failed';
+            showToast(data.error || 'Save failed', 'error');
+            return;
+        }
+        showToast('Product saved: ' + (data.action || 'saved') + ' — ' + payload.sku, 'success');
+        state.adminNewFromUrlPayload = null;
+        state.adminNewFromUrlUrl = '';
+        renderAdminNewFromUrl();
+    } catch (err) {
+        if (errEl) errEl.textContent = err.message || 'Request failed';
+        showToast(err.message || 'Request failed', 'error');
+    }
+}
+
 async function loadAdminProducts(keepPage) {
     const content = document.getElementById('adminProductsContent');
     if (!content) return;
+
+    if (state.adminProductsView === 'new-from-url') {
+        renderAdminNewFromUrl();
+        return;
+    }
 
     try {
         const products = await api.get('/api/products');
@@ -6428,6 +7129,9 @@ async function loadAdminProducts(keepPage) {
                     <button onclick="showCSVImportSection()" style="background: #111111; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#1F2933';" onmouseout="this.style.background='#111111';">
                         <i class="fas fa-file-csv"></i> Import CSV
                     </button>
+                    <button onclick="showAdminNewFromUrlView()" style="background: #7C3AED; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='#6D28D9';" onmouseout="this.style.background='#7C3AED';">
+                        <i class="fas fa-link"></i> Add Product by URL
+                    </button>
                     <button onclick="showAddProductForm()" style="background: #FF7A00; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='rgba(255,122,0,0.85)';" onmouseout="this.style.background='#FF7A00';">
                         <i class="fas fa-plus"></i> Add New Product
                     </button>
@@ -6457,7 +7161,7 @@ async function loadAdminProducts(keepPage) {
                         <select id="exportFilterCategory" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;">
                             <option value="">All categories</option>
                             <option value="Disposable Gloves">Disposable Gloves</option>
-                            <option value="Work Gloves">Work Gloves</option>
+                            <option value="Work Gloves">Reusable Work Gloves</option>
                         </select>
                     </div>
                     <div>
@@ -6510,7 +7214,7 @@ async function loadAdminProducts(keepPage) {
                         <select id="adminFilterCategory" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: #fff;" onchange="adminProductsOnFilterChange()">
                             <option value="">All</option>
                             <option value="Disposable Gloves">Disposable Gloves</option>
-                            <option value="Work Gloves">Work Gloves</option>
+                            <option value="Work Gloves">Reusable Work Gloves</option>
                         </select>
                     </div>
                     <div>
@@ -6622,6 +7326,17 @@ async function loadAdminProducts(keepPage) {
                     Add New Product
                 </h3>
                 <form id="addProductForm" onsubmit="addProduct(event)">
+                    <div class="form-group" style="grid-column: 1 / -1; margin-bottom: 20px;">
+                        <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Add Product by URL</label>
+                        <p style="font-size: 12px; color: #6B7280; margin-bottom: 8px;">Paste a product page URL to auto-fill details and images, or a direct image/PDF URL to use as the product image.</p>
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <input type="url" id="addProductByUrlInput" placeholder="https://example.com/product-page or https://.../image.jpg" style="flex: 1; min-width: 200px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <button type="button" id="addProductByUrlBtn" onclick="fetchProductByUrl()" style="background: #FF7A00; color: #fff; border: none; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+                                <i class="fas fa-link"></i> Fetch
+                            </button>
+                        </div>
+                        <div id="addProductByUrlStatus" style="margin-top: 10px; font-size: 13px; min-height: 20px;"></div>
+                    </div>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
                         <div class="form-group">
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">SKU *</label>
@@ -6639,7 +7354,7 @@ async function loadAdminProducts(keepPage) {
                             <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a;">Category *</label>
                             <select id="productCategory" required style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                 <option value="Disposable Gloves">Disposable Gloves</option>
-                                <option value="Work Gloves">Work Gloves</option>
+                                <option value="Work Gloves">Reusable Work Gloves</option>
                             </select>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
@@ -6940,7 +7655,7 @@ function buildEditProductFormHTML(product, brands) {
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Main SKU</label><input type="text" id="editProductSku" value="${escape(p.sku)}" required placeholder="e.g. GLV-500G" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;" oninput="updateEditVariantSkuPreview()" onchange="updateEditVariantSkuPreview()"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Product Name</label><input type="text" id="editProductName" value="${escape(p.name)}" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Brand</label><select id="editProductBrand" required style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option>${brandsList.map(b => `<option value="${escape(b)}" ${(p.brand || '') === b ? 'selected' : ''}>${escape(b)}</option>`).join('')}${p.brand && !brandsList.includes(p.brand) ? `<option value="${escape(p.brand)}" selected>${escape(p.brand)}</option>` : ''}</select></div>
-                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Category</label><select id="editProductCategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option><option value="Disposable Gloves" ${(p.category || '') === 'Disposable Gloves' ? 'selected' : ''}>Disposable Gloves</option><option value="Work Gloves" ${(p.category || '') === 'Work Gloves' ? 'selected' : ''}>Work Gloves</option></select></div>
+                <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Category</label><select id="editProductCategory" style="width:100%; padding:10px 12px; border:2px solid #e0e0e0; border-radius:8px;"><option value="">— Select —</option><option value="Disposable Gloves" ${(p.category || '') === 'Disposable Gloves' ? 'selected' : ''}>Disposable Gloves</option><option value="Work Gloves" ${(p.category || '') === 'Work Gloves' ? 'selected' : ''}>Reusable Work Gloves</option></select></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Subcategory</label><div id="editProductSubcategoryChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.subcategories, p.subcategory, 'editProductSubcategoryChips')}</div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label><div id="editProductMaterialChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.materials, p.material, 'editProductMaterialChips')}</div></div>
                 <div><label style="display:block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label><div id="editProductColorChips" class="edit-product-multi-chips" style="display:flex; flex-wrap:wrap; gap:8px;">${multiChip(EDIT_FILTER_OPTIONS.colors, p.color, 'editProductColorChips')}</div></div>
@@ -7140,8 +7855,10 @@ function closeEditProductModal() {
 function showAddProductForm() {
     const section = document.getElementById('addProductSection');
     if (section) section.style.display = 'block';
-    // Hide CSV import if open
     hideCSVImportSection();
+    const statusEl = document.getElementById('addProductByUrlStatus');
+    if (statusEl) statusEl.innerHTML = '';
+    window.addProductParseResult = null;
 }
 
 function hideAddProductForm() {
@@ -7149,7 +7866,10 @@ function hideAddProductForm() {
     if (section) {
         section.style.display = 'none';
         document.getElementById('addProductForm')?.reset();
+        const statusEl = document.getElementById('addProductByUrlStatus');
+        if (statusEl) statusEl.innerHTML = '';
     }
+    window.addProductParseResult = null;
 }
 
 function populateExportFilters(products) {
@@ -7264,45 +7984,46 @@ function downloadCSV(products, exportName) {
     const safeName = (exportName || 'glovecubs-products').replace(/[\s\/\\:*?"<>|]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'glovecubs-products';
     const filename = `${safeName}-export-${date}.csv`;
 
-    // CSV Headers (matching import format) - includes all filter fields
+    // Headers match server export and importer mapping (round-trip safe). No internal id; manufacturer_id allowed.
     const headers = [
-        'sku', 'name', 'brand', 'category', 'subcategory', 'description', 
-        'material', 'powder', 'thickness', 'sizes', 'color', 'grade', 
-        'useCase', 'certifications', 'texture', 'cuffStyle', 'sterility',
-        'pack_qty', 'case_qty', 'price', 'bulk_price', 'image_url', 'in_stock', 'featured'
+        'sku', 'name', 'brand', 'cost', 'image_url', 'manufacturer_id', 'manufacturer_name',
+        'category', 'subcategory', 'description', 'material', 'powder', 'thickness', 'sizes', 'color',
+        'grade', 'useCase', 'certifications', 'texture', 'cuffStyle', 'sterility',
+        'pack_qty', 'case_qty', 'bulk_price', 'in_stock', 'featured', 'industry'
     ];
-    
-    // Convert products to CSV rows
-    const csvRows = [
-        headers.join(',') // Header row
-    ];
-    
-    products.forEach(product => {
+
+    const csvRows = [headers.join(',')];
+
+    products.forEach(function (product) {
+        const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
         const row = [
             escapeCSV(product.sku || ''),
             escapeCSV(product.name || ''),
             escapeCSV(product.brand || ''),
+            cost,
+            escapeCSV(product.image_url || ''),
+            product.manufacturer_id != null && product.manufacturer_id !== '' ? product.manufacturer_id : '',
+            escapeCSV(product.manufacturer_name || ''),
             escapeCSV(product.category || ''),
             escapeCSV(product.subcategory || ''),
             escapeCSV(product.description || ''),
             escapeCSV(product.material || ''),
-            escapeCSV(product.powder || ''), // Powder-Free or Powdered
-            product.thickness || '', // mil value (e.g., 4, 5, 6)
-            escapeCSV(product.sizes || ''), // Comma-separated: S,M,L,XL
+            escapeCSV(product.powder || ''),
+            product.thickness ?? '',
+            escapeCSV(product.sizes || ''),
             escapeCSV(product.color || ''),
-            escapeCSV(product.grade || ''), // Medical/Exam Grade, Industrial Grade, Food Service Grade
-            escapeCSV(product.useCase || ''), // Comma-separated industries: Healthcare,Food Service,Automotive
-            escapeCSV(product.certifications || ''), // Comma-separated: FDA Approved,ASTM Tested,Food Safe
-            escapeCSV(product.texture || ''), // Smooth, Fingertip Textured, Fully Textured
-            escapeCSV(product.cuffStyle || ''), // Beaded Cuff, Non-Beaded, Extended Cuff
-            escapeCSV(product.sterility || ''), // Sterile, Non-Sterile
-            product.pack_qty || 100,
-            product.case_qty || 1000,
-            product.price || 0,
-            product.bulk_price || 0,
-            escapeCSV(product.image_url || ''),
+            escapeCSV(product.grade || ''),
+            escapeCSV(product.useCase || ''),
+            escapeCSV(product.certifications || ''),
+            escapeCSV(product.texture || ''),
+            escapeCSV(product.cuffStyle || ''),
+            escapeCSV(product.sterility || ''),
+            product.pack_qty ?? 100,
+            product.case_qty ?? 1000,
+            product.bulk_price ?? 0,
             product.in_stock ? 1 : 0,
-            product.featured ? 1 : 0
+            product.featured ? 1 : 0,
+            escapeCSV(product.industry || '')
         ];
         csvRows.push(row.join(','));
     });
@@ -7456,34 +8177,40 @@ async function importCSV() {
             if (statusDiv) statusDiv.innerHTML = html;
             showToast(msg, 'success');
         } else {
-            const added = response.added != null ? response.added : 0;
+            window.lastImportResult = response;
+            const parsedRows = response.parsedRows != null ? response.parsedRows : (response.dataRowCount != null ? response.dataRowCount : 0);
+            const created = response.created != null ? response.created : 0;
             const updated = response.updated != null ? response.updated : 0;
+            const skipped = response.skipped != null ? response.skipped : 0;
+            const failed = response.failed != null ? response.failed : 0;
             const deleted = response.deleted != null ? response.deleted : 0;
             const withImage = response.withImage != null ? response.withImage : null;
-            const parts = [];
-            if (added) parts.push(`${added} added`);
-            if (updated) parts.push(`${updated} updated`);
-            if (deleted) parts.push(`${deleted} deleted`);
-            const summary = parts.length ? parts.join(', ') : (response.count || 0) + ' processed';
-            const msg = response.message || `Import complete: ${summary}.`;
-            const imageLine = withImage !== null
-                ? (withImage ? `${withImage} row(s) had image URLs.` : 'No image_url values were found in the CSV—check column name (use "image_url").')
-                : '';
+            const errorSamples = response.errorSamples || [];
+            const hasErrors = failed > 0;
+            const msg = response.message || 'Import finished.';
             if (statusDiv) {
-                let html = `<span style="color: #28a745;"><i class="fas fa-check-circle"></i> ${msg}</span>` +
-                    (imageLine ? `<div style="margin-top: 8px; font-size: 13px; color: #1a1a1a;">${imageLine}</div>` : '');
+                const iconColor = hasErrors ? '#d97706' : '#28a745';
+                const iconClass = hasErrors ? 'fa-exclamation-triangle' : 'fa-check-circle';
+                let html = `<span style="color: ${iconColor};"><i class="fas ${iconClass}"></i> ${msg}</span>`;
+                html += ` <button type="button" onclick="showImportResultsModal()" style="margin-left: 12px; padding: 6px 14px; background: #111; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Import Results</button>`;
+                if (withImage !== null && withImage !== undefined) {
+                    html += `<div style="margin-top: 8px; font-size: 13px; color: #6B7280;">${withImage ? withImage + ' row(s) had image URLs.' : 'No image_url values in CSV.'}</div>`;
+                }
                 if (response.debug) {
                     const d = response.debug;
                     html += `<div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; font-size: 12px; color: #0c4a6e; text-align: left;">`;
                     html += `<strong>Why no changes?</strong><br>Headers (${d.headerCount || 0}): ${(d.headers || []).join(', ')}<br>`;
-                    html += `First row columns: ${d.firstRowColumnCount || 0} | First row SKU: "${d.firstRowSku || ''}" | Name: "${d.firstRowName || ''}"<br>`;
-                    html += `Delimiter used: ${d.delimiterUsed || 'comma'}`;
+                    html += `First row SKU: "${d.firstRowSku || ''}" | Name: "${d.firstRowName || ''}"<br>`;
+                    html += `Delimiter: ${d.delimiterUsed || 'comma'}`;
                     html += `</div>`;
                 }
                 statusDiv.innerHTML = html;
             }
-            const toastMsg = imageLine ? `${msg} ${imageLine}` : msg;
-            showToast(toastMsg, 'success');
+            if (hasErrors) {
+                showToast(msg + ' Open Import Results for details.', 'error');
+            } else {
+                showToast(msg, 'success');
+            }
         }
         
         // Reset form
@@ -7513,6 +8240,49 @@ async function importCSV() {
             importBtn.innerHTML = '<i class="fas fa-upload"></i> Import Products';
         }
     }
+}
+
+function showImportResultsModal() {
+    const r = window.lastImportResult;
+    const existing = document.getElementById('importResultsModalOverlay');
+    if (existing) existing.remove();
+    if (!r) {
+        showToast('No import result available. Run an import first.', 'error');
+        return;
+    }
+    const parsedRows = (r && r.parsedRows != null) ? r.parsedRows : (r && r.dataRowCount != null ? r.dataRowCount : 0);
+    const created = (r && r.created != null) ? r.created : 0;
+    const updated = (r && r.updated != null) ? r.updated : 0;
+    const failed = (r && r.failed != null) ? r.failed : 0;
+    const skipped = (r && r.skipped != null) ? r.skipped : 0;
+    const deleted = (r && r.deleted != null) ? r.deleted : 0;
+    const errorSamples = (r && r.errorSamples) ? r.errorSamples : [];
+    const hasErrors = failed > 0;
+    const rows = errorSamples.map(function (e) {
+        const sku = (e.sku || '').toString().replace(/</g, '&lt;');
+        const msg = (e.message || '').replace(/</g, '&lt;');
+        return '<tr><td>' + (e.row || '') + '</td><td>' + sku + '</td><td>' + msg + '</td></tr>';
+    }).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'importResultsModalOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;';
+    overlay.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
+        '<div style="padding:24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">' +
+        '<h2 style="margin:0;font-size:20px;font-weight:700;color:#111;">Import Results</h2>' +
+        '<button type="button" onclick="document.getElementById(\'importResultsModalOverlay\').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6B7280;">&times;</button></div>' +
+        '<div style="padding:24px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">' +
+        '<div style="padding:12px;background:#f3f4f6;border-radius:8px;"><div style="font-size:12px;color:#6B7280;">Parsed rows</div><div style="font-size:20px;font-weight:700;">' + parsedRows + '</div></div>' +
+        '<div style="padding:12px;background:#d1fae5;border-radius:8px;"><div style="font-size:12px;color:#065f46;">Created</div><div style="font-size:20px;font-weight:700;color:#059669;">' + created + '</div></div>' +
+        '<div style="padding:12px;background:#dbeafe;border-radius:8px;"><div style="font-size:12px;color:#1e40af;">Updated</div><div style="font-size:20px;font-weight:700;color:#2563eb;">' + updated + '</div></div>' +
+        '<div style="padding:12px;background:' + (hasErrors ? '#fee2e2' : '#f3f4f6') + ';border-radius:8px;"><div style="font-size:12px;color:' + (hasErrors ? '#991b1b' : '#6B7280') + ';">Failed</div><div style="font-size:20px;font-weight:700;color:' + (hasErrors ? '#dc2626' : '#374151') + ';">' + failed + '</div></div>' +
+        '<div style="padding:12px;background:#f3f4f6;border-radius:8px;"><div style="font-size:12px;color:#6B7280;">Skipped</div><div style="font-size:20px;font-weight:700;">' + skipped + '</div></div>' +
+        '<div style="padding:12px;background:#f3f4f6;border-radius:8px;"><div style="font-size:12px;color:#6B7280;">Deleted</div><div style="font-size:20px;font-weight:700;">' + deleted + '</div></div>' +
+        '</div>' +
+        (rows ? '<h3 style="font-size:14px;font-weight:600;margin-bottom:8px;">Error samples (max 20)</h3><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid #e5e7eb;"><th style="text-align:left;padding:8px;">Row</th><th style="text-align:left;padding:8px;">SKU</th><th style="text-align:left;padding:8px;">Message</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p style="color:#6B7280;font-size:14px;">No error samples.</p>') +
+        '</div></div>';
+    overlay.onclick = function (ev) { if (ev.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
 }
 
 async function loadAdminOrders() {
@@ -8184,8 +8954,10 @@ async function deleteProduct(productId) {
 function showAddProductForm() {
     const section = document.getElementById('addProductSection');
     if (section) section.style.display = 'block';
-    // Hide CSV import if open
     hideCSVImportSection();
+    var statusEl = document.getElementById('addProductByUrlStatus');
+    if (statusEl) statusEl.innerHTML = '';
+    window.addProductParseResult = null;
 }
 
 function hideAddProductForm() {
@@ -8193,6 +8965,71 @@ function hideAddProductForm() {
     if (section) {
         section.style.display = 'none';
         document.getElementById('addProductForm')?.reset();
+        var statusEl = document.getElementById('addProductByUrlStatus');
+        if (statusEl) statusEl.innerHTML = '';
+    }
+    window.addProductParseResult = null;
+}
+
+async function fetchProductByUrl() {
+    var input = document.getElementById('addProductByUrlInput');
+    var btn = document.getElementById('addProductByUrlBtn');
+    var statusEl = document.getElementById('addProductByUrlStatus');
+    var url = (input && input.value) ? input.value.trim() : '';
+    if (!url) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Please enter a URL.</span>';
+        return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">URL must start with http:// or https://</span>';
+        return;
+    }
+    var origLabel = btn ? btn.innerHTML : 'Fetch';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...'; }
+    if (statusEl) statusEl.innerHTML = '';
+    try {
+        var res = await fetch(api.baseUrl + '/api/admin/products/parse-url', {
+            method: 'POST',
+            headers: api.getHeaders(),
+            body: JSON.stringify({ url: url })
+        });
+        var data = await res.json().catch(function() { return { error: 'Invalid response' }; });
+        if (!res.ok) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || res.statusText || 'Request failed') + '</span>';
+            return;
+        }
+        window.addProductParseResult = data;
+        if (data.kind === 'asset') {
+            var imgUrl = (data.hints && data.hints.images && data.hints.images[0]) ? data.hints.images[0] : (data.asset && data.asset.finalUrl) ? data.asset.finalUrl : url;
+            var imgInput = document.getElementById('productImageUrl');
+            if (imgInput) imgInput.value = imgUrl;
+            if (typeof updateImagePreview === 'function') updateImagePreview(imgUrl);
+            if (statusEl) statusEl.innerHTML = '<div style="background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; padding: 10px 12px; border-radius: 8px;"><strong>This is a media file URL, not a product page.</strong> We saved it as an image. Paste the product page URL to auto-fill SKU/details.</div>';
+        } else {
+            var extracted = data.extracted || {};
+            var hints = data.hints || {};
+            var images = hints.images || extracted.images || [];
+            if (images.length > 0) {
+                var imgInput = document.getElementById('productImageUrl');
+                if (imgInput) imgInput.value = images[0];
+                var addImg = document.getElementById('productAdditionalImages');
+                if (addImg && images.length > 1) addImg.value = images.slice(1).join('\n');
+                if (typeof updateImagePreview === 'function') updateImagePreview(images[0]);
+            }
+            if (extracted.title) {
+                var nameInput = document.getElementById('productName');
+                if (nameInput) nameInput.value = extracted.title;
+            }
+            if (extracted.description) {
+                var descInput = document.getElementById('productDescription');
+                if (descInput) descInput.value = extracted.description;
+            }
+            if (statusEl) statusEl.innerHTML = '<span style="color: #059669;">Product page parsed. Image and details filled from page.</span>';
+        }
+    } catch (err) {
+        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Network error') + '</span>';
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
     }
 }
 
@@ -8410,19 +9247,26 @@ function openModal(modalId) {
 }
 
 // ============================================
-// THEME (Dark / Light)
+// THEME (Dark / Light) – backend portals only (dashboard, admin)
 // ============================================
 
 function initTheme() {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    document.documentElement.setAttribute('data-theme', 'light');
+}
+
+function isPortalPage() {
+    return state.currentPage === 'dashboard' || state.currentPage === 'admin';
+}
+
+function updateThemeForPage(page) {
+    if (page === 'dashboard' || page === 'admin') {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = (saved || (prefersDark ? 'dark' : 'light'));
+        document.documentElement.setAttribute('data-theme', theme);
+    } else {
         document.documentElement.setAttribute('data-theme', 'light');
-        return;
     }
-    const saved = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = saved || (prefersDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', theme);
 }
 
 function toggleTheme() {
@@ -8431,46 +9275,6 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
-}
-[];
-    const materialChips = typeof getSelectedEditProductMulti === 'function' ? getSelectedEditProductMulti('addProductMaterialChips') : [];
-    const name = nameInput ? nameInput.value : 'Product';
-    const color = (colorChips && colorChips[0]) || 'Blue';
-    const material = (materialChips && materialChips[0]) || 'Nitrile';
-    const colorMap = {
-        'Blue': '0066CC',
-        'Black': '000000',
-        'Orange': 'FF6B00',
-        'Green': '00AA00',
-        'Gray': '666666',
-        'Grey': '666666',
-        'White': 'FFFFFF',
-        'Red': 'FF0000',
-        'Yellow': 'FFCC00',
-        'Purple': '6600CC',
-        'Pink': 'FF66CC',
-        'Tan': 'D2B48C',
-        'Clear': 'CCCCCC',
-        'Natural': 'D2B48C'
-    };
-    let colorCode = '0066CC';
-    for (const [key, value] of Object.entries(colorMap)) {
-        if (color.toLowerCase().includes(key.toLowerCase())) {
-            colorCode = value;
-            break;
-        }
-    }
-    let text = name.replace(/\s+/g, '+').substring(0, 30);
-    if (!text || text === 'Product') {
-        text = material + '+' + color;
-    }
-    const imageUrl = `https://via.placeholder.com/400x400/FFFFFF/${colorCode}?text=${text}`;
-    const imageInput = document.getElementById('productImageUrl');
-    if (imageInput) {
-        imageInput.value = imageUrl;
-        updateImagePreview(imageUrl);
-        showToast('✅ Image URL generated!');
-    }
 }
 
 function updateImagePreview(url) {
@@ -8643,29 +9447,3 @@ function openModal(modalId) {
     document.getElementById(modalId).classList.add('open');
 }
 
-// ============================================
-// THEME (Dark / Light)
-// ============================================
-
-function initTheme() {
-    const token = localStorage.getItem('token');
-    if (!token) {
-        document.documentElement.setAttribute('data-theme', 'light');
-        return;
-    }
-    const saved = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = saved || (prefersDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', theme);
-}
-
-function toggleTheme() {
-    const root = document.documentElement;
-    const current = root.getAttribute('data-theme') || 'light';
-    const next = current === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-}
- next);
-    localStorage.setItem('theme', next);
-}

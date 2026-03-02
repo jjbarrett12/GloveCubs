@@ -31,13 +31,14 @@ function importFromCSV(csvFilePath, options = {}) {
     const db = loadDB();
 
     const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
-    const { added, updated, deleted, skippedDuplicates, withImage } = result;
+    const { created, updated, skipped, failed, deleted, withImage } = result;
 
     saveDB(db);
 
-    console.log(`\n✅ Import complete: ${added} added, ${updated} updated.`);
+    console.log(`\n✅ Import complete: ${created} created, ${updated} updated.`);
     if (deleted > 0) console.log(`   ${deleted} product(s) removed (not in CSV).`);
-    if (skippedDuplicates > 0) console.log(`   ${skippedDuplicates} duplicate SKU(s) in CSV were skipped.`);
+    if (skipped > 0) console.log(`   ${skipped} row(s) skipped (empty or too few columns).`);
+    if (failed > 0) console.log(`   ${failed} row(s) failed (missing/invalid required fields).`);
     if (withImage > 0) console.log(`   ${withImage} row(s) had image URLs.`);
     console.log(`   Total products in database: ${db.products.length}\n`);
 

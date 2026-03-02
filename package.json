@@ -1,20 +1,30 @@
 {
   "name": "glovecubs",
   "version": "1.0.0",
-  "description": "B2B E-commerce platform for disposable and work gloves",
+  "description": "B2B E-commerce platform for disposable and reusable work gloves",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "diagnose:products": "node scripts/diagnose-products.mjs",
+    "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
+    "test:parse-url": "node scripts/test-parse-url-asset.mjs",
+    "test:parse-url:live": "node scripts/test-parse-url-asset.mjs --live"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@supabase/supabase-js": "^2.45.0",
+    "zod": "^3.23.8",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
-    "nodemailer": "^8.0.0",
-    "express-rate-limit": "^7.1.5"
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^8.0.0"
+  },
+  "devDependencies": {
+    "csv-parser": "^3.2.0",
+    "csv-stringify": "^6.6.0"
   }
 }

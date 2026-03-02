@@ -103,7 +103,7 @@
 - **Latex:** 3 products
 - **Vinyl:** 3 products
 
-### Work Gloves (30 products)
+### Reusable Work Gloves (30 products)
 - **Cut Resistant:** 8 products (ANSI A3-A6)
 - **Coated:** 6 products (foam nitrile, nitrile)
 - **Leather:** 7 products
@@ -159,7 +159,7 @@ All products have been assigned professional image URLs from Unsplash:
 
 ### Current URLs (Unsplash Placeholders)
 - Disposable: `https://images.unsplash.com/photo-1584433144859-1fc3ab64a957?w=400&h=400&fit=crop`
-- Work Gloves: `https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop`
+- Reusable Work Gloves: `https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop`
 
 ---
 

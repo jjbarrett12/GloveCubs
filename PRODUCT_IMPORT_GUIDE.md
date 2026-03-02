@@ -35,7 +35,7 @@ sku,name,brand,category,subcategory,description,material,sizes,color,pack_qty,ca
 - **sku**: Must start with `GLV-` followed by manufacturer item number (e.g., `GLV-GL-N105FX`)
 - **name**: Full product name
 - **brand**: One of: Hospeco, Global Glove, Safeko, Ambitex, SW Safety, MCR Safety, PIP, Wells Lamont, Ansell, SHOWA
-- **category**: `Disposable Gloves` or `Work Gloves`
+- **category**: `Disposable Gloves` or `Work Gloves` (stored value; site displays "Reusable Work Gloves" for the latter)
 - **subcategory**: Nitrile, Latex, Vinyl, Coated, Cut Resistant, Leather, etc.
 - **description**: Product description (can include multiple sentences)
 - **material**: Nitrile, Latex, Vinyl, Nylon/Nitrile, Leather, etc.

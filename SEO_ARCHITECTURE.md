@@ -5,7 +5,7 @@ This doc describes the SEO-friendly URL structure and how to extend it.
 ## Clean URL structure
 
 ### Product pages
-- **Category listing:** `/gloves/` or `/gloves/nitrile/`, `/gloves/vinyl/`, `/gloves/disposable-gloves/`, `/gloves/work-gloves/`
+- **Category listing:** `/gloves/` or `/gloves/nitrile/`, `/gloves/vinyl/`, `/gloves/disposable-gloves/`, `/gloves/work-gloves/` (display title: Reusable Work Gloves)
 - **Product:** `/gloves/nitrile/black-nitrile-exam-gloves/`
 - **Programmatic size pages:** `/gloves/nitrile/black-nitrile-exam-gloves/size/xl/`
 

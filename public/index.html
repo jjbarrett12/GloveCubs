@@ -5,25 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
         (function(){
-            var token = localStorage.getItem('token');
-            if (!token) {
-                document.documentElement.setAttribute('data-theme', 'light');
-            } else {
-                var t = localStorage.getItem('theme');
-                if (t) document.documentElement.setAttribute('data-theme', t);
-            }
+            document.documentElement.setAttribute('data-theme', 'light');
         })();
     </script>
-    <title>Glovecubs - Professional Disposable & Work Gloves | B2B Glove Distributor</title>
-    <meta name="description" content="Glovecubs is your trusted B2B distributor for disposable and work gloves. 1,000+ SKUs from top manufacturers including Hospeco, Global Glove, Safeko, and more. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.">
-    <meta name="keywords" content="disposable gloves, work gloves, nitrile gloves, latex gloves, vinyl gloves, B2B gloves, bulk gloves, industrial gloves, medical gloves, food service gloves, glove distributor, Salt Lake City">
+    <title>Glovecubs - Professional Disposable & Reusable Work Gloves | B2B Glove Distributor</title>
+    <meta name="description" content="Glovecubs is your trusted B2B distributor for disposable and reusable work gloves. 1,000+ SKUs from top manufacturers including Hospeco, Global Glove, Safeko, and more. Bulk pricing, net terms, fast fulfillment from Salt Lake City, UT.">
+    <meta name="keywords" content="disposable gloves, reusable work gloves, nitrile gloves, latex gloves, vinyl gloves, B2B gloves, bulk gloves, industrial gloves, medical gloves, food service gloves, glove distributor, Salt Lake City">
     <meta name="author" content="Glovecubs">
-    <meta property="og:title" content="Glovecubs - Professional Disposable & Work Gloves">
+    <meta property="og:title" content="Glovecubs - Professional Disposable & Reusable Work Gloves">
     <meta property="og:description" content="Your trusted B2B distributor for 1,000+ glove SKUs. Bulk pricing, net terms, fast fulfillment.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://glovecubs.com">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Glovecubs - Professional Disposable & Work Gloves">
+    <meta name="twitter:title" content="Glovecubs - Professional Disposable & Reusable Work Gloves">
     <meta name="twitter:description" content="B2B glove distributor with 1,000+ SKUs. Bulk pricing, net terms, fast fulfillment.">
     <link rel="canonical" href="https://glovecubs.com">
     <link rel="icon" type="image/png" href="/favicon.png">
@@ -143,71 +137,13 @@
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main id="mainContent">
-        <div id="mainContentFallback" class="container" style="padding: 60px 20px; text-align: center;">
-            <div class="spinner" style="margin: 0 auto 16px; width: 40px; height: 40px; border: 3px solid rgba(255,122,0,0.3); border-top-color: #FF7A00; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-            <p style="color: var(--gray-600); margin-bottom: 16px;">Loading Glovecubs…</p>
-            <p style="font-size: 14px; color: var(--gray-500);">If this doesn’t load, <a href="#" onclick="window.location.reload(); return false;">refresh the page</a> or check the browser console for errors.</p>
-        </div>
-    </main>
+    <!-- Main Content: filled by app.js (renderHomePage = hero + Quick Bulk Builder + product grid + etc.) -->
+    <main id="mainContent"></main>
 
-    <!-- Footer -->
+    <!-- Footer: content injected from footerLinks.js config via initFooter() -->
     <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <div class="footer-logo">
-                        <img src="/images/logo.png" alt="Glovecubs" class="footer-logo-image">
-                    </div>
-                    <p>Your trusted source for professional-grade disposable and work gloves. Serving businesses nationwide with quality products from top manufacturers.</p>
-                    <div class="social-links">
-                        <a href="https://facebook.com/glovecubs" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-                        <a href="https://twitter.com/glovecubs" target="_blank" rel="noopener noreferrer" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                        <a href="https://linkedin.com/company/glovecubs" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-                        <a href="https://instagram.com/glovecubs" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
-                    </div>
-                </div>
-                <div class="footer-col">
-                    <h4>Quick Links</h4>
-                    <ul>
-                        <li><a href="#" onclick="navigate('products'); return false;">All Products</a></li>
-                        <li><a href="#" onclick="filterByCategory('Disposable Gloves'); return false;">Disposable Gloves</a></li>
-                        <li><a href="#" onclick="filterByCategory('Work Gloves'); return false;">Work Gloves</a></li>
-                        <li><a href="#" onclick="navigate('b2b'); return false;">B2B Program</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4>Top Brands</h4>
-                    <div class="footer-brand-logos">
-                        <a href="#" onclick="filterByBrand('Hospeco'); return false;" title="Hospeco"><img src="/images/logos/hospeco.svg" alt="Hospeco" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Hospeco</span></a>
-                        <a href="#" onclick="filterByBrand('Global Glove'); return false;" title="Global Glove"><img src="/images/logos/global-glove.svg" alt="Global Glove" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Global Glove</span></a>
-                        <a href="#" onclick="filterByBrand('Safeko'); return false;" title="Safeko"><img src="/images/logos/safeko.svg" alt="Safeko" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Safeko</span></a>
-                        <a href="#" onclick="filterByBrand('PIP'); return false;" title="PIP"><img src="/images/logos/pip.svg" alt="PIP" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">PIP</span></a>
-                        <a href="#" onclick="filterByBrand('Growl Gloves'); return false;" title="Growl Gloves"><img src="/images/logos/growl-gloves.svg" alt="Growl Gloves" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Growl Gloves</span></a>
-                        <a href="#" onclick="filterByBrand('Semper Guard'); return false;" title="Semper Guard"><img src="/images/logos/Semper.png" alt="Semper Guard" class="footer-brand-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline');"><span class="footer-brand-fallback" style="display:none;">Semper Guard</span></a>
-                    </div>
-                </div>
-                <div class="footer-col">
-                    <h4>Contact Us</h4>
-                    <ul class="contact-info">
-                        <li><i class="fas fa-phone"></i> 1-800-GLOVECUBS</li>
-                        <li><i class="fas fa-envelope"></i> sales@glovecubs.com</li>
-                        <li><i class="fas fa-map-marker-alt"></i> Salt Lake City, UT</li>
-                        <li><i class="fas fa-clock"></i> Mon-Fri: 8AM - 6PM MST</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 Glovecubs. All rights reserved.</p>
-                <div class="payment-icons">
-                    <i class="fab fa-cc-visa"></i>
-                    <i class="fab fa-cc-mastercard"></i>
-                    <i class="fab fa-cc-amex"></i>
-                    <i class="fab fa-cc-discover"></i>
-                    <i class="fab fa-cc-paypal"></i>
-                </div>
-            </div>
+        <div class="container" id="footerContainer">
+            <!-- Filled by initFooter() when FOOTER_LINKS is loaded -->
         </div>
     </footer>
 
@@ -248,6 +184,23 @@
     </div>
 
     <script src="/js/industry-config.js"></script>
-    <script src="/js/app.js?v=3"></script>
+    <script src="/js/footerLinks.js"></script>
+    <script src="/js/app.js?v=10"></script>
+    <script>
+      (function(){
+        if (window.clearOverlaysAndModals) window.clearOverlaysAndModals();
+        function go(){ if (window.runAppInit) window.runAppInit(); }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
+        else go();
+        setTimeout(function(){
+          var main = document.getElementById('mainContent');
+          if (main && !main.innerHTML.trim() && window.navigate) window.navigate('home');
+        }, 500);
+        setTimeout(function(){
+          var main = document.getElementById('mainContent');
+          if (main && !main.innerHTML.trim()) main.innerHTML = '<div class="container" style="padding:60px 20px;text-align:center;"><h2>Content could not load</h2><p style="margin:16px 0;">Please <a href="">refresh the page</a>. If it keeps happening, open the browser console (F12) and check for errors.</p></div>';
+        }, 3000);
+      })();
+    </script>
 </body>
 </html>

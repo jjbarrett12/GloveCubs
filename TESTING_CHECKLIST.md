@@ -37,7 +37,7 @@
   - [ ] Verify search debouncing works
 
 - [ ] **Filtering**
-  - [ ] Filter by category (Disposable/Work Gloves)
+  - [ ] Filter by category (Disposable/Reusable Work Gloves)
   - [ ] Filter by material (Nitrile, Latex, Vinyl)
   - [ ] Filter by brand
   - [ ] Filter by size

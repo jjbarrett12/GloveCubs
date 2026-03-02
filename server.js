@@ -10,6 +10,17 @@ const fishbowl = require('./fishbowl');
 const rateLimit = require('express-rate-limit');
 const { sendMail, isConfigured: emailConfigured } = require('./lib/email');
 const productStore = require('./lib/product-store');
+const { getEffectiveMargin, computeSellPrice } = require('./lib/pricing');
+const { importCsvToSupabase } = require('./lib/import-csv-supabase');
+const supabaseLib = require('./lib/supabase');
+const { parseProductUrl } = require('./lib/parse-product-url');
+const { aiNormalizeProduct, normalizeFromExtracted, isConfigured: aiNormalizeConfigured } = require('./lib/ai-normalize-product');
+const { validateImageUrls, validateImageUrlsWithVerification } = require('./lib/validate-image-urls');
+const { getSupabase, isConfigured: supabaseConfigured } = require('./lib/supabase');
+const { logParseEvent } = require('./lib/parse-log');
+const { aiGenerate, aiExtractInvoice, aiRecommendFromInvoice, isConfigured: aiConfigured } = require('./lib/ai/provider');
+const { validateGloveFinderRequest, validateGloveFinderResponse, validateInvoiceExtractResponse, validateInvoiceRecommendResponse } = require('./lib/ai/schemas');
+const { hashIp, logConversation, logInvoiceUpload, logInvoiceLines, logRecommendations } = require('./lib/ai/ai-log');
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3004;
@@ -45,6 +56,53 @@ function loadDB() {
             if (!db.contact_messages) { db.contact_messages = []; changed = true; }
             if (!db.password_reset_tokens) { db.password_reset_tokens = []; changed = true; }
             if (!db.uploaded_invoices) { db.uploaded_invoices = []; changed = true; }
+            if (!db.companies) { db.companies = []; changed = true; }
+            if (!db.manufacturers) { db.manufacturers = []; changed = true; }
+            if (!db.customer_manufacturer_pricing) { db.customer_manufacturer_pricing = []; changed = true; }
+            if (!db.app_admins) { db.app_admins = []; changed = true; }
+            // Seed companies from users (unique company_name) if empty
+            if (db.companies.length === 0 && (db.users || []).length > 0) {
+                const seen = new Set();
+                let nextId = 1;
+                (db.users || []).forEach((u) => {
+                    const name = (u.company_name || '').trim();
+                    if (name && !seen.has(name.toLowerCase())) {
+                        seen.add(name.toLowerCase());
+                        db.companies.push({
+                            id: nextId++,
+                            name,
+                            default_gross_margin_percent: 30,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+                });
+                changed = true;
+            }
+            // Seed manufacturers from products (unique brand) if empty
+            if (db.manufacturers.length === 0 && (db.products || []).length > 0) {
+                const seen = new Set();
+                let nextId = 1;
+                (db.products || []).forEach((p) => {
+                    const name = (p.brand || '').trim();
+                    if (name && !seen.has(name.toLowerCase())) {
+                        seen.add(name.toLowerCase());
+                        db.manufacturers.push({
+                            id: nextId++,
+                            name,
+                            created_at: new Date().toISOString()
+                        });
+                    }
+                });
+                changed = true;
+            }
+            // Ensure companies have default_gross_margin_percent
+            (db.companies || []).forEach((c) => {
+                if (c.default_gross_margin_percent == null) {
+                    c.default_gross_margin_percent = 30;
+                    changed = true;
+                }
+            });
             // Ensure orders can have tracking
             (db.orders || []).forEach(o => {
                 if (o.tracking_number === undefined) o.tracking_number = '';
@@ -86,7 +144,7 @@ function loadDB() {
     } catch (e) {
         console.log('Creating new database...');
     }
-    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [] };
+    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [], companies: [], manufacturers: [], customer_manufacturer_pricing: [], app_admins: [] };
     // Ensure demo user exists so login works even when database.json is missing or empty (e.g. fresh Vercel deploy)
     const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe'; // bcrypt hash of 'demo123'
     if (!db.users || db.users.length === 0) {
@@ -162,6 +220,20 @@ const apiLimiter = rateLimit({
     legacyHeaders: false
 });
 app.use('/api', apiLimiter);
+
+// AI routes: stricter limit per IP (and per user when authenticated)
+const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: { error: 'Too many AI requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        const uid = req.user && req.user.id ? String(req.user.id) : '';
+        const ip = (req.ip || req.connection?.remoteAddress || 'unknown').trim();
+        return uid ? `ai:user:${uid}` : `ai:ip:${ip}`;
+    },
+});
 
 // Stricter limit for auth and contact to prevent abuse
 const authContactLimiter = rateLimit({
@@ -450,7 +522,7 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
 
 // ============ PRODUCT ROUTES ============
 
-app.get('/api/products', (req, res) => {
+app.get('/api/products', optionalAuth, (req, res) => {
     db = loadDB();
     let products = Array.isArray(db.products) ? [...db.products] : [];
 
@@ -482,9 +554,10 @@ app.get('/api/products', (req, res) => {
         products = products.filter(p => p.category === req.query.category);
     }
     
-    // Brand filter (single value)
+    // Brand filter (single value) — case-insensitive so "Hospeco" matches "HOSPECO" etc.
     if (req.query.brand) {
-        products = products.filter(p => p.brand === req.query.brand);
+        const brandQ = (req.query.brand || '').trim().toLowerCase();
+        if (brandQ) products = products.filter(p => (p.brand || '').trim().toLowerCase() === brandQ);
     }
     
     // Material filter (multiple values possible); product.material can be comma-separated
@@ -855,6 +928,17 @@ app.get('/api/products', (req, res) => {
         return (a.name || '').localeCompare(b.name || '');
     });
 
+    // Customer pricing: when user has a company, add sell_price using manufacturer_id (no brand string)
+    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
+    if (companyId != null) {
+        products = products.map(p => {
+            const cost = p.cost != null && p.cost !== '' ? Number(p.cost) : (p.price != null ? Number(p.price) : 0);
+            const margin = getEffectiveMargin(db, companyId, p.manufacturer_id);
+            const sell = computeSellPrice(cost, margin);
+            return { ...p, sell_price: Number.isNaN(sell) ? (p.price || 0) : sell };
+        });
+    }
+
     res.json(products);
 });
 
@@ -864,20 +948,28 @@ function productSlug(p) {
     return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
 }
 
-app.get('/api/products/:id', (req, res) => {
+app.get('/api/products/:id', optionalAuth, (req, res) => {
     db = loadDB();
-    const product = db.products.find(p => p.id == req.params.id || p.sku === req.params.id);
+    let product = db.products.find(p => p.id == req.params.id || p.sku === req.params.id);
     if (!product) {
         return res.status(404).json({ error: 'Product not found' });
+    }
+    product = { ...product };
+    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
+    if (companyId != null) {
+        const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+        const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
+        const sell = computeSellPrice(cost, margin);
+        product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
     }
     res.json(product);
 });
 
 // SEO: get product by URL slug (e.g. black-nitrile-exam-gloves). Optional category/material to disambiguate.
-app.get('/api/products/by-slug', (req, res) => {
+app.get('/api/products/by-slug', optionalAuth, (req, res) => {
     db = loadDB();
     const slug = (req.query.slug || '').toString().trim().toLowerCase();
-    const categorySegment = (req.query.category || '').toString().trim().toLowerCase(); // e.g. nitrile, disposable-gloves
+    const categorySegment = (req.query.category || '').toString().trim().toLowerCase();
     if (!slug) {
         return res.status(400).json({ error: 'slug query parameter required' });
     }
@@ -890,22 +982,30 @@ app.get('/api/products/by-slug', (req, res) => {
             return mat === categorySegment || sub === categorySegment || cat === categorySegment;
         });
     }
-    const product = products.length > 0 ? products[0] : null;
+    let product = products.length > 0 ? products[0] : null;
     if (!product) {
         return res.status(404).json({ error: 'Product not found' });
     }
-    res.json({ ...product, slug: productSlug(product) });
+    product = { ...product, slug: productSlug(product) };
+    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
+    if (companyId != null) {
+        const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+        const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
+        const sell = computeSellPrice(cost, margin);
+        product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
+    }
+    res.json(product);
 });
 
 // SEO: list industries for landing pages (slug, title, description, useCase param)
 // Routes: /industries/medical, janitorial, food-service, industrial, automotive (+ legacy slugs)
 const SEO_INDUSTRIES = [
     { slug: 'medical', title: 'Medical & Healthcare Gloves', useCase: 'Healthcare', description: 'Exam and medical-grade gloves for healthcare facilities. Nitrile, latex-free, and sterile options.' },
-    { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
+    { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and reusable work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
     { slug: 'food-service', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
     { slug: 'foodservice', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
-    { slug: 'industrial', title: 'Industrial & Manufacturing Gloves', useCase: 'Manufacturing', description: 'Work gloves for manufacturing, assembly, and industrial applications.' },
-    { slug: 'manufacturing', title: 'Manufacturing & Industrial Gloves', useCase: 'Manufacturing', description: 'Work gloves for manufacturing, assembly, and industrial applications.' },
+    { slug: 'industrial', title: 'Industrial & Manufacturing Gloves', useCase: 'Manufacturing', description: 'Reusable work gloves for manufacturing, assembly, and industrial applications.' },
+    { slug: 'manufacturing', title: 'Manufacturing & Industrial Gloves', useCase: 'Manufacturing', description: 'Reusable work gloves for manufacturing, assembly, and industrial applications.' },
     { slug: 'automotive', title: 'Automotive Gloves', useCase: 'Automotive', description: 'Mechanic and automotive gloves. Nitrile, impact, and cut-resistant styles.' },
     { slug: 'healthcare', title: 'Healthcare Gloves', useCase: 'Healthcare', description: 'Professional gloves for healthcare and clinical use. B2B pricing and bulk quantities.' },
     { slug: 'food-processing', title: 'Food Processing Gloves', useCase: 'Food Processing', description: 'Heavy-duty gloves for food processing and manufacturing. Cut-resistant and chemical-resistant options.' },
@@ -980,16 +1080,14 @@ app.get('/api/seo/sitemap-urls', (req, res) => {
     res.json({ pages });
 });
 
-// Add new product (admin only - requires authentication)
-app.post('/api/products/import-csv', authenticateToken, (req, res) => {
+// CSV import: Supabase (when configured) or JSON DB. Row-fault-tolerant; returns parsedRows, created, updated, failed, skipped, errorSamples.
+app.post('/api/products/import-csv', authenticateToken, async (req, res) => {
     try {
-        // Check if user is admin
         db = loadDB();
         const user = db.users.find(u => u.id === req.user.id);
         if (!user || !user.is_approved) {
             return res.status(403).json({ error: 'Admin access required' });
         }
-        
         let csvContent = req.body.csvContent;
         if (!csvContent) {
             return res.status(400).json({ error: 'CSV content is required' });
@@ -999,33 +1097,76 @@ app.post('/api/products/import-csv', authenticateToken, (req, res) => {
             return res.status(400).json({ error: 'CSV must have at least a header row and one data row' });
         }
 
-        const deleteNotInImport = !!req.body.deleteNotInImport;
-        const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
-        const { added, updated, deleted, skippedDuplicates, withImage } = result;
+        let parsedRows, created, updated, failed, skipped, deleted, withImage, errorSamples;
 
-        saveDB(db);
-        const msgParts = [added && `${added} added`, updated && `${updated} updated`, deleted > 0 && `${deleted} deleted`, skippedDuplicates > 0 && `${skippedDuplicates} duplicate SKU(s) skipped`].filter(Boolean);
-        const msg = msgParts.length ? msgParts.join(', ') : 'No changes';
-        const imageNote = withImage ? ` ${withImage} row(s) had image URLs.` : ' No image_url values were found in the CSV—check column name (use "image_url") and that URLs are in the column.';
-        const resBody = { success: true, count: added + updated, added, updated, deleted, skippedDuplicates, withImage, message: `Import complete: ${msg}.${imageNote}` };
-        if (added + updated === 0 && lines.length > 1) {
-            const delimiter = productStore.detectDelimiter(lines[0]);
-            const headers = productStore.parseCSVLine(lines[0], delimiter).map(h => (h || '').replace(/^"|"$/g, '').trim().replace(/^\ufeff/, ''));
-            const firstValues = productStore.parseCSVLine(lines[1], delimiter).map(v => (v || '').replace(/^"|"$/g, '').trim());
-            const { getVal } = productStore.buildHeaderLookup(headers);
-            resBody.debug = {
-                headers,
-                headerCount: headers.length,
-                firstRowColumnCount: firstValues.length,
-                firstRowSku: (getVal(firstValues, 'sku', ['product_sku', 'item_number', 'part_number'], '') || '').trim() || '(column not found)',
-                firstRowName: (getVal(firstValues, 'name', ['product name', 'title'], '') || '').substring(0, 30) || '(column not found)',
-                delimiterUsed: delimiter
-            };
+        if (supabaseLib.isConfigured()) {
+            const result = await importCsvToSupabase(csvContent);
+            parsedRows = result.parsedRows;
+            created = result.created;
+            updated = result.updated;
+            failed = result.failed;
+            skipped = result.skipped;
+            deleted = 0;
+            withImage = 0;
+            errorSamples = result.errorSamples || [];
+        } else {
+            const deleteNotInImport = !!req.body.deleteNotInImport;
+            const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
+            parsedRows = result.parsedRows ?? result.dataRowCount ?? 0;
+            created = result.created;
+            updated = result.updated;
+            failed = result.failed;
+            skipped = result.skipped;
+            deleted = result.deleted || 0;
+            withImage = result.withImage || 0;
+            errorSamples = result.errorSamples || [];
+            saveDB(db);
+            // Sync manufacturers from products (distinct brand) and backfill manufacturer_id
+            const manufacturers = db.manufacturers || [];
+            let nextMfrId = manufacturers.length ? Math.max(...manufacturers.map(m => m.id)) + 1 : 1;
+            const byName = new Map(manufacturers.map(m => [(m.name || '').trim().toLowerCase(), m]));
+            (db.products || []).forEach((p) => {
+                const brand = (p.brand || '').trim();
+                if (!brand) return;
+                const key = brand.toLowerCase();
+                if (!byName.has(key)) {
+                    manufacturers.push({ id: nextMfrId, name: brand, created_at: new Date().toISOString() });
+                    byName.set(key, { id: nextMfrId, name: brand });
+                    nextMfrId++;
+                }
+                const mfr = byName.get(key);
+                if (mfr) p.manufacturer_id = mfr.id;
+            });
+            db.manufacturers = manufacturers;
+            saveDB(db);
         }
+
+        const msgParts = [
+            parsedRows != null && `${parsedRows} row(s) in file`,
+            created > 0 && `${created} created`,
+            updated > 0 && `${updated} updated`,
+            deleted > 0 && `${deleted} deleted`,
+            skipped > 0 && `${skipped} skipped`,
+            failed > 0 && `${failed} failed`
+        ].filter(Boolean);
+        const msg = msgParts.length ? msgParts.join('; ') : 'No changes';
+        const success = failed === 0;
+        const resBody = {
+            success,
+            parsedRows: parsedRows ?? 0,
+            created,
+            updated,
+            failed,
+            skipped,
+            deleted,
+            withImage,
+            errorSamples: errorSamples.slice(0, 20),
+            message: failed > 0 ? `Import finished with errors: ${msg}. Check Import Results for details.` : `Import complete: ${msg}.`
+        };
         res.json(resBody);
     } catch (error) {
         console.error('CSV import error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error.message, errorSamples: [{ row: 0, message: error.message }] });
     }
 });
 
@@ -1115,6 +1256,272 @@ app.post('/api/products/update-images-csv', authenticateToken, (req, res) => {
     } catch (error) {
         console.error('Update images CSV error:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Add Product by URL: classify asset vs page; asset = no HTML parse, return hints.image_urls + empty extracted
+app.post('/api/admin/products/parse-url', authenticateToken, requireAdmin, async (req, res) => {
+    const url = (req.body && req.body.url) ? String(req.body.url).trim() : '';
+    if (!url) return res.status(400).json({ error: 'URL is required' });
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return res.status(400).json({ error: 'URL must start with http:// or https://' });
+    }
+    try {
+        const payload = await parseProductUrl(url);
+        if (payload.kind === 'asset') {
+            const hints = payload.hints || {};
+            const image_urls = hints.image_urls || hints.images || (payload.asset && payload.asset.finalUrl ? [payload.asset.finalUrl] : [url]);
+            return res.json({
+                kind: 'asset',
+                url: payload.url,
+                asset: payload.asset,
+                hints: { image_urls, images: image_urls },
+                extracted: { meta: {}, jsonld: [], text: '' }
+            });
+        }
+        if (payload.kind === 'page' && payload.extracted) {
+            logParseEvent({ event: 'parse-url', url: payload.url, meta: payload.extracted.meta });
+            const extracted = {
+                jsonld: payload.extracted.jsonld || [],
+                meta: payload.extracted.meta || { title: '', image: '', description: '' },
+                text: payload.extracted.text || ''
+            };
+            if (payload.extracted.sku) extracted.sku = payload.extracted.sku;
+            if (payload.extracted.skuGuess) extracted.skuGuess = payload.extracted.skuGuess;
+            if (payload.extracted.image_urls && payload.extracted.image_urls.length) extracted.image_urls = payload.extracted.image_urls;
+            const hints = payload.hints || {};
+            const image_urls = hints.image_urls || hints.images || [];
+            return res.json({
+                url: payload.url,
+                finalUrl: payload.finalUrl,
+                kind: 'page',
+                extracted,
+                hints: { ...hints, image_urls, images: image_urls }
+            });
+        }
+        res.json(payload);
+    } catch (err) {
+        const message = err.message || 'Failed to fetch URL';
+        const isTimeout = err.name === 'AbortError' || (message && (message.includes('abort') || message.includes('timeout')));
+        const is403 = message.includes('403') || message.includes('forbidden');
+        res.status(is403 ? 403 : isTimeout ? 504 : 502).json({ error: isTimeout ? 'Request timed out. Try again or use a different URL.' : message });
+    }
+});
+
+// AI normalization: input { kind, url, extracted, hints }. Output strict schema; image_urls only from extracted.meta, jsonld, hints.
+app.post('/api/admin/products/ai-normalize', authenticateToken, requireAdmin, async (req, res) => {
+    const body = req.body || {};
+    const extracted = body.extracted;
+    if (!extracted || typeof extracted !== 'object') {
+        return res.status(400).json({ error: 'extracted payload is required (jsonld, meta, text)' });
+    }
+    const hints = body.hints || {};
+    try {
+        let normalized;
+        let fromFallback = false;
+        const options = { hints };
+        if (aiNormalizeConfigured()) {
+            normalized = await aiNormalizeProduct(extracted, options);
+        } else {
+            normalized = normalizeFromExtracted(extracted, options);
+            fromFallback = true;
+        }
+        if (body.logParse) {
+            console.log('[admin/products] ai-normalize', fromFallback ? 'fallback' : 'openai', body.url ? 'url=' + body.url.slice(0, 60) : '');
+            logParseEvent({ event: 'ai-normalize', url: body.url || '', normalized, fromFallback });
+        }
+        res.json({ normalized, fromFallback: fromFallback || undefined });
+    } catch (err) {
+        console.error('AI normalize error:', err);
+        res.status(500).json({ error: err.message || 'AI normalization failed' });
+    }
+});
+
+// Validate image URLs: HEAD then GET. Returns valid_urls + invalid. Optional: withVerification=true returns results with verified flag (do not drop URLs).
+app.post('/api/admin/products/validate-images', authenticateToken, requireAdmin, async (req, res) => {
+    const image_urls = Array.isArray(req.body && req.body.image_urls) ? req.body.image_urls : [];
+    const withVerification = !!(req.body && req.body.withVerification);
+    try {
+        if (withVerification) {
+            const { results } = await validateImageUrlsWithVerification(image_urls);
+            res.json({ results, valid_urls: results.filter((r) => r.verified).map((r) => r.url), invalid: results.filter((r) => !r.verified).map((r) => r.url) });
+        } else {
+            const { valid_urls, invalid } = await validateImageUrls(image_urls);
+            res.json({ valid_urls, invalid });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Validation failed' });
+    }
+});
+
+// Save product draft to Supabase: upsert by sku, upsert manufacturer, set manufacturer_id.
+// Do not drop unverified image URLs; store primary image_url always.
+app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) {
+        return res.status(503).json({ error: 'Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' });
+    }
+    const body = req.body || {};
+    const sku = (body.sku || '').toString().trim();
+    const name = (body.name || '').toString().trim();
+    if (!sku || !name) {
+        return res.status(400).json({ error: 'sku and name are required' });
+    }
+    const image_urls = Array.isArray(body.image_urls) ? body.image_urls : [];
+    const primaryImage = image_urls[0] || body.image_url || '';
+    const brand = (body.brand || '').toString().trim();
+    const supabase = getSupabase();
+    try {
+        let manufacturer_id = null;
+        if (brand) {
+            const { data: existingMfr } = await supabase.from('manufacturers').select('id').eq('name', brand).limit(1).maybeSingle();
+            if (existingMfr && existingMfr.id) {
+                manufacturer_id = existingMfr.id;
+            } else {
+                const { data: inserted, error } = await supabase.from('manufacturers').insert({ name: brand }).select('id').single();
+                if (!error && inserted) manufacturer_id = inserted.id;
+            }
+        }
+        const productPayload = {
+            sku,
+            name,
+            brand: brand || null,
+            description: (body.description || '').toString().trim() || null,
+            cost: body.cost != null && !Number.isNaN(Number(body.cost)) ? Number(body.cost) : 0,
+            image_url: (primaryImage || '').toString().trim() || null,
+            manufacturer_id,
+            material: (body.material || '').toString().trim() || null,
+            color: (body.color || '').toString().trim() || null,
+            sizes: (body.sizes || '').toString().trim() || null,
+            pack_qty: body.pack_qty != null && !Number.isNaN(Number(body.pack_qty)) ? Number(body.pack_qty) : null,
+            case_qty: body.case_qty != null && !Number.isNaN(Number(body.case_qty)) ? Number(body.case_qty) : null,
+            category: (body.category || '').toString().trim() || null,
+            subcategory: (body.subcategory || '').toString().trim() || null,
+            thickness: (body.thickness || '').toString().trim() || null,
+            updated_at: new Date().toISOString()
+        };
+        const { data: existingProduct } = await supabase.from('products').select('id').eq('sku', sku).limit(1).maybeSingle();
+        if (existingProduct) {
+            const { error } = await supabase.from('products').update(productPayload).eq('id', existingProduct.id);
+            if (error) throw error;
+            logParseEvent({ event: 'save', action: 'updated', sku, name });
+            if (req.body && req.body.logParse) {
+                console.log('[admin/products] save updated', sku);
+            }
+            return res.json({ success: true, action: 'updated', sku });
+        }
+        productPayload.created_at = new Date().toISOString();
+        const { error } = await supabase.from('products').insert(productPayload);
+        if (error) throw error;
+        logParseEvent({ event: 'save', action: 'created', sku, name });
+        if (req.body && req.body.logParse) {
+            console.log('[admin/products] save created', sku);
+        }
+        res.json({ success: true, action: 'created', sku });
+    } catch (err) {
+        console.error('Save product error:', err);
+        res.status(500).json({ error: err.message || 'Save failed' });
+    }
+});
+
+// ============ AI LAYER (glove-finder, invoice extract/recommend) ============
+const getSupabaseForAi = () => (supabaseConfigured() ? getSupabase() : null);
+
+app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
+    const parsed = validateGloveFinderRequest(req.body || {});
+    if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    if (!aiConfigured()) {
+        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
+    }
+    try {
+        const result = await aiGenerate(parsed.data);
+        const validated = validateGloveFinderResponse(result);
+        if (!validated.success) {
+            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
+        }
+        const summary = (result.recommendations || []).length + ' recommendations';
+        const supabase = getSupabaseForAi();
+        if (supabase) {
+            await logConversation(supabase, {
+                user_id: req.user && req.user.id ? req.user.id : null,
+                ip_hash: hashIp(req.ip || req.connection?.remoteAddress),
+                kind: 'glove_finder',
+                request_summary: JSON.stringify(parsed.data).slice(0, 500),
+                response_summary: summary,
+            });
+        }
+        res.json(validated.data);
+    } catch (err) {
+        console.error('AI glove-finder error:', err);
+        res.status(500).json({ error: err.message || 'AI request failed' });
+    }
+});
+
+app.post('/api/ai/invoice/extract', optionalAuth, aiLimiter, async (req, res) => {
+    const rawText = typeof req.body === 'object' && req.body && typeof req.body.text === 'string' ? req.body.text : (typeof req.body === 'string' ? req.body : '');
+    if (!rawText || rawText.trim().length < 10) {
+        return res.status(400).json({ error: 'Request body must include "text" with invoice content (min 10 chars).' });
+    }
+    if (!aiConfigured()) {
+        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
+    }
+    try {
+        const result = await aiExtractInvoice(rawText);
+        const validated = validateInvoiceExtractResponse(result);
+        if (!validated.success) {
+            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
+        }
+        const data = validated.data;
+        const summary = `vendor=${data.vendor_name || 'N/A'}, lines=${(data.lines || []).length}`;
+        const supabase = getSupabaseForAi();
+        let uploadId = null;
+        if (supabase) {
+            uploadId = await logInvoiceUpload(supabase, {
+                user_id: req.user && req.user.id ? req.user.id : null,
+                ip_hash: hashIp(req.ip || req.connection?.remoteAddress),
+                file_name: req.body && req.body.file_name ? String(req.body.file_name).slice(0, 255) : null,
+                vendor_name: data.vendor_name,
+                invoice_number: data.invoice_number,
+                total_amount: data.total_amount,
+                line_count: (data.lines || []).length,
+                extract_summary: summary,
+            });
+            if (uploadId && data.lines && data.lines.length) await logInvoiceLines(supabase, uploadId, data.lines);
+        }
+        res.json({ ...data, upload_id: uploadId });
+    } catch (err) {
+        console.error('AI invoice extract error:', err);
+        res.status(500).json({ error: err.message || 'Extraction failed' });
+    }
+});
+
+app.post('/api/ai/invoice/recommend', optionalAuth, aiLimiter, async (req, res) => {
+    const extract = req.body && req.body.extract;
+    if (!extract || !Array.isArray(extract.lines)) {
+        return res.status(400).json({ error: 'Request body must include "extract" with "lines" array (e.g. from /api/ai/invoice/extract).' });
+    }
+    if (!aiConfigured()) {
+        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
+    }
+    const productCatalogSummary = (req.body && req.body.product_catalog_summary) ? String(req.body.product_catalog_summary).slice(0, 2000) : '';
+    try {
+        const result = await aiRecommendFromInvoice(extract, productCatalogSummary);
+        const validated = validateInvoiceRecommendResponse(result);
+        if (!validated.success) {
+            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
+        }
+        const supabase = getSupabaseForAi();
+        if (supabase && result.recommendations && result.recommendations.length) {
+            await logRecommendations(supabase, {
+                upload_id: req.body && req.body.upload_id ? req.body.upload_id : null,
+                recommendations: result.recommendations,
+            });
+        }
+        res.json(validated.data);
+    } catch (err) {
+        console.error('AI invoice recommend error:', err);
+        res.status(500).json({ error: err.message || 'Recommendation failed' });
     }
 });
 
@@ -1301,7 +1708,7 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
         const colors = colorsParam ? (Array.isArray(colorsParam) ? colorsParam : colorsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
         const materials = materialsParam ? (Array.isArray(materialsParam) ? materialsParam : materialsParam.split(',').map(s => s.trim()).filter(Boolean)) : [];
 
-        if (brand) products = products.filter(p => (p.brand || '').trim() === brand);
+        if (brand) products = products.filter(p => (p.brand || '').trim().toLowerCase() === brand.trim().toLowerCase());
         if (category) products = products.filter(p => (p.category || '').trim() === category);
         if (colors.length > 0) {
             const colorSet = new Set(colors.map(c => (c || '').toLowerCase()));
@@ -1315,7 +1722,8 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
             products = products.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
         }
 
-        const { csvContent, filename } = productStore.productsToCsv(products);
+        const manufacturers = Array.isArray(db.manufacturers) ? db.manufacturers : [];
+        const { csvContent, filename } = productStore.productsToCsv(products, { manufacturers });
         try {
             if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
                 fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
@@ -1535,28 +1943,36 @@ app.get('/api/cart', optionalAuth, (req, res) => {
     const sessionId = req.headers['x-session-id'] || 'anonymous';
     const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
     const cartItems = db.carts[cartKey] || [];
-    
+    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
+
     const enrichedCart = cartItems.map(item => {
         const product = db.products.find(p => p.id === item.product_id);
-        
-        // Generate variant SKU with size suffix (e.g., GLV-AMS-N400-M)
+        let price = product?.price || 0;
+        const bulk_price = product?.bulk_price ?? null;
+        if (companyId != null && product) {
+            const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+            const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
+            const sell = computeSellPrice(cost, margin);
+            if (!Number.isNaN(sell)) price = sell;
+        }
+
         let variantSku = product?.sku || '';
         if (item.size && variantSku) {
             const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
             variantSku = `${variantSku}-${sizeSuffix}`;
         }
-        
+
         return {
             ...item,
             name: product?.name || 'Unknown',
-            price: product?.price || 0,
-            bulk_price: product?.bulk_price || null,
+            price,
+            bulk_price: companyId != null ? price : bulk_price,
             image_url: product?.image_url || '',
             sku: product?.sku || '',
-            variant_sku: variantSku // Size-specific SKU for inventory
+            variant_sku: variantSku
         };
     });
-    
+
     res.json(enrichedCart);
 });
 
@@ -2380,6 +2796,173 @@ app.get('/api/admin/contact-messages', authenticateToken, (req, res) => {
     }
     const messages = (db.contact_messages || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     res.json(messages);
+});
+
+// ---------- Admin: customer pricing (companies, default margin, manufacturer overrides) ----------
+/** Resolve company id for a logged-in user (match by company_name). Used for customer pricing. */
+function getCompanyIdForUser(db, reqUser) {
+    if (!db || !reqUser || reqUser.id == null) return null;
+    const user = (db.users || []).find(u => u.id === reqUser.id);
+    if (!user || !(user.company_name || '').trim()) return null;
+    const name = (user.company_name || '').trim().toLowerCase();
+    const company = (db.companies || []).find(c => (c.name || '').trim().toLowerCase() === name);
+    return company ? company.id : null;
+}
+
+function requireAdmin(req, res, next) {
+    db = loadDB();
+    const user = db.users.find(u => u.id === req.user.id);
+    if (!user) return res.status(403).json({ error: 'Admin access required' });
+    const admins = db.app_admins || [];
+    const isAllowlisted = admins.length > 0 && (admins.includes(user.id) || admins.includes((user.email || '').toLowerCase()));
+    if (!user.is_approved && !isAllowlisted) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+}
+
+app.get('/api/admin/companies', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const list = (db.companies || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    res.json(list);
+});
+
+app.get('/api/admin/manufacturers', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const list = (db.manufacturers || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    res.json(list);
+});
+
+app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const company = (db.companies || []).find((c) => c.id == req.params.id);
+    if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+    }
+    const overrides = (db.customer_manufacturer_pricing || [])
+        .filter((o) => o.company_id == req.params.id)
+        .map((o) => {
+            const mfr = (db.manufacturers || []).find((m) => m.id === o.manufacturer_id);
+            const gross = o.gross_margin_percent != null ? o.gross_margin_percent : o.margin_percent;
+            return {
+                id: o.id,
+                manufacturer_id: o.manufacturer_id,
+                manufacturer_name: mfr ? mfr.name : '',
+                gross_margin_percent: gross,
+                margin_percent: gross
+            };
+        });
+    res.json({ ...company, overrides });
+});
+
+app.post('/api/admin/companies/:id/default-margin', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const company = (db.companies || []).find((c) => c.id == req.params.id);
+    if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+    }
+    let percent = req.body.default_gross_margin_percent != null ? Number(req.body.default_gross_margin_percent) : null;
+    if (percent == null) percent = req.body.margin_percent != null ? Number(req.body.margin_percent) : null;
+    if (percent == null || isNaN(percent)) {
+        return res.status(400).json({ error: 'default_gross_margin_percent or margin_percent required' });
+    }
+    if (percent < 0 || percent >= 100) {
+        return res.status(400).json({ error: 'Margin must be 0 <= margin < 100' });
+    }
+    company.default_gross_margin_percent = percent;
+    company.updated_at = new Date().toISOString();
+    saveDB(db);
+    res.json({ success: true, company });
+});
+
+app.post('/api/admin/companies/:id/overrides', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const company = (db.companies || []).find((c) => c.id == req.params.id);
+    if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+    }
+    const manufacturer_id = req.body.manufacturer_id != null ? Number(req.body.manufacturer_id) : null;
+    let gross_margin_percent = req.body.gross_margin_percent != null ? Number(req.body.gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
+    if (manufacturer_id == null || isNaN(manufacturer_id)) {
+        return res.status(400).json({ error: 'manufacturer_id required' });
+    }
+    if (gross_margin_percent == null || isNaN(gross_margin_percent) || gross_margin_percent < 0 || gross_margin_percent >= 100) {
+        return res.status(400).json({ error: 'gross_margin_percent (or margin_percent) required and must be 0 <= value < 100' });
+    }
+    const list = db.customer_manufacturer_pricing || [];
+    const existing = list.find((o) => o.company_id == req.params.id && o.manufacturer_id === manufacturer_id);
+    const companyId = Number(req.params.id);
+    if (existing) {
+        existing.gross_margin_percent = gross_margin_percent;
+        existing.margin_percent = gross_margin_percent;
+        existing.updated_at = new Date().toISOString();
+    } else {
+        const maxId = list.length ? Math.max(...list.map((o) => o.id)) : 0;
+        list.push({
+            id: maxId + 1,
+            company_id: companyId,
+            manufacturer_id,
+            gross_margin_percent,
+            margin_percent: gross_margin_percent,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        });
+    }
+    saveDB(db);
+    const override = list.find((o) => o.company_id == companyId && o.manufacturer_id === manufacturer_id);
+    const mfr = (db.manufacturers || []).find((m) => m.id === manufacturer_id);
+    const gross = override.gross_margin_percent != null ? override.gross_margin_percent : override.margin_percent;
+    res.json({
+        success: true,
+        override: {
+            id: override.id,
+            manufacturer_id: override.manufacturer_id,
+            manufacturer_name: mfr ? mfr.name : '',
+            gross_margin_percent: gross,
+            margin_percent: gross
+        }
+    });
+});
+
+app.delete('/api/admin/companies/:id/overrides/:overrideId', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const company = (db.companies || []).find((c) => c.id == req.params.id);
+    if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+    }
+    const list = db.customer_manufacturer_pricing || [];
+    const idx = list.findIndex((o) => o.id == req.params.overrideId && o.company_id == req.params.id);
+    if (idx === -1) {
+        return res.status(404).json({ error: 'Override not found' });
+    }
+    list.splice(idx, 1);
+    saveDB(db);
+    res.json({ success: true });
+});
+
+// Optional: get effective margin and sell price (for admin or storefront)
+app.get('/api/pricing/effective-margin', authenticateToken, (req, res) => {
+    db = loadDB();
+    const companyId = req.query.companyId != null ? Number(req.query.companyId) : null;
+    const manufacturerId = req.query.manufacturerId != null ? Number(req.query.manufacturerId) : null;
+    if (companyId == null) {
+        return res.status(400).json({ error: 'companyId required' });
+    }
+    const margin = getEffectiveMargin(db, companyId, manufacturerId);
+    res.json({ margin_percent: margin });
+});
+
+app.get('/api/pricing/sell-price', (req, res) => {
+    const cost = req.query.cost != null ? Number(req.query.cost) : NaN;
+    const margin = req.query.margin != null ? Number(req.query.margin) : NaN;
+    if (isNaN(cost) || isNaN(margin)) {
+        return res.status(400).json({ error: 'cost and margin query params required' });
+    }
+    const sell = computeSellPrice(cost, margin);
+    if (Number.isNaN(sell)) {
+        return res.status(400).json({ error: 'Invalid margin (must be 0 <= margin < 100)' });
+    }
+    res.json({ cost, margin_percent: margin, sell_price: sell });
 });
 
 // ============ SERVE FRONTEND ============
