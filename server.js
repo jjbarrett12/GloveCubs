@@ -2872,24 +2872,31 @@ app.patch('/api/admin/manufacturers/:id', authenticateToken, requireAdmin, (req,
 
 // ---------- Inventory (in-app fishbowl) ----------
 app.get('/api/admin/inventory', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const products = db.products || [];
-    const invList = db.inventory || [];
-    const byProduct = new Map(invList.map((i) => [i.product_id, i]));
-    const rows = products.map((p) => {
-        const inv = byProduct.get(p.id);
-        return {
-            product_id: p.id,
-            sku: p.sku,
-            name: p.name,
-            brand: p.brand,
-            quantity_on_hand: inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0),
-            reorder_point: inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0),
-            bin_location: inv ? (inv.bin_location || '') : (p.bin_location || ''),
-            last_count_at: inv ? inv.last_count_at : null
-        };
-    });
-    res.json(rows);
+    try {
+        res.setHeader('Content-Type', 'application/json');
+        db = loadDB();
+        const products = db.products || [];
+        const invList = db.inventory || [];
+        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const rows = products.map((p) => {
+            const inv = byProduct.get(p.id);
+            return {
+                product_id: p.id,
+                sku: p.sku,
+                name: p.name,
+                brand: p.brand,
+                quantity_on_hand: inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0),
+                reorder_point: inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0),
+                bin_location: inv ? (inv.bin_location || '') : (p.bin_location || ''),
+                last_count_at: inv ? inv.last_count_at : null
+            };
+        });
+        res.json(rows);
+    } catch (err) {
+        console.error('[admin/inventory]', err.message);
+        res.setHeader('Content-Type', 'application/json');
+        res.status(500).json({ error: err.message || 'Failed to load inventory' });
+    }
 });
 
 app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, (req, res) => {
@@ -3246,6 +3253,9 @@ app.get('/api/pricing/sell-price', (req, res) => {
 // ============ SERVE FRONTEND ============
 
 app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API route not found', path: req.path });
+    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
