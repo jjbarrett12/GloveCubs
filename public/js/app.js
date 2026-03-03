@@ -106,6 +106,13 @@ function handleAuthError(response, data) {
 const api = {
     baseUrl: '',
     
+    initBaseUrl() {
+        var m = document.querySelector('meta[name="glovecubs-api-url"]');
+        if (m && m.getAttribute('content')) {
+            this.baseUrl = m.getAttribute('content').trim().replace(/\/$/, '');
+        }
+    },
+    
     getHeaders() {
         const headers = { 
             'Content-Type': 'application/json',
@@ -413,6 +420,7 @@ function getDiscountPercent(tier) {
 async function runAppInit() {
     if (window.__glovecubsInitDone) return;
     window.__glovecubsInitDone = true;
+    if (typeof api !== 'undefined' && api.initBaseUrl) api.initBaseUrl();
     clearOverlaysAndModals();
     const main = document.getElementById('mainContent');
     const showNavError = () => {
@@ -8556,7 +8564,17 @@ async function loadAdminInventory() {
             }).join('') +
             '</tbody></table></div>';
     } catch (e) {
-        el.innerHTML = '<p style="color:#dc2626;">Failed to load inventory. ' + (e.message || '') + '</p>';
+        var msg = e.message || '';
+        var isHtmlResponse = msg.indexOf('Server returned HTML instead of JSON') !== -1;
+        if (isHtmlResponse) {
+            el.innerHTML = '<div style="padding:24px;background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;">' +
+                '<p style="font-weight:600;color:#92400e;margin-bottom:8px;">Admin API not available at this URL</p>' +
+                '<p style="color:#b45309;font-size:14px;margin-bottom:12px;">Inventory (and other admin features) only work on the <strong>main GloveCubs site</strong> where you log in and shop. If you opened the storefront or a different URL, open the main site and use Admin from there.</p>' +
+                '<p style="font-size:13px;color:#6B7280;">To point this page to the main API, add <code>&lt;meta name="glovecubs-api-url" content="https://your-main-site.com"&gt;</code> to the page.</p>' +
+                '</div>';
+        } else {
+            el.innerHTML = '<p style="color:#dc2626;">Failed to load inventory. ' + msg + '</p>';
+        }
     }
 }
 

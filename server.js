@@ -211,7 +211,7 @@ const bodyLimit = '50mb';
 app.use(cors());
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Note: express.static is registered later, after all API routes, so /api/* never serves static files
 
 // API rate limit: 200 requests per 15 minutes per IP
 const apiLimiter = rateLimit({
@@ -3251,6 +3251,8 @@ app.get('/api/pricing/sell-price', (req, res) => {
 });
 
 // ============ SERVE FRONTEND ============
+// Static files (CSS, JS, images) - after all API routes so /api/* is never served as static
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
