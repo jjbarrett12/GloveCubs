@@ -60,6 +60,8 @@ function loadDB() {
             if (!db.manufacturers) { db.manufacturers = []; changed = true; }
             if (!db.customer_manufacturer_pricing) { db.customer_manufacturer_pricing = []; changed = true; }
             if (!db.app_admins) { db.app_admins = []; changed = true; }
+            if (!db.inventory) { db.inventory = []; changed = true; }
+            if (!db.purchase_orders) { db.purchase_orders = []; changed = true; }
             // Seed companies from users (unique company_name) if empty
             if (db.companies.length === 0 && (db.users || []).length > 0) {
                 const seen = new Set();
@@ -144,7 +146,7 @@ function loadDB() {
     } catch (e) {
         console.log('Creating new database...');
     }
-    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [], companies: [], manufacturers: [], customer_manufacturer_pricing: [], app_admins: [] };
+    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [], companies: [], manufacturers: [], customer_manufacturer_pricing: [], app_admins: [], inventory: [], purchase_orders: [] };
     // Ensure demo user exists so login works even when database.json is missing or empty (e.g. fresh Vercel deploy)
     const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe'; // bcrypt hash of 'demo123'
     if (!db.users || db.users.length === 0) {
@@ -521,6 +523,16 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
 });
 
 // ============ PRODUCT ROUTES ============
+// When inventory table has a record, use quantity_on_hand for availability (in_stock = qty > 0).
+function applyInventoryToProducts(products, inventoryList) {
+    const byProduct = new Map((inventoryList || []).map((i) => [i.product_id, i]));
+    return products.map((p) => {
+        const inv = byProduct.get(p.id);
+        if (inv == null) return p;
+        const qty = inv.quantity_on_hand ?? 0;
+        return { ...p, in_stock: qty > 0 ? 1 : 0, quantity_on_hand: qty };
+    });
+}
 
 app.get('/api/products', optionalAuth, (req, res) => {
     db = loadDB();
@@ -928,6 +940,9 @@ app.get('/api/products', optionalAuth, (req, res) => {
         return (a.name || '').localeCompare(b.name || '');
     });
 
+    // Apply inventory (in-app fishbowl): in_stock and quantity_on_hand from inventory table when present
+    products = applyInventoryToProducts(products, db.inventory);
+
     // Customer pricing: when user has a company, add sell_price using manufacturer_id (no brand string)
     const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
     if (companyId != null) {
@@ -954,7 +969,8 @@ app.get('/api/products/:id', optionalAuth, (req, res) => {
     if (!product) {
         return res.status(404).json({ error: 'Product not found' });
     }
-    product = { ...product };
+    const applied = applyInventoryToProducts([{ ...product }], db.inventory);
+    product = applied[0] || product;
     const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
     if (companyId != null) {
         const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
@@ -986,7 +1002,8 @@ app.get('/api/products/by-slug', optionalAuth, (req, res) => {
     if (!product) {
         return res.status(404).json({ error: 'Product not found' });
     }
-    product = { ...product, slug: productSlug(product) };
+    const applied = applyInventoryToProducts([{ ...product }], db.inventory);
+    product = { ...(applied[0] || product), slug: productSlug(product) };
     const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
     if (companyId != null) {
         const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
@@ -1398,6 +1415,8 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
             category: (body.category || '').toString().trim() || null,
             subcategory: (body.subcategory || '').toString().trim() || null,
             thickness: (body.thickness || '').toString().trim() || null,
+            powder: (body.powder || '').toString().trim() || null,
+            grade: (body.grade || '').toString().trim() || null,
             updated_at: new Date().toISOString()
         };
         const { data: existingProduct } = await supabase.from('products').select('id').eq('sku', sku).limit(1).maybeSingle();
@@ -2839,6 +2858,257 @@ app.get('/api/admin/manufacturers', authenticateToken, requireAdmin, (req, res) 
     db = loadDB();
     const list = (db.manufacturers || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     res.json(list);
+});
+
+app.patch('/api/admin/manufacturers/:id', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const mfr = (db.manufacturers || []).find((m) => m.id == req.params.id);
+    if (!mfr) return res.status(404).json({ error: 'Manufacturer not found' });
+    if (req.body.vendor_email !== undefined) mfr.vendor_email = String(req.body.vendor_email || '').trim() || null;
+    if (req.body.po_email !== undefined) mfr.po_email = String(req.body.po_email || '').trim() || null;
+    saveDB(db);
+    res.json(mfr);
+});
+
+// ---------- Inventory (in-app fishbowl) ----------
+app.get('/api/admin/inventory', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const products = db.products || [];
+    const invList = db.inventory || [];
+    const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+    const rows = products.map((p) => {
+        const inv = byProduct.get(p.id);
+        return {
+            product_id: p.id,
+            sku: p.sku,
+            name: p.name,
+            brand: p.brand,
+            quantity_on_hand: inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0),
+            reorder_point: inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0),
+            bin_location: inv ? (inv.bin_location || '') : (p.bin_location || ''),
+            last_count_at: inv ? inv.last_count_at : null
+        };
+    });
+    res.json(rows);
+});
+
+app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const productId = parseInt(req.params.product_id, 10);
+    if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
+    const product = (db.products || []).find((p) => p.id === productId);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    let inv = (db.inventory || []).find((i) => i.product_id === productId);
+    if (!inv) {
+        inv = { product_id: productId, quantity_on_hand: 0, reorder_point: 0, bin_location: '' };
+        if (!db.inventory) db.inventory = [];
+        db.inventory.push(inv);
+    }
+    if (req.body.quantity_on_hand !== undefined) {
+        inv.quantity_on_hand = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
+        inv.last_count_at = new Date().toISOString();
+    }
+    if (req.body.reorder_point !== undefined) inv.reorder_point = Math.max(0, parseInt(req.body.reorder_point, 10) || 0);
+    if (req.body.bin_location !== undefined) inv.bin_location = String(req.body.bin_location || '').trim();
+    saveDB(db);
+    res.json(inv);
+});
+
+app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
+    const byProduct = new Map((db.inventory || []).map((i) => [i.product_id, i]));
+    const products = db.products || [];
+    for (const row of counts) {
+        const pid = row.product_id != null ? parseInt(row.product_id, 10) : NaN;
+        if (isNaN(pid)) continue;
+        const product = products.find((p) => p.id === pid);
+        if (!product) continue;
+        let inv = byProduct.get(pid);
+        if (!inv) {
+            inv = { product_id: pid, quantity_on_hand: 0, reorder_point: 0, bin_location: '' };
+            db.inventory = db.inventory || [];
+            db.inventory.push(inv);
+            byProduct.set(pid, inv);
+        }
+        inv.quantity_on_hand = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
+        inv.last_count_at = new Date().toISOString();
+    }
+    saveDB(db);
+    res.json({ success: true, updated: counts.length });
+});
+
+// ---------- Purchase Orders ----------
+function nextPoNumber(db) {
+    const list = db.purchase_orders || [];
+    const nums = list.map((po) => (po.po_number || '').replace(/^PO-/, '')).filter((n) => /^\d+$/.test(n));
+    const max = nums.length ? Math.max(...nums.map((n) => parseInt(n, 10))) : 0;
+    return 'PO-' + String(max + 1).padStart(5, '0');
+}
+
+app.get('/api/admin/purchase-orders', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const list = (db.purchase_orders || []).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const manufacturers = db.manufacturers || [];
+    const orders = db.orders || [];
+    const out = list.map((po) => {
+        const mfr = manufacturers.find((m) => m.id === po.manufacturer_id);
+        const order = po.order_id != null ? orders.find((o) => o.id === po.order_id) : null;
+        return {
+            ...po,
+            manufacturer_name: mfr ? mfr.name : '',
+            order_number: order ? order.order_number : null
+        };
+    });
+    res.json(out);
+});
+
+app.get('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
+    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+    const mfr = (db.manufacturers || []).find((m) => m.id === po.manufacturer_id);
+    const order = po.order_id != null ? (db.orders || []).find((o) => o.id === po.order_id) : null;
+    res.json({ ...po, manufacturer_name: mfr ? mfr.name : '', order, order_number: order ? order.order_number : null });
+});
+
+app.post('/api/admin/purchase-orders', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const { manufacturer_id, order_id, lines, shipping_address, customer_order_number } = req.body;
+    const mid = manufacturer_id != null ? parseInt(manufacturer_id, 10) : null;
+    if (mid == null || isNaN(mid)) return res.status(400).json({ error: 'manufacturer_id required' });
+    const mfr = (db.manufacturers || []).find((m) => m.id === mid);
+    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+    const lineItems = Array.isArray(lines) ? lines : [];
+    const poNumber = nextPoNumber(db);
+    const id = Date.now();
+    const po = {
+        id,
+        po_number: poNumber,
+        manufacturer_id: mid,
+        manufacturer_name: mfr.name,
+        order_id: order_id != null ? parseInt(order_id, 10) : null,
+        status: 'draft',
+        lines: lineItems.map((l) => ({
+            product_id: l.product_id,
+            sku: l.sku || '',
+            name: l.name || '',
+            quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
+            unit_cost: parseFloat(l.unit_cost) || 0
+        })),
+        subtotal: 0,
+        shipping_address: shipping_address || null,
+        customer_order_number: customer_order_number || null,
+        created_at: new Date().toISOString(),
+        sent_at: null
+    };
+    po.subtotal = po.lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
+    if (!db.purchase_orders) db.purchase_orders = [];
+    db.purchase_orders.push(po);
+    saveDB(db);
+    res.json(po);
+});
+
+app.put('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, (req, res) => {
+    db = loadDB();
+    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
+    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+    if (req.body.lines !== undefined && Array.isArray(req.body.lines)) {
+        po.lines = req.body.lines.map((l) => ({
+            product_id: l.product_id,
+            sku: l.sku || '',
+            name: l.name || '',
+            quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
+            unit_cost: parseFloat(l.unit_cost) || 0
+        }));
+        po.subtotal = po.lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
+    }
+    if (req.body.shipping_address !== undefined) po.shipping_address = req.body.shipping_address;
+    if (req.body.customer_order_number !== undefined) po.customer_order_number = req.body.customer_order_number;
+    saveDB(db);
+    res.json(po);
+});
+
+app.post('/api/admin/purchase-orders/:id/send', authenticateToken, requireAdmin, async (req, res) => {
+    db = loadDB();
+    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
+    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+    const mfr = (db.manufacturers || []).find((m) => m.id === po.manufacturer_id);
+    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+    const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
+    if (!toEmail) return res.status(400).json({ error: 'Manufacturer has no PO/vendor email. Add it in Vendors.' });
+    const lineText = (po.lines || []).map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
+    const bodyText = `GloveCubs Purchase Order\n\nPO#: ${po.po_number}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || 'See order').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${(po.subtotal || 0).toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
+    const bodyHtml = bodyText.replace(/\n/g, '<br>');
+    const result = await sendMail({ to: toEmail, subject: `Purchase Order ${po.po_number} - GloveCubs`, text: bodyText, html: bodyHtml });
+    if (!result.sent) return res.status(500).json({ error: result.error || 'Failed to send email' });
+    po.status = 'sent';
+    po.sent_at = new Date().toISOString();
+    saveDB(db);
+    res.json({ success: true, sent: true, po_number: po.po_number });
+});
+
+// Create PO from customer order and send to vendor (drop-ship)
+app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, async (req, res) => {
+    db = loadDB();
+    const order = (db.orders || []).find((o) => o.id == req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const manufacturers = db.manufacturers || [];
+    const products = db.products || [];
+    const byMfr = new Map();
+    for (const item of order.items || []) {
+        const product = products.find((p) => p.id === item.product_id);
+        const mfrId = product ? (product.manufacturer_id || null) : null;
+        if (!mfrId) continue;
+        if (!byMfr.has(mfrId)) byMfr.set(mfrId, []);
+        byMfr.get(mfrId).push({
+            product_id: item.product_id,
+            sku: item.sku || product?.sku,
+            name: item.name || product?.name,
+            quantity: item.quantity,
+            unit_cost: product ? (product.cost || 0) : 0
+        });
+    }
+    const mfrId = req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : (byMfr.size === 1 ? [...byMfr.keys()][0] : null);
+    if (mfrId == null || isNaN(mfrId)) return res.status(400).json({ error: 'Order has items from multiple or no manufacturers. Specify manufacturer_id.' });
+    const mfr = manufacturers.find((m) => m.id === mfrId);
+    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+    const lines = byMfr.get(mfrId) || [];
+    if (lines.length === 0) return res.status(400).json({ error: 'No line items for this manufacturer' });
+    const poNumber = nextPoNumber(db);
+    const poId = Date.now();
+    const po = {
+        id: poId,
+        po_number: poNumber,
+        manufacturer_id: mfrId,
+        manufacturer_name: mfr.name,
+        order_id: order.id,
+        status: 'draft',
+        lines,
+        subtotal: lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0),
+        shipping_address: order.shipping_address || null,
+        customer_order_number: order.order_number || null,
+        created_at: new Date().toISOString(),
+        sent_at: null
+    };
+    if (!db.purchase_orders) db.purchase_orders = [];
+    db.purchase_orders.push(po);
+    const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
+    if (!toEmail) {
+        saveDB(db);
+        return res.json({ success: true, po, message: 'PO created. Add vendor email in Vendors and send from Purchase Orders.' });
+    }
+    const lineText = po.lines.map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
+    const bodyText = `GloveCubs Purchase Order\n\nPO#: ${poNumber}\nDate: ${po.created_at.slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || '').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${po.subtotal.toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
+    const result = await sendMail({ to: toEmail, subject: `Purchase Order ${poNumber} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
+    if (result.sent) {
+        po.status = 'sent';
+        po.sent_at = new Date().toISOString();
+        saveDB(db);
+        return res.json({ success: true, po, sent: true, message: 'PO created and sent to vendor.' });
+    }
+    saveDB(db);
+    res.json({ success: true, po, sent: false, message: 'PO created. Email failed: ' + (result.error || 'unknown') });
 });
 
 app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, (req, res) => {

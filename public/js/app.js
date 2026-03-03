@@ -245,6 +245,45 @@ const api = {
         }
     },
 
+    async patch(endpoint, data) {
+        try {
+            const response = await fetch(this.baseUrl + endpoint, {
+                method: 'PATCH',
+                headers: this.getHeaders(),
+                body: JSON.stringify(data)
+            });
+            const contentType = response.headers.get('content-type');
+            let result;
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                if (text.trim().startsWith('<')) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('Authentication required. Please log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}`);
+                }
+                try {
+                    result = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response. Status: ${response.status}`);
+                }
+            }
+            if (!response.ok) {
+                const authErr = handleAuthError(response, result);
+                if (authErr) throw authErr;
+                throw new Error(result.error || `HTTP error! status: ${response.status}`);
+            }
+            return result;
+        } catch (error) {
+            if (error.message && !error.message.includes('fetch')) {
+                throw error;
+            }
+            throw new Error(`Network error: ${error.message}`);
+        }
+    },
+
     async delete(endpoint) {
         try {
             const response = await fetch(this.baseUrl + endpoint, {
@@ -513,7 +552,9 @@ function initFooter() {
     var brandHtml = '';
     (config.topBrands || []).forEach(function (b) {
         var attrs = ' href="' + esc(b.href) + '" onclick="event.preventDefault(); navigate(\'products\', { brand: \'' + esc(b.name).replace(/'/g, "\\'") + '\' }); return false;" title="' + esc(b.name) + '"';
-        brandHtml += '<a' + attrs + ' class="footer-brand-link footer-brand-name">' + esc(b.name) + '</a>';
+        var logoPath = getBrandLogoPath(b.name);
+        var imgPart = logoPath ? '<img src="' + logoPath + '" alt="" class="footer-brand-tile-img" loading="lazy" onerror="this.style.display=\'none\';">' : '';
+        brandHtml += '<a' + attrs + ' class="footer-brand-link footer-brand-tile"><span class="footer-brand-tile-inner">' + imgPart + '<span class="footer-brand-name">' + esc(b.name) + '</span></span></a>';
     });
     var contactHtml = '';
     (config.contactLinks || []).forEach(function (c) {
@@ -6272,6 +6313,15 @@ function renderAdminPanel(activeTab = 'orders') {
                             <button onclick="renderAdminPanel('customers')" class="admin-tab ${activeTab === 'customers' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'customers' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'customers' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'customers' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
                                 <i class="fas fa-building" style="margin-right: 8px;"></i>Customers
                             </button>
+                            <button onclick="renderAdminPanel('inventory')" class="admin-tab ${activeTab === 'inventory' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'inventory' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'inventory' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'inventory' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-warehouse" style="margin-right: 8px;"></i>Inventory
+                            </button>
+                            <button onclick="renderAdminPanel('vendors')" class="admin-tab ${activeTab === 'vendors' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'vendors' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'vendors' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'vendors' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-truck" style="margin-right: 8px;"></i>Vendors
+                            </button>
+                            <button onclick="renderAdminPanel('purchase-orders')" class="admin-tab ${activeTab === 'purchase-orders' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'purchase-orders' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'purchase-orders' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'purchase-orders' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-file-invoice" style="margin-right: 8px;"></i>POs
+                            </button>
                         </div>
                         
                         <!-- Tab Content -->
@@ -6282,6 +6332,9 @@ function renderAdminPanel(activeTab = 'orders') {
                             ${activeTab === 'products' ? '<div id="adminProductsContent">Loading products...</div>' : ''}
                             ${activeTab === 'messages' ? '<div id="adminMessagesContent">Loading messages...</div>' : ''}
                             ${activeTab === 'customers' ? '<div id="adminCustomersContent">Loading customers...</div>' : ''}
+                            ${activeTab === 'inventory' ? '<div id="adminInventoryContent">Loading inventory...</div>' : ''}
+                            ${activeTab === 'vendors' ? '<div id="adminVendorsContent">Loading vendors...</div>' : ''}
+                            ${activeTab === 'purchase-orders' ? '<div id="adminPurchaseOrdersContent">Loading POs...</div>' : ''}
                         </div>
                     </div>
                 </div>
@@ -6303,6 +6356,12 @@ function renderAdminPanel(activeTab = 'orders') {
     } else if (activeTab === 'customers') {
         if (state.adminCustomerId) loadAdminCustomerDetail(state.adminCustomerId);
         else loadAdminCustomersList();
+    } else if (activeTab === 'inventory') {
+        loadAdminInventory();
+    } else if (activeTab === 'vendors') {
+        loadAdminVendors();
+    } else if (activeTab === 'purchase-orders') {
+        loadAdminPurchaseOrders();
     }
 }
 
@@ -6881,6 +6940,23 @@ function renderAdminNewFromUrl() {
                     <input type="text" id="newFromUrlThickness" value="${(draft.thickness || draft.thickness_mil || '').replace(/"/g, '&quot;')}" placeholder="e.g. 4 mil" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
                 </div>
                 <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Powder</label>
+                    <select id="newFromUrlPowder" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                        <option value="">— Select —</option>
+                        <option value="Powder-Free" ${(draft.powder || '') === 'Powder-Free' ? 'selected' : ''}>Powder-Free</option>
+                        <option value="Powdered" ${(draft.powder || '') === 'Powdered' ? 'selected' : ''}>Powdered</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Grade (Exam / Medical / Industrial)</label>
+                    <select id="newFromUrlGrade" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                        <option value="">— Select —</option>
+                        <option value="Medical / Exam Grade" ${(draft.grade || '') === 'Medical / Exam Grade' ? 'selected' : ''}>Medical / Exam Grade</option>
+                        <option value="Industrial Grade" ${(draft.grade || '') === 'Industrial Grade' ? 'selected' : ''}>Industrial Grade</option>
+                        <option value="Food Service Grade" ${(draft.grade || '') === 'Food Service Grade' ? 'selected' : ''}>Food Service Grade</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Material</label>
                     <input type="text" id="newFromUrlMaterial" value="${(draft.material || '').replace(/"/g, '&quot;')}" placeholder="e.g. Nitrile" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
                 </div>
@@ -7053,6 +7129,8 @@ async function saveAdminNewFromUrlProduct() {
         image_urls: image_urls,
         color: (document.getElementById('newFromUrlColor') && document.getElementById('newFromUrlColor').value) ? document.getElementById('newFromUrlColor').value.trim() : '',
         thickness: (document.getElementById('newFromUrlThickness') && document.getElementById('newFromUrlThickness').value) ? document.getElementById('newFromUrlThickness').value.trim() : '',
+        powder: (document.getElementById('newFromUrlPowder') && document.getElementById('newFromUrlPowder').value) ? document.getElementById('newFromUrlPowder').value.trim() : '',
+        grade: (document.getElementById('newFromUrlGrade') && document.getElementById('newFromUrlGrade').value) ? document.getElementById('newFromUrlGrade').value.trim() : '',
         material: (document.getElementById('newFromUrlMaterial') && document.getElementById('newFromUrlMaterial').value) ? document.getElementById('newFromUrlMaterial').value.trim() : '',
         sizes: (document.getElementById('newFromUrlSizes') && document.getElementById('newFromUrlSizes').value) ? document.getElementById('newFromUrlSizes').value.trim() : '',
         pack_qty: (document.getElementById('newFromUrlPackQty') && document.getElementById('newFromUrlPackQty').value) ? parseInt(document.getElementById('newFromUrlPackQty').value, 10) : null,
@@ -8364,6 +8442,7 @@ async function loadAdminOrders() {
                             <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
                                 <strong>Tracking:</strong> ${order.tracking_number || '—'} ${order.tracking_url ? '<a href="' + order.tracking_url + '" target="_blank" rel="noopener">Track</a>' : ''}
                                 <button type="button" onclick="openAdminOrderTrackingModal(${order.id}, this.getAttribute('data-tracking'))" data-tracking="${encodeURIComponent(JSON.stringify({ tracking_number: order.tracking_number || '', tracking_url: order.tracking_url || '', status: order.status || 'pending' }))}" style="margin-left: 12px; background: #FF7A00; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;">Set tracking</button>
+                                <button type="button" onclick="createPoFromOrder(${order.id})" style="margin-left: 8px; background: #059669; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;"><i class="fas fa-file-invoice"></i> Create PO &amp; send to vendor</button>
                             </div>
                         </div>
                     </div>
@@ -8427,6 +8506,174 @@ async function saveAdminOrderTracking(orderId) {
         loadAdminOrders();
     } catch (e) {
         showToast(e.message || 'Failed to update', 'error');
+    }
+}
+
+async function createPoFromOrder(orderId) {
+    try {
+        const result = await api.post('/api/admin/orders/' + orderId + '/create-po', {});
+        showToast(result.sent ? 'PO created and sent to vendor.' : (result.message || 'PO created.'), result.sent ? 'success' : 'info');
+        loadAdminOrders();
+        if (result.po && state.adminTab === 'purchase-orders') loadAdminPurchaseOrders();
+    } catch (e) {
+        showToast(e.message || e.error || 'Failed to create PO', 'error');
+    }
+}
+
+async function loadAdminInventory() {
+    const el = document.getElementById('adminInventoryContent');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#4B5563;"><i class="fas fa-spinner fa-spin" style="font-size:32px;"></i><p>Loading inventory...</p></div>';
+    try {
+        const rows = await api.get('/api/admin/inventory');
+        if (!rows || rows.length === 0) {
+            el.innerHTML = '<p style="color:#6B7280;">No products. Add products first; then set quantities here. Inventory drives in-stock on the storefront.</p>';
+            return;
+        }
+        const lowStock = rows.filter(function(r) { return (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point); });
+        el.innerHTML = '<div style="margin-bottom:20px;">' +
+            '<h2 style="font-size:20px;font-weight:600;margin-bottom:8px;">Inventory (in-app)</h2>' +
+            '<p style="color:#6B7280;font-size:14px;">Set quantity and reorder point per product. Storefront uses quantity &gt; 0 as in-stock. No Fishbowl required.</p>' +
+            (lowStock.length > 0 ? '<p style="color:#B45309;font-size:14px;margin-top:8px;"><i class="fas fa-exclamation-triangle"></i> ' + lowStock.length + ' product(s) at or below reorder point.</p>' : '') +
+            '</div>' +
+            '<div style="overflow-x:auto;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="border-bottom:2px solid #e5e7eb;">' +
+            '<th style="text-align:left;padding:12px;">SKU</th><th style="text-align:left;padding:12px;">Name</th><th style="text-align:left;padding:12px;">Brand</th>' +
+            '<th style="text-align:right;padding:12px;">Qty on hand</th><th style="text-align:right;padding:12px;">Reorder pt</th><th style="text-align:left;padding:12px;">Bin</th><th style="text-align:left;padding:12px;">Last count</th><th style="text-align:left;padding:12px;">Actions</th>' +
+            '</tr></thead><tbody>' +
+            rows.map(function(r) {
+                const esc = function(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+                const low = (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point);
+                const lastCount = r.last_count_at ? new Date(r.last_count_at).toLocaleDateString() : '—';
+                return '<tr style="border-bottom:1px solid #e5e7eb;' + (low ? ' background:#fef3c7;' : '') + '">' +
+                    '<td style="padding:12px;">' + esc(r.sku) + '</td><td style="padding:12px;">' + esc(r.name) + '</td><td style="padding:12px;">' + esc(r.brand) + '</td>' +
+                    '<td style="padding:12px;text-align:right;">' + (r.quantity_on_hand ?? 0) + '</td>' +
+                    '<td style="padding:12px;text-align:right;">' + (r.reorder_point ?? 0) + '</td>' +
+                    '<td style="padding:12px;">' + esc(r.bin_location) + '</td><td style="padding:12px;">' + lastCount + '</td>' +
+                    '<td style="padding:12px;"><button type="button" data-product-id="' + r.product_id + '" data-sku="' + esc(r.sku) + '" data-qty="' + (r.quantity_on_hand ?? 0) + '" data-reorder="' + (r.reorder_point ?? 0) + '" data-bin="' + esc(r.bin_location || '') + '" onclick="openAdminInventoryEditFromBtn(this)" style="background:#FF7A00;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">Edit</button></td>' +
+                    '</tr>';
+            }).join('') +
+            '</tbody></table></div>';
+    } catch (e) {
+        el.innerHTML = '<p style="color:#dc2626;">Failed to load inventory. ' + (e.message || '') + '</p>';
+    }
+}
+
+function openAdminInventoryEditFromBtn(btn) {
+    var id = parseInt(btn.getAttribute('data-product-id'), 10);
+    var sku = btn.getAttribute('data-sku') || '';
+    var qty = parseInt(btn.getAttribute('data-qty'), 10) || 0;
+    var reorder = parseInt(btn.getAttribute('data-reorder'), 10) || 0;
+    var bin = btn.getAttribute('data-bin') || '';
+    openAdminInventoryEdit(id, sku, qty, reorder, bin);
+}
+function openAdminInventoryEdit(productId, sku, qty, reorderPoint, binLocation) {
+    const overlay = document.createElement('div');
+    overlay.id = 'adminInventoryEditOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    const esc = function(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;width:100%;" onclick="event.stopPropagation()">' +
+        '<h3 style="margin-bottom:16px;">Edit inventory — ' + esc(sku) + '</h3>' +
+        '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Quantity on hand</label>' +
+        '<input type="number" id="adminInvQty" min="0" value="' + (qty || 0) + '" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;margin-bottom:12px;">' +
+        '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Reorder point</label>' +
+        '<input type="number" id="adminInvReorder" min="0" value="' + (reorderPoint || 0) + '" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;margin-bottom:12px;">' +
+        '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Bin / location</label>' +
+        '<input type="text" id="adminInvBin" value="' + esc(binLocation) + '" placeholder="A-1" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;margin-bottom:16px;">' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button type="button" class="btn btn-primary" onclick="saveAdminInventoryEdit(' + productId + ')">Save</button>' +
+        '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'adminInventoryEditOverlay\').remove();">Cancel</button>' +
+        '</div></div>';
+    overlay.onclick = function() { overlay.remove(); };
+    document.body.appendChild(overlay);
+}
+async function saveAdminInventoryEdit(productId) {
+    const qty = parseInt(document.getElementById('adminInvQty') && document.getElementById('adminInvQty').value, 10) || 0;
+    const reorder = parseInt(document.getElementById('adminInvReorder') && document.getElementById('adminInvReorder').value, 10) || 0;
+    const bin = (document.getElementById('adminInvBin') && document.getElementById('adminInvBin').value) ? document.getElementById('adminInvBin').value.trim() : '';
+    try {
+        await api.put('/api/admin/inventory/' + productId, { quantity_on_hand: qty, reorder_point: reorder, bin_location: bin });
+        showToast('Inventory updated', 'success');
+        document.getElementById('adminInventoryEditOverlay') && document.getElementById('adminInventoryEditOverlay').remove();
+        loadAdminInventory();
+    } catch (e) {
+        showToast(e.message || 'Failed to save', 'error');
+    }
+}
+
+async function loadAdminVendors() {
+    const el = document.getElementById('adminVendorsContent');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#4B5563;"><i class="fas fa-spinner fa-spin" style="font-size:32px;"></i><p>Loading vendors...</p></div>';
+    try {
+        const list = await api.get('/api/admin/manufacturers');
+        el.innerHTML = '<div style="margin-bottom:20px;">' +
+            '<h2 style="font-size:20px;font-weight:600;margin-bottom:8px;">Vendors / Manufacturers</h2>' +
+            '<p style="color:#6B7280;font-size:14px;">Add PO/vendor email for each manufacturer. When you create a PO from an order, it is emailed to this address for drop-shipping.</p></div>' +
+            '<div style="display:grid;gap:12px;">' +
+            (list && list.length ? list.map(function(m) {
+                const email = (m.po_email || m.vendor_email || '').trim() || '';
+                return '<div style="background:#f9fafb;padding:16px;border-radius:12px;border-left:4px solid #FF7A00;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">' +
+                    '<div><strong>' + (m.name || '').replace(/</g, '&lt;') + '</strong></div>' +
+                    '<div style="display:flex;align-items:center;gap:12px;">' +
+                    '<input type="email" id="vendorEmail_' + m.id + '" value="' + email.replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" placeholder="orders@manufacturer.com" style="min-width:220px;padding:8px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:14px;">' +
+                    '<button type="button" onclick="saveVendorEmail(' + m.id + ')" style="background:#059669;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;">Save email</button>' +
+                    '</div></div>';
+            }).join('') : '<p style="color:#6B7280;">No manufacturers yet. They are added when you add products with a brand.</p>') +
+            '</div>';
+    } catch (e) {
+        el.innerHTML = '<p style="color:#dc2626;">Failed to load vendors. ' + (e.message || '') + '</p>';
+    }
+}
+async function saveVendorEmail(manufacturerId) {
+    const input = document.getElementById('vendorEmail_' + manufacturerId);
+    const email = (input && input.value) ? input.value.trim() : '';
+    try {
+        await api.patch('/api/admin/manufacturers/' + manufacturerId, { vendor_email: email, po_email: email });
+        showToast('Vendor email saved', 'success');
+    } catch (e) {
+        showToast(e.message || 'Failed to save', 'error');
+    }
+}
+
+async function loadAdminPurchaseOrders() {
+    const el = document.getElementById('adminPurchaseOrdersContent');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#4B5563;"><i class="fas fa-spinner fa-spin" style="font-size:32px;"></i><p>Loading POs...</p></div>';
+    try {
+        const list = await api.get('/api/admin/purchase-orders');
+        if (!list || list.length === 0) {
+            el.innerHTML = '<p style="color:#6B7280;">No purchase orders yet. Create one from an order (Orders tab → Create PO &amp; send to vendor) or create manually here later.</p>';
+            return;
+        }
+        el.innerHTML = '<div style="margin-bottom:20px;"><h2 style="font-size:20px;font-weight:600;">Purchase Orders</h2><p style="color:#6B7280;font-size:14px;">POs created from orders are emailed to the vendor for drop-shipping.</p></div>' +
+            '<div style="display:grid;gap:16px;">' +
+            list.map(function(po) {
+                const sent = po.status === 'sent';
+                return '<div style="background:#f9fafb;padding:20px;border-radius:12px;border-left:4px solid ' + (sent ? '#059669' : '#FF7A00') + ';">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px;">' +
+                    '<div><strong style="font-size:16px;">' + (po.po_number || '').replace(/</g, '&lt;') + '</strong> — ' + (po.manufacturer_name || '').replace(/</g, '&lt;') + '</div>' +
+                    '<span style="background:' + (sent ? '#d1fae5' : '#fed7aa') + ';color:' + (sent ? '#065f46' : '#9a3412') + ';padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">' + (po.status || 'draft') + '</span>' +
+                    '</div>' +
+                    (po.order_number ? '<p style="color:#6B7280;font-size:13px;margin-top:8px;">Customer order: ' + (po.order_number || '').replace(/</g, '&lt;') + '</p>' : '') +
+                    '<p style="font-size:13px;margin-top:8px;">' + (po.lines && po.lines.length) + ' line(s) · Subtotal $' + (po.subtotal != null ? Number(po.subtotal).toFixed(2) : '0.00') + '</p>' +
+                    (po.sent_at ? '<p style="font-size:12px;color:#6B7280;margin-top:4px;">Sent ' + new Date(po.sent_at).toLocaleString() + '</p>' : '') +
+                    (!sent ? '<button type="button" onclick="sendPoEmail(' + po.id + ')" style="margin-top:12px;background:#059669;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;"><i class="fas fa-paper-plane"></i> Send to vendor</button>' : '') +
+                    '</div>';
+            }).join('') +
+            '</div>';
+    } catch (e) {
+        el.innerHTML = '<p style="color:#dc2626;">Failed to load POs. ' + (e.message || '') + '</p>';
+    }
+}
+async function sendPoEmail(poId) {
+    try {
+        const result = await api.post('/api/admin/purchase-orders/' + poId + '/send');
+        showToast(result.sent ? 'PO sent to vendor.' : (result.error || 'Send failed'), result.sent ? 'success' : 'error');
+        loadAdminPurchaseOrders();
+    } catch (e) {
+        showToast(e.message || e.error || 'Failed to send', 'error');
     }
 }
 
