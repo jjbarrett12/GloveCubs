@@ -103,6 +103,11 @@ function handleAuthError(response, data) {
     return new Error('Your session has expired. Please log in again.');
 }
 
+function adminNonJsonError(endpoint, text) {
+    if ((endpoint || '').indexOf('/api/admin/') !== 0) return null;
+    return new Error('Admin API returned non-JSON; you are likely hitting the UI host. First 200 chars: ' + (text || '').substring(0, 200));
+}
+
 const api = {
     baseUrl: '',
     
@@ -138,7 +143,8 @@ const api = {
                 data = await response.json();
             } else {
                 const text = await response.text();
-                // If response is HTML, it's likely an error page
+                var adminErr = adminNonJsonError(endpoint, text);
+                if (adminErr) throw adminErr;
                 if (text.trim().startsWith('<')) {
                     if (response.status === 401 || response.status === 403) {
                         throw new Error('Authentication required. Please log in again.');
@@ -183,6 +189,8 @@ const api = {
                 result = await response.json();
             } else {
                 const text = await response.text();
+                var adminErr = adminNonJsonError(endpoint, text);
+                if (adminErr) throw adminErr;
                 if (text.trim().startsWith('<')) {
                     if (response.status === 401 || response.status === 403) {
                         throw new Error('Authentication required. Please log in again.');
@@ -225,6 +233,8 @@ const api = {
                 result = await response.json();
             } else {
                 const text = await response.text();
+                var adminErr = adminNonJsonError(endpoint, text);
+                if (adminErr) throw adminErr;
                 if (text.trim().startsWith('<')) {
                     if (response.status === 401 || response.status === 403) {
                         throw new Error('Authentication required. Please log in again.');
@@ -265,6 +275,8 @@ const api = {
                 result = await response.json();
             } else {
                 const text = await response.text();
+                var adminErr = adminNonJsonError(endpoint, text);
+                if (adminErr) throw adminErr;
                 if (text.trim().startsWith('<')) {
                     if (response.status === 401 || response.status === 403) {
                         throw new Error('Authentication required. Please log in again.');
@@ -305,6 +317,8 @@ const api = {
                 result = await response.json();
             } else {
                 const text = await response.text();
+                var adminErr = adminNonJsonError(endpoint, text);
+                if (adminErr) throw adminErr;
                 if (text.trim().startsWith('<')) {
                     if (response.status === 401 || response.status === 403) {
                         throw new Error('Authentication required. Please log in again.');
@@ -8567,10 +8581,12 @@ async function loadAdminInventory() {
         var msg = e.message || '';
         var isHtmlResponse = msg.indexOf('Server returned HTML instead of JSON') !== -1;
         if (isHtmlResponse) {
+            var mainUrl = (document.querySelector('meta[name="glovecubs-api-url"]') || {}).getAttribute('content') || '';
+            var linkHtml = mainUrl ? '<a href="' + mainUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" style="color:#B45309;font-weight:600;">' + mainUrl.replace(/</g, '&lt;') + '</a>' : 'the main GloveCubs site';
             el.innerHTML = '<div style="padding:24px;background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;">' +
                 '<p style="font-weight:600;color:#92400e;margin-bottom:8px;">Admin API not available at this URL</p>' +
-                '<p style="color:#b45309;font-size:14px;margin-bottom:12px;">Inventory (and other admin features) only work on the <strong>main GloveCubs site</strong> where you log in and shop. If you opened the storefront or a different URL, open the main site and use Admin from there.</p>' +
-                '<p style="font-size:13px;color:#6B7280;">To point this page to the main API, add <code>&lt;meta name="glovecubs-api-url" content="https://your-main-site.com"&gt;</code> to the page.</p>' +
+                '<p style="color:#b45309;font-size:14px;margin-bottom:12px;">Inventory and other admin features only work on the main GloveCubs site. Open ' + linkHtml + ' (where you log in and shop), then go to Admin &rarr; Inventory.</p>' +
+                (mainUrl ? '<p style="margin-top:12px;"><a href="' + mainUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" class="btn btn-primary" style="display:inline-block;padding:10px 20px;background:#FF7A00;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open main site</a></p>' : '') +
                 '</div>';
         } else {
             el.innerHTML = '<p style="color:#dc2626;">Failed to load inventory. ' + msg + '</p>';

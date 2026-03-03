@@ -3254,11 +3254,20 @@ app.get('/api/pricing/sell-price', (req, res) => {
 // Static files (CSS, JS, images) - after all API routes so /api/* is never served as static
 app.use(express.static(path.join(__dirname, 'public')));
 
+const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found', path: req.path });
     }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const mainApiUrl = (process.env.GLOVECUBS_MAIN_API_URL || process.env.DOMAIN || process.env.BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
+    try {
+        let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
+        html = html.replace('<!-- GLOVECUBS_API_URL_INJECT -->', '<meta name="glovecubs-api-url" content="' + mainApiUrl.replace(/"/g, '&quot;') + '">');
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (err) {
+        res.sendFile(INDEX_HTML_PATH);
+    }
 });
 
 // If default port is in use, try next ports (e.g. previous instance still running)

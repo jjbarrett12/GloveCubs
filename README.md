@@ -50,6 +50,31 @@ npm start
 npm run dev
 ```
 
+### Local dev: Admin API proxy (storefront on :3004, Express API on :3001)
+
+When the Next.js storefront runs on port 3004 and the main GloveCubs Express API runs on another port (e.g. 3001), requests to `http://localhost:3004/api/admin/*` are rewritten to the real API so the Admin UI (Inventory, POs, etc.) gets JSON instead of HTML.
+
+1. **Set the Admin API origin** (in `storefront/.env.local`, do not commit secrets):
+   - `GLOVECUBS_ADMIN_API_ORIGIN=http://localhost:3001` (server-side rewrite target)
+   - `NEXT_PUBLIC_GLOVECUBS_ADMIN_API_ORIGIN=http://localhost:3001` (optional; for UI/debug)
+   If unset, the rewrite falls back to `http://localhost:3001`.
+
+2. **Run the Express API** on 3001 (from repo root):
+   ```bash
+   PORT=3001 npm run dev
+   ```
+
+3. **Run the storefront** on 3004 (from `storefront/`):
+   ```bash
+   npx next dev -p 3004
+   ```
+
+4. **Verify the proxy** (storefront must be running on 3004):
+   ```bash
+   curl -i http://localhost:3004/api/admin/inventory
+   ```
+   You should see `Content-Type: application/json` (and 401 if not authenticated).
+
 ## Demo Account
 
 A demo B2B account is created during seeding:
