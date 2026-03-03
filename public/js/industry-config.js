@@ -59,7 +59,7 @@ window.industryConfig = {
         slug: 'food-service',
         industryTag: 'Food Service',
         heroHeadline: 'Food Service Gloves',
-        heroSubheadline: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene in bulk.',
+        heroSubheadline: 'FDA-compliant gloves for hospitality, catering, and food service. Nitrile, vinyl, and polyethylene in bulk.',
         heroImage: '/images/industries/food-service-hero.jpg',
         heroImageAlt: 'Food service worker with disposable gloves',
         ctaPrimary: { text: 'Shop Food Service Gloves', href: '#shop', action: 'scroll' },

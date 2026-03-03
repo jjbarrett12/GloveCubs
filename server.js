@@ -1004,6 +1004,7 @@ const SEO_INDUSTRIES = [
     { slug: 'janitorial', title: 'Janitorial & Cleaning Gloves', useCase: 'Janitorial', description: 'Disposable and reusable work gloves for janitorial, custodial, and cleaning professionals. Bulk pricing, fast shipping.' },
     { slug: 'food-service', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
     { slug: 'foodservice', title: 'Food Service Gloves', useCase: 'Food Service', description: 'FDA-compliant gloves for restaurants, catering, and food service. Nitrile, vinyl, and polyethylene options.' },
+    { slug: 'hospitality', title: 'Hospitality Gloves', useCase: 'Food Service', description: 'Food-safe gloves for hospitality and back-of-house. Nitrile, vinyl, and case pricing for consistent supply.' },
     { slug: 'industrial', title: 'Industrial & Manufacturing Gloves', useCase: 'Manufacturing', description: 'Reusable work gloves for manufacturing, assembly, and industrial applications.' },
     { slug: 'manufacturing', title: 'Manufacturing & Industrial Gloves', useCase: 'Manufacturing', description: 'Reusable work gloves for manufacturing, assembly, and industrial applications.' },
     { slug: 'automotive', title: 'Automotive Gloves', useCase: 'Automotive', description: 'Mechanic and automotive gloves. Nitrile, impact, and cut-resistant styles.' },
@@ -1426,19 +1427,26 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
 // ============ AI LAYER (glove-finder, invoice extract/recommend) ============
 const getSupabaseForAi = () => (supabaseConfigured() ? getSupabase() : null);
 
+// Stable error shape for AI endpoints: { error: { code, message }, details? }
+function aiError(res, status, code, message, details = null) {
+    const body = { error: { code, message } };
+    if (details != null) body.details = details;
+    return res.status(status).json(body);
+}
+
 app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
     const parsed = validateGloveFinderRequest(req.body || {});
     if (!parsed.success) {
-        return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+        return aiError(res, 400, 'VALIDATION_ERROR', 'Invalid request', parsed.error.flatten());
     }
     if (!aiConfigured()) {
-        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
+        return aiError(res, 503, 'AI_NOT_CONFIGURED', 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).');
     }
     try {
         const result = await aiGenerate(parsed.data);
         const validated = validateGloveFinderResponse(result);
         if (!validated.success) {
-            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
+            return aiError(res, 500, 'INVALID_AI_RESPONSE', 'Invalid AI response', validated.error.flatten());
         }
         const summary = (result.recommendations || []).length + ' recommendations';
         const supabase = getSupabaseForAi();
@@ -1454,7 +1462,7 @@ app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
         res.json(validated.data);
     } catch (err) {
         console.error('AI glove-finder error:', err);
-        res.status(500).json({ error: err.message || 'AI request failed' });
+        return aiError(res, 500, 'INTERNAL_ERROR', err.message || 'AI request failed');
     }
 });
 

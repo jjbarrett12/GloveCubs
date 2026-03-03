@@ -512,18 +512,8 @@ function initFooter() {
     });
     var brandHtml = '';
     (config.topBrands || []).forEach(function (b) {
-        var logoPath = typeof getBrandLogoPath === 'function' ? getBrandLogoPath(b.name) : null;
         var attrs = ' href="' + esc(b.href) + '" onclick="event.preventDefault(); navigate(\'products\', { brand: \'' + esc(b.name).replace(/'/g, "\\'") + '\' }); return false;" title="' + esc(b.name) + '"';
-        brandHtml += '<a' + attrs + ' class="footer-brand-link">';
-        if (logoPath) {
-            var ext = (logoPath || '').split('.').pop();
-            var isSvg = ext && ext.toLowerCase() === 'svg';
-            brandHtml += '<img src="' + esc(logoPath) + '" alt="' + esc(b.name) + '" class="footer-brand-logo" loading="lazy" onerror="this.style.display=\'none\';if(this.nextElementSibling){this.nextElementSibling.style.display=\'inline\';}">';
-            brandHtml += '<span class="footer-brand-fallback" style="display:none;">' + esc(b.name) + '</span>';
-        } else {
-            brandHtml += '<span class="footer-brand-fallback">' + esc(b.name) + '</span>';
-        }
-        brandHtml += '</a>';
+        brandHtml += '<a' + attrs + ' class="footer-brand-link footer-brand-name">' + esc(b.name) + '</a>';
     });
     var contactHtml = '';
     (config.contactLinks || []).forEach(function (c) {
@@ -751,7 +741,7 @@ async function renderHomePage() {
     
     mainContent.innerHTML = `
         <!-- Hero Section (Two-Column, B2B-Focused) - Dark -->
-        <section class="hero-new home-hero-dark" style="position: relative; overflow: hidden; background: linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d1117 100%); padding: 80px 0 60px;">
+        <section class="hero-new home-hero-dark" style="position: relative; overflow: hidden; background: linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d1117 100%); padding: 24px 0 60px;">
             <div style="position: absolute; top: -100px; right: -100px; width: 400px; height: 400px; background: radial-gradient(circle, rgba(255,122,0,0.15) 0%, transparent 70%); border-radius: 50%; animation: pulse 8s ease-in-out infinite; pointer-events: none; z-index: 0;"></div>
             <div style="position: absolute; bottom: -150px; left: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 70%); border-radius: 50%; animation: pulse 10s ease-in-out infinite; animation-delay: 2s; pointer-events: none; z-index: 0;"></div>
             <style>
@@ -928,7 +918,7 @@ async function renderHomePage() {
 
         <!-- Trust block: who we serve -->
         <div class="trust-block-below-fold" style="background: #1a1a1a; padding: 20px 24px; text-align: center; border-top: 1px solid rgba(255,255,255,0.08);">
-            <p style="margin: 0; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9); letter-spacing: 0.02em;">Serving Restaurants • Janitorial Contractors • Healthcare Facilities • Industrial Operators</p>
+            <p style="margin: 0; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9); letter-spacing: 0.02em;">Serving Hospitality • Janitorial Contractors • Healthcare Facilities • Industrial Operators</p>
         </div>
 
         <!-- Who This Is For -->
@@ -939,34 +929,40 @@ async function renderHomePage() {
                     <p style="color: #4B5563; font-size: 17px; max-width: 560px; margin: 0 auto;">Operators, procurement, and facilities teams—not random shoppers.</p>
                 </div>
                 <div class="who-blocks-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
-                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                    <a href="/industries/janitorial/" class="who-block who-block-link" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease; text-decoration: none; display: block; color: inherit;" onclick="event.preventDefault(); navigate('industry', { industry: 'janitorial' }); return false;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
                         <div style="font-size: 36px; margin-bottom: 16px;">🧼</div>
                         <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Janitorial Contractors</h3>
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Reduce cost per building. Standardize SKUs.</p>
-                    </div>
-                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <span class="who-block-cta" style="display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: #FF7A00;">View industry page →</span>
+                    </a>
+                    <a href="/industries/hospitality/" class="who-block who-block-link" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease; text-decoration: none; display: block; color: inherit;" onclick="event.preventDefault(); navigate('industry', { industry: 'hospitality' }); return false;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
                         <div style="font-size: 36px; margin-bottom: 16px;">🍽</div>
-                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Restaurants</h3>
+                        <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Hospitality</h3>
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Food-safe vinyl & nitrile at competitive case pricing.</p>
-                    </div>
-                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <span class="who-block-cta" style="display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: #FF7A00;">View industry page →</span>
+                    </a>
+                    <a href="/industries/healthcare/" class="who-block who-block-link" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease; text-decoration: none; display: block; color: inherit;" onclick="event.preventDefault(); navigate('industry', { industry: 'healthcare' }); return false;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
                         <div style="font-size: 36px; margin-bottom: 16px;">🏥</div>
                         <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Healthcare</h3>
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Medical-grade compliance with reliable stock.</p>
-                    </div>
-                    <div class="who-block" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
+                        <span class="who-block-cta" style="display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: #FF7A00;">View industry page →</span>
+                    </a>
+                    <a href="/industries/industrial/" class="who-block who-block-link" style="background: #ffffff; border-radius: 16px; padding: 28px; border: 2px solid #E5E7EB; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: all 0.3s ease; text-decoration: none; display: block; color: inherit;" onclick="event.preventDefault(); navigate('industry', { industry: 'industrial' }); return false;" onmouseover="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 8px 24px rgba(255,122,0,0.15)'; this.style.transform='translateY(-4px)';" onmouseout="this.style.borderColor='#E5E7EB'; this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'; this.style.transform='translateY(0)';">
                         <div style="font-size: 36px; margin-bottom: 16px;">🏭</div>
                         <h3 style="font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 10px;">Industrial & Manufacturing</h3>
                         <p style="font-size: 14px; color: #4B5563; line-height: 1.5; margin: 0;">Cut-resistant, chemical, and task-specific gloves at scale.</p>
-                    </div>
+                        <span class="who-block-cta" style="display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: #FF7A00;">View industry page →</span>
+                    </a>
                 </div>
                 <!-- Authorized / trusted brands – revolving logo carousel -->
                 <div class="brands-strip" style="margin-top: 48px; padding-top: 40px; border-top: 1px solid #E5E7EB;">
                     <p style="text-align: center; font-size: 12px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 20px;">Authorized distributor for</p>
-                    <div class="brands-carousel-outer">
-                        <div class="brands-carousel-track">
-                            ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
-                            ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
+                    <div class="brands-carousel-wrap">
+                        <div class="brands-carousel-outer">
+                            <div class="brands-carousel-track">
+                                ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
+                                ${HOME_BRAND_LIST.map(getBrandLogoItemHtml).join('')}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3736,22 +3732,22 @@ function renderLoginPage() {
                     <div class="auth-tab active" onclick="navigate('login')">Login</div>
                     <div class="auth-tab" onclick="navigate('register')">Register</div>
                 </div>
-                <div class="auth-content">
+                <div class="auth-content auth-content-split">
                     <div class="auth-form">
                         <h2>Welcome Back</h2>
                         <p class="subtitle">Sign in to access your B2B account and exclusive pricing.</p>
                         
-                        <div id="loginError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
+                        <div id="loginError" class="error-message" style="display: none;"></div>
                         
                         <div class="form-group">
-                            <label>Email Address</label>
-                            <input type="email" id="loginEmail" placeholder="Enter your email">
+                            <label for="loginEmail">Email Address</label>
+                            <input type="email" id="loginEmail" placeholder="Enter your email" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>Password</label>
-                            <div class="password-input-wrap" style="position: relative; display: flex;">
-                                <input type="password" id="loginPassword" placeholder="Enter your password" style="flex: 1; padding-right: 44px;">
-                                <button type="button" class="password-toggle" onclick="toggleLoginPasswordVisibility()" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
+                            <label for="loginPassword">Password</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password">
+                                <button type="button" class="password-toggle" onclick="toggleLoginPasswordVisibility()" title="Show password" aria-label="Show password">
                                     <i class="fas fa-eye" id="loginPasswordToggleIcon"></i>
                                 </button>
                             </div>
@@ -3759,10 +3755,11 @@ function renderLoginPage() {
                         <button class="btn btn-primary btn-block" onclick="handleLogin()">
                             <i class="fas fa-sign-in-alt"></i> Sign In
                         </button>
-                        <p style="text-align: center; margin-top: 12px;">
-                            <a href="#" onclick="navigate('forgot-password'); return false;" style="color: var(--primary); font-size: 14px;">Forgot password?</a>
+                        <p class="auth-legal" style="margin-top: 12px;">
+                            <a href="#" onclick="navigate('forgot-password'); return false;">Forgot password?</a>
                         </p>
-                        <div class="b2b-benefits">
+                    </div>
+                    <div class="b2b-benefits">
                             <h4>B2B Account Benefits</h4>
                             <ul>
                                 <li><i class="fas fa-check"></i> Wholesale pricing on all products</li>
@@ -3869,8 +3866,8 @@ function renderForgotPasswordPage() {
                     <div id="forgotError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
                     <div id="forgotSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
                     <div class="form-group">
-                        <label>Email Address</label>
-                        <input type="email" id="forgotEmail" placeholder="your@company.com">
+                        <label for="forgotEmail">Email Address</label>
+                        <input type="email" id="forgotEmail" placeholder="your@company.com" autocomplete="email">
                     </div>
                     <button class="btn btn-primary btn-block" onclick="handleForgotPassword()">
                         <i class="fas fa-paper-plane"></i> Send Reset Link
@@ -3931,12 +3928,12 @@ function renderResetPasswordPage(token) {
                     <div id="resetError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
                     <div id="resetSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
                     <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" id="resetPassword" placeholder="Min 6 characters">
+                        <label for="resetPassword">New Password</label>
+                        <input type="password" id="resetPassword" placeholder="Min 6 characters" autocomplete="new-password">
                     </div>
                     <div class="form-group">
-                        <label>Confirm Password</label>
-                        <input type="password" id="resetPassword2" placeholder="Confirm new password">
+                        <label for="resetPassword2">Confirm Password</label>
+                        <input type="password" id="resetPassword2" placeholder="Confirm new password" autocomplete="new-password">
                     </div>
                     <button class="btn btn-primary btn-block" onclick="handleResetPassword('${token.replace(/'/g, "\\'")}')">
                         <i class="fas fa-check"></i> Update Password
@@ -4004,84 +4001,83 @@ function renderRegisterPage() {
                     <div class="auth-tab active" onclick="navigate('register')">Register</div>
                 </div>
                 <div class="auth-content">
-                    <div class="auth-form" style="max-width: 600px;">
-                        <h2>Apply for B2B Account</h2>
-                        <p class="subtitle">Create your business account to access wholesale pricing and bulk discounts.</p>
+                    <div class="auth-form auth-form-wide auth-form-register">
+                        <h2 class="form-group-span-3">Apply for B2B Account</h2>
+                        <p class="subtitle form-group-span-3">Create your business account to access wholesale pricing and bulk discounts.</p>
                         
-                        <div id="registerError" class="error-message" style="display: none; margin-bottom: 16px; padding: 12px; background: #ffebee; border-radius: 8px;"></div>
-                        <div id="registerSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #e8f5e9; border-radius: 8px; color: #2e7d32;"></div>
+                        <div id="registerError" class="error-message form-group-span-3" style="display: none;"></div>
+                        <div id="registerSuccess" class="auth-success form-group-span-3" style="display: none;"></div>
                         
-                        <div class="form-group">
-                            <label>Company Name *</label>
-                            <input type="text" id="regCompany" placeholder="Your company name">
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Contact Name *</label>
-                                <input type="text" id="regContact" placeholder="Your full name">
-                            </div>
-                            <div class="form-group">
-                                <label>Phone Number</label>
-                                <input type="tel" id="regPhone" placeholder="(555) 123-4567">
-                            </div>
+                        <div class="form-group form-group-span-2">
+                            <label for="regCompany">Company Name *</label>
+                            <input type="text" id="regCompany" placeholder="Your company name" autocomplete="organization">
                         </div>
                         <div class="form-group">
-                            <label>Email Address *</label>
-                            <input type="email" id="regEmail" placeholder="business@company.com">
+                            <label for="regContact">Contact Name *</label>
+                            <input type="text" id="regContact" placeholder="Your full name" autocomplete="name">
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Password *</label>
-                                <div style="position: relative; display: flex;">
-                                    <input type="password" id="regPassword" placeholder="Min 6 characters" style="flex: 1; padding-right: 44px;">
-                                    <button type="button" onclick="toggleRegPasswordVisibility('regPassword', 'regPasswordToggleIcon')" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
-                                        <i class="fas fa-eye" id="regPasswordToggleIcon"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Confirm Password *</label>
-                                <div style="position: relative; display: flex;">
-                                    <input type="password" id="regPassword2" placeholder="Confirm password" style="flex: 1; padding-right: 44px;">
-                                    <button type="button" onclick="toggleRegPasswordVisibility('regPassword2', 'regPassword2ToggleIcon')" title="Show password" aria-label="Show password" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #6b7280; cursor: pointer; padding: 8px;">
-                                        <i class="fas fa-eye" id="regPassword2ToggleIcon"></i>
-                                    </button>
-                                </div>
+                        <div class="form-group">
+                            <label for="regPhone">Phone Number</label>
+                            <input type="tel" id="regPhone" placeholder="(555) 123-4567" autocomplete="tel">
+                        </div>
+                        <div class="form-group form-group-span-3">
+                            <label for="regEmail">Email Address *</label>
+                            <input type="email" id="regEmail" placeholder="business@company.com" autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="regPassword">Password *</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="regPassword" placeholder="Min 6 characters" autocomplete="new-password">
+                                <button type="button" class="password-toggle" onclick="toggleRegPasswordVisibility('regPassword', 'regPasswordToggleIcon')" title="Show password" aria-label="Show password">
+                                    <i class="fas fa-eye" id="regPasswordToggleIcon"></i>
+                                </button>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label>Business Address</label>
-                            <input type="text" id="regAddress" placeholder="Street address">
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>City</label>
-                                <input type="text" id="regCity" placeholder="City">
-                            </div>
-                            <div class="form-group">
-                                <label>State</label>
-                                <input type="text" id="regState" placeholder="State">
+                            <label for="regPassword2">Confirm Password *</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="regPassword2" placeholder="Confirm password" autocomplete="new-password">
+                                <button type="button" class="password-toggle" onclick="toggleRegPasswordVisibility('regPassword2', 'regPassword2ToggleIcon')" title="Show password" aria-label="Show password">
+                                    <i class="fas fa-eye" id="regPassword2ToggleIcon"></i>
+                                </button>
                             </div>
                         </div>
-                        <div class="form-group" style="max-width: 200px;">
-                            <label>ZIP Code</label>
-                            <input type="text" id="regZip" placeholder="ZIP">
+                        <div class="form-group form-group-span-3">
+                            <label for="regAddress">Business Address</label>
+                            <input type="text" id="regAddress" placeholder="Street address" autocomplete="street-address">
+                        </div>
+                        <div class="form-group">
+                            <label for="regCity">City</label>
+                            <input type="text" id="regCity" placeholder="City" autocomplete="address-level2">
+                        </div>
+                        <div class="form-group">
+                            <label for="regState">State</label>
+                            <input type="text" id="regState" placeholder="State" autocomplete="address-level1">
+                        </div>
+                        <div class="form-group">
+                            <label for="regZip">ZIP Code</label>
+                            <input type="text" id="regZip" placeholder="ZIP" autocomplete="postal-code">
                         </div>
                         
-                        <div class="form-group" style="padding: 16px; background: #f9f9f9; border-radius: 8px; border: 1px solid #e5e7eb;">
-                            <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; font-weight: 600;">
-                                <input type="checkbox" id="regAllowFreeUpgrades" style="margin-top: 4px; accent-color: #FF7A00;">
-                                <span>Allow free upgrades?</span>
+                        <div class="form-group auth-checkbox-box form-group-span-3 auth-free-upgrades-row">
+                            <label class="auth-checkbox-with-help" for="regAllowFreeUpgrades">
+                                <input type="checkbox" id="regAllowFreeUpgrades" style="margin-top: 2px; accent-color: #FF7A00;">
+                                <span class="auth-checkbox-label">Allow free upgrades</span>
                             </label>
-                            <p style="margin: 8px 0 0 28px; font-size: 13px; color: #4B5563; font-weight: 400; line-height: 1.5;">If we are out of stock on an item, we will send another in-stock glove of equal or greater thickness and quality without charging you for the difference.</p>
+                            <span class="auth-tooltip-trigger" tabindex="0" role="button" aria-label="What are free upgrades?">
+                                <i class="fas fa-question-circle" aria-hidden="true"></i>
+                                <span class="auth-tooltip-popover">If we are out of stock on an item, we will send another in-stock glove of equal or greater thickness and quality without charging you for the difference.</span>
+                            </span>
                         </div>
                         
-                        <button class="btn btn-primary btn-block" onclick="handleRegister()">
-                            <i class="fas fa-user-plus"></i> Create Account
-                        </button>
+                        <div class="form-group-span-3">
+                            <button class="btn btn-primary btn-block" onclick="handleRegister()">
+                                <i class="fas fa-user-plus"></i> Create Account
+                            </button>
+                        </div>
                         
-                        <p style="text-align: center; margin-top: 16px; color: #374151; font-size: 13px;">
-                            By registering, you agree to our Terms of Service and Privacy Policy.
+                        <p class="auth-legal form-group-span-3">
+                            By registering, you agree to our <a href="#" onclick="navigate('terms'); return false;">Terms of Service</a> and <a href="#" onclick="navigate('privacy'); return false;">Privacy Policy</a>.
                         </p>
                     </div>
                 </div>
@@ -4882,7 +4878,8 @@ async function submitGloveFinder() {
         });
         const data = await res.json().catch(function() { return {}; });
         if (!res.ok) {
-            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Request failed') + '</span>';
+            var errMsg = (data.error && typeof data.error === 'object' && data.error.message) ? data.error.message : (data.error || 'Request failed');
+            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (typeof errMsg === 'string' ? errMsg : 'Request failed') + '</span>';
             return;
         }
         state.gloveFinderResults = data;

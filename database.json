@@ -2252,5 +2252,85 @@
   "ship_to_addresses": [],
   "contact_messages": [],
   "password_reset_tokens": [],
-  "uploaded_invoices": []
+  "uploaded_invoices": [],
+  "companies": [
+    {
+      "id": 1,
+      "name": "Demo Company Inc",
+      "default_gross_margin_percent": 30,
+      "created_at": "2026-03-02T22:32:04.480Z",
+      "updated_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 2,
+      "name": "Bear Facility Supply",
+      "default_gross_margin_percent": 30,
+      "created_at": "2026-03-02T22:32:04.482Z",
+      "updated_at": "2026-03-02T22:32:04.482Z"
+    }
+  ],
+  "manufacturers": [
+    {
+      "id": 1,
+      "name": "Global Glove",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 2,
+      "name": "Safeko",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 3,
+      "name": "Ambitex",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 4,
+      "name": "PIP",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 5,
+      "name": "MCR Safety",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 6,
+      "name": "Ansell",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 7,
+      "name": "SHOWA",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 8,
+      "name": "Wells Lamont",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 9,
+      "name": "Hospeco",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    },
+    {
+      "id": 10,
+      "name": "Safety Zone",
+      "created_at": "2026-03-02T22:32:04.482Z"
+    }
+  ],
+  "customer_manufacturer_pricing": [
+    {
+      "id": 1,
+      "company_id": 2,
+      "manufacturer_id": 9,
+      "gross_margin_percent": 25,
+      "margin_percent": 25,
+      "created_at": "2026-03-03T00:59:32.690Z",
+      "updated_at": "2026-03-03T00:59:32.690Z"
+    }
+  ],
+  "app_admins": []
 }

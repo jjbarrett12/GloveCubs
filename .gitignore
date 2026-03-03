@@ -1,6 +1,7 @@
 node_modules/
 *.db
 .env
+.env*.local
 .DS_Store
 Thumbs.db
 # Scheduled Fishbowl customer export (generated every 30 min)
