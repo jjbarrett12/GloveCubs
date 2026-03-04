@@ -1,9 +1,12 @@
-require('dotenv').config();
-console.log('[supabase] url set:', !!process.env.SUPABASE_URL);
-console.log('[supabase] service role set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+const path = require('path');
+const envPath = path.join(__dirname, '.env');
+require('dotenv').config({ path: envPath });
+console.log('[boot] cwd:', process.cwd());
+console.log('[boot] env file path:', envPath);
+console.log('[boot] supabase url set:', !!process.env.SUPABASE_URL);
+console.log('[boot] service role set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const os = require('os');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -1449,16 +1452,31 @@ app.post('/api/admin/products/validate-images', authenticateToken, requireAdmin,
 
 // Supabase config health check (admin). In production set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in host env vars.
 app.get('/api/admin/supabase/health', authenticateToken, requireAdmin, async (req, res) => {
+    const envPath = path.join(__dirname, '.env');
+    const payload = {
+        ok: false,
+        cwd: process.cwd(),
+        envFilePath: envPath,
+        supabaseUrlSet: !!process.env.SUPABASE_URL,
+        serviceRoleSet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    };
     try {
         if (!isSupabaseAdminConfigured()) {
-            return res.status(200).json({ ok: false, error: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set' });
+            payload.error = 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set';
+            return res.status(200).json(payload);
         }
         const supabase = getSupabaseAdmin();
-        const { error } = await supabase.from('products').select('id').limit(1);
-        if (error) return res.status(200).json({ ok: false, error: error.message });
-        return res.json({ ok: true });
+        const { data, error } = await supabase.from('products').select('id').limit(1);
+        if (error) {
+            payload.error = error.message;
+            return res.status(200).json(payload);
+        }
+        payload.ok = true;
+        payload.productsReachable = true;
+        return res.json(payload);
     } catch (e) {
-        return res.status(200).json({ ok: false, error: (e && e.message) || 'Supabase check failed' });
+        payload.error = (e && e.message) || 'Supabase check failed';
+        return res.status(200).json(payload);
     }
 });
 
