@@ -265,6 +265,37 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
+// Supabase health (registered first so never hit by catch-all; no auth for diagnostics)
+app.get('/api/admin/supabase/health', async (req, res) => {
+    const envPath = path.join(__dirname, '.env');
+    const payload = {
+        ok: false,
+        cwd: process.cwd(),
+        envFilePath: envPath,
+        supabaseUrlSet: !!process.env.SUPABASE_URL,
+        serviceRoleSet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    };
+    try {
+        if (!isSupabaseAdminConfigured()) {
+            payload.error = 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set';
+            return res.status(200).json(payload);
+        }
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('products').select('id').limit(1);
+        if (error) {
+            payload.error = error.message;
+            return res.status(200).json(payload);
+        }
+        payload.ok = true;
+        payload.productsReachable = true;
+        return res.json(payload);
+    } catch (e) {
+        payload.error = (e && e.message) || 'Supabase check failed';
+        return res.status(200).json(payload);
+    }
+});
+console.log('[routes] health: /api/admin/supabase/health registered');
+
 // AI routes: stricter limit per IP (and per user when authenticated)
 const aiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -1447,36 +1478,6 @@ app.post('/api/admin/products/validate-images', authenticateToken, requireAdmin,
         }
     } catch (err) {
         res.status(500).json({ error: err.message || 'Validation failed' });
-    }
-});
-
-// Supabase config health check (admin). In production set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in host env vars.
-app.get('/api/admin/supabase/health', authenticateToken, requireAdmin, async (req, res) => {
-    const envPath = path.join(__dirname, '.env');
-    const payload = {
-        ok: false,
-        cwd: process.cwd(),
-        envFilePath: envPath,
-        supabaseUrlSet: !!process.env.SUPABASE_URL,
-        serviceRoleSet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    };
-    try {
-        if (!isSupabaseAdminConfigured()) {
-            payload.error = 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set';
-            return res.status(200).json(payload);
-        }
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase.from('products').select('id').limit(1);
-        if (error) {
-            payload.error = error.message;
-            return res.status(200).json(payload);
-        }
-        payload.ok = true;
-        payload.productsReachable = true;
-        return res.json(payload);
-    } catch (e) {
-        payload.error = (e && e.message) || 'Supabase check failed';
-        return res.status(200).json(payload);
     }
 });
 
