@@ -1,4 +1,6 @@
 require('dotenv').config();
+console.log('[supabase] url set:', !!process.env.SUPABASE_URL);
+console.log('[supabase] service role set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -17,6 +19,7 @@ const { parseProductUrl } = require('./lib/parse-product-url');
 const { aiNormalizeProduct, normalizeFromExtracted, isConfigured: aiNormalizeConfigured } = require('./lib/ai-normalize-product');
 const { validateImageUrls, validateImageUrlsWithVerification } = require('./lib/validate-image-urls');
 const { getSupabase, isConfigured: supabaseConfigured } = require('./lib/supabase');
+const { getSupabaseAdmin, isSupabaseAdminConfigured } = require('./lib/supabaseAdmin');
 const { logParseEvent } = require('./lib/parse-log');
 const { aiGenerate, aiExtractInvoice, aiRecommendFromInvoice, isConfigured: aiConfigured } = require('./lib/ai/provider');
 const { validateGloveFinderRequest, validateGloveFinderResponse, validateInvoiceExtractResponse, validateInvoiceRecommendResponse } = require('./lib/ai/schemas');
@@ -1444,23 +1447,40 @@ app.post('/api/admin/products/validate-images', authenticateToken, requireAdmin,
     }
 });
 
-// Save product draft to Supabase: upsert by sku, upsert manufacturer, set manufacturer_id.
-// Do not drop unverified image URLs; store primary image_url always.
-app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req, res) => {
-    if (!supabaseConfigured()) {
-        return res.status(500).json({ error: 'Supabase not configured' });
+// Supabase config health check (admin). In production set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in host env vars.
+app.get('/api/admin/supabase/health', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        if (!isSupabaseAdminConfigured()) {
+            return res.status(200).json({ ok: false, error: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set' });
+        }
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('products').select('id').limit(1);
+        if (error) return res.status(200).json({ ok: false, error: error.message });
+        return res.json({ ok: true });
+    } catch (e) {
+        return res.status(200).json({ ok: false, error: (e && e.message) || 'Supabase check failed' });
     }
+});
+
+// Save product draft to Supabase: upsert by sku, upsert manufacturer, set manufacturer_id.
+// Uses server-only supabaseAdmin (service role). Always returns JSON.
+app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req, res) => {
     const body = req.body || {};
     const sku = (body.sku || '').toString().trim();
     const name = (body.name || '').toString().trim();
     if (!sku || !name) {
         return res.status(400).json({ error: 'sku and name are required' });
     }
+    let supabase;
+    try {
+        supabase = getSupabaseAdmin();
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env (local) or host env vars (prod).' });
+    }
     const image_urls = Array.isArray(body.image_urls) ? body.image_urls : [];
     const primaryImage = image_urls[0] || body.image_url || '';
     const additionalImages = image_urls.length > 1 ? image_urls.slice(1).map(u => (u || '').toString().trim()).filter(Boolean) : [];
     const brand = (body.brand || '').toString().trim();
-    const supabase = getSupabase();
     try {
         let manufacturer_id = null;
         if (brand) {
@@ -1520,7 +1540,7 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
         res.json({ success: true, action: 'created', sku });
     } catch (err) {
         console.error('Save product error:', err);
-        res.status(500).json({ error: err.message || 'Save failed' });
+        return res.status(500).json({ error: err.message || 'Save failed' });
     }
 });
 
