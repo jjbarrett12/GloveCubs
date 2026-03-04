@@ -22,6 +22,16 @@ import {
   UserCheck,
   FileText,
   ChevronRight,
+  Scissors,
+  CircleDot,
+  Flame,
+  Snowflake,
+  FlaskConical,
+  HandMetal,
+  Apple,
+  ShieldOff,
+  Stethoscope,
+  type LucideIcon,
 } from "lucide-react";
 
 interface IndustryLandingTemplateProps {
@@ -60,6 +70,18 @@ const PROCUREMENT_TABS = [
     ],
   },
 ];
+
+const SAFETY_ICON_MAP: Record<string, LucideIcon> = {
+  cut: Scissors,
+  puncture: CircleDot,
+  burn: Flame,
+  cold: Snowflake,
+  chemical: FlaskConical,
+  impact: HandMetal,
+  "food-safe": Apple,
+  "latex-free": ShieldOff,
+  exam: Stethoscope,
+};
 
 const B2B_CARDS = [
   {
@@ -181,16 +203,21 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
         </div>
       </section>
 
-      {/* 2) Proof strip */}
-      <section className="border-b border-white/10 py-8">
+      {/* 2) Safety certifications strip */}
+      <section className="border-b border-white/10 py-8 bg-white/[0.04]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-            {config.proofStats.map((stat, i) => (
-              <div key={i} className="text-center">
-                <p className="text-2xl sm:text-3xl font-bold text-white">{stat.value}</p>
-                <p className="text-sm text-white/60 mt-1">{stat.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
+            {config.safetyCertifications?.map((cert, i) => {
+              const IconComponent = SAFETY_ICON_MAP[cert.icon] ?? ShieldCheck;
+              return (
+                <div key={i} className="flex flex-col items-center justify-center gap-2 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white">
+                    <IconComponent className="h-6 w-6" aria-hidden />
+                  </div>
+                  <p className="text-sm font-medium text-white/90">{cert.label}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

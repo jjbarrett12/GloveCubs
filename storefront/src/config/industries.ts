@@ -2,6 +2,11 @@
 
 export type IndustryKey = "janitorial" | "hospitality" | "healthcare" | "industrial";
 
+export interface SafetyCertification {
+  icon: string;
+  label: string;
+}
+
 export interface IndustryConfig {
   key: IndustryKey;
   name: string;
@@ -9,6 +14,8 @@ export interface IndustryConfig {
   subtagline: string;
   heroBullets: string[];
   proofStats: { label: string; value: string }[];
+  /** Safety certifications to show in the proof strip (symbol + label). */
+  safetyCertifications: SafetyCertification[];
   featuredCollections: {
     title: string;
     description: string;
@@ -38,6 +45,12 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { label: "Sites standardized", value: "500+" },
       { label: "Avg. spend reduction", value: "18%" },
       { label: "Reorder lead time", value: "Same-day" },
+    ],
+    safetyCertifications: [
+      { icon: "cut", label: "Cut resistant" },
+      { icon: "puncture", label: "Puncture resistant" },
+      { icon: "chemical", label: "Chemical resistant" },
+      { icon: "cold", label: "Cold weather" },
     ],
     featuredCollections: [
       { title: "Nitrile Exam Gloves (High-Volume)", description: "Powder-free, textured grip for high-turnover cleaning.", storeHref: "/store?industry=janitorial&category=nitrile-gloves", badge: "Best seller" },
@@ -91,6 +104,11 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { label: "Case orders/month", value: "15K+" },
       { label: "In-stock rate", value: "99%" },
     ],
+    safetyCertifications: [
+      { icon: "food-safe", label: "Food safe" },
+      { icon: "puncture", label: "Puncture resistant" },
+      { icon: "cold", label: "Cold / freezer" },
+    ],
     featuredCollections: [
       { title: "Food Prep & Line Service", description: "Black nitrile and food-safe options for prep and serving.", storeHref: "/store?industry=hospitality&collection=food-prep", badge: "Popular" },
       { title: "Nitrile Exam Gloves (High-Volume)", description: "Powder-free, high-volume boxes for busy kitchens.", storeHref: "/store?industry=hospitality&category=nitrile-gloves" },
@@ -143,6 +161,11 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { label: "Powder-free options", value: "50+" },
       { label: "On-time delivery", value: "99%" },
     ],
+    safetyCertifications: [
+      { icon: "exam", label: "Exam grade" },
+      { icon: "latex-free", label: "Latex-free" },
+      { icon: "puncture", label: "Puncture resistant" },
+    ],
     featuredCollections: [
       { title: "Nitrile Exam Gloves (High-Volume)", description: "Powder-free, textured grip for exams and procedures.", storeHref: "/store?industry=healthcare&category=nitrile-gloves", badge: "Best seller" },
       { title: "Powder-Free Nitrile", description: "Low-particulate, comfortable options for clinical use.", storeHref: "/store?industry=healthcare&category=nitrile-gloves&powderFree=true" },
@@ -194,6 +217,14 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { label: "Plants supplied", value: "400+" },
       { label: "Cut levels (ANSI)", value: "A3–A8" },
       { label: "Case orders", value: "10K+/mo" },
+    ],
+    safetyCertifications: [
+      { icon: "cut", label: "Cut resistant (ANSI)" },
+      { icon: "puncture", label: "Puncture resistant" },
+      { icon: "burn", label: "Burn resistant" },
+      { icon: "cold", label: "Cold weather" },
+      { icon: "chemical", label: "Chemical resistant" },
+      { icon: "impact", label: "Impact resistant" },
     ],
     featuredCollections: [
       { title: "Cut Resistance (ANSI A3–A6)", description: "Cut-resistant gloves for sharp materials and assembly.", storeHref: "/store?industry=industrial&collection=cut-resistant", badge: "ANSI" },

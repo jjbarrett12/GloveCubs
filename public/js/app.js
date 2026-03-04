@@ -2725,10 +2725,15 @@ function buildIndustryLandingHTML(slug, industry, products, config) {
     const features = Array.isArray(c.features) ? c.features : [];
     const complianceBadges = Array.isArray(c.complianceBadges) ? c.complianceBadges : [];
     const proofStats = Array.isArray(c.proofStats) ? c.proofStats : [];
+    const safetyCerts = Array.isArray(c.safetyCerts) ? c.safetyCerts : [];
     const faq = Array.isArray(c.faq) ? c.faq : [];
     const filterDefaults = c.filterDefaults || { materials: [], thicknesses: [], certifications: [] };
 
-    const proofStripHtml = proofStats.length > 0
+    const proofStripHtml = safetyCerts.length > 0
+        ? '<div class="industry-proof-strip industry-proof-strip-certs"><div class="container"><div class="industry-proof-inner">' +
+          safetyCerts.map(function (cert) { return '<div class="industry-proof-stat industry-proof-cert"><span class="industry-proof-cert-icon"><i class="' + industryEsc(cert.icon) + '" aria-hidden="true"></i></span><span class="industry-proof-label">' + industryEsc(cert.label) + '</span></div>'; }).join('') +
+          '</div></div></div>'
+        : proofStats.length > 0
         ? '<div class="industry-proof-strip"><div class="container"><div class="industry-proof-inner">' +
           proofStats.map(function (s) { return '<div class="industry-proof-stat"><span class="industry-proof-value">' + industryEsc(s.value) + '</span><span class="industry-proof-label">' + industryEsc(s.label) + '</span></div>'; }).join('') +
           '</div></div></div>'

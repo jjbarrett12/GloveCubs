@@ -23,6 +23,11 @@ window.industryConfig = {
             { value: '500+', label: 'Healthcare accounts' },
             { value: '24/7', label: 'Reorder support' }
         ],
+        safetyCerts: [
+            { icon: 'fas fa-stethoscope', label: 'Exam grade' },
+            { icon: 'fas fa-allergies', label: 'Latex-free' },
+            { icon: 'fas fa-shield-alt', label: 'Puncture resistant' }
+        ],
         faq: [
             { q: 'What glove material is best for healthcare?', a: 'Nitrile is the most common choice: latex-free, durable, and compliant. Vinyl and polyethylene are options for non-clinical tasks.' },
             { q: 'Do you offer sterile gloves?', a: 'Yes. We carry sterile and non-sterile options. Filter by “Sterility” on the shop page or ask our team for recommendations.' },
@@ -49,6 +54,12 @@ window.industryConfig = {
             { value: '50K+', label: 'Cases/year' },
             { value: '2-day', label: 'Shipping available' }
         ],
+        safetyCerts: [
+            { icon: 'fas fa-cut', label: 'Cut resistant' },
+            { icon: 'fas fa-shield-alt', label: 'Puncture resistant' },
+            { icon: 'fas fa-flask', label: 'Chemical resistant' },
+            { icon: 'fas fa-snowflake', label: 'Cold weather' }
+        ],
         faq: [
             { q: 'What gloves are best for janitorial work?', a: 'Nitrile and vinyl are popular for general cleaning. For heavy chemicals, choose chemical-resistant or coated gloves.' },
             { q: 'Do you offer powder-free gloves?', a: 'Yes. Filter by “Powder-Free” on the shop section. Most of our cleaning gloves are powder-free.' }
@@ -73,6 +84,11 @@ window.industryConfig = {
         proofStats: [
             { value: '1M+', label: 'Boxes delivered' },
             { value: 'Next-day', label: 'Available in select regions' }
+        ],
+        safetyCerts: [
+            { icon: 'fas fa-utensils', label: 'Food safe' },
+            { icon: 'fas fa-shield-alt', label: 'Puncture resistant' },
+            { icon: 'fas fa-snowflake', label: 'Cold / freezer' }
         ],
         faq: [
             { q: 'Are these gloves FDA approved?', a: 'Our food service gloves meet FDA requirements for food contact. Look for “FDA Approved” or “Food Safe” in the product details.' },
@@ -99,6 +115,14 @@ window.industryConfig = {
             { value: '100+', label: 'Plants supplied' },
             { value: 'A1–A9', label: 'Cut levels available' }
         ],
+        safetyCerts: [
+            { icon: 'fas fa-cut', label: 'Cut resistant (ANSI)' },
+            { icon: 'fas fa-shield-alt', label: 'Puncture resistant' },
+            { icon: 'fas fa-fire-alt', label: 'Burn resistant' },
+            { icon: 'fas fa-snowflake', label: 'Cold weather' },
+            { icon: 'fas fa-flask', label: 'Chemical resistant' },
+            { icon: 'fas fa-hand-rock', label: 'Impact resistant' }
+        ],
         faq: [
             { q: 'What cut level do I need?', a: 'Depends on the task. A1–A3 for light duty; A4–A6 for medium; A7–A9 for heavy. We can help you choose.' },
             { q: 'Do you offer chemical-resistant gloves?', a: 'Yes. Filter by “Chemical Resistant” or “Coated” in the shop section.' }
@@ -123,6 +147,12 @@ window.industryConfig = {
         proofStats: [
             { value: '500+', label: 'Shops supplied' },
             { value: '2-day', label: 'Shipping' }
+        ],
+        safetyCerts: [
+            { icon: 'fas fa-cut', label: 'Cut resistant' },
+            { icon: 'fas fa-shield-alt', label: 'Puncture resistant' },
+            { icon: 'fas fa-fire-alt', label: 'Burn resistant' },
+            { icon: 'fas fa-flask', label: 'Chemical resistant' }
         ],
         faq: [
             { q: 'Best gloves for mechanics?', a: 'Nitrile disposable or reusable mechanics gloves are most common. For heavy duty, choose impact-resistant or cut-resistant.' },
