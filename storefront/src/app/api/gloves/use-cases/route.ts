@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getUseCases } from "@/lib/gloves/queries";
 
 export async function GET() {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Supabase not configured" },
+      { status: 500 }
+    );
+  }
   try {
-    const supabase = createServerSupabase();
+    const supabase = getSupabaseAdmin();
     const useCases = await getUseCases(supabase);
     return NextResponse.json({ useCases });
   } catch (err) {

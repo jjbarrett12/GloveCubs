@@ -3613,8 +3613,25 @@ async function renderCheckoutPage() {
                 <h1 style="margin-bottom: 32px;">Checkout</h1>
                 <div class="checkout-layout">
                     <div class="checkout-form">
-                        ${user.is_approved && (user.payment_terms || 'credit_card') === 'net30' ? '<div class="checkout-net-terms" style="background: #f0f9ff; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bae6fd;"><i class="fas fa-file-invoice-dollar"></i> <strong>Payment: Net 30</strong> — This order will be invoiced. Pay within 30 days.</div>' : ''}
-                        ${user.is_approved && (user.payment_terms || 'credit_card') === 'credit_card' ? '<div style="background: var(--gray-100); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;"><i class="fas fa-credit-card"></i> <strong>Payment: Credit Card</strong> — You will pay by credit card for this order.</div>' : ''}
+                        <div class="checkout-section">
+                            <h3>Payment method</h3>
+                            <div class="checkout-payment-methods" role="group" aria-label="Payment method">
+                                <label class="checkout-payment-option">
+                                    <input type="radio" name="checkoutPaymentMethod" value="credit_card" ${((user.payment_terms || 'credit_card') === 'credit_card') ? 'checked' : ''}>
+                                    <span class="checkout-payment-label"><i class="fas fa-credit-card"></i> Credit card</span>
+                                </label>
+                                <label class="checkout-payment-option">
+                                    <input type="radio" name="checkoutPaymentMethod" value="ach" ${user.payment_terms === 'ach' ? 'checked' : ''}>
+                                    <span class="checkout-payment-label"><i class="fas fa-university"></i> ACH (bank transfer)</span>
+                                </label>
+                                <label class="checkout-payment-option ${user.is_approved ? '' : 'checkout-payment-disabled'}">
+                                    <input type="radio" name="checkoutPaymentMethod" value="net30" ${(user.payment_terms === 'net30') ? 'checked' : ''} ${user.is_approved ? '' : 'disabled'}>
+                                    <span class="checkout-payment-label"><i class="fas fa-file-invoice-dollar"></i> Net 30 terms</span>
+                                    ${!user.is_approved ? '<span class="checkout-payment-hint">Requires approval</span>' : ''}
+                                </label>
+                            </div>
+                            <p class="checkout-payment-note text-muted">Card and ACH are processed securely via Stripe. Net 30 is available for approved accounts only.</p>
+                        </div>
                         <div class="checkout-section">
                             <h3>Shipping Address</h3>
                             ${shipToAddresses.length > 0 ? `
@@ -3667,7 +3684,6 @@ async function renderCheckoutPage() {
                                 <textarea id="checkoutNotes" rows="3" placeholder="Special instructions for your order..."></textarea>
                             </div>
                         </div>
-                        <input type="hidden" id="checkoutPaymentMethod" value="${(user.payment_terms || 'credit_card')}">
                         <button class="btn btn-primary btn-lg btn-block" onclick="placeOrder()">
                             <i class="fas fa-lock"></i> Place Order - $${total.toFixed(2)}
                         </button>
@@ -3747,22 +3763,85 @@ ${document.getElementById('checkoutCity').value}, ${document.getElementById('che
 Phone: ${document.getElementById('checkoutPhone').value}`;
     
     const notes = document.getElementById('checkoutNotes').value;
-    const paymentMethodEl = document.getElementById('checkoutPaymentMethod');
-    const payment_method = paymentMethodEl ? paymentMethodEl.value : 'credit_card';
+    const paymentMethodRadio = document.querySelector('input[name="checkoutPaymentMethod"]:checked');
+    const payment_method = paymentMethodRadio ? paymentMethodRadio.value : 'credit_card';
 
-    const result = await api.post('/api/orders', {
+    const payload = {
         shipping_address: address,
         ship_to_id: ship_to_id || undefined,
         notes: notes,
         payment_method: payment_method
-    });
+    };
 
-    if (result.success) {
-        await loadCart();
-        showOrderConfirmation(result.order_number, result.total);
-    } else {
-        showToast(result.error || 'Failed to place order');
+    if (payment_method === 'net30') {
+        const result = await api.post('/api/orders', payload);
+        if (result.success) {
+            await loadCart();
+            showOrderConfirmation(result.order_number, result.total);
+        } else {
+            showToast(result.error || 'Failed to place order');
+        }
+        return;
     }
+
+    if (payment_method === 'credit_card' || payment_method === 'ach') {
+        let result;
+        try {
+            result = await api.post('/api/orders/create-payment-intent', payload);
+        } catch (e) {
+            showToast(e.message || 'Failed to start payment');
+            return;
+        }
+        if (!result.success || !result.client_secret) {
+            showToast(result.error || 'Payment setup failed. Try Net 30 or contact us.');
+            return;
+        }
+        await showStripePaymentStep(result.client_secret, result.order_number, result.total);
+        await loadCart();
+        return;
+    }
+
+    showToast('Please select a payment method.');
+}
+
+async function showStripePaymentStep(clientSecret, orderNumber, total) {
+    const base = api.baseUrl || '';
+    const configRes = await fetch(base + '/api/config');
+    const config = configRes.ok ? await configRes.json() : {};
+    const pk = (config && config.stripePublishableKey) ? config.stripePublishableKey : '';
+    if (!pk) {
+        showToast('Payment form not available. Your order has been created; we will contact you for payment.');
+        showOrderConfirmation(orderNumber, total);
+        return;
+    }
+    if (!window.Stripe) {
+        await new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = 'https://js.stripe.com/v3/';
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+    var stripe = window.Stripe(pk);
+    var mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<section class="checkout-page"><div class="container"><h1>Complete your payment</h1><p class="text-muted">Order ' + orderNumber + ' — $' + total.toFixed(2) + '</p><div id="stripe-payment-element" style="max-width: 480px; margin: 20px 0;"></div><button type="button" class="btn btn-primary btn-lg" id="stripe-pay-btn"><i class="fas fa-lock"></i> Pay now</button><p class="text-muted" style="margin-top: 12px;">Secure payment by Stripe. Cancel to go back.</p></div></section>';
+    var elements = stripe.elements({ clientSecret: clientSecret });
+    var paymentElement = elements.create('payment');
+    paymentElement.mount('#stripe-payment-element');
+    document.getElementById('stripe-pay-btn').onclick = async function () {
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Processing…';
+        var result = await stripe.confirmPayment({ elements: elements });
+        if (result && result.error) {
+            showToast(result.error.message || 'Payment failed');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-lock"></i> Pay now';
+        } else {
+            showOrderConfirmation(orderNumber, total);
+        }
+    };
 }
 
 function showOrderConfirmation(orderNumber, total) {
@@ -4279,8 +4358,8 @@ async function renderDashboardPage() {
     ]);
     const sum = summary || {};
 
-    const paymentTermsText = (user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : 'Credit Card';
-    const netTermsText = user.is_approved ? ((user.payment_terms || 'credit_card') === 'net30' ? 'Net 30 terms' : 'Credit card') : 'Net terms after approval';
+    const paymentTermsText = (user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : (user.payment_terms === 'ach' ? 'ACH' : 'Credit Card');
+    const netTermsText = user.is_approved ? ((user.payment_terms || 'credit_card') === 'net30' ? 'Net 30 terms' : user.payment_terms === 'ach' ? 'ACH' : 'Credit card') : 'Net terms after approval';
     const budgetHtml = budget ? `
         <div class="dashboard-section dashboard-budget-card">
             <h2><i class="fas fa-wallet"></i> Purchasing Budget</h2>
@@ -4371,7 +4450,7 @@ async function renderDashboardPage() {
                             <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                                 <div><strong>Last 30 days:</strong> $${Number(sum.last_30_days_spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                                 <div><strong>Orders this year:</strong> ${sum.ytd_orders || 0}</div>
-                                ${(user.payment_terms || 'credit_card') === 'net30' ? '<div><i class="fas fa-file-invoice-dollar"></i> <strong>Payment:</strong> Net 30</div>' : '<div><i class="fas fa-credit-card"></i> <strong>Payment:</strong> Credit Card</div>'}
+                                ${(user.payment_terms || 'credit_card') === 'net30' ? '<div><i class="fas fa-file-invoice-dollar"></i> <strong>Payment:</strong> Net 30</div>' : user.payment_terms === 'ach' ? '<div><i class="fas fa-university"></i> <strong>Payment:</strong> ACH</div>' : '<div><i class="fas fa-credit-card"></i> <strong>Payment:</strong> Credit Card</div>'}
                             </div>
                         </div>
                         <div class="dashboard-section">
@@ -4393,7 +4472,7 @@ async function renderDashboardPage() {
                                     <div class="label">Account Status</div>
                                 </div>
                                 <div class="stat-card">
-                                    <i class="fas fa-${(user.payment_terms || 'credit_card') === 'net30' ? 'file-invoice-dollar' : 'credit-card'}"></i>
+                                    <i class="fas fa-${(user.payment_terms || 'credit_card') === 'net30' ? 'file-invoice-dollar' : user.payment_terms === 'ach' ? 'university' : 'credit-card'}"></i>
                                     <div class="value">${paymentTermsText}</div>
                                     <div class="label">Payment Terms</div>
                                 </div>
@@ -6349,6 +6428,9 @@ function renderAdminPanel(activeTab = 'orders') {
                             <button onclick="renderAdminPanel('purchase-orders')" class="admin-tab ${activeTab === 'purchase-orders' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'purchase-orders' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'purchase-orders' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'purchase-orders' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
                                 <i class="fas fa-file-invoice" style="margin-right: 8px;"></i>POs
                             </button>
+                            <button onclick="renderAdminPanel('bulk-import')" class="admin-tab ${activeTab === 'bulk-import' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'bulk-import' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'bulk-import' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'bulk-import' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
+                                <i class="fas fa-upload" style="margin-right: 8px;"></i>Bulk Import
+                            </button>
                         </div>
                         
                         <!-- Tab Content -->
@@ -6362,6 +6444,7 @@ function renderAdminPanel(activeTab = 'orders') {
                             ${activeTab === 'inventory' ? '<div id="adminInventoryContent">Loading inventory...</div>' : ''}
                             ${activeTab === 'vendors' ? '<div id="adminVendorsContent">Loading vendors...</div>' : ''}
                             ${activeTab === 'purchase-orders' ? '<div id="adminPurchaseOrdersContent">Loading POs...</div>' : ''}
+                            ${activeTab === 'bulk-import' ? '<div id="adminBulkImportContent">Loading...</div>' : ''}
                         </div>
                     </div>
                 </div>
@@ -6389,6 +6472,158 @@ function renderAdminPanel(activeTab = 'orders') {
         loadAdminVendors();
     } else if (activeTab === 'purchase-orders') {
         loadAdminPurchaseOrders();
+    } else if (activeTab === 'bulk-import') {
+        loadAdminBulkImport();
+    }
+}
+
+async function loadAdminBulkImport() {
+    const content = document.getElementById('adminBulkImportContent');
+    if (!content) return;
+    if (state.adminBulkImportView === 'job' && state.adminBulkImportJobId) {
+        renderAdminBulkImportJobDetail(state.adminBulkImportJobId);
+        return;
+    }
+    if (state.adminBulkImportView === 'draft' && state.adminBulkImportDraftId) {
+        renderAdminBulkImportDraftEditor(state.adminBulkImportDraftId);
+        return;
+    }
+    try {
+        const [jobsRes, draftsRes] = await Promise.all([
+            api.get('/api/admin/import/jobs').catch(function() { return { jobs: [] }; }),
+            api.get('/api/admin/import/drafts').catch(function() { return { drafts: [] }; })
+        ]);
+        const jobs = jobsRes.jobs || [];
+        const drafts = draftsRes.drafts || [];
+        content.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Bulk Import</h2>
+                <p style="color: #6B7280; font-size: 14px;">Paste URLs (one per line). Enqueue creates a job; run the worker (cron or POST /api/internal/import/run) to process. Edit drafts then approve to add products.</p>
+            </div>
+            <div style="background: #F9FAFB; padding: 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #E5E7EB;">
+                <label style="display: block; font-weight: 600; margin-bottom: 8px;">URLs (one per line)</label>
+                <textarea id="bulkImportUrls" rows="5" placeholder="https://example.com/product1&#10;https://example.com/product2" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;"></textarea>
+                <button type="button" id="bulkImportEnqueueBtn" class="btn btn-primary" onclick="submitBulkImportUrls()" style="margin-top: 12px;"><i class="fas fa-plus"></i> Enqueue job</button>
+                <span id="bulkImportEnqueueStatus" style="margin-left: 12px; font-size: 14px;"></span>
+            </div>
+            <div style="margin-bottom: 24px;">
+                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">Import jobs</h3>
+                <div id="bulkImportJobsList">${jobs.length === 0 ? '<p style="color: #6B7280;">No jobs yet.</p>' : jobs.map(function(j) {
+                    return '<div style="padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;"><div><strong>Job #' + j.id + '</strong> — ' + (j.total_count || 0) + ' URLs · done: ' + (j.done || 0) + ', error: ' + (j.error || 0) + ', queued: ' + (j.queued || 0) + '</div><button type="button" class="btn btn-secondary" onclick="state.adminBulkImportJobId=' + j.id + '; state.adminBulkImportView=\'job\'; loadAdminBulkImport();">Detail</button></div>';
+                }).join('')}</div>
+            </div>
+            <div>
+                <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">Drafts</h3>
+                <div id="bulkImportDraftsList">${drafts.length === 0 ? '<p style="color: #6B7280;">No drafts. Run the worker after enqueueing a job.</p>' : drafts.map(function(d) {
+                    return '<div style="padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;"><div>' + (d.name || d.sku || d.source_url) + ' <span style="color: #6B7280; font-size: 13px;">' + (d.source_url || '').substring(0, 50) + '…</span></div><button type="button" class="btn btn-primary" onclick="state.adminBulkImportDraftId=' + d.id + '; state.adminBulkImportView=\'draft\'; loadAdminBulkImport();">Edit</button></div>';
+                }).join('')}</div>
+            </div>
+        `;
+    } catch (e) {
+        content.innerHTML = '<p style="color: #DC2626;">Failed to load: ' + (e.message || 'Unknown error') + '. Ensure Supabase and bulk import tables are configured.</p>';
+    }
+}
+
+async function submitBulkImportUrls() {
+    const ta = document.getElementById('bulkImportUrls');
+    const btn = document.getElementById('bulkImportEnqueueBtn');
+    const status = document.getElementById('bulkImportEnqueueStatus');
+    if (!ta || !btn) return;
+    const urls = ta.value.split(/[\r\n]+/).map(function(u) { return u.trim(); }).filter(Boolean);
+    if (urls.length === 0) { if (status) status.textContent = 'Enter at least one URL.'; return; }
+    btn.disabled = true;
+    if (status) status.textContent = 'Enqueueing…';
+    try {
+        const res = await api.post('/api/admin/import/bulk', { urls: urls });
+        if (status) status.textContent = 'Job #' + (res.job_id || res.job?.id) + ' created with ' + (res.total_count || 0) + ' items.';
+        ta.value = '';
+        loadAdminBulkImport();
+    } catch (e) {
+        if (status) status.textContent = 'Error: ' + (e.message || 'Request failed');
+    }
+    btn.disabled = false;
+}
+
+async function renderAdminBulkImportJobDetail(jobId) {
+    const content = document.getElementById('adminBulkImportContent');
+    if (!content) return;
+    try {
+        const data = await api.get('/api/admin/import/jobs/' + jobId);
+        const job = data.job || {};
+        const items = data.items || [];
+        content.innerHTML = `
+            <div style="margin-bottom: 16px;">
+                <button type="button" class="btn btn-secondary" onclick="state.adminBulkImportView=null; state.adminBulkImportJobId=null; loadAdminBulkImport();"><i class="fas fa-arrow-left"></i> Back to Bulk Import</button>
+            </div>
+            <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Job #${job.id}</h2>
+            <p style="color: #6B7280; margin-bottom: 16px;">Total: ${job.total_count || 0} URLs</p>
+            <div id="bulkImportJobItemsList">
+                ${items.map(function(it) {
+                    return '<div style="padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 8px;"><div style="display: flex; justify-content: space-between;"><a href="' + (it.source_url || '#') + '" target="_blank" rel="noopener" style="color: #2563EB;">' + (it.source_url || '').substring(0, 80) + (it.source_url && it.source_url.length > 80 ? '…' : '') + '</a><span style="font-size: 13px; padding: 4px 8px; border-radius: 6px; background: ' + (it.status === 'done' ? '#D1FAE5' : it.status === 'error' ? '#FEE2E2' : '#FEF3C7') + ';">' + (it.status || 'queued') + '</span></div>' + (it.error_message ? '<p style="margin: 8px 0 0; color: #DC2626; font-size: 13px;">' + (it.error_message || '').replace(/</g, '&lt;') + '</p>' : '') + (it.attempt_count != null ? '<p style="margin: 4px 0 0; font-size: 12px; color: #6B7280;">Attempts: ' + it.attempt_count + '</p>' : '') + '</div>';
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        content.innerHTML = '<p style="color: #DC2626;">Failed to load job: ' + (e.message || 'Unknown error') + '</p>';
+    }
+}
+
+async function renderAdminBulkImportDraftEditor(draftId) {
+    const content = document.getElementById('adminBulkImportContent');
+    if (!content) return;
+    try {
+        const draft = await api.get('/api/admin/import/drafts/' + draftId);
+        content.innerHTML = `
+            <div style="margin-bottom: 16px;">
+                <button type="button" class="btn btn-secondary" onclick="state.adminBulkImportView=null; state.adminBulkImportDraftId=null; loadAdminBulkImport();"><i class="fas fa-arrow-left"></i> Back to Bulk Import</button>
+            </div>
+            <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Edit draft — ${(draft.name || draft.sku || 'Draft #' + draft.id)}</h2>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 16px;">
+                <div><label style="display: block; font-weight: 600; margin-bottom: 4px;">SKU</label><input type="text" id="bulkDraftSku" value="${(draft.sku || '').replace(/"/g, '&quot;')}" style="width: 100%; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px;"></div>
+                <div><label style="display: block; font-weight: 600; margin-bottom: 4px;">Name</label><input type="text" id="bulkDraftName" value="${(draft.name || '').replace(/"/g, '&quot;')}" style="width: 100%; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px;"></div>
+                <div><label style="display: block; font-weight: 600; margin-bottom: 4px;">Brand</label><input type="text" id="bulkDraftBrand" value="${(draft.brand || '').replace(/"/g, '&quot;')}" style="width: 100%; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px;"></div>
+                <div><label style="display: block; font-weight: 600; margin-bottom: 4px;">Category</label><input type="text" id="bulkDraftCategory" value="${(draft.category || '').replace(/"/g, '&quot;')}" style="width: 100%; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px;"></div>
+                <div class="form-group" style="grid-column: 1 / -1;"><label style="display: block; font-weight: 600; margin-bottom: 4px;">Description</label><textarea id="bulkDraftDescription" rows="3" style="width: 100%; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px;">${(draft.description || '').replace(/</g, '&lt;')}</textarea></div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button type="button" class="btn btn-secondary" onclick="saveBulkImportDraft(${draftId})">Save changes</button>
+                <button type="button" class="btn btn-primary" onclick="approveBulkImportDraft(${draftId})">Approve → Add to products</button>
+            </div>
+            <p id="bulkDraftSaveStatus" style="margin-top: 12px; font-size: 14px;"></p>
+        `;
+        window.__bulkImportDraftId = draftId;
+    } catch (e) {
+        content.innerHTML = '<p style="color: #DC2626;">Failed to load draft: ' + (e.message || 'Unknown error') + '</p>';
+    }
+}
+
+async function saveBulkImportDraft(draftId) {
+    const statusEl = document.getElementById('bulkDraftSaveStatus');
+    try {
+        const payload = {
+            sku: (document.getElementById('bulkDraftSku') && document.getElementById('bulkDraftSku').value) || '',
+            name: (document.getElementById('bulkDraftName') && document.getElementById('bulkDraftName').value) || '',
+            brand: (document.getElementById('bulkDraftBrand') && document.getElementById('bulkDraftBrand').value) || '',
+            category: (document.getElementById('bulkDraftCategory') && document.getElementById('bulkDraftCategory').value) || '',
+            description: (document.getElementById('bulkDraftDescription') && document.getElementById('bulkDraftDescription').value) || ''
+        };
+        await api.patch('/api/admin/import/drafts/' + draftId, payload);
+        if (statusEl) statusEl.textContent = 'Saved.';
+    } catch (e) {
+        if (statusEl) statusEl.textContent = 'Error: ' + (e.message || 'Save failed');
+    }
+}
+
+async function approveBulkImportDraft(draftId) {
+    const statusEl = document.getElementById('bulkDraftSaveStatus');
+    try {
+        const result = await api.post('/api/admin/import/drafts/' + draftId + '/approve');
+        if (statusEl) statusEl.textContent = 'Approved. Product ' + (result.action || 'created') + ' (id: ' + (result.product_id || '') + ').';
+        state.adminBulkImportView = null;
+        state.adminBulkImportDraftId = null;
+        loadAdminBulkImport();
+    } catch (e) {
+        if (statusEl) statusEl.textContent = 'Error: ' + (e.message || 'Approve failed');
     }
 }
 
@@ -6901,6 +7136,7 @@ function renderAdminNewFromUrl() {
     var assetImg = (state.adminNewFromUrlAssetResult && state.adminNewFromUrlAssetResult.hints && (state.adminNewFromUrlAssetResult.hints.image_urls || state.adminNewFromUrlAssetResult.hints.images)) ? (state.adminNewFromUrlAssetResult.hints.image_urls || state.adminNewFromUrlAssetResult.hints.images)[0] : '';
     const primaryImage = imageUrls[0] || '';
     const additionalImages = imageUrls.length > 1 ? imageUrls.slice(1).join('\n') : '';
+    const imageRows = Math.max(4, imageUrls.length);
     content.innerHTML = `
         <div style="margin-bottom: 24px;">
             <button type="button" class="btn btn-secondary" onclick="hideAdminNewFromUrlView()"><i class="fas fa-arrow-left" style="margin-right: 6px;"></i>Back to Products</button>
@@ -6951,13 +7187,26 @@ function renderAdminNewFromUrl() {
                     <textarea id="newFromUrlDescription" rows="4" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">${(draft.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Primary image URL</label>
-                    <input type="url" id="newFromUrlImagePrimary" value="${(primaryImage || '').replace(/"/g, '&quot;')}" placeholder="https://..." style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Image URLs (one per line) — first is primary, all will be saved</label>
+                    <textarea id="newFromUrlImagesAll" rows="${imageRows}" placeholder="https://...&#10;https://...&#10;(add as many as you have)" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit;">${(imageUrls.length ? imageUrls.join('\n') : '').replace(/</g, '&lt;')}</textarea>
+                    <p style="font-size: 12px; color: #6B7280; margin-top: 4px;">${imageUrls.length} image(s) from page. Add or edit URLs above; leave blank lines to remove.</p>
                 </div>
-                <div class="form-group" style="grid-column: 1 / -1;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Additional image URLs (one per line)</label>
-                    <textarea id="newFromUrlImagesExtra" rows="2" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">${(additionalImages || '').replace(/</g, '&lt;')}</textarea>
-                </div>
+                ${(function() {
+                    var attrs = draft.attributes || {};
+                    var warnings = Array.isArray(draft.attribute_warnings) ? draft.attribute_warnings : [];
+                    var hasAttrs = Object.keys(attrs).some(function(k) { var v = attrs[k]; return Array.isArray(v) ? v.length > 0 : v != null && v !== ''; });
+                    if (!hasAttrs && !warnings.length) return '';
+                    var facetLabels = { category: 'Category', material: 'Material', size: 'Size', color: 'Color', thickness_mil: 'Thickness', powder: 'Powder', grade: 'Grade', industries: 'Industries', compliance: 'Compliance', cut_level_ansi: 'Cut (ANSI)', puncture_level: 'Puncture', abrasion_level: 'Abrasion', flame_resistant: 'Flame resistant', arc_rating: 'Arc rating', warm_cold: 'Warm/Cold', texture: 'Texture', cuff_style: 'Cuff', hand_orientation: 'Hand', packaging: 'Packaging', sterility: 'Sterility' };
+                    var chips = '';
+                    for (var key in attrs) {
+                        var val = attrs[key];
+                        var label = facetLabels[key] || key;
+                        if (Array.isArray(val) && val.length) chips += '<div style="margin-bottom: 6px;"><span style="font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase;">' + label + '</span><div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">' + val.map(function(v) { return '<span class="new-from-url-attr-chip">' + (v + '').replace(/_/g, ' ') + '</span>'; }).join('') + '</div></div>';
+                        else if (val != null && val !== '' && typeof val !== 'boolean') chips += '<div style="margin-bottom: 6px;"><span style="font-size: 11px; font-weight: 600; color: #6B7280;">' + label + '</span> <span class="new-from-url-attr-chip">' + (val + '').replace(/_/g, ' ') + '</span></div>';
+                        else if (val === true) chips += '<div style="margin-bottom: 6px;"><span class="new-from-url-attr-chip">' + label + ': yes</span></div>';
+                    }
+                    return '<div class="form-group" style="grid-column: 1 / -1; background: #F9FAFB; padding: 14px; border-radius: 8px; border: 1px solid #E5E7EB;"><label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Filter attributes (for sidebar)</label>' + (chips ? '<div id="newFromUrlAttributesPreview">' + chips + '</div>' : '') + (warnings.length ? '<p style="font-size: 12px; color: #B45309; margin-top: 10px; margin-bottom: 0;"><strong>Warnings:</strong> ' + warnings.map(function(w) { return (w + '').replace(/</g, '&lt;'); }).join('; ') + '</p>' : '') + '</div>';
+                })()}
                 <div class="form-group">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">Color</label>
                     <input type="text" id="newFromUrlColor" value="${(draft.color || '').replace(/"/g, '&quot;')}" placeholder="e.g. Blue" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;">
@@ -7144,10 +7393,10 @@ async function saveAdminNewFromUrlProduct() {
         showToast('SKU and Name are required.', 'error');
         return;
     }
-    const primary = (document.getElementById('newFromUrlImagePrimary') && document.getElementById('newFromUrlImagePrimary').value) ? document.getElementById('newFromUrlImagePrimary').value.trim() : '';
-    const extraText = (document.getElementById('newFromUrlImagesExtra') && document.getElementById('newFromUrlImagesExtra').value) ? document.getElementById('newFromUrlImagesExtra').value : '';
-    const extraUrls = extraText.split(/[\r\n]+/).map(function(s) { return s.trim(); }).filter(Boolean);
-    const image_urls = primary ? [primary].concat(extraUrls) : extraUrls;
+    const draft = state.adminNewFromUrlPayload || {};
+    const imagesAllEl = document.getElementById('newFromUrlImagesAll');
+    const imagesAllText = (imagesAllEl && imagesAllEl.value) ? imagesAllEl.value : '';
+    const image_urls = imagesAllText.split(/[\r\n]+/).map(function(s) { return s.trim(); }).filter(Boolean);
     const payload = {
         sku: sku,
         name: name,
@@ -7163,7 +7412,10 @@ async function saveAdminNewFromUrlProduct() {
         pack_qty: (document.getElementById('newFromUrlPackQty') && document.getElementById('newFromUrlPackQty').value) ? parseInt(document.getElementById('newFromUrlPackQty').value, 10) : null,
         case_qty: (document.getElementById('newFromUrlCaseQty') && document.getElementById('newFromUrlCaseQty').value) ? parseInt(document.getElementById('newFromUrlCaseQty').value, 10) : null,
         category: (document.getElementById('newFromUrlCategory') && document.getElementById('newFromUrlCategory').value) ? document.getElementById('newFromUrlCategory').value.trim() : '',
-        subcategory: (document.getElementById('newFromUrlSubcategory') && document.getElementById('newFromUrlSubcategory').value) ? document.getElementById('newFromUrlSubcategory').value.trim() : ''
+        subcategory: (document.getElementById('newFromUrlSubcategory') && document.getElementById('newFromUrlSubcategory').value) ? document.getElementById('newFromUrlSubcategory').value.trim() : '',
+        attributes: (draft.attributes && typeof draft.attributes === 'object') ? draft.attributes : {},
+        attribute_warnings: Array.isArray(draft.attribute_warnings) ? draft.attribute_warnings : [],
+        source_confidence: (draft.source_confidence && typeof draft.source_confidence === 'object') ? draft.source_confidence : {}
     };
     if (payload.pack_qty !== null && isNaN(payload.pack_qty)) payload.pack_qty = null;
     if (payload.case_qty !== null && isNaN(payload.case_qty)) payload.case_qty = null;
@@ -8547,6 +8799,52 @@ async function createPoFromOrder(orderId) {
     }
 }
 
+var adminInventoryRows = [];
+
+function applyInventoryFilters() {
+    var el = document.getElementById('adminInventoryContent');
+    var searchEl = document.getElementById('adminInventorySearch');
+    var brandEl = document.getElementById('adminInventoryBrand');
+    if (!el || !adminInventoryRows.length) return;
+    var search = (searchEl && searchEl.value) ? searchEl.value.trim().toLowerCase() : '';
+    var brand = (brandEl && brandEl.value) ? brandEl.value : '';
+    var filtered = adminInventoryRows.filter(function(r) {
+        var matchSearch = !search || (r.sku && String(r.sku).toLowerCase().indexOf(search) !== -1) || (r.name && String(r.name).toLowerCase().indexOf(search) !== -1) || (r.brand && String(r.brand).toLowerCase().indexOf(search) !== -1);
+        var matchBrand = !brand || (r.brand || '') === brand;
+        return matchSearch && matchBrand;
+    });
+    renderAdminInventoryTable(el, filtered);
+}
+
+function renderAdminInventoryTable(container, rows) {
+    if (!container) return;
+    var existingToolbar = container.querySelector('.admin-inventory-toolbar');
+    var existingSuggestions = container.querySelector('.admin-inventory-suggestions');
+    var tableWrap = container.querySelector('.admin-inventory-table-wrap');
+    if (!tableWrap) return;
+    var esc = function(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+    var lowStock = rows.filter(function(r) { return (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point); });
+    tableWrap.innerHTML = '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr style="border-bottom:2px solid #e5e7eb;">' +
+        '<th style="text-align:left;padding:12px;">SKU</th><th style="text-align:left;padding:12px;">Name</th><th style="text-align:left;padding:12px;">Brand</th>' +
+        '<th style="text-align:right;padding:12px;">Qty on hand</th><th style="text-align:right;padding:12px;">Reorder pt</th><th style="text-align:left;padding:12px;">Bin</th><th style="text-align:left;padding:12px;">Last count</th><th style="text-align:left;padding:12px;">Actions</th>' +
+        '</tr></thead><tbody>' +
+        rows.map(function(r) {
+            var low = (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point);
+            var lastCount = r.last_count_at ? new Date(r.last_count_at).toLocaleDateString() : '—';
+            return '<tr style="border-bottom:1px solid #e5e7eb;' + (low ? ' background:#fef3c7;' : '') + '">' +
+                '<td style="padding:12px;">' + esc(r.sku) + '</td><td style="padding:12px;">' + esc(r.name) + '</td><td style="padding:12px;">' + esc(r.brand) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + (r.quantity_on_hand ?? 0) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + (r.reorder_point ?? 0) + '</td>' +
+                '<td style="padding:12px;">' + esc(r.bin_location) + '</td><td style="padding:12px;">' + lastCount + '</td>' +
+                '<td style="padding:12px;"><button type="button" data-product-id="' + r.product_id + '" data-sku="' + esc(r.sku) + '" data-qty="' + (r.quantity_on_hand ?? 0) + '" data-reorder="' + (r.reorder_point ?? 0) + '" data-bin="' + esc(r.bin_location || '') + '" onclick="openAdminInventoryEditFromBtn(this)" style="background:#FF7A00;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">Edit</button></td>' +
+                '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    var countNote = container.querySelector('.admin-inventory-count');
+    if (countNote) countNote.textContent = 'Showing ' + rows.length + (rows.length !== adminInventoryRows.length ? ' of ' + adminInventoryRows.length : '') + ' products' + (lowStock.length > 0 ? ' · ' + lowStock.length + ' at or below reorder point' : '') + '.';
+}
+
 async function loadAdminInventory() {
     const el = document.getElementById('adminInventoryContent');
     if (!el) return;
@@ -8557,34 +8855,30 @@ async function loadAdminInventory() {
             el.innerHTML = '<p style="color:#6B7280;">No products. Add products first; then set quantities here. Inventory drives in-stock on the storefront.</p>';
             return;
         }
-        const lowStock = rows.filter(function(r) { return (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point); });
-        el.innerHTML = '<div style="margin-bottom:20px;">' +
+        adminInventoryRows = rows;
+        var brands = [];
+        var seen = {};
+        rows.forEach(function(r) {
+            var b = (r.brand || '').trim();
+            if (b && !seen[b]) { seen[b] = true; brands.push(b); }
+        });
+        brands.sort();
+        var lowStock = rows.filter(function(r) { return (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point); });
+        el.innerHTML = '<div class="admin-inventory-toolbar" style="margin-bottom:20px;">' +
             '<h2 style="font-size:20px;font-weight:600;margin-bottom:8px;">Inventory (in-app)</h2>' +
-            '<p style="color:#6B7280;font-size:14px;">Set quantity and reorder point per product. Storefront uses quantity &gt; 0 as in-stock. No Fishbowl required.</p>' +
-            (lowStock.length > 0 ? '<p style="color:#B45309;font-size:14px;margin-top:8px;"><i class="fas fa-exclamation-triangle"></i> ' + lowStock.length + ' product(s) at or below reorder point.</p>' : '') +
-            '</div>' +
-            '<div style="overflow-x:auto;">' +
-            '<table style="width:100%;border-collapse:collapse;">' +
-            '<thead><tr style="border-bottom:2px solid #e5e7eb;">' +
-            '<th style="text-align:left;padding:12px;">SKU</th><th style="text-align:left;padding:12px;">Name</th><th style="text-align:left;padding:12px;">Brand</th>' +
-            '<th style="text-align:right;padding:12px;">Qty on hand</th><th style="text-align:right;padding:12px;">Reorder pt</th><th style="text-align:left;padding:12px;">Bin</th><th style="text-align:left;padding:12px;">Last count</th><th style="text-align:left;padding:12px;">Actions</th>' +
-            '</tr></thead><tbody>' +
-            rows.map(function(r) {
-                const esc = function(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
-                const low = (r.reorder_point != null && r.reorder_point > 0) && (r.quantity_on_hand <= r.reorder_point);
-                const lastCount = r.last_count_at ? new Date(r.last_count_at).toLocaleDateString() : '—';
-                return '<tr style="border-bottom:1px solid #e5e7eb;' + (low ? ' background:#fef3c7;' : '') + '">' +
-                    '<td style="padding:12px;">' + esc(r.sku) + '</td><td style="padding:12px;">' + esc(r.name) + '</td><td style="padding:12px;">' + esc(r.brand) + '</td>' +
-                    '<td style="padding:12px;text-align:right;">' + (r.quantity_on_hand ?? 0) + '</td>' +
-                    '<td style="padding:12px;text-align:right;">' + (r.reorder_point ?? 0) + '</td>' +
-                    '<td style="padding:12px;">' + esc(r.bin_location) + '</td><td style="padding:12px;">' + lastCount + '</td>' +
-                    '<td style="padding:12px;"><button type="button" data-product-id="' + r.product_id + '" data-sku="' + esc(r.sku) + '" data-qty="' + (r.quantity_on_hand ?? 0) + '" data-reorder="' + (r.reorder_point ?? 0) + '" data-bin="' + esc(r.bin_location || '') + '" onclick="openAdminInventoryEditFromBtn(this)" style="background:#FF7A00;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">Edit</button></td>' +
-                    '</tr>';
-            }).join('') +
-            '</tbody></table></div>';
+            '<p style="color:#6B7280;font-size:14px;">Set quantity and reorder point per product. Storefront uses quantity &gt; 0 as in-stock.</p>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;">' +
+            '<input type="text" id="adminInventorySearch" placeholder="Search by SKU, name, or brand..." style="flex:1;min-width:200px;max-width:320px;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;" oninput="applyInventoryFilters()">' +
+            '<label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#4B5563;">Brand: <select id="adminInventoryBrand" style="padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;min-width:160px;" onchange="applyInventoryFilters()">' +
+            '<option value="">All brands</option>' + brands.map(function(b) { return '<option value="' + (b || '').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + (b || '').replace(/</g, '&lt;') + '</option>'; }).join('') + '</select></label>' +
+            '<span class="admin-inventory-count" style="font-size:13px;color:#6B7280;"></span></div></div>' +
+            '<div class="admin-inventory-suggestions" id="adminInventorySuggestionsWrap" style="margin-bottom:16px;"></div>' +
+            '<div class="admin-inventory-table-wrap" style="overflow-x:auto;"></div>';
+        renderAdminInventoryTable(el, rows);
+        loadAdminReorderSuggestions();
     } catch (e) {
-        var msg = e.message || '';
-        var isHtmlResponse = msg.indexOf('Server returned HTML instead of JSON') !== -1;
+        var msg = e.message || (e.error || '');
+        var isHtmlResponse = (msg && msg.indexOf('Server returned HTML instead of JSON') !== -1);
         if (isHtmlResponse) {
             var mainUrl = (document.querySelector('meta[name="glovecubs-api-url"]') || {}).getAttribute('content') || '';
             var linkHtml = mainUrl ? '<a href="' + mainUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" style="color:#B45309;font-weight:600;">' + mainUrl.replace(/</g, '&lt;') + '</a>' : 'the main GloveCubs site';
@@ -8638,6 +8932,52 @@ async function saveAdminInventoryEdit(productId) {
         loadAdminInventory();
     } catch (e) {
         showToast(e.message || 'Failed to save', 'error');
+    }
+}
+
+async function loadAdminReorderSuggestions() {
+    var wrap = document.getElementById('adminInventorySuggestionsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<div style="padding:12px;color:#6B7280;"><i class="fas fa-spinner fa-spin"></i> Loading suggestions...</div>';
+    try {
+        var list = await api.get('/api/admin/inventory/reorder-suggestions');
+        if (!list || list.length === 0) {
+            wrap.innerHTML = '<div style="background:#f9fafb;padding:16px;border-radius:12px;border:1px solid #e5e7eb;"><h3 style="font-size:15px;font-weight:600;margin-bottom:8px;"><i class="fas fa-box-open"></i> Restock suggestions</h3><p style="color:#6B7280;font-size:14px;">No suggestions yet. Set reorder points and use orders from the last 90 days to see how many of each item to stock.</p><button type="button" id="adminInventoryAiBtn" onclick="loadAdminAiReorderSummary()" style="margin-top:12px;padding:8px 16px;background:#111;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;"><i class="fas fa-robot"></i> Get AI summary</button></div>';
+            return;
+        }
+        var esc = function(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+        var rowsHtml = list.slice(0, 20).map(function(s) {
+            return '<tr style="border-bottom:1px solid #e5e7eb;">' +
+                '<td style="padding:8px 12px;">' + esc(s.sku) + '</td><td style="padding:8px 12px;">' + esc(s.name) + '</td><td style="padding:8px 12px;">' + esc(s.brand) + '</td>' +
+                '<td style="padding:8px 12px;text-align:right;">' + (s.quantity_on_hand ?? 0) + '</td><td style="padding:8px 12px;text-align:right;">' + (s.reorder_point ?? 0) + '</td>' +
+                '<td style="padding:8px 12px;text-align:right;">' + (s.units_sold_90d || 0) + '</td><td style="padding:8px 12px;text-align:right;font-weight:600;color:#059669;">' + (s.suggested_order_qty || 0) + '</td></tr>';
+        }).join('');
+        wrap.innerHTML = '<div style="background:#f0fdf4;padding:16px;border-radius:12px;border:1px solid #bbf7d0;">' +
+            '<h3 style="font-size:15px;font-weight:600;margin-bottom:8px;"><i class="fas fa-chart-line"></i> Restock suggestions (from last 90 days)</h3>' +
+            '<p style="color:#166534;font-size:13px;margin-bottom:12px;">Suggested order qty is based on reorder point and ~4 weeks of historical usage. Use this to stock items rather than drop-ship.</p>' +
+            '<button type="button" id="adminInventoryAiBtn" onclick="loadAdminAiReorderSummary()" style="margin-bottom:12px;padding:8px 16px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;"><i class="fas fa-robot"></i> Get AI summary</button>' +
+            '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+            '<thead><tr style="border-bottom:2px solid #86efac;"><th style="text-align:left;padding:8px 12px;">SKU</th><th style="text-align:left;padding:8px 12px;">Name</th><th style="text-align:left;padding:8px 12px;">Brand</th><th style="text-align:right;padding:8px 12px;">On hand</th><th style="text-align:right;padding:8px 12px;">Reorder pt</th><th style="text-align:right;padding:8px 12px;">Sold (90d)</th><th style="text-align:right;padding:8px 12px;">Suggest order</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div></div>';
+    } catch (e) {
+        wrap.innerHTML = '<div style="background:#fef2f2;padding:12px;border-radius:8px;color:#b91c1c;font-size:14px;">Could not load suggestions. ' + (e.message || '') + '</div>';
+    }
+}
+
+async function loadAdminAiReorderSummary() {
+    var wrap = document.getElementById('adminInventorySuggestionsWrap');
+    if (!wrap) return;
+    var btn = document.getElementById('adminInventoryAiBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting AI summary...'; }
+    try {
+        var res = await api.get('/api/admin/inventory/ai-reorder-summary');
+        var summary = (res && res.summary) ? res.summary : 'No summary available.';
+        var existing = wrap.innerHTML;
+        var summaryDiv = '<div id="adminInventoryAiSummary" style="margin-top:12px;padding:12px;background:#fff;border-radius:8px;border:1px solid #bbf7d0;white-space:pre-wrap;font-size:14px;color:#166534;">' + (summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+        if (wrap.querySelector('#adminInventoryAiSummary')) wrap.querySelector('#adminInventoryAiSummary').outerHTML = summaryDiv; else wrap.insertAdjacentHTML('beforeend', summaryDiv);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-robot"></i> Get AI summary'; }
+    } catch (e) {
+        showToast(e.message || 'Failed to get AI summary', 'error');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-robot"></i> Get AI summary'; }
     }
 }
 
@@ -8903,7 +9243,8 @@ async function loadAdminUsers() {
                             <label>Payment terms *</label>
                             <select id="newCustomerPaymentTerms" style="width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px;">
                                 <option value="credit_card">Credit Card</option>
-                                <option value="net30">Net 30</option>
+                                <option value="ach">ACH</option>
+                                <option value="net30">Net 30 (requires approval)</option>
                             </select>
                         </div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
@@ -8952,7 +9293,7 @@ async function loadAdminUsers() {
                                     ${user.is_approved ? 'Approved' : 'Pending'}
                                 </div>
                                 <div style="font-size: 13px; color: #4B5563; text-transform: capitalize;">${user.discount_tier || 'standard'} tier</div>
-                                <div style="font-size: 12px; color: #4B5563; margin-top: 4px;">${(user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : 'Credit Card'}</div>
+                                <div style="font-size: 12px; color: #4B5563; margin-top: 4px;">${(user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : user.payment_terms === 'ach' ? 'ACH' : 'Credit Card'}</div>
                             </div>
                         </div>
                         <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
@@ -8966,6 +9307,7 @@ async function loadAdminUsers() {
                             </select>
                             <select onchange="updateUserPaymentTerms(${user.id}, this.value)" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 13px; cursor: pointer;">
                                 <option value="credit_card" ${(user.payment_terms || 'credit_card') === 'credit_card' ? 'selected' : ''}>Credit Card</option>
+                                <option value="ach" ${user.payment_terms === 'ach' ? 'selected' : ''}>ACH</option>
                                 <option value="net30" ${user.payment_terms === 'net30' ? 'selected' : ''}>Net 30</option>
                             </select>
                         </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendRequestSchema, recommendResponseSchema, type RecommendResponse } from "@/lib/gloves/types";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   getActiveProducts,
   getUseCaseRiskProfiles,
@@ -57,7 +57,13 @@ export async function POST(request: NextRequest) {
     }
     const { useCaseKey, answers } = parsed.data;
 
-    const supabase = createServerSupabase();
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json(
+        { error: "Supabase not configured" },
+        { status: 500 }
+      );
+    }
+    const supabase = getSupabaseAdmin();
     const [products, riskProfiles] = await Promise.all([
       getActiveProducts(supabase),
       getUseCaseRiskProfiles(supabase, useCaseKey),

@@ -10,7 +10,9 @@
     "diagnose:products": "node scripts/diagnose-products.mjs",
     "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
     "test:parse-url": "node scripts/test-parse-url-asset.mjs",
-    "test:parse-url:live": "node scripts/test-parse-url-asset.mjs --live"
+    "test:parse-url:live": "node scripts/test-parse-url-asset.mjs --live",
+    "test:import-attributes": "node scripts/test-import-attributes.cjs",
+    "scrape:hospeco": "tsx scripts/hospeco-image-scraper.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -22,10 +24,16 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.0",
     "openai": "^6.25.0",
+    "stripe": "^17.7.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "csv-parse": "^5.5.6",
     "csv-parser": "^3.2.0",
-    "csv-stringify": "^6.6.0"
+    "csv-stringify": "^6.6.0",
+    "minimist": "^1.2.8",
+    "playwright": "^1.49.0",
+    "tsx": "^4.19.2",
+    "xlsx": "^0.18.5"
   }
 }

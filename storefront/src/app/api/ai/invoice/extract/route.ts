@@ -5,7 +5,7 @@ import os from "os";
 import { aiExtractInvoice } from "@/lib/ai/provider";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { logAiEvent } from "@/lib/ai/telemetry";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
 
 export const maxDuration = 60;
@@ -48,12 +48,13 @@ export async function POST(request: NextRequest) {
   const base64 = Buffer.from(buffer).toString("base64");
   const mimeType = contentType.startsWith("image/") ? contentType : contentType === "application/pdf" ? "application/pdf" : "image/png";
 
-  let supabase = null;
-  try {
-    supabase = createServerSupabase();
-  } catch {
-    // optional
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Supabase not configured" },
+      { status: 500 }
+    );
   }
+  const supabase = getSupabaseAdmin();
 
   const start = Date.now();
   try {

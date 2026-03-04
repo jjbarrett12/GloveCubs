@@ -3,7 +3,7 @@ import { invoiceRecommendRequestSchema } from "@/lib/ai/schemas";
 import { aiInvoiceSavings } from "@/lib/ai/provider";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { logAiEvent } from "@/lib/ai/telemetry";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getActiveProducts } from "@/lib/gloves/queries";
 import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
 
@@ -29,11 +29,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  let supabase = null;
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Supabase not configured" },
+      { status: 500 }
+    );
+  }
+  const supabase = getSupabaseAdmin();
   let catalog: Awaited<ReturnType<typeof getActiveProducts>> = [];
   try {
-    supabase = createServerSupabase();
-    if (supabase) catalog = await getActiveProducts(supabase);
+    catalog = await getActiveProducts(supabase);
   } catch {
     catalog = [];
   }

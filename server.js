@@ -21,8 +21,12 @@ const { logParseEvent } = require('./lib/parse-log');
 const { aiGenerate, aiExtractInvoice, aiRecommendFromInvoice, isConfigured: aiConfigured } = require('./lib/ai/provider');
 const { validateGloveFinderRequest, validateGloveFinderResponse, validateInvoiceExtractResponse, validateInvoiceRecommendResponse } = require('./lib/ai/schemas');
 const { hashIp, logConversation, logInvoiceUpload, logInvoiceLines, logRecommendations } = require('./lib/ai/ai-log');
+const { enqueueBulkUrls, runWorker, approveDraft } = require('./lib/bulk-import');
+const Stripe = require('stripe');
 
 const app = express();
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const PORT = parseInt(process.env.PORT, 10) || 3004;
 const JWT_SECRET = process.env.JWT_SECRET || 'glovecubs-secret-key-2024';
 
@@ -209,6 +213,38 @@ let db = loadDB();
 // Middleware (increase limit for large CSV imports)
 const bodyLimit = '50mb';
 app.use(cors());
+
+// Stripe webhook needs raw body for signature verification (must be before express.json).
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret || !stripe) {
+        res.status(200).send();
+        return;
+    }
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+        console.error('[Stripe] Webhook signature verification failed:', err.message);
+        res.status(400).send('Webhook signature verification failed');
+        return;
+    }
+    if (event.type === 'payment_intent.succeeded') {
+        const pi = event.data.object;
+        const orderId = pi.metadata && pi.metadata.order_id;
+        if (orderId) {
+            const dbLocal = loadDB();
+            const order = dbLocal.orders.find(o => String(o.id) === String(orderId));
+            if (order && order.status === 'pending_payment') {
+                order.status = 'pending';
+                saveDB(dbLocal);
+            }
+        }
+    }
+    res.status(200).send();
+});
+
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 // Note: express.static is registered later, after all API routes, so /api/* never serves static files
@@ -533,6 +569,13 @@ function applyInventoryToProducts(products, inventoryList) {
         return { ...p, in_stock: qty > 0 ? 1 : 0, quantity_on_hand: qty };
     });
 }
+
+// Public config for front end (e.g. Stripe publishable key for checkout).
+app.get('/api/config', (req, res) => {
+    res.json({
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || ''
+    });
+});
 
 app.get('/api/products', optionalAuth, (req, res) => {
     db = loadDB();
@@ -1307,6 +1350,9 @@ app.post('/api/admin/products/parse-url', authenticateToken, requireAdmin, async
             if (payload.extracted.sku) extracted.sku = payload.extracted.sku;
             if (payload.extracted.skuGuess) extracted.skuGuess = payload.extracted.skuGuess;
             if (payload.extracted.image_urls && payload.extracted.image_urls.length) extracted.image_urls = payload.extracted.image_urls;
+            if (payload.extracted.productDetails && typeof payload.extracted.productDetails === 'object') extracted.productDetails = payload.extracted.productDetails;
+            if (payload.extracted.specText) extracted.specText = payload.extracted.specText;
+            if (Array.isArray(payload.extracted.bullets)) extracted.bullets = payload.extracted.bullets;
             const hints = payload.hints || {};
             const image_urls = hints.image_urls || hints.images || [];
             return res.json({
@@ -1326,7 +1372,10 @@ app.post('/api/admin/products/parse-url', authenticateToken, requireAdmin, async
     }
 });
 
-// AI normalization: input { kind, url, extracted, hints }. Output strict schema; image_urls only from extracted.meta, jsonld, hints.
+// AI normalization: input { kind, url, extracted, hints }. Output strict schema + attributes (filter vocab).
+const { normalizeProduct } = require('./lib/productImport/normalizeProduct');
+const { inferAttributesAI, mergeAttributes, mergeWarnings, isConfigured: inferAiConfigured } = require('./lib/productImport/inferAttributesAI');
+
 app.post('/api/admin/products/ai-normalize', authenticateToken, requireAdmin, async (req, res) => {
     const body = req.body || {};
     const extracted = body.extracted;
@@ -1344,9 +1393,32 @@ app.post('/api/admin/products/ai-normalize', authenticateToken, requireAdmin, as
             normalized = normalizeFromExtracted(extracted, options);
             fromFallback = true;
         }
+        const specText = (extracted.specText || '').toString();
+        const bullets = Array.isArray(extracted.bullets) ? extracted.bullets : [];
+        const attrDraft = normalizeProduct(extracted, hints, specText, bullets);
+        let attributes = attrDraft.attributes || {};
+        let attribute_warnings = attrDraft.warnings || [];
+        let source_confidence = {};
+        if (inferAiConfigured()) {
+            const aiInput = {
+                name: normalized.name,
+                description: normalized.description,
+                specText,
+                bullets
+            };
+            const aiResult = await inferAttributesAI(aiInput);
+            if (aiResult) {
+                attributes = mergeAttributes(attributes, aiResult);
+                attribute_warnings = mergeWarnings(attribute_warnings, aiResult.warnings);
+                source_confidence = aiResult.confidence || {};
+            }
+        }
+        normalized.attributes = attributes;
+        normalized.attribute_warnings = attribute_warnings;
+        normalized.source_confidence = source_confidence;
         if (body.logParse) {
             console.log('[admin/products] ai-normalize', fromFallback ? 'fallback' : 'openai', body.url ? 'url=' + body.url.slice(0, 60) : '');
-            logParseEvent({ event: 'ai-normalize', url: body.url || '', normalized, fromFallback });
+            logParseEvent({ event: 'ai-normalize', url: body.url || '', normalized: { ...normalized, attributes, attribute_warnings }, fromFallback });
         }
         res.json({ normalized, fromFallback: fromFallback || undefined });
     } catch (err) {
@@ -1376,7 +1448,7 @@ app.post('/api/admin/products/validate-images', authenticateToken, requireAdmin,
 // Do not drop unverified image URLs; store primary image_url always.
 app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req, res) => {
     if (!supabaseConfigured()) {
-        return res.status(503).json({ error: 'Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' });
+        return res.status(500).json({ error: 'Supabase not configured' });
     }
     const body = req.body || {};
     const sku = (body.sku || '').toString().trim();
@@ -1386,6 +1458,7 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
     }
     const image_urls = Array.isArray(body.image_urls) ? body.image_urls : [];
     const primaryImage = image_urls[0] || body.image_url || '';
+    const additionalImages = image_urls.length > 1 ? image_urls.slice(1).map(u => (u || '').toString().trim()).filter(Boolean) : [];
     const brand = (body.brand || '').toString().trim();
     const supabase = getSupabase();
     try {
@@ -1399,6 +1472,9 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
                 if (!error && inserted) manufacturer_id = inserted.id;
             }
         }
+        const attributes = body.attributes && typeof body.attributes === 'object' ? body.attributes : {};
+        const attribute_warnings = Array.isArray(body.attribute_warnings) ? body.attribute_warnings : [];
+        const source_confidence = body.source_confidence && typeof body.source_confidence === 'object' ? body.source_confidence : {};
         const productPayload = {
             sku,
             name,
@@ -1406,6 +1482,7 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
             description: (body.description || '').toString().trim() || null,
             cost: body.cost != null && !Number.isNaN(Number(body.cost)) ? Number(body.cost) : 0,
             image_url: (primaryImage || '').toString().trim() || null,
+            images: additionalImages,
             manufacturer_id,
             material: (body.material || '').toString().trim() || null,
             color: (body.color || '').toString().trim() || null,
@@ -1417,6 +1494,9 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
             thickness: (body.thickness || '').toString().trim() || null,
             powder: (body.powder || '').toString().trim() || null,
             grade: (body.grade || '').toString().trim() || null,
+            attributes,
+            attribute_warnings,
+            source_confidence,
             updated_at: new Date().toISOString()
         };
         const { data: existingProduct } = await supabase.from('products').select('id').eq('sku', sku).limit(1).maybeSingle();
@@ -1432,6 +1512,7 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
         productPayload.created_at = new Date().toISOString();
         const { error } = await supabase.from('products').insert(productPayload);
         if (error) throw error;
+        console.log('Product inserted:', sku);
         logParseEvent({ event: 'save', action: 'created', sku, name });
         if (req.body && req.body.logParse) {
             console.log('[admin/products] save created', sku);
@@ -1440,6 +1521,143 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
     } catch (err) {
         console.error('Save product error:', err);
         res.status(500).json({ error: err.message || 'Save failed' });
+    }
+});
+
+// ------------ Bulk Import (admin + internal worker) ------------
+function requireInternalCron(req, res, next) {
+    const secret = process.env.INTERNAL_CRON_SECRET;
+    if (!secret) return res.status(503).json({ error: 'INTERNAL_CRON_SECRET not configured' });
+    const headerSecret = req.headers['x-internal-cron-secret'] || (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '');
+    if (headerSecret !== secret) return res.status(401).json({ error: 'Unauthorized' });
+    next();
+}
+
+app.post('/api/admin/import/bulk', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const urls = req.body && req.body.urls;
+    if (!Array.isArray(urls) || urls.length === 0) return res.status(400).json({ error: 'urls array required' });
+    try {
+        const supabase = getSupabase();
+        const { job_id, total_count } = await enqueueBulkUrls(supabase, urls);
+        const { data: job } = await supabase.from('import_jobs').select('id, created_at, total_count').eq('id', job_id).single();
+        res.status(201).json({ job_id, total_count, job: job || { id: job_id, total_count } });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Enqueue failed' });
+    }
+});
+
+app.get('/api/admin/import/jobs', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    try {
+        const supabase = getSupabase();
+        const { data: jobs, error } = await supabase.from('import_jobs').select('id, created_at, total_count').order('id', { ascending: false }).limit(100);
+        if (error) throw error;
+        const counts = await Promise.all((jobs || []).map(async (j) => {
+            const { count } = await supabase.from('import_job_items').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
+            const { count: done } = await supabase.from('import_job_items').select('*', { count: 'exact', head: true }).eq('job_id', j.id).eq('status', 'done');
+            const { count: err } = await supabase.from('import_job_items').select('*', { count: 'exact', head: true }).eq('job_id', j.id).eq('status', 'error');
+            const { count: queued } = await supabase.from('import_job_items').select('*', { count: 'exact', head: true }).eq('job_id', j.id).eq('status', 'queued');
+            return { job_id: j.id, total_count: j.total_count, items_count: count ?? 0, done: done ?? 0, error: err ?? 0, queued: queued ?? 0 };
+        }));
+        res.json({ jobs: (jobs || []).map((j, i) => ({ ...j, ...counts[i] })) });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to list jobs' });
+    }
+});
+
+app.get('/api/admin/import/jobs/:id', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid job id' });
+    try {
+        const supabase = getSupabase();
+        const { data: job, error: jobErr } = await supabase.from('import_jobs').select('*').eq('id', id).single();
+        if (jobErr || !job) return res.status(404).json({ error: 'Job not found' });
+        const { data: items, error: itemsErr } = await supabase.from('import_job_items').select('id, source_url, status, attempt_count, error_message, created_product_id, created_at').eq('job_id', id).order('id');
+        if (itemsErr) throw itemsErr;
+        res.json({ job, items: items || [] });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to get job' });
+    }
+});
+
+app.post('/api/internal/import/run', requireInternalCron, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const limit = Math.min(parseInt(req.body && req.body.limit, 10) || 20, 50);
+    try {
+        const supabase = getSupabase();
+        const result = await runWorker(supabase, limit);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Worker failed' });
+    }
+});
+
+app.get('/api/admin/import/drafts', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.from('products_drafts').select('id, source_url, status, sku, name, brand, import_job_item_id, created_at').eq('status', 'draft').order('id', { ascending: false }).limit(200);
+        if (error) throw error;
+        res.json({ drafts: data || [] });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to list drafts' });
+    }
+});
+
+app.get('/api/admin/import/drafts/:id', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid draft id' });
+    try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.from('products_drafts').select('*').eq('id', id).single();
+        if (error || !data) return res.status(404).json({ error: 'Draft not found' });
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to get draft' });
+    }
+});
+
+app.patch('/api/admin/import/drafts/:id', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid draft id' });
+    const body = req.body || {};
+    const allowed = ['sku', 'name', 'brand', 'description', 'image_url', 'images', 'material', 'color', 'sizes', 'pack_qty', 'case_qty', 'category', 'subcategory', 'thickness', 'powder', 'grade', 'attributes', 'attribute_warnings', 'source_confidence'];
+    const updates = {};
+    for (const k of allowed) {
+        if (body[k] !== undefined) {
+            if (k === 'images' && Array.isArray(body[k])) updates[k] = body[k];
+            else if (k === 'attributes' && typeof body[k] === 'object') updates[k] = body[k];
+            else if (k === 'attribute_warnings' && Array.isArray(body[k])) updates[k] = body[k];
+            else if (k === 'source_confidence' && typeof body[k] === 'object') updates[k] = body[k];
+            else if (typeof body[k] === 'string' || typeof body[k] === 'number') updates[k] = body[k];
+        }
+    }
+    updates.updated_at = new Date().toISOString();
+    try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.from('products_drafts').update(updates).eq('id', id).eq('status', 'draft').select().single();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: 'Draft not found or already approved' });
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to update draft' });
+    }
+});
+
+app.post('/api/admin/import/drafts/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+    if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid draft id' });
+    try {
+        const supabase = getSupabase();
+        const result = await approveDraft(supabase, id);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Approve failed' });
     }
 });
 
@@ -2153,9 +2371,15 @@ app.post('/api/orders', authenticateToken, (req, res) => {
     const tax = subtotal * 0.08;
     const total = subtotal + shipping + tax;
 
+    // Normalize payment_method: credit_card | ach | net30. Net 30 requires approved account.
+    const allowedMethods = ['credit_card', 'ach', 'net30'];
+    const requested = (payment_method && allowedMethods.includes(payment_method)) ? payment_method : (user.payment_terms === 'net30' ? 'net30' : 'credit_card');
+    if (requested === 'net30' && !user.is_approved) {
+        return res.status(400).json({ error: 'Net 30 payment terms require account approval. Please use Credit Card or ACH, or contact us to request Net 30.' });
+    }
+    const orderPaymentMethod = requested;
+
     const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
-    const userPaymentTerms = (user.payment_terms === 'net30') ? 'net30' : 'credit_card';
-    const orderPaymentMethod = (payment_method === 'net30') ? 'net30' : (payment_method === 'credit_card' ? 'credit_card' : userPaymentTerms);
 
     const order = {
         id: Date.now(),
@@ -2198,6 +2422,122 @@ app.post('/api/orders', authenticateToken, (req, res) => {
         success: true,
         order_number: orderNumber,
         order_id: order.id,
+        total
+    });
+});
+
+// Create order in pending_payment and Stripe PaymentIntent for card/ACH (returns client_secret for Stripe.js).
+app.post('/api/orders/create-payment-intent', authenticateToken, (req, res) => {
+    if (!stripe) {
+        return res.status(503).json({ error: 'Stripe is not configured. Use Credit Card or ACH after setting STRIPE_SECRET_KEY.' });
+    }
+    const { shipping_address, notes, ship_to_id, payment_method } = req.body;
+    if (payment_method !== 'credit_card' && payment_method !== 'ach') {
+        return res.status(400).json({ error: 'Use this endpoint only for credit_card or ach. Use POST /api/orders for Net 30.' });
+    }
+    db = loadDB();
+    let finalShippingAddress = shipping_address;
+    if (ship_to_id) {
+        const shipTo = (db.ship_to_addresses || []).find(s => s.id == ship_to_id && s.user_id === req.user.id);
+        if (shipTo) {
+            finalShippingAddress = `${shipTo.label || 'Ship-to'}: ${shipTo.address}, ${shipTo.city}, ${shipTo.state} ${shipTo.zip}`;
+        }
+    }
+    const cartKey = `user_${req.user.id}`;
+    const cartItems = db.carts[cartKey] || [];
+    if (cartItems.length === 0) {
+        return res.status(400).json({ error: 'Cart is empty' });
+    }
+    const missing = cartItems.filter(item => {
+        const product = db.products.find(p => p.id === item.product_id);
+        return !product || !product.in_stock;
+    });
+    if (missing.length > 0) {
+        return res.status(400).json({
+            error: 'Some items in your cart are no longer available. Please update your cart.',
+            unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
+        });
+    }
+    const user = db.users.find(u => u.id === req.user.id);
+    let discountPercent = 0;
+    if (user && user.is_approved) {
+        switch (user.discount_tier) {
+            case 'bronze': discountPercent = 5; break;
+            case 'silver': discountPercent = 10; break;
+            case 'gold': discountPercent = 15; break;
+            case 'platinum': discountPercent = 20; break;
+        }
+    }
+    let subtotal = 0;
+    const orderItems = cartItems.map(item => {
+        const product = db.products.find(p => p.id === item.product_id);
+        let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
+        if (discountPercent > 0) price = price * (1 - discountPercent / 100);
+        subtotal += price * item.quantity;
+        let variantSku = product.sku || '';
+        if (item.size && product.sku) {
+            variantSku = `${product.sku}-${(item.size || '').toUpperCase().replace(/\s+/g, '')}`;
+        }
+        return {
+            product_id: item.product_id,
+            sku: product.sku || '',
+            variant_sku: variantSku,
+            name: product.name || 'Unknown',
+            size: item.size || null,
+            quantity: item.quantity,
+            price
+        };
+    });
+    const discount = 0;
+    const shipping = subtotal >= 500 ? 0 : 25;
+    const tax = subtotal * 0.08;
+    const total = subtotal + shipping + tax;
+    const amountCents = Math.round(total * 100);
+    if (amountCents < 50) {
+        return res.status(400).json({ error: 'Order total must be at least $0.50 to pay by card or ACH.' });
+    }
+    const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
+    const order = {
+        id: Date.now(),
+        user_id: req.user.id,
+        order_number: orderNumber,
+        status: 'pending_payment',
+        payment_method,
+        subtotal,
+        discount,
+        shipping,
+        tax,
+        total,
+        shipping_address: finalShippingAddress,
+        ship_to_id: ship_to_id || null,
+        notes: notes || '',
+        items: orderItems,
+        tracking_number: '',
+        tracking_url: '',
+        created_at: new Date().toISOString()
+    };
+    let paymentIntent;
+    try {
+        // Card + ACH via Stripe Payment Element (enable both in Stripe Dashboard if needed).
+        paymentIntent = await stripe.paymentIntents.create({
+            amount: amountCents,
+            currency: 'usd',
+            automatic_payment_methods: { enabled: true },
+            metadata: { order_id: String(order.id), order_number: orderNumber, user_id: String(req.user.id) }
+        });
+    } catch (err) {
+        console.error('[Stripe] PaymentIntent create failed:', err.message);
+        return res.status(502).json({ error: 'Could not create payment session. Please try again or use a different payment method.' });
+    }
+    order.stripe_payment_intent_id = paymentIntent.id;
+    db.orders.push(order);
+    db.carts[cartKey] = [];
+    saveDB(db);
+    res.json({
+        success: true,
+        client_secret: paymentIntent.client_secret,
+        order_id: order.id,
+        order_number: orderNumber,
         total
     });
 });
@@ -2760,7 +3100,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
         city: (city || '').trim(),
         state: (state || '').trim(),
         zip: (zip || '').trim(),
-        payment_terms: payment_terms === 'net30' ? 'net30' : 'credit_card',
+        payment_terms: (payment_terms === 'net30' ? 'net30' : payment_terms === 'ach' ? 'ach' : 'credit_card'),
         allow_free_upgrades: !!allow_free_upgrades,
         is_approved: 1,
         discount_tier: 'standard',
@@ -2808,7 +3148,8 @@ app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
         user.discount_tier = req.body.discount_tier;
     }
     if (req.body.payment_terms !== undefined) {
-        user.payment_terms = req.body.payment_terms === 'net30' ? 'net30' : 'credit_card';
+        const pt = req.body.payment_terms;
+        user.payment_terms = (pt === 'net30' ? 'net30' : pt === 'ach' ? 'ach' : 'credit_card');
     }
     saveDB(db);
     const { password, ...safeUser } = user;
@@ -2943,6 +3284,119 @@ app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, (req, re
     }
     saveDB(db);
     res.json({ success: true, updated: counts.length });
+});
+
+// Reorder suggestions from historical order usage (last 90 days).
+app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAdmin, (req, res) => {
+    try {
+        res.setHeader('Content-Type', 'application/json');
+        db = loadDB();
+        const products = db.products || [];
+        const invList = db.inventory || [];
+        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const orders = (db.orders || []).filter((o) => {
+            const t = o.created_at ? new Date(o.created_at).getTime() : 0;
+            return t >= Date.now() - 90 * 24 * 60 * 60 * 1000;
+        });
+        const usageByProduct = new Map();
+        orders.forEach((order) => {
+            (order.items || []).forEach((item) => {
+                const pid = item.product_id;
+                if (pid == null) return;
+                const qty = Math.max(0, parseInt(item.quantity, 10) || 0);
+                const cur = usageByProduct.get(pid) || { units: 0, orders: 0 };
+                cur.units += qty;
+                cur.orders += 1;
+                usageByProduct.set(pid, cur);
+            });
+        });
+        const suggestions = products.map((p) => {
+            const inv = byProduct.get(p.id);
+            const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
+            const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
+            const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
+            const unitsSold90 = usage.units;
+            const ordersCount90 = usage.orders;
+            const weeklyAvg = unitsSold90 / 13;
+            const weeksSupply = 4;
+            const suggestedNeed = Math.ceil(weeklyAvg * weeksSupply);
+            const suggestedOrderQty = Math.max(0, Math.max(reorderPt, suggestedNeed) - qoh);
+            return {
+                product_id: p.id,
+                sku: p.sku,
+                name: p.name,
+                brand: p.brand,
+                quantity_on_hand: qoh,
+                reorder_point: reorderPt,
+                units_sold_90d: unitsSold90,
+                orders_count_90d: ordersCount90,
+                suggested_order_qty: suggestedOrderQty
+            };
+        }).filter((s) => s.suggested_order_qty > 0 || s.quantity_on_hand <= s.reorder_point).sort((a, b) => (b.suggested_order_qty || 0) - (a.suggested_order_qty || 0));
+        res.json(suggestions);
+    } catch (err) {
+        console.error('[admin/inventory/reorder-suggestions]', err.message);
+        res.setHeader('Content-Type', 'application/json');
+        res.status(500).json({ error: err.message || 'Failed to load reorder suggestions' });
+    }
+});
+
+// AI summary for restock suggestions (uses OpenAI if configured).
+app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        res.setHeader('Content-Type', 'application/json');
+        db = loadDB();
+        const products = db.products || [];
+        const invList = db.inventory || [];
+        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const orders = (db.orders || []).filter((o) => {
+            const t = o.created_at ? new Date(o.created_at).getTime() : 0;
+            return t >= Date.now() - 90 * 24 * 60 * 60 * 1000;
+        });
+        const usageByProduct = new Map();
+        orders.forEach((order) => {
+            (order.items || []).forEach((item) => {
+                const pid = item.product_id;
+                if (pid == null) return;
+                const qty = Math.max(0, parseInt(item.quantity, 10) || 0);
+                const cur = usageByProduct.get(pid) || { units: 0, orders: 0 };
+                cur.units += qty;
+                cur.orders += 1;
+                usageByProduct.set(pid, cur);
+            });
+        });
+        const suggestions = products.map((p) => {
+            const inv = byProduct.get(p.id);
+            const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
+            const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
+            const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
+            const unitsSold90 = usage.units;
+            const weeklyAvg = unitsSold90 / 13;
+            const suggestedNeed = Math.ceil(weeklyAvg * 4);
+            const suggestedOrderQty = Math.max(0, Math.max(reorderPt, suggestedNeed) - qoh);
+            return { product_id: p.id, sku: p.sku, name: p.name, brand: p.brand, quantity_on_hand: qoh, reorder_point: reorderPt, units_sold_90d: unitsSold90, suggested_order_qty: suggestedOrderQty };
+        }).filter((s) => s.suggested_order_qty > 0 || s.quantity_on_hand <= s.reorder_point).sort((a, b) => (b.suggested_order_qty || 0) - (a.suggested_order_qty || 0));
+        const top = suggestions.slice(0, 25).map((s) => `${s.sku}: ${s.name} (${s.brand || '—'}) — on hand ${s.quantity_on_hand}, reorder pt ${s.reorder_point}, sold ${s.units_sold_90d} in 90d → suggest order ${s.suggested_order_qty}`).join('\n');
+        if (!top) return res.json({ summary: 'No restock suggestions right now. Set reorder points and use historical orders to see AI suggestions.' });
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (!openaiKey) return res.json({ summary: 'Restock suggestions (from history):\n\n' + top.replace(/\n/g, '\n• ') + '\n\nSet OPENAI_API_KEY for an AI-written summary.' });
+        const openai = require('openai');
+        const client = new openai.OpenAI({ apiKey: openaiKey });
+        const completion = await client.chat.completions.create({
+            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: 'You are a brief inventory restock advisor. In 2–4 sentences, summarize which products to reorder and why, based on current stock and recent sales. Be concise and actionable.' },
+                { role: 'user', content: 'Suggest restock quantities for these products (stock to keep vs drop-ship):\n\n' + top }
+            ],
+            max_tokens: 300
+        });
+        const summary = (completion.choices && completion.choices[0] && completion.choices[0].message && completion.choices[0].message.content) ? completion.choices[0].message.content.trim() : 'Unable to generate summary.';
+        res.json({ summary });
+    } catch (err) {
+        console.error('[admin/inventory/ai-reorder-summary]', err.message);
+        res.setHeader('Content-Type', 'application/json');
+        res.status(500).json({ error: err.message || 'Failed to get AI summary' });
+    }
 });
 
 // ---------- Purchase Orders ----------
