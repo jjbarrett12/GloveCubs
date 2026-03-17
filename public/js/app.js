@@ -8,6 +8,25 @@ function getCategoryDisplayName(category) {
     return category || '';
 }
 
+/**
+ * Derive use-case labels from product (name, description, category, useCase, grade).
+ * Used for product card chips instead of highlighting material.
+ */
+function getProductUseCaseLabels(product) {
+    if (!product) return [];
+    var text = ((product.name || '') + ' ' + (product.description || '') + ' ' + (product.useCase || '') + ' ' + (product.grade || '') + ' ' + (product.category || '')).toLowerCase();
+    var labels = [];
+    if (/\b(food|fda|nsf|food-safe|food service)\b/.test(text)) labels.push('Food-safe');
+    if (/\b(medical|exam|clinical|patient|healthcare|sterile)\b/.test(text) || (product.grade || '').toLowerCase().includes('medical')) labels.push('Medical');
+    if (/\b(cut|ansi|level a|level b|level c|level d|level e)\b/.test(text)) labels.push('Cut resistant');
+    if (/\b(chemical|solvent|resistant|acid)\b/.test(text)) labels.push('Chemical');
+    if (/\b(impact|crush|puncture)\b/.test(text)) labels.push('Impact resistant');
+    if (/\b(heavy duty|heavy-duty|8 mil|10 mil|12 mil|15 mil)\b/.test(text)) labels.push('Heavy duty');
+    if (labels.length === 0 && (product.category === 'Work Gloves' || (product.category || '').toLowerCase().includes('work'))) labels.push('Work');
+    if (labels.length === 0 && (product.category === 'Disposable Gloves' || (product.category || '').toLowerCase().includes('disposable'))) labels.push('Disposable');
+    return labels.slice(0, 3);
+}
+
 // Brand name -> logo filename (without .png). Used for brands strip and footer.
 const BRAND_TO_LOGO_SLUG = {
     'Hospeco': 'hospeco',
@@ -479,6 +498,23 @@ async function runAppInit() {
             try {
                 state.user = JSON.parse(userData);
                 updateHeaderAccount();
+                // Refresh user from API so is_admin is current
+                api.get('/api/auth/me').then(function(me) {
+                    if (me && me.id) {
+                        state.user = Object.assign({}, state.user, me);
+                        localStorage.setItem('user', JSON.stringify(state.user));
+                        updateHeaderAccount();
+
+                        // If you're already on an admin URL, route to the admin shell
+                        // after we learn your auth state (prevents "half admin" state).
+                        var p = (window.location && window.location.pathname) ? window.location.pathname : '';
+                        if (p === '/admin' || p === '/admin/' || p.indexOf('/admin/') === 0) {
+                            if (state.user.is_admin === true) {
+                                navigate('admin');
+                            }
+                        }
+                    }
+                }).catch(function() {});
             } catch (e) {
                 console.error('Error parsing user data:', e);
             }
@@ -649,6 +685,7 @@ window.clearOverlaysAndModals = clearOverlaysAndModals;
 async function navigate(page, params = {}) {
     try {
         state.currentPage = page;
+        if (page !== 'admin') document.body.classList.remove('admin-mode');
         clearOverlaysAndModals();
         let mainContent = document.getElementById('mainContent');
         if (!mainContent) {
@@ -721,6 +758,48 @@ async function navigate(page, params = {}) {
                 navigate('login');
             }
             break;
+        case 'portal-orders':
+            if (state.user) {
+                await renderPortalOrdersPage(params);
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'portal-order':
+            if (state.user) {
+                await renderPortalOrderDetailPage(params.id);
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'portal-addresses':
+            if (state.user) {
+                await renderPortalAddressesPage();
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'portal-rfqs':
+            if (state.user) {
+                await renderPortalRfqsPage();
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'portal-account':
+            if (state.user) {
+                await renderPortalAccountPage();
+            } else {
+                navigate('login');
+            }
+            break;
+        case 'portal-favorites':
+            if (state.user) {
+                await renderPortalFavoritesPage();
+            } else {
+                navigate('login');
+            }
+            break;
         case 'b2b':
             renderB2BPage();
             break;
@@ -740,6 +819,7 @@ async function navigate(page, params = {}) {
             renderFAQPage();
             break;
         case 'admin':
+            document.body.classList.add('admin-mode');
             if (params && params.subPath === 'products/new-from-url') {
                 state.adminTab = 'products';
                 state.adminProductsView = 'new-from-url';
@@ -747,7 +827,7 @@ async function navigate(page, params = {}) {
                 state.adminNewFromUrlParseResult = null;
                 state.adminNewFromUrlUrl = '';
             }
-            renderAdminPanel(state.adminTab || 'orders');
+            renderAdminPanel(state.adminTab || 'dashboard');
             break;
         case 'ai-advisor':
             state.aiAdvisorPrefill = params.prefill || null;
@@ -2413,6 +2493,9 @@ function renderProductCard(product) {
                     <button type="button" class="product-action-btn" onclick="event.preventDefault(); event.stopPropagation(); navigate('product', { id: ${productId} });" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
+                    <button type="button" class="product-action-btn favorite-btn" onclick="event.preventDefault(); event.stopPropagation(); toggleFavorite(${productId}, this);" title="Add to Favorites">
+                        <i class="far fa-heart"></i>
+                    </button>
                 </div>
             </div>
             <div class="product-info">
@@ -2420,7 +2503,7 @@ function renderProductCard(product) {
                 <h3 class="product-name">${(product.name || '').replace(/</g, '&lt;')}</h3>
                 <div class="product-sku">${(product.sku || '').replace(/</g, '&lt;')}</div>
                 <div class="product-meta">
-                    <span class="product-material">${(product.material || '').replace(/</g, '&lt;')}</span>
+                    ${getProductUseCaseLabels(product).length ? '<span class="product-use-cases">' + getProductUseCaseLabels(product).map(function(u) { return '<span class="product-use-case-chip">' + u.replace(/</g, '&lt;') + '</span>'; }).join('') + '</span>' : ''}
                     <span class="product-pack">${product.pack_qty || 100}/box</span>
                 </div>
                 ${(product.case_qty || product.pack_qty) ? '<div class="product-case-min">Sold by case (' + (product.case_qty || product.pack_qty) + '). Min: 1 case.</div>' : ''}
@@ -3231,6 +3314,10 @@ function showRFQModal() {
                             <input type="hidden" name="use_case" value="${use}">
                         </div>
                         ` : ''}
+                        <div style="background: #FFFFFF; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,122,0,0.2);">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #4B5563; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Cases or pallets needed</label>
+                            <input type="text" name="cases_or_pallets" style="width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;" placeholder="e.g. 50 cases, 2 pallets">
+                        </div>
                     </div>
                 </div>
                 ` : `
@@ -3262,6 +3349,12 @@ function showRFQModal() {
                                 Use Case / Industry
                             </label>
                             <input type="text" name="use_case" style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="e.g., Food Service, Healthcare, Manufacturing">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 8px;">
+                                Cases or pallets needed
+                            </label>
+                            <input type="text" name="cases_or_pallets" style="width: 100%; padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; transition: all 0.3s ease; background: #FFFFFF;" onfocus="this.style.borderColor='#FF7A00'; this.style.boxShadow='0 0 0 4px rgba(255,122,0,0.1)'; this.style.outline='none';" onblur="this.style.borderColor='#E5E7EB'; this.style.boxShadow='none';" placeholder="e.g. 50 cases, 2 pallets">
                         </div>
                     </div>
                 </div>
@@ -3399,8 +3492,9 @@ async function renderCartPage() {
     });
     
     const shipping = subtotal >= 500 ? 0 : 25;
-    const tax = subtotal * 0.08;
-    const total = subtotal + shipping + tax;
+    // Tax is calculated at checkout based on shipping destination (nexus rules)
+    const taxEstimate = null; // Will be calculated at checkout
+    const total = subtotal + shipping; // Tax added at checkout
 
     mainContent.innerHTML = `
         <section class="cart-page">
@@ -3486,11 +3580,11 @@ async function renderCartPage() {
                             <span class="value">${shipping === 0 ? 'FREE' : '$' + shipping.toFixed(2)}</span>
                         </div>
                         <div class="summary-row">
-                            <span class="label">Est. Tax</span>
-                            <span class="value">$${tax.toFixed(2)}</span>
+                            <span class="label">Tax</span>
+                            <span class="value" style="font-size: 13px; color: var(--gray-600);">Calculated at checkout</span>
                         </div>
                         <div class="summary-row total">
-                            <span class="label">Total</span>
+                            <span class="label">Subtotal</span>
                             <span class="value">$${total.toFixed(2)}</span>
                         </div>
                         ${subtotal < 500 ? `<p style="font-size: 13px; color: #374151; margin-top: 16px;"><i class="fas fa-truck" style="color: var(--primary);"></i> Add $${(500 - subtotal).toFixed(2)} more for free shipping!</p>` : ''}
@@ -3604,7 +3698,12 @@ async function renderCheckoutPage() {
     // Discount is already applied to prices, so discount amount is 0
     const discount = 0;
     const shipping = subtotal >= 500 ? 0 : 25;
-    const tax = (subtotal - discount) * 0.08;
+    // Tax will be calculated based on shipping state (nexus rules)
+    const initialState = (user.state || '').toUpperCase();
+    // Store checkout data for tax calculation
+    window._checkoutData = { subtotal, discount, shipping };
+    // Initial tax will be updated when page loads based on state
+    let tax = 0;
     const total = subtotal - discount + shipping + tax;
 
     mainContent.innerHTML = `
@@ -3663,7 +3762,7 @@ async function renderCheckoutPage() {
                                 </div>
                                 <div class="form-group">
                                     <label>State</label>
-                                    <input type="text" id="checkoutState" value="${user.state || ''}" placeholder="State">
+                                    <input type="text" id="checkoutState" value="${user.state || ''}" placeholder="State" onchange="updateCheckoutTax()" onblur="updateCheckoutTax()">
                                 </div>
                             </div>
                             <div class="form-row">
@@ -3733,41 +3832,172 @@ async function renderCheckoutPage() {
                             <span class="label">Shipping</span>
                             <span class="value">${shipping === 0 ? 'FREE' : '$' + shipping.toFixed(2)}</span>
                         </div>
-                        <div class="summary-row">
-                            <span class="label">Tax</span>
-                            <span class="value">$${tax.toFixed(2)}</span>
+                        <div class="summary-row" id="checkoutTaxRow">
+                            <span class="label" id="checkoutTaxLabel">Tax</span>
+                            <span class="value" id="checkoutTaxValue">Calculating...</span>
                         </div>
                         <div class="summary-row total">
                             <span class="label">Total</span>
-                            <span class="value">$${total.toFixed(2)}</span>
+                            <span class="value" id="checkoutTotalValue">$${total.toFixed(2)}</span>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
     `;
+    
+    // Calculate tax based on current state after page renders
+    setTimeout(() => updateCheckoutTax(), 100);
+}
+
+async function updateCheckoutTax() {
+    const data = window._checkoutData;
+    if (!data) return;
+    
+    const stateInput = document.getElementById('checkoutState');
+    const shipToSelect = document.getElementById('checkoutShipTo');
+    
+    let shippingState = '';
+    
+    // Check if using saved ship-to address
+    if (shipToSelect && shipToSelect.value) {
+        // Extract state from the selected option text (format: "Label — Address, City, ST ZIP")
+        const optionText = shipToSelect.options[shipToSelect.selectedIndex].text;
+        const stateMatch = optionText.match(/,\s*([A-Z]{2})\s+\d{5}/);
+        if (stateMatch) shippingState = stateMatch[1];
+    } else if (stateInput) {
+        shippingState = stateInput.value.trim().toUpperCase();
+    }
+    
+    const taxValueEl = document.getElementById('checkoutTaxValue');
+    const taxLabelEl = document.getElementById('checkoutTaxLabel');
+    const totalValueEl = document.getElementById('checkoutTotalValue');
+    const placeOrderBtn = document.querySelector('.checkout-form .btn-primary');
+    
+    if (!taxValueEl || !totalValueEl) return;
+    
+    try {
+        const res = await api.post('/api/tax/estimate', {
+            subtotal: data.subtotal,
+            shipping_state: shippingState,
+            shipping: data.shipping
+        });
+        
+        const tax = res.tax || 0;
+        const total = data.subtotal + data.shipping + tax;
+        
+        taxValueEl.textContent = tax > 0 ? `$${tax.toFixed(2)}` : '$0.00';
+        if (taxLabelEl) {
+            taxLabelEl.textContent = res.taxable ? res.summary : 'Tax';
+        }
+        if (!res.taxable && shippingState) {
+            taxValueEl.innerHTML = `$0.00 <span style="font-size: 11px; color: var(--gray-500);">(out-of-state)</span>`;
+        }
+        
+        totalValueEl.textContent = `$${total.toFixed(2)}`;
+        if (placeOrderBtn) {
+            placeOrderBtn.innerHTML = `<i class="fas fa-lock"></i> Place Order - $${total.toFixed(2)}`;
+        }
+        
+        window._checkoutData.calculatedTax = tax;
+        window._checkoutData.calculatedTotal = total;
+    } catch (err) {
+        console.error('Tax calculation error:', err);
+        taxValueEl.textContent = 'Error';
+    }
 }
 
 function toggleCheckoutAddress(selectEl) {
     const fields = document.getElementById('checkoutAddressFields');
     if (!fields) return;
     fields.style.display = selectEl.value ? 'none' : 'block';
+    // Recalculate tax when ship-to selection changes
+    updateCheckoutTax();
+}
+
+const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','PR','VI','GU','AS','MP'];
+const ZIP_REGEX = /^\d{5}(-\d{4})?$/;
+
+function validateShippingAddress(addressData) {
+    const errors = {};
+    
+    if (!addressData.full_name || addressData.full_name.trim().length < 2) {
+        errors.full_name = 'Contact name is required (at least 2 characters)';
+    }
+    if (!addressData.address_line1 || addressData.address_line1.trim().length < 5) {
+        errors.address_line1 = 'Street address is required (at least 5 characters)';
+    }
+    if (!addressData.city || addressData.city.trim().length < 2) {
+        errors.city = 'City is required (at least 2 characters)';
+    }
+    const stateUpper = (addressData.state || '').trim().toUpperCase();
+    if (!stateUpper || !US_STATES.includes(stateUpper)) {
+        errors.state = 'Valid US state abbreviation required (e.g., CA, NY, TX)';
+    }
+    if (!addressData.zip_code || !ZIP_REGEX.test(addressData.zip_code.trim())) {
+        errors.zip_code = 'Valid US ZIP code required (12345 or 12345-6789)';
+    }
+    
+    return { valid: Object.keys(errors).length === 0, errors };
+}
+
+function showFieldErrors(fieldErrors) {
+    // Clear existing errors
+    document.querySelectorAll('.checkout-field-error').forEach(el => el.remove());
+    document.querySelectorAll('.checkout-error-field').forEach(el => el.classList.remove('checkout-error-field'));
+    
+    const fieldMap = {
+        full_name: 'checkoutContact',
+        address_line1: 'checkoutAddress',
+        city: 'checkoutCity',
+        state: 'checkoutState',
+        zip_code: 'checkoutZip'
+    };
+    
+    for (const [field, message] of Object.entries(fieldErrors)) {
+        const inputId = fieldMap[field];
+        const input = inputId && document.getElementById(inputId);
+        if (input) {
+            input.classList.add('checkout-error-field');
+            const errorEl = document.createElement('div');
+            errorEl.className = 'checkout-field-error';
+            errorEl.textContent = message;
+            errorEl.style.cssText = 'color: #dc2626; font-size: 12px; margin-top: 4px;';
+            input.parentNode.appendChild(errorEl);
+        }
+    }
 }
 
 async function placeOrder() {
     const shipToSelect = document.getElementById('checkoutShipTo');
     const ship_to_id = shipToSelect && shipToSelect.value ? shipToSelect.value : null;
-    const address = `${document.getElementById('checkoutContact').value}
-${document.getElementById('checkoutAddress').value}
-${document.getElementById('checkoutCity').value}, ${document.getElementById('checkoutState').value} ${document.getElementById('checkoutZip').value}
-Phone: ${document.getElementById('checkoutPhone').value}`;
+    
+    // Build structured address data
+    const addressData = {
+        full_name: (document.getElementById('checkoutContact').value || '').trim(),
+        address_line1: (document.getElementById('checkoutAddress').value || '').trim(),
+        city: (document.getElementById('checkoutCity').value || '').trim(),
+        state: (document.getElementById('checkoutState').value || '').trim().toUpperCase(),
+        zip_code: (document.getElementById('checkoutZip').value || '').trim(),
+        phone: (document.getElementById('checkoutPhone').value || '').trim()
+    };
+    
+    // Client-side validation (skip if using saved ship-to)
+    if (!ship_to_id) {
+        const validation = validateShippingAddress(addressData);
+        if (!validation.valid) {
+            showFieldErrors(validation.errors);
+            showToast('Please correct the highlighted address fields.');
+            return;
+        }
+    }
     
     const notes = document.getElementById('checkoutNotes').value;
     const paymentMethodRadio = document.querySelector('input[name="checkoutPaymentMethod"]:checked');
     const payment_method = paymentMethodRadio ? paymentMethodRadio.value : 'credit_card';
 
     const payload = {
-        shipping_address: address,
+        shipping_address: addressData,
         ship_to_id: ship_to_id || undefined,
         notes: notes,
         payment_method: payment_method
@@ -3779,6 +4009,9 @@ Phone: ${document.getElementById('checkoutPhone').value}`;
             await loadCart();
             showOrderConfirmation(result.order_number, result.total);
         } else {
+            if (result.field_errors) {
+                showFieldErrors(result.field_errors);
+            }
             showToast(result.error || 'Failed to place order');
         }
         return;
@@ -3793,6 +4026,9 @@ Phone: ${document.getElementById('checkoutPhone').value}`;
             return;
         }
         if (!result.success || !result.client_secret) {
+            if (result.field_errors) {
+                showFieldErrors(result.field_errors);
+            }
             showToast(result.error || 'Payment setup failed. Try Net 30 or contact us.');
             return;
         }
@@ -3978,10 +4214,22 @@ async function handleLogin() {
             localStorage.setItem('token', result.token);
             localStorage.setItem('user', JSON.stringify(result.user));
             state.user = result.user;
+            if (state.user) localStorage.setItem('user', JSON.stringify(state.user));
             updateHeaderAccount();
             await loadCart();
             showToast('Welcome back, ' + result.user.contact_name + '!');
-            navigate('dashboard');
+            if (result.user.is_admin) {
+                // Force stable owner/admin entry point until this is fully stabilized.
+                // We set the URL too so direct refresh/back behavior remains consistent.
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({}, '', '/admin');
+                } else if (window.location) {
+                    window.location.pathname = '/admin';
+                }
+                navigate('admin');
+                return;
+            }
+            else navigate('dashboard');
         } else {
             if (errorDiv) {
                 errorDiv.textContent = result.error || 'Login failed. Please try again.';
@@ -4205,6 +4453,10 @@ function renderRegisterPage() {
                             <label for="regZip">ZIP Code</label>
                             <input type="text" id="regZip" placeholder="ZIP" autocomplete="postal-code">
                         </div>
+                        <div class="form-group form-group-span-3">
+                            <label for="regCasesPallets">Cases or pallets needed</label>
+                            <input type="text" id="regCasesPallets" placeholder="e.g. 50 cases/month, 2 pallets per order">
+                        </div>
                         
                         <div class="form-group auth-checkbox-box form-group-span-3 auth-free-upgrades-row">
                             <label class="auth-checkbox-with-help" for="regAllowFreeUpgrades">
@@ -4247,6 +4499,7 @@ async function handleRegister() {
         city: document.getElementById('regCity').value,
         state: document.getElementById('regState').value,
         zip: document.getElementById('regZip').value,
+        cases_or_pallets: (document.getElementById('regCasesPallets') && document.getElementById('regCasesPallets').value) || '',
         allow_free_upgrades: document.getElementById('regAllowFreeUpgrades').checked
     };
 
@@ -4295,7 +4548,7 @@ function updateHeaderAccount() {
     if (!accountDiv) return;
 
     if (state.user) {
-        const adminLink = state.user.is_approved ? `
+        const adminLink = state.user.is_admin ? `
             <a href="#" onclick="navigate('admin'); return false;" style="margin-right: 12px; color: #FF7A00; font-weight: 600;">
                 <i class="fas fa-shield-alt"></i>
                 <span>Admin</span>
@@ -4345,18 +4598,21 @@ async function renderDashboardPage() {
     const mainContent = document.getElementById('mainContent');
     mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     
-    const [user, orders, summary, tierProgress, budget, rep, savedLists, rfqsMine, shipToAddresses] = await Promise.all([
+    const [user, ordersResponse, summary, tierProgress, budget, rep, savedLists, rfqsMine, shipToAddresses, favorites] = await Promise.all([
         api.get('/api/auth/me'),
-        api.get('/api/orders'),
+        api.get('/api/orders?limit=10'),
         api.get('/api/account/summary').catch(() => ({ total_spend: 0, ytd_spend: 0, last_30_days_spend: 0, total_savings: 0, order_count: 0, total_units: 0, ytd_orders: 0 })),
         api.get('/api/account/tier-progress').catch(() => null),
         api.get('/api/account/budget').catch(() => null),
         api.get('/api/account/rep').catch(() => ({ name: 'Glovecubs Sales', email: 'sales@glovecubs.com', phone: '1-800-GLOVECUBS' })),
         api.get('/api/saved-lists').catch(() => []),
         api.get('/api/rfqs/mine').catch(() => []),
-        api.get('/api/ship-to').catch(() => [])
+        api.get('/api/ship-to').catch(() => []),
+        api.get('/api/favorites').catch(() => ({ favorites: [], count: 0 }))
     ]);
+    const orders = ordersResponse.orders || ordersResponse || [];
     const sum = summary || {};
+    const favList = favorites.favorites || [];
 
     const paymentTermsText = (user.payment_terms || 'credit_card') === 'net30' ? 'Net 30' : (user.payment_terms === 'ach' ? 'ACH' : 'Credit Card');
     const netTermsText = user.is_approved ? ((user.payment_terms || 'credit_card') === 'net30' ? 'Net 30 terms' : user.payment_terms === 'ach' ? 'ACH' : 'Credit card') : 'Net terms after approval';
@@ -4391,7 +4647,8 @@ async function renderDashboardPage() {
         <section class="dashboard-page">
             <div class="container">
                 <div class="dashboard-layout">
-                    <aside class="dashboard-sidebar">
+                    <aside class="dashboard-sidebar" id="dashboardSidebar">
+                        <button class="mobile-sidebar-close" onclick="toggleDashboardSidebar()" aria-label="Close menu"><i class="fas fa-times"></i></button>
                         <div class="dashboard-user">
                             <div class="dashboard-user-avatar">
                                 <i class="fas fa-building"></i>
@@ -4410,14 +4667,25 @@ async function renderDashboardPage() {
                             <p><a href="tel:${rep.phone.replace(/\D/g,'')}">${rep.phone}</a></p>
                         </div>
                         <nav class="dashboard-nav">
-                            <a href="#" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                            <a href="#" onclick="navigate('products'); return false;"><i class="fas fa-shopping-bag"></i> Shop Products</a>
-                            <a href="#" onclick="navigate('cart'); return false;"><i class="fas fa-shopping-cart"></i> My Cart</a>
-                            <a href="#" onclick="navigate('cart'); return false;"><i class="fas fa-upload"></i> Bulk Upload</a>
+                            ${state.user && state.user.is_admin ? '<a href="#" class="dashboard-nav-admin" onclick="toggleDashboardSidebar(); navigate(\'admin\'); return false;" style="background: rgba(255,122,0,0.15); color: var(--primary); font-weight: 700;"><i class="fas fa-shield-alt"></i> Admin (Manage site)</a><div style="border-top: 1px solid #e5e7eb; margin: 12px 0;"></div>' : ''}
+                            <a href="#" class="active" onclick="toggleDashboardSidebar(); navigate('dashboard'); return false;"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-orders'); return false;"><i class="fas fa-clipboard-list"></i> Orders</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-favorites'); return false;"><i class="fas fa-heart"></i> Favorites</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-addresses'); return false;"><i class="fas fa-map-marker-alt"></i> Addresses</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-rfqs'); return false;"><i class="fas fa-file-alt"></i> Quotes</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('invoice-savings'); return false;"><i class="fas fa-file-invoice-dollar"></i> Invoice Analysis</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-account'); return false;"><i class="fas fa-user-cog"></i> Account</a>
+                            <div style="border-top: 1px solid #e5e7eb; margin: 12px 0;"></div>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('products'); return false;"><i class="fas fa-shopping-bag"></i> Shop Products</a>
+                            <a href="#" onclick="toggleDashboardSidebar(); navigate('cart'); return false;"><i class="fas fa-shopping-cart"></i> My Cart</a>
                             <a href="#" onclick="logout(); return false;"><i class="fas fa-sign-out-alt"></i> Logout</a>
                         </nav>
                     </aside>
                     <div class="dashboard-main">
+                        <div class="dashboard-mobile-header" style="display: none; margin-bottom: 24px;">
+                            <button class="portal-mobile-menu-toggle" onclick="toggleDashboardSidebar()" aria-label="Open menu"><i class="fas fa-bars"></i></button>
+                            <h2 style="margin: 0 0 0 12px; font-size: 20px;">Dashboard</h2>
+                        </div>
                         <div class="dashboard-section dashboard-spend-savings">
                             <h2><i class="fas fa-chart-pie"></i> Spend &amp; Savings</h2>
                             <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">Your purchasing activity and savings vs. list price.</p>
@@ -4481,10 +4749,21 @@ async function renderDashboardPage() {
                         ${tierProgressHtml}
                         ${budgetHtml}
                         <div class="dashboard-section">
-                            <h2>Recent Orders</h2>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h2 style="margin: 0;">Recent Orders</h2>
+                                ${orders.length > 0 ? `<a href="#" onclick="navigate('portal-orders'); return false;" class="btn btn-outline btn-sm">View All Orders →</a>` : ''}
+                            </div>
                             ${orders.length > 0 ? `<button type="button" class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="reorderOrder(${orders[0].id}); return false;"><i class="fas fa-redo"></i> Reorder Last Order</button>` : ''}
                             ${orders.length === 0 ? `
-                                <p style="color: #374151; text-align: center; padding: 40px;">No orders yet. <a href="#" onclick="navigate('products'); return false;">Start shopping</a></p>
+                                <div class="portal-empty-state">
+                                    <i class="fas fa-box-open"></i>
+                                    <h3>No orders yet</h3>
+                                    <p>Your company's order history will appear here once you place your first order.</p>
+                                    <div style="display: flex; gap: 12px; justify-content: center;">
+                                        <a href="#" onclick="navigate('products'); return false;" class="btn btn-primary">Browse Products</a>
+                                        <a href="#" onclick="navigate('portal-rfqs'); return false;" class="btn btn-outline">Request a Quote</a>
+                                    </div>
+                                </div>
                             ` : `
                                 <div class="orders-table-wrap">
                                 <table class="orders-table">
@@ -4500,20 +4779,44 @@ async function renderDashboardPage() {
                                     <tbody>
                                         ${orders.slice(0, 10).map(order => `
                                             <tr>
-                                                <td><strong>${order.order_number}</strong></td>
+                                                <td><strong>${order.order_number || 'GC-' + order.id}</strong></td>
                                                 <td>${new Date(order.created_at).toLocaleDateString()}</td>
                                                 <td><span class="order-status status-${order.status}">${order.status}</span></td>
-                                                <td><strong>$${order.total.toFixed(2)}</strong></td>
+                                                <td><strong>$${(order.total || 0).toFixed(2)}</strong></td>
                                                 <td class="order-actions">
-                                                    <button type="button" class="btn-order-action" onclick="reorderOrder(${order.id}); return false;" title="Reorder">Reorder</button>
-                                                    ${(order.tracking_number || order.tracking_url) ? `<a href="${(order.tracking_url || '#').replace(/"/g,'&quot;')}" target="_blank" rel="noopener" class="btn-order-action">Track</a>` : '<span class="order-action-muted">Track</span>'}
-                                                    <button type="button" class="btn-order-action" onclick="openInvoiceModal(${order.id}); return false;">Invoice</button>
+                                                    <button type="button" class="btn-order-action" onclick="reorderOrder(${order.id}); return false;" title="Reorder"><i class="fas fa-redo"></i></button>
+                                                    ${(order.tracking_number || order.tracking_url) ? `<a href="${(order.tracking_url || '#').replace(/"/g,'&quot;')}" target="_blank" rel="noopener" class="btn-order-action" title="Track"><i class="fas fa-truck"></i></a>` : '<span class="order-action-muted" title="No tracking"><i class="fas fa-truck"></i></span>'}
+                                                    <button type="button" class="btn-order-action" onclick="openInvoiceModal(${order.id}); return false;" title="View Invoice"><i class="fas fa-file-invoice"></i></button>
+                                                    <button type="button" class="btn-order-action" onclick="downloadInvoicePdf(${order.id}); return false;" title="Download Invoice"><i class="fas fa-download"></i></button>
                                                 </td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
                                 </table>
                                 </div>
+                            `}
+                        </div>
+
+                        <div class="dashboard-section">
+                            <h2><i class="fas fa-heart"></i> Favorite Products (${favorites.count || 0})</h2>
+                            ${favList.length === 0 ? `
+                                <p style="color: var(--gray-600);">Save your favorite products for quick access. Click the heart icon on any product to add it here.</p>
+                                <a href="#" onclick="navigate('products'); return false;" class="btn btn-outline btn-sm">Browse Products</a>
+                            ` : `
+                                <div class="favorites-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;">
+                                    ${favList.slice(0, 6).map(fav => fav.product ? `
+                                        <div class="favorite-card" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; display: flex; flex-direction: column;">
+                                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${fav.product.name}</div>
+                                            <div style="color: #6b7280; font-size: 12px; margin-bottom: 8px;">${fav.product.sku}</div>
+                                            <div style="font-weight: 700; color: #111; margin-bottom: 8px;">$${Number(fav.product.price || 0).toFixed(2)}</div>
+                                            <div style="display: flex; gap: 8px; margin-top: auto;">
+                                                <button type="button" class="btn btn-primary btn-sm" onclick="addFavoriteToCart(${fav.product.id}); return false;">Add to Cart</button>
+                                                <button type="button" class="btn btn-outline btn-sm" onclick="removeFavorite(${fav.product_id}); return false;" title="Remove"><i class="fas fa-heart-broken"></i></button>
+                                            </div>
+                                        </div>
+                                    ` : '').join('')}
+                                </div>
+                                ${favList.length > 6 ? `<p style="margin-top: 12px;"><a href="#" onclick="navigate('favorites'); return false;">View all ${favorites.count} favorites →</a></p>` : ''}
                             `}
                         </div>
 
@@ -4536,9 +4839,15 @@ async function renderDashboardPage() {
                         </div>
 
                         <div class="dashboard-section">
-                            <h2>My Quotes (RFQs)</h2>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h2 style="margin: 0;">My Quotes (RFQs)</h2>
+                                <a href="#" onclick="navigate('portal-rfqs'); return false;" class="btn btn-outline btn-sm">Manage Quotes →</a>
+                            </div>
                             ${rfqsMine.length === 0 ? `
-                                <p style="color: var(--gray-600);">No quote requests yet. Use the RFQ form for bulk or custom quotes.</p>
+                                <div style="text-align: center; padding: 24px; background: #f9fafb; border-radius: 8px;">
+                                    <p style="color: #6b7280; margin: 0 0 12px;">Need pricing for large quantities or custom specifications?</p>
+                                    <button onclick="navigate('portal-rfqs')" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Request a Quote</button>
+                                </div>
                             ` : `
                                 <ul class="rfq-list">
                                     ${rfqsMine.map(rfq => `
@@ -4552,10 +4861,15 @@ async function renderDashboardPage() {
                         </div>
 
                         <div class="dashboard-section">
-                            <h2>Ship-To Addresses</h2>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h2 style="margin: 0;">Ship-To Addresses</h2>
+                                <a href="#" onclick="navigate('portal-addresses'); return false;" class="btn btn-outline btn-sm">Manage Addresses →</a>
+                            </div>
                             ${shipToAddresses.length === 0 ? `
-                                <p style="color: var(--gray-600);">Add multiple ship-to addresses for checkout.</p>
-                                <button type="button" class="btn btn-outline btn-sm" onclick="openShipToModal(); return false;">Add Address</button>
+                                <div style="text-align: center; padding: 24px; background: #f9fafb; border-radius: 8px;">
+                                    <p style="color: #6b7280; margin: 0 0 12px;">Save your frequently used shipping locations for faster checkout.</p>
+                                    <button type="button" class="btn btn-outline btn-sm" onclick="openShipToModal(); return false;"><i class="fas fa-plus"></i> Add Address</button>
+                                </div>
                             ` : `
                                 <ul class="ship-to-list">
                                     ${shipToAddresses.map(s => `
@@ -4633,11 +4947,78 @@ async function openInvoiceModal(orderId) {
             '<p><strong>Total: $' + Number(o.total).toFixed(2) + '</strong></p></div>';
         const overlay = document.getElementById('invoiceModalOverlay');
         if (!overlay) return;
-        overlay.innerHTML = '<div class="modal-content" style="max-height:90vh; overflow:auto;">' + html + '<div style="margin-top:16px;"><button type="button" class="btn btn-primary" onclick="window.print();">Print</button> <button type="button" class="btn btn-outline" onclick="closeInvoiceModal();">Close</button></div></div>';
+        overlay.innerHTML = '<div class="modal-content" style="max-height:90vh; overflow:auto;">' + html + '<div style="margin-top:16px;"><button type="button" class="btn btn-primary" onclick="window.print();"><i class="fas fa-print"></i> Print</button> <button type="button" class="btn btn-outline" onclick="downloadInvoicePdf(' + orderId + ');"><i class="fas fa-download"></i> Download</button> <button type="button" class="btn btn-outline" onclick="closeInvoiceModal();">Close</button></div></div>';
         overlay.style.display = 'flex';
         overlay.onclick = function(e) { if (e.target === overlay) closeInvoiceModal(); };
     } catch (e) {
         showToast(e.message || 'Could not load invoice', 'error');
+    }
+}
+
+async function downloadInvoicePdf(orderId) {
+    try {
+        showToast('Preparing invoice download...', 'info');
+        const response = await fetch('/api/orders/' + orderId + '/invoice/pdf', {
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+        });
+        if (!response.ok) throw new Error('Failed to download invoice');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'invoice-' + orderId + '.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Invoice downloaded', 'success');
+    } catch (e) {
+        showToast(e.message || 'Could not download invoice', 'error');
+    }
+}
+
+async function addFavoriteToCart(productId) {
+    try {
+        const cart = await api.get('/api/cart');
+        const existing = (cart || []).find(c => c.product_id === productId);
+        if (existing) {
+            existing.quantity = (existing.quantity || 1) + 1;
+            await api.put('/api/cart', { items: cart });
+        } else {
+            await api.post('/api/cart', { product_id: productId, quantity: 1 });
+        }
+        showToast('Added to cart', 'success');
+        const cartCount = document.getElementById('cartCount');
+        if (cartCount) { const c = await api.get('/api/cart'); cartCount.textContent = (c && c.length) ? c.length : 0; }
+    } catch (e) {
+        showToast(e.message || 'Could not add to cart', 'error');
+    }
+}
+
+async function removeFavorite(productId) {
+    try {
+        await api.delete('/api/favorites/' + productId);
+        showToast('Removed from favorites', 'success');
+        renderDashboardPage();
+    } catch (e) {
+        showToast(e.message || 'Could not remove favorite', 'error');
+    }
+}
+
+async function toggleFavorite(productId, btn) {
+    const isFavorited = btn && btn.classList.contains('favorited');
+    try {
+        if (isFavorited) {
+            await api.delete('/api/favorites/' + productId);
+            if (btn) { btn.classList.remove('favorited'); btn.innerHTML = '<i class="far fa-heart"></i>'; }
+            showToast('Removed from favorites', 'success');
+        } else {
+            await api.post('/api/favorites', { product_id: productId });
+            if (btn) { btn.classList.add('favorited'); btn.innerHTML = '<i class="fas fa-heart"></i>'; }
+            showToast('Added to favorites', 'success');
+        }
+    } catch (e) {
+        showToast(e.message || 'Could not update favorite', 'error');
     }
 }
 function closeInvoiceModal() {
@@ -4771,6 +5152,804 @@ async function deleteShipTo(id) {
     }
 }
 
+// ============================================
+// PORTAL: ORDERS PAGE
+// ============================================
+
+async function renderPortalOrdersPage(params = {}) {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    const page = parseInt(params.page, 10) || 1;
+    const status = params.status || '';
+    const search = params.search || '';
+    
+    try {
+        const [user, ordersResponse] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get(`/api/orders?page=${page}&limit=20${status ? '&status=' + status : ''}${search ? '&search=' + encodeURIComponent(search) : ''}`)
+        ]);
+        
+        const orders = ordersResponse.orders || [];
+        const pagination = ordersResponse.pagination || { page: 1, pages: 1, total: 0 };
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('orders', user)}
+                        <div class="portal-main">
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                                <div>
+                                    <h1><i class="fas fa-clipboard-list"></i> Order History</h1>
+                                    <p>View and manage your company's orders</p>
+                                </div>
+                                ${renderPortalMobileMenuButton()}
+                            </div>
+                            
+                            <div class="portal-filters" style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+                                <select id="orderStatusFilter" onchange="filterOrders()" style="padding: 10px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                                    <option value="">All Statuses</option>
+                                    <option value="pending" ${status === 'pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="processing" ${status === 'processing' ? 'selected' : ''}>Processing</option>
+                                    <option value="shipped" ${status === 'shipped' ? 'selected' : ''}>Shipped</option>
+                                    <option value="delivered" ${status === 'delivered' ? 'selected' : ''}>Delivered</option>
+                                    <option value="cancelled" ${status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                                </select>
+                                <div style="flex: 1; min-width: 200px;">
+                                    <input type="text" id="orderSearchInput" placeholder="Search by order # or product..." 
+                                        value="${search.replace(/"/g, '&quot;')}"
+                                        onkeydown="if(event.key==='Enter') filterOrders();"
+                                        style="width: 100%; padding: 10px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                                </div>
+                                <button onclick="filterOrders()" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Search</button>
+                            </div>
+                            
+                            ${orders.length === 0 ? `
+                                <div class="portal-empty-state">
+                                    <i class="fas fa-box-open"></i>
+                                    <h3>No orders found</h3>
+                                    ${search || status ? `
+                                        <p>No orders match your current filters.</p>
+                                        <button onclick="navigate('portal-orders')" class="btn btn-outline">Clear Filters</button>
+                                    ` : `
+                                        <p>Your company's order history will appear here once you place your first order.</p>
+                                        <div style="display: flex; gap: 12px; justify-content: center; margin-top: 16px;">
+                                            <a href="#" onclick="navigate('products'); return false;" class="btn btn-primary">Browse Products</a>
+                                            <a href="#" onclick="navigate('portal-rfqs'); return false;" class="btn btn-outline">Request a Quote</a>
+                                        </div>
+                                    `}
+                                </div>
+                            ` : `
+                                <div class="orders-table-wrap">
+                                    <table class="orders-table portal-orders-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Order #</th>
+                                                <th>Date</th>
+                                                <th>Items</th>
+                                                <th>Status</th>
+                                                <th>Total</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${orders.map(order => `
+                                                <tr onclick="navigate('portal-order', { id: ${order.id} })" style="cursor: pointer;">
+                                                    <td><strong>${order.order_number || 'GC-' + order.id}</strong></td>
+                                                    <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                                                    <td>${(order.items || []).length} item${(order.items || []).length !== 1 ? 's' : ''}</td>
+                                                    <td><span class="order-status status-${order.status}">${order.status}</span></td>
+                                                    <td><strong>$${(order.total || 0).toFixed(2)}</strong></td>
+                                                    <td class="order-actions" onclick="event.stopPropagation();">
+                                                        <button type="button" class="btn-order-action" onclick="navigate('portal-order', { id: ${order.id} })" title="View Details"><i class="fas fa-eye"></i></button>
+                                                        <button type="button" class="btn-order-action" onclick="reorderOrder(${order.id})" title="Reorder"><i class="fas fa-redo"></i></button>
+                                                        <button type="button" class="btn-order-action" onclick="downloadInvoicePdf(${order.id})" title="Download Invoice"><i class="fas fa-download"></i></button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                ${pagination.pages > 1 ? `
+                                    <div class="portal-pagination">
+                                        ${pagination.page > 1 ? `<button onclick="navigate('portal-orders', { page: ${pagination.page - 1}, status: '${status}', search: '${search}' })" class="btn btn-outline btn-sm">← Previous</button>` : '<span></span>'}
+                                        <span>Page ${pagination.page} of ${pagination.pages} (${pagination.total} orders)</span>
+                                        ${pagination.page < pagination.pages ? `<button onclick="navigate('portal-orders', { page: ${pagination.page + 1}, status: '${status}', search: '${search}' })" class="btn btn-outline btn-sm">Next →</button>` : '<span></span>'}
+                                    </div>
+                                ` : `<p style="text-align: center; color: #6b7280; margin-top: 16px;">${pagination.total} order${pagination.total !== 1 ? 's' : ''} total</p>`}
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    } catch (err) {
+        console.error('Error loading orders:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load orders. <a href="#" onclick="renderPortalOrdersPage(); return false;">Try again</a></p></div>`;
+    }
+}
+
+function filterOrders() {
+    const status = document.getElementById('orderStatusFilter')?.value || '';
+    const search = document.getElementById('orderSearchInput')?.value || '';
+    navigate('portal-orders', { page: 1, status, search });
+}
+
+// ============================================
+// PORTAL: ORDER DETAIL PAGE
+// ============================================
+
+async function renderPortalOrderDetailPage(orderId) {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const [user, order, tracking] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get('/api/orders/' + orderId),
+            api.get('/api/orders/' + orderId + '/tracking').catch(() => null)
+        ]);
+        
+        if (!order) {
+            mainContent.innerHTML = `<div class="portal-error"><p>Order not found. <a href="#" onclick="navigate('portal-orders'); return false;">Back to Orders</a></p></div>`;
+            return;
+        }
+        
+        const items = order.items || [];
+        const shippingAddress = typeof order.shipping_address === 'object' && order.shipping_address.display ? order.shipping_address.display : (order.shipping_address || 'Not specified');
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('orders', user)}
+                        <div class="portal-main">
+                            <div class="portal-breadcrumb">
+                                <a href="#" onclick="navigate('portal-orders'); return false;">← Back to Orders</a>
+                            </div>
+                            
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                                <div style="flex: 1; min-width: 200px;">
+                                    <h1>Order ${order.order_number || 'GC-' + order.id}</h1>
+                                    <p>Placed on ${new Date(order.created_at).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <button onclick="reorderOrder(${order.id})" class="btn btn-primary"><i class="fas fa-redo"></i> Reorder</button>
+                                    <button onclick="downloadInvoicePdf(${order.id})" class="btn btn-outline"><i class="fas fa-download"></i> Invoice</button>
+                                    ${renderPortalMobileMenuButton()}
+                                </div>
+                            </div>
+                            
+                            <div class="order-detail-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-bottom: 32px;">
+                                <div class="order-detail-card">
+                                    <h3>Status</h3>
+                                    <span class="order-status status-${order.status}" style="font-size: 16px; padding: 8px 16px;">${order.status}</span>
+                                    ${order.tracking_number ? `
+                                        <p style="margin-top: 12px;"><strong>Tracking:</strong> ${order.tracking_number}</p>
+                                        ${order.tracking_url ? `<a href="${order.tracking_url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="margin-top: 8px;"><i class="fas fa-external-link-alt"></i> Track Package</a>` : ''}
+                                    ` : ''}
+                                </div>
+                                <div class="order-detail-card">
+                                    <h3>Shipping Address</h3>
+                                    <p style="white-space: pre-line;">${shippingAddress}</p>
+                                </div>
+                                <div class="order-detail-card">
+                                    <h3>Payment</h3>
+                                    <p><strong>Method:</strong> ${order.payment_method === 'net30' ? 'Net 30' : order.payment_method === 'ach' ? 'ACH' : 'Credit Card'}</p>
+                                    <p><strong>Status:</strong> ${order.status === 'pending_payment' ? 'Awaiting Payment' : 'Paid'}</p>
+                                </div>
+                            </div>
+                            
+                            ${tracking && tracking.events && tracking.events.length > 0 ? `
+                                <div class="dashboard-section">
+                                    <h2><i class="fas fa-truck"></i> Tracking History</h2>
+                                    <div class="tracking-timeline">
+                                        ${tracking.events.map((event, i) => `
+                                            <div class="tracking-event ${i === 0 ? 'latest' : ''}">
+                                                <div class="tracking-dot"></div>
+                                                <div class="tracking-content">
+                                                    <strong>${event.status}</strong>
+                                                    <span>${new Date(event.timestamp).toLocaleString()}</span>
+                                                    <p>${event.description || ''} ${event.location ? '— ' + event.location : ''}</p>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="dashboard-section">
+                                <h2><i class="fas fa-box"></i> Order Items</h2>
+                                <table class="orders-table" style="margin-top: 16px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>SKU</th>
+                                            <th>Size</th>
+                                            <th style="text-align: center;">Qty</th>
+                                            <th style="text-align: right;">Price</th>
+                                            <th style="text-align: right;">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${items.map(item => `
+                                            <tr>
+                                                <td><strong>${item.product_name || item.name || 'Product'}</strong></td>
+                                                <td>${item.sku || '-'}</td>
+                                                <td>${item.size || '-'}</td>
+                                                <td style="text-align: center;">${item.quantity}</td>
+                                                <td style="text-align: right;">$${(item.unit_price || item.price || 0).toFixed(2)}</td>
+                                                <td style="text-align: right;"><strong>$${((item.quantity || 1) * (item.unit_price || item.price || 0)).toFixed(2)}</strong></td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="order-totals" style="max-width: 350px; margin-left: auto; background: #f9fafb; padding: 24px; border-radius: 12px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Subtotal</span>
+                                    <span>$${(order.subtotal || 0).toFixed(2)}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Shipping</span>
+                                    <span>$${(order.shipping || 0).toFixed(2)}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Tax</span>
+                                    <span>$${(order.tax || 0).toFixed(2)}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; border-top: 2px solid #e5e7eb; padding-top: 12px; margin-top: 12px;">
+                                    <span>Total</span>
+                                    <span>$${(order.total || 0).toFixed(2)}</span>
+                                </div>
+                            </div>
+                            
+                            ${order.notes ? `
+                                <div class="dashboard-section" style="margin-top: 24px;">
+                                    <h2><i class="fas fa-sticky-note"></i> Order Notes</h2>
+                                    <p style="color: #6b7280;">${order.notes}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    } catch (err) {
+        console.error('Error loading order:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load order details. <a href="#" onclick="navigate('portal-orders'); return false;">Back to Orders</a></p></div>`;
+    }
+}
+
+// ============================================
+// PORTAL: ADDRESSES PAGE
+// ============================================
+
+async function renderPortalAddressesPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const [user, addresses] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get('/api/ship-to')
+        ]);
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('addresses', user)}
+                        <div class="portal-main">
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+                                <div style="flex: 1; min-width: 200px;">
+                                    <h1><i class="fas fa-map-marker-alt"></i> Shipping Addresses</h1>
+                                    <p>Manage your company's shipping locations</p>
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <button onclick="openShipToModalPortal()" class="btn btn-primary"><i class="fas fa-plus"></i> Add Address</button>
+                                    ${renderPortalMobileMenuButton()}
+                                </div>
+                            </div>
+                            
+                            ${addresses.length === 0 ? `
+                                <div class="portal-empty-state">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                    <h3>No shipping addresses saved</h3>
+                                    <p>Save your frequently used shipping locations for faster checkout. Addresses are shared with your team.</p>
+                                    <button onclick="openShipToModalPortal()" class="btn btn-primary" style="margin-top: 16px;">Add Your First Address</button>
+                                </div>
+                            ` : `
+                                <div class="addresses-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                                    ${addresses.map(addr => `
+                                        <div class="address-card ${addr.is_default ? 'default' : ''}" style="border: 1px solid ${addr.is_default ? '#FF7A00' : '#e5e7eb'}; border-radius: 12px; padding: 20px; position: relative;">
+                                            ${addr.is_default ? '<span class="address-default-badge" style="position: absolute; top: 12px; right: 12px; background: #FF7A00; color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; font-weight: 600;">DEFAULT</span>' : ''}
+                                            <h3 style="margin-bottom: 8px; font-size: 16px;">${addr.label || 'Address'}</h3>
+                                            <p style="color: #6b7280; line-height: 1.6;">
+                                                ${addr.address}<br>
+                                                ${addr.city}, ${addr.state} ${addr.zip}
+                                            </p>
+                                            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                                                <button onclick="openShipToModalPortal(${addr.id})" class="btn btn-outline btn-sm"><i class="fas fa-edit"></i> Edit</button>
+                                                ${!addr.is_default ? `<button onclick="setDefaultAddress(${addr.id})" class="btn btn-outline btn-sm">Set Default</button>` : ''}
+                                                ${!addr.is_default ? `<button onclick="deleteAddressPortal(${addr.id})" class="btn btn-outline btn-sm" style="color: #dc2626;"><i class="fas fa-trash"></i></button>` : ''}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <div id="shipToModalOverlay" class="modal-overlay" style="display:none;"></div>
+        `;
+        window._dashboardShipToList = addresses;
+    } catch (err) {
+        console.error('Error loading addresses:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load addresses. <a href="#" onclick="renderPortalAddressesPage(); return false;">Try again</a></p></div>`;
+    }
+}
+
+async function openShipToModalPortal(id) {
+    await openShipToModal(id);
+}
+
+async function deleteAddressPortal(id) {
+    if (!confirm('Delete this address?')) return;
+    try {
+        await api.delete('/api/ship-to/' + id);
+        showToast('Address deleted', 'success');
+        renderPortalAddressesPage();
+    } catch (e) {
+        showToast(e.message || 'Failed to delete', 'error');
+    }
+}
+
+async function setDefaultAddress(id) {
+    try {
+        await api.put('/api/ship-to/' + id, { is_default: true });
+        showToast('Default address updated', 'success');
+        renderPortalAddressesPage();
+    } catch (e) {
+        showToast(e.message || 'Failed to update', 'error');
+    }
+}
+
+// ============================================
+// PORTAL: RFQs PAGE
+// ============================================
+
+async function renderPortalRfqsPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const [user, rfqs] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get('/api/rfqs/mine')
+        ]);
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('rfqs', user)}
+                        <div class="portal-main">
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+                                <div style="flex: 1; min-width: 200px;">
+                                    <h1><i class="fas fa-file-alt"></i> Quote Requests</h1>
+                                    <p>Request pricing for bulk orders or custom specifications</p>
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <button onclick="openRfqModal()" class="btn btn-primary"><i class="fas fa-plus"></i> New Quote Request</button>
+                                    ${renderPortalMobileMenuButton()}
+                                </div>
+                            </div>
+                            
+                            ${rfqs.length === 0 ? `
+                                <div class="portal-empty-state">
+                                    <i class="fas fa-file-alt"></i>
+                                    <h3>No quote requests yet</h3>
+                                    <p>Need pricing for large quantities or custom specifications? Submit a quote request and our team will respond within 24 hours.</p>
+                                    <button onclick="openRfqModal()" class="btn btn-primary" style="margin-top: 16px;">Request a Quote</button>
+                                </div>
+                            ` : `
+                                <div class="rfq-list-full">
+                                    ${rfqs.map(rfq => `
+                                        <div class="rfq-card" style="border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                                <div>
+                                                    <span class="order-status status-${rfq.status || 'pending'}" style="margin-right: 12px;">${rfq.status || 'pending'}</span>
+                                                    <span style="color: #6b7280; font-size: 14px;">${new Date(rfq.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                                                ${rfq.type ? `<div><strong>Type:</strong> ${rfq.type}</div>` : ''}
+                                                ${rfq.quantity ? `<div><strong>Quantity:</strong> ${rfq.quantity}</div>` : ''}
+                                                ${rfq.size ? `<div><strong>Size:</strong> ${rfq.size}</div>` : ''}
+                                                ${rfq.material ? `<div><strong>Material:</strong> ${rfq.material}</div>` : ''}
+                                            </div>
+                                            ${rfq.notes ? `<p style="margin-top: 12px; color: #6b7280; font-size: 14px;">${rfq.notes}</p>` : ''}
+                                            ${rfq.admin_notes ? `<div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 8px;"><strong>Response:</strong> ${rfq.admin_notes}</div>` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <div id="rfqModalOverlay" class="modal-overlay" style="display:none;"></div>
+        `;
+    } catch (err) {
+        console.error('Error loading RFQs:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load quote requests. <a href="#" onclick="renderPortalRfqsPage(); return false;">Try again</a></p></div>`;
+    }
+}
+
+function openRfqModal() {
+    const overlay = document.getElementById('rfqModalOverlay') || document.createElement('div');
+    overlay.id = 'rfqModalOverlay';
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <h2 style="margin-bottom: 16px;">Request a Quote</h2>
+            <form onsubmit="submitRfq(event)">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Glove Type</label>
+                    <select id="rfqType" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <option value="">Select type...</option>
+                        <option value="Nitrile">Nitrile</option>
+                        <option value="Latex">Latex</option>
+                        <option value="Vinyl">Vinyl</option>
+                        <option value="Cut Resistant">Cut Resistant</option>
+                        <option value="Leather">Leather</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Quantity Needed</label>
+                    <input type="text" id="rfqQuantity" placeholder="e.g., 10,000 gloves or 100 cases" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 6px;">Size</label>
+                        <select id="rfqSize" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                            <option value="">Any size</option>
+                            <option value="S">Small</option>
+                            <option value="M">Medium</option>
+                            <option value="L">Large</option>
+                            <option value="XL">X-Large</option>
+                            <option value="Mixed">Mixed sizes</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 6px;">Material/Thickness</label>
+                        <input type="text" id="rfqMaterial" placeholder="e.g., 6 mil, powder-free" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Additional Details</label>
+                    <textarea id="rfqNotes" rows="3" placeholder="Any specific requirements, certifications needed, delivery timeline..." style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                    <button type="button" onclick="closeRfqModal()" class="btn btn-outline">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    `;
+    if (!document.getElementById('rfqModalOverlay')) {
+        document.body.appendChild(overlay);
+    }
+    overlay.onclick = function(e) { if (e.target === overlay) closeRfqModal(); };
+}
+
+function closeRfqModal() {
+    const overlay = document.getElementById('rfqModalOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+async function submitRfq(e) {
+    e.preventDefault();
+    const type = document.getElementById('rfqType')?.value || '';
+    const quantity = document.getElementById('rfqQuantity')?.value || '';
+    const size = document.getElementById('rfqSize')?.value || '';
+    const material = document.getElementById('rfqMaterial')?.value || '';
+    const notes = document.getElementById('rfqNotes')?.value || '';
+    
+    if (!type && !quantity) {
+        showToast('Please provide glove type or quantity', 'error');
+        return;
+    }
+    
+    try {
+        await api.post('/api/rfqs', { type, quantity, size, material, notes });
+        showToast('Quote request submitted! We\'ll respond within 24 hours.', 'success');
+        closeRfqModal();
+        renderPortalRfqsPage();
+    } catch (err) {
+        showToast(err.message || 'Failed to submit request', 'error');
+    }
+}
+
+// ============================================
+// PORTAL: FAVORITES PAGE
+// ============================================
+
+async function renderPortalFavoritesPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const [user, favorites] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get('/api/favorites')
+        ]);
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('favorites', user)}
+                        <div class="portal-main">
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                                <div>
+                                    <h1><i class="fas fa-heart"></i> Favorite Products</h1>
+                                    <p>Your saved products for quick reordering</p>
+                                </div>
+                                ${renderPortalMobileMenuButton()}
+                            </div>
+                            
+                            ${favorites.length === 0 ? `
+                                <div class="portal-empty-state">
+                                    <i class="fas fa-heart"></i>
+                                    <h3>No favorites saved yet</h3>
+                                    <p>Save your frequently purchased products for faster ordering. Click the heart icon on any product to add it to your favorites.</p>
+                                    <a href="#" onclick="navigate('products'); return false;" class="btn btn-primary" style="margin-top: 16px;">Browse Products</a>
+                                </div>
+                            ` : `
+                                <div class="favorites-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px;">
+                                    ${favorites.map(fav => {
+                                        const product = fav.product || {};
+                                        const price = product.price || 0;
+                                        const name = product.name || product.title || 'Product';
+                                        const image = product.image || product.images?.[0] || '/images/placeholder.png';
+                                        
+                                        return `
+                                            <div class="favorite-product-card" style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #fff;">
+                                                <div style="position: relative;">
+                                                    <img src="${image}" alt="${name}" style="width: 100%; height: 200px; object-fit: cover;">
+                                                    <button onclick="removeFavoriteFromPage(${product.id})" class="btn-remove-favorite" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 1px solid #e5e7eb; color: #ef4444; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                                        <i class="fas fa-heart"></i>
+                                                    </button>
+                                                </div>
+                                                <div style="padding: 16px;">
+                                                    <h3 style="font-size: 16px; margin: 0 0 8px; line-height: 1.4;">${name}</h3>
+                                                    ${product.sku ? `<p style="color: #6b7280; font-size: 13px; margin: 0 0 12px;">SKU: ${product.sku}</p>` : ''}
+                                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                        <span style="font-size: 18px; font-weight: 700; color: #FF7A00;">$${price.toFixed(2)}</span>
+                                                        <div style="display: flex; gap: 8px;">
+                                                            <button onclick="navigate('product', { id: ${product.id} })" class="btn btn-outline btn-sm">View</button>
+                                                            <button onclick="addFavoriteToCartFromPage(${product.id})" class="btn btn-primary btn-sm"><i class="fas fa-cart-plus"></i> Add</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                                <p style="text-align: center; color: #6b7280; margin-top: 24px;">${favorites.length} favorite product${favorites.length !== 1 ? 's' : ''}</p>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    } catch (err) {
+        console.error('Error loading favorites:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load favorites. <a href="#" onclick="renderPortalFavoritesPage(); return false;">Try again</a></p></div>`;
+    }
+}
+
+async function removeFavoriteFromPage(productId) {
+    if (!confirm('Remove this product from favorites?')) return;
+    try {
+        await api.delete('/api/favorites/' + productId);
+        showToast('Removed from favorites', 'success');
+        renderPortalFavoritesPage();
+    } catch (e) {
+        showToast(e.message || 'Could not remove', 'error');
+    }
+}
+
+async function addFavoriteToCartFromPage(productId) {
+    try {
+        await api.post('/api/cart/items', { product_id: productId, quantity: 1 });
+        showToast('Added to cart', 'success');
+        updateCartCount();
+    } catch (e) {
+        showToast(e.message || 'Could not add to cart', 'error');
+    }
+}
+
+// ============================================
+// PORTAL: ACCOUNT PAGE
+// ============================================
+
+async function renderPortalAccountPage() {
+    const mainContent = document.getElementById('mainContent');
+    mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const [user, summary] = await Promise.all([
+            api.get('/api/auth/me'),
+            api.get('/api/account/summary').catch(() => ({}))
+        ]);
+        
+        mainContent.innerHTML = `
+            <section class="portal-page">
+                <div class="container">
+                    <div class="portal-layout">
+                        ${renderPortalSidebar('account', user)}
+                        <div class="portal-main">
+                            <div class="portal-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                                <div>
+                                    <h1><i class="fas fa-user-cog"></i> Account Settings</h1>
+                                    <p>Manage your company account information</p>
+                                </div>
+                                ${renderPortalMobileMenuButton()}
+                            </div>
+                            
+                            <div class="dashboard-section">
+                                <h2>Company Information</h2>
+                                <div class="specs-list" style="max-width: 600px;">
+                                    <div class="spec-item" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                                        <span class="spec-label" style="min-width: 150px;">Company Name</span>
+                                        <span class="spec-value">${user.company_name || '-'}</span>
+                                    </div>
+                                    <div class="spec-item" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                                        <span class="spec-label" style="min-width: 150px;">Contact Name</span>
+                                        <span class="spec-value">${user.contact_name || '-'}</span>
+                                    </div>
+                                    <div class="spec-item" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                                        <span class="spec-label" style="min-width: 150px;">Email</span>
+                                        <span class="spec-value">${user.email || '-'}</span>
+                                    </div>
+                                    <div class="spec-item" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                                        <span class="spec-label" style="min-width: 150px;">Phone</span>
+                                        <span class="spec-value">${user.phone || 'Not provided'}</span>
+                                    </div>
+                                    <div class="spec-item" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                                        <span class="spec-label" style="min-width: 150px;">Address</span>
+                                        <span class="spec-value">${user.address ? `${user.address}, ${user.city}, ${user.state} ${user.zip}` : 'Not provided'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="dashboard-section">
+                                <h2>Account Status</h2>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; max-width: 800px;">
+                                    <div class="stat-card" style="text-align: center;">
+                                        <i class="fas fa-${user.is_approved ? 'check-circle' : 'clock'}" style="font-size: 24px; color: ${user.is_approved ? '#059669' : '#f59e0b'};"></i>
+                                        <div class="value" style="margin-top: 8px;">${user.is_approved ? 'Approved' : 'Pending'}</div>
+                                        <div class="label">Account Status</div>
+                                    </div>
+                                    <div class="stat-card" style="text-align: center;">
+                                        <i class="fas fa-medal" style="font-size: 24px; color: #FF7A00;"></i>
+                                        <div class="value" style="margin-top: 8px;">${user.discount_tier || 'Standard'}</div>
+                                        <div class="label">Pricing Tier</div>
+                                    </div>
+                                    <div class="stat-card" style="text-align: center;">
+                                        <i class="fas fa-${user.payment_terms === 'net30' ? 'file-invoice-dollar' : 'credit-card'}" style="font-size: 24px; color: #3b82f6;"></i>
+                                        <div class="value" style="margin-top: 8px;">${user.payment_terms === 'net30' ? 'Net 30' : user.payment_terms === 'ach' ? 'ACH' : 'Credit Card'}</div>
+                                        <div class="label">Payment Terms</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="dashboard-section">
+                                <h2>Purchasing Summary</h2>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; max-width: 600px;">
+                                    <div>
+                                        <div style="font-size: 24px; font-weight: 700;">$${Number(summary.total_spend || 0).toLocaleString()}</div>
+                                        <div style="color: #6b7280;">Total Spend</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 24px; font-weight: 700;">${summary.order_count || 0}</div>
+                                        <div style="color: #6b7280;">Total Orders</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 24px; font-weight: 700;">$${Number(summary.total_savings || 0).toLocaleString()}</div>
+                                        <div style="color: #6b7280;">Total Savings</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="dashboard-section">
+                                <h2>Security</h2>
+                                <p style="color: #6b7280; margin-bottom: 16px;">Manage your account security settings.</p>
+                                <a href="#" onclick="navigate('forgot-password'); return false;" class="btn btn-outline">Change Password</a>
+                            </div>
+                            
+                            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                                <p style="color: #6b7280; font-size: 14px;">Need to update your company information? Contact your sales rep or email <a href="mailto:support@glovecubs.com">support@glovecubs.com</a></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    } catch (err) {
+        console.error('Error loading account:', err);
+        mainContent.innerHTML = `<div class="portal-error"><p>Failed to load account. <a href="#" onclick="renderPortalAccountPage(); return false;">Try again</a></p></div>`;
+    }
+}
+
+// ============================================
+// PORTAL: SHARED SIDEBAR
+// ============================================
+
+function renderPortalSidebar(activePage, user) {
+    const pages = [
+        { id: 'dashboard', icon: 'fa-tachometer-alt', label: 'Dashboard', route: 'dashboard' },
+        { id: 'orders', icon: 'fa-clipboard-list', label: 'Orders', route: 'portal-orders' },
+        { id: 'favorites', icon: 'fa-heart', label: 'Favorites', route: 'portal-favorites' },
+        { id: 'addresses', icon: 'fa-map-marker-alt', label: 'Addresses', route: 'portal-addresses' },
+        { id: 'rfqs', icon: 'fa-file-alt', label: 'Quotes', route: 'portal-rfqs' },
+        { id: 'invoices', icon: 'fa-file-invoice-dollar', label: 'Invoice Analysis', route: 'invoice-savings' },
+        { id: 'account', icon: 'fa-user-cog', label: 'Account', route: 'portal-account' }
+    ];
+    
+    return `
+        <aside class="dashboard-sidebar" id="portalSidebar">
+            <button class="mobile-sidebar-close" onclick="togglePortalSidebar()" aria-label="Close menu"><i class="fas fa-times"></i></button>
+            <div class="dashboard-user">
+                <div class="dashboard-user-avatar">
+                    <i class="fas fa-building"></i>
+                </div>
+                <h3>${user.company_name || 'My Account'}</h3>
+                <p>${user.email || ''}</p>
+                ${user.is_approved ? `<span class="dashboard-tier">${user.discount_tier || 'Standard'} Tier</span>` : '<span class="dashboard-tier" style="background: #666;">Pending</span>'}
+            </div>
+            <nav class="dashboard-nav">
+                ${pages.map(p => `
+                    <a href="#" class="${activePage === p.id ? 'active' : ''}" onclick="togglePortalSidebar(); navigate('${p.route}'); return false;">
+                        <i class="fas ${p.icon}"></i> ${p.label}
+                    </a>
+                `).join('')}
+                <div style="border-top: 1px solid #e5e7eb; margin: 12px 0;"></div>
+                <a href="#" onclick="togglePortalSidebar(); navigate('products'); return false;"><i class="fas fa-shopping-bag"></i> Shop Products</a>
+                <a href="#" onclick="togglePortalSidebar(); navigate('cart'); return false;"><i class="fas fa-shopping-cart"></i> My Cart</a>
+                <a href="#" onclick="logout(); return false;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </nav>
+        </aside>
+    `;
+}
+
+function togglePortalSidebar() {
+    const sidebar = document.getElementById('portalSidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('mobile-open');
+    }
+}
+
+function toggleDashboardSidebar() {
+    const sidebar = document.getElementById('dashboardSidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('mobile-open');
+    }
+}
+
+function renderPortalMobileMenuButton() {
+    return `<button class="portal-mobile-menu-toggle" onclick="togglePortalSidebar()" aria-label="Open menu"><i class="fas fa-bars"></i></button>`;
+}
+
 // getDiscountPercent moved to top of file for early availability
 
 // ============================================
@@ -4843,7 +6022,7 @@ function renderB2BPage() {
                                 <li><i class="fas fa-check"></i> All Gold benefits</li>
                                 <li><i class="fas fa-check"></i> Volume rebates</li>
                                 <li><i class="fas fa-check"></i> Net 60 terms</li>
-                                <li><i class="fas fa-check"></i> Private labeling</li>
+                                <li><i class="fas fa-check"></i> Priority allocation</li>
                             </ul>
                         </div>
                     </div>
@@ -6361,9 +7540,9 @@ function generateOptimizations(orders) {
 
 function renderAdminPanel(activeTab = 'orders') {
     const mainContent = document.getElementById('mainContent');
-    const isLoggedIn = state.user?.is_approved;
-    
-    if (!isLoggedIn) {
+    const isAdmin = state.user && state.user.is_admin === true;
+
+    if (!state.user) {
         mainContent.innerHTML = `
             <section class="contact-page" style="padding: 60px 0;">
                 <div class="container">
@@ -6371,8 +7550,8 @@ function renderAdminPanel(activeTab = 'orders') {
                         <div style="font-size: 64px; color: #FF7A00; margin-bottom: 24px;">
                             <i class="fas fa-lock"></i>
                         </div>
-                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Admin Access Required</h1>
-                        <p style="font-size: 18px; color: #4B5563; margin-bottom: 32px;">Please login with an approved account to access the admin panel.</p>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Sign in required</h1>
+                        <p style="font-size: 18px; color: #4B5563; margin-bottom: 32px;">Please log in to access the admin panel.</p>
                         <button class="btn btn-primary btn-lg" onclick="navigate('login')" style="background: #FF7A00; border: none; padding: 14px 32px; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: 600; cursor: pointer;">
                             <i class="fas fa-sign-in-alt"></i> Login
                         </button>
@@ -6382,59 +7561,77 @@ function renderAdminPanel(activeTab = 'orders') {
         `;
         return;
     }
+    if (!isAdmin) {
+        mainContent.innerHTML = `
+            <section class="contact-page" style="padding: 60px 0;">
+                <div class="container">
+                    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                        <div style="font-size: 64px; color: #DC2626; margin-bottom: 24px;">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h1 style="font-size: 36px; font-weight: 700; margin-bottom: 16px;">Admin access required</h1>
+                        <p style="font-size: 18px; color: #4B5563; margin-bottom: 32px;">Your account does not have admin rights. Contact your administrator.</p>
+                        <button class="btn btn-secondary" onclick="navigate('dashboard')" style="border: 2px solid #6B7280; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;">Back to Dashboard</button>
+                    </div>
+                </div>
+            </section>
+        `;
+        return;
+    }
+
+    // Explicit owner banner so you never wonder if the app recognized you.
+    const ownerBannerHtml = `
+        <div style="background:#111827;color:#fff;border:1px solid rgba(255,122,0,.5);padding:12px 16px;border-radius:10px;margin-bottom:16px;">
+            Signed in as <strong>Owner / Super Admin</strong> (${state.user.email || 'unknown email'})
+        </div>
+    `;
     
     // Store active tab in state
     state.adminTab = activeTab;
-    
+
+    var tabStyle = function(tab) {
+        var active = activeTab === tab;
+        return 'flex: 0 1 auto; padding: 12px 16px; background: ' + (active ? '#ffffff' : 'transparent') + '; border: none; border-bottom: 3px solid ' + (active ? '#FF7A00' : 'transparent') + '; cursor: pointer; font-size: 14px; font-weight: 600; color: ' + (active ? '#FF7A00' : '#6B7280') + '; transition: all 0.2s ease; white-space: nowrap;';
+    };
+
     mainContent.innerHTML = `
-        <section style="padding: 40px 0; background: #f5f5f5; min-height: calc(100vh - 200px);">
+        <div class="admin-top-bar">
+            <a href="#" onclick="navigate('admin'); renderAdminPanel('dashboard'); return false;"><i class="fas fa-shield-alt" style="margin-right: 8px;"></i>GloveCubs Admin</a>
+            <div class="admin-nav-links">
+                <a href="#" onclick="renderAdminPanel('dashboard'); return false;">Dashboard</a>
+                <a href="#" onclick="renderAdminPanel('customers'); return false;">Customers</a>
+                <a href="#" onclick="renderAdminPanel('orders'); return false;">Orders</a>
+                <a href="#" onclick="renderAdminPanel('arap'); return false;">AR / AP</a>
+                <a href="#" onclick="renderAdminPanel('inventory'); return false;">Inventory</a>
+                <a href="#" onclick="renderAdminPanel('products'); return false;">Products</a>
+                <a href="#" onclick="navigate('dashboard'); return false;" style="margin-left: 12px; padding: 6px 12px; background: rgba(255,255,255,0.15); border-radius: 6px;">Back to site</a>
+            </div>
+        </div>
+        <section style="padding: 24px 0; background: #f5f5f5; min-height: calc(100vh - 120px);">
             <div class="container">
                 <div style="max-width: 1400px; margin: 0 auto;">
                     <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
-                        <!-- Header -->
-                        <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); padding: 32px; color: #ffffff;">
-                            <h1 style="font-size: 32px; font-weight: 700; margin-bottom: 8px;">
-                                <i class="fas fa-shield-alt" style="margin-right: 12px;"></i>Admin Dashboard
-                            </h1>
-                            <p style="opacity: 0.9; font-size: 15px;">Manage orders, RFQs, users, and products</p>
+                        <div style="background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); padding: 24px 32px; color: #ffffff;">
+                            <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 4px;"><i class="fas fa-shield-alt" style="margin-right: 10px;"></i>Admin</h1>
+                            <p style="opacity: 0.9; font-size: 14px;">Customers, pricing, orders, inventory, products</p>
                         </div>
-                        
-                        <!-- Tabs -->
-                        <div style="display: flex; border-bottom: 2px solid #e0e0e0; background: #fafafa;">
-                            <button onclick="renderAdminPanel('orders')" class="admin-tab ${activeTab === 'orders' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'orders' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'orders' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'orders' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-shopping-cart" style="margin-right: 8px;"></i>Orders
-                            </button>
-                            <button onclick="renderAdminPanel('rfqs')" class="admin-tab ${activeTab === 'rfqs' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'rfqs' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'rfqs' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'rfqs' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-file-invoice-dollar" style="margin-right: 8px;"></i>RFQs
-                            </button>
-                            <button onclick="renderAdminPanel('users')" class="admin-tab ${activeTab === 'users' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'users' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'users' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'users' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-users" style="margin-right: 8px;"></i>Users
-                            </button>
-                            <button onclick="renderAdminPanel('products')" class="admin-tab ${activeTab === 'products' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'products' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'products' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'products' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-box" style="margin-right: 8px;"></i>Products
-                            </button>
-                            <button onclick="renderAdminPanel('messages')" class="admin-tab ${activeTab === 'messages' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'messages' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'messages' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'messages' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-envelope" style="margin-right: 8px;"></i>Messages
-                            </button>
-                            <button onclick="renderAdminPanel('customers')" class="admin-tab ${activeTab === 'customers' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'customers' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'customers' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'customers' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-building" style="margin-right: 8px;"></i>Customers
-                            </button>
-                            <button onclick="renderAdminPanel('inventory')" class="admin-tab ${activeTab === 'inventory' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'inventory' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'inventory' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'inventory' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-warehouse" style="margin-right: 8px;"></i>Inventory
-                            </button>
-                            <button onclick="renderAdminPanel('vendors')" class="admin-tab ${activeTab === 'vendors' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'vendors' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'vendors' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'vendors' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-truck" style="margin-right: 8px;"></i>Vendors
-                            </button>
-                            <button onclick="renderAdminPanel('purchase-orders')" class="admin-tab ${activeTab === 'purchase-orders' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'purchase-orders' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'purchase-orders' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'purchase-orders' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-file-invoice" style="margin-right: 8px;"></i>POs
-                            </button>
-                            <button onclick="renderAdminPanel('bulk-import')" class="admin-tab ${activeTab === 'bulk-import' ? 'active' : ''}" style="flex: 1; padding: 20px; background: ${activeTab === 'bulk-import' ? '#ffffff' : 'transparent'}; border: none; border-bottom: 3px solid ${activeTab === 'bulk-import' ? '#FF7A00' : 'transparent'}; cursor: pointer; font-size: 15px; font-weight: 600; color: ${activeTab === 'bulk-import' ? '#FF7A00' : '#6B7280'}; transition: all 0.3s ease;">
-                                <i class="fas fa-upload" style="margin-right: 8px;"></i>Bulk Import
-                            </button>
+                        ${ownerBannerHtml}
+                        <div style="display: flex; flex-wrap: wrap; border-bottom: 2px solid #e0e0e0; background: #fafafa; gap: 0;">
+                            <button onclick="renderAdminPanel('dashboard')" class="admin-tab" style="${tabStyle('dashboard')}"><i class="fas fa-tachometer-alt" style="margin-right: 6px;"></i>Dashboard</button>
+                            <button onclick="renderAdminPanel('customers')" class="admin-tab" style="${tabStyle('customers')}"><i class="fas fa-building" style="margin-right: 6px;"></i>Customers</button>
+                            <button onclick="renderAdminPanel('orders')" class="admin-tab" style="${tabStyle('orders')}"><i class="fas fa-shopping-cart" style="margin-right: 6px;"></i>Orders</button>
+                            <button onclick="renderAdminPanel('arap')" class="admin-tab" style="${tabStyle('arap')}"><i class="fas fa-money-check-alt" style="margin-right: 6px;"></i>AR / AP</button>
+                            <button onclick="renderAdminPanel('rfqs')" class="admin-tab" style="${tabStyle('rfqs')}"><i class="fas fa-file-invoice-dollar" style="margin-right: 6px;"></i>RFQs</button>
+                            <button onclick="renderAdminPanel('users')" class="admin-tab" style="${tabStyle('users')}"><i class="fas fa-users" style="margin-right: 6px;"></i>Users</button>
+                            <button onclick="renderAdminPanel('products')" class="admin-tab" style="${tabStyle('products')}"><i class="fas fa-box" style="margin-right: 6px;"></i>Products</button>
+                            <button onclick="renderAdminPanel('messages')" class="admin-tab" style="${tabStyle('messages')}"><i class="fas fa-envelope" style="margin-right: 6px;"></i>Messages</button>
+                            <button onclick="renderAdminPanel('inventory')" class="admin-tab" style="${tabStyle('inventory')}"><i class="fas fa-warehouse" style="margin-right: 6px;"></i>Inventory</button>
+                            <button onclick="renderAdminPanel('vendors')" class="admin-tab" style="${tabStyle('vendors')}"><i class="fas fa-truck" style="margin-right: 6px;"></i>Vendors</button>
+                            <button onclick="renderAdminPanel('purchase-orders')" class="admin-tab" style="${tabStyle('purchase-orders')}"><i class="fas fa-file-invoice" style="margin-right: 6px;"></i>POs</button>
+                            <button onclick="renderAdminPanel('bulk-import')" class="admin-tab" style="${tabStyle('bulk-import')}"><i class="fas fa-upload" style="margin-right: 6px;"></i>Bulk Import</button>
                         </div>
-                        
-                        <!-- Tab Content -->
                         <div id="adminTabContent" style="padding: 32px;">
+                            ${activeTab === 'dashboard' ? '<div id="adminDashboardContent">Loading...</div>' : ''}
                             ${activeTab === 'orders' ? '<div id="adminOrdersContent">Loading orders...</div>' : ''}
                             ${activeTab === 'rfqs' ? '<div id="adminRFQsContent">Loading RFQs...</div>' : ''}
                             ${activeTab === 'users' ? '<div id="adminUsersContent">Loading users...</div>' : ''}
@@ -6445,6 +7642,7 @@ function renderAdminPanel(activeTab = 'orders') {
                             ${activeTab === 'vendors' ? '<div id="adminVendorsContent">Loading vendors...</div>' : ''}
                             ${activeTab === 'purchase-orders' ? '<div id="adminPurchaseOrdersContent">Loading POs...</div>' : ''}
                             ${activeTab === 'bulk-import' ? '<div id="adminBulkImportContent">Loading...</div>' : ''}
+                            ${activeTab === 'arap' ? '<div id="adminARAPContent">Loading...</div>' : ''}
                         </div>
                     </div>
                 </div>
@@ -6453,7 +7651,9 @@ function renderAdminPanel(activeTab = 'orders') {
     `;
     
     // Load data for active tab
-    if (activeTab === 'orders') {
+    if (activeTab === 'dashboard') {
+        loadAdminDashboard();
+    } else if (activeTab === 'orders') {
         loadAdminOrders();
     } else if (activeTab === 'rfqs') {
         loadAdminRFQs();
@@ -6474,6 +7674,62 @@ function renderAdminPanel(activeTab = 'orders') {
         loadAdminPurchaseOrders();
     } else if (activeTab === 'bulk-import') {
         loadAdminBulkImport();
+    } else if (activeTab === 'arap') {
+        loadAdminARAP();
+    }
+}
+
+async function loadAdminDashboard() {
+    var el = document.getElementById('adminDashboardContent');
+    if (!el) return;
+    try {
+        var ordersRes = api.get('/api/admin/orders').catch(function() { return { orders: [] }; });
+        var companiesRes = api.get('/api/admin/companies').catch(function() { return { companies: [] }; });
+        var usersRes = api.get('/api/admin/users').catch(function() { return { users: [] }; });
+        var invRes = api.get('/api/admin/inventory').catch(function() { return { items: [] }; });
+        var orders = (await ordersRes).orders || [];
+        var companies = (await companiesRes).companies || [];
+        var users = (await usersRes).users || [];
+        var invItems = (await invRes).items || [];
+        var lowStock = invItems.filter(function(i) { return (i.quantity_on_hand || 0) <= (i.reorder_point || 0); });
+        var pendingOrders = orders.filter(function(o) { return (o.status || '').toLowerCase() === 'pending' || (o.status || '').toLowerCase() === 'processing'; });
+        el.innerHTML = '<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-bottom: 32px;">' +
+            '<div class="stat-card" style="background: var(--surface); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,122,0,0.4);"><div class="value" style="font-size: 28px; font-weight: 700;">' + companies.length + '</div><div class="label" style="font-size: 13px; color: #6B7280;">Customers</div><a href="#" onclick="renderAdminPanel(\'customers\'); return false;" style="color: #FF7A00; font-size: 13px;">View &rarr;</a></div>' +
+            '<div class="stat-card" style="background: var(--surface); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,122,0,0.4);"><div class="value" style="font-size: 28px; font-weight: 700;">' + users.length + '</div><div class="label" style="font-size: 13px; color: #6B7280;">Users</div><a href="#" onclick="renderAdminPanel(\'users\'); return false;" style="color: #FF7A00; font-size: 13px;">View &rarr;</a></div>' +
+            '<div class="stat-card" style="background: var(--surface); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,122,0,0.4);"><div class="value" style="font-size: 28px; font-weight: 700;">' + orders.length + '</div><div class="label" style="font-size: 13px; color: #6B7280;">Orders</div><a href="#" onclick="renderAdminPanel(\'orders\'); return false;" style="color: #FF7A00; font-size: 13px;">View &rarr;</a></div>' +
+            '<div class="stat-card" style="background: var(--surface); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,122,0,0.4);"><div class="value" style="font-size: 28px; font-weight: 700;">' + pendingOrders.length + '</div><div class="label" style="font-size: 13px; color: #6B7280;">Pending</div><a href="#" onclick="renderAdminPanel(\'orders\'); return false;" style="color: #FF7A00; font-size: 13px;">View &rarr;</a></div>' +
+            '<div class="stat-card" style="background: var(--surface); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,122,0,0.4);"><div class="value" style="font-size: 28px; font-weight: 700;">' + lowStock.length + '</div><div class="label" style="font-size: 13px; color: #6B7280;">Low stock</div><a href="#" onclick="renderAdminPanel(\'inventory\'); return false;" style="color: #FF7A00; font-size: 13px;">View &rarr;</a></div>' +
+            '</div><p style="color: #6B7280; font-size: 14px;">Use the tabs or top nav to manage customers, pricing, contact info, orders, inventory, and products.</p>';
+    } catch (e) {
+        el.innerHTML = '<p style="color: #DC2626;">Failed to load dashboard: ' + (e.message || '') + '</p>';
+    }
+}
+
+async function loadAdminARAP() {
+    var el = document.getElementById('adminARAPContent');
+    if (!el) return;
+    try {
+        var ordersRes = await api.get('/api/admin/orders').catch(function() { return { orders: [] }; });
+        var orders = ordersRes.orders || [];
+        var unpaid = orders.filter(function(o) {
+            var s = (o.status || '').toLowerCase();
+            return s === 'pending' || s === 'processing' || s === 'invoiced' || s === 'shipped';
+        });
+        var byStatus = {};
+        orders.forEach(function(o) {
+            var s = o.status || 'unknown';
+            byStatus[s] = (byStatus[s] || 0) + 1;
+        });
+        el.innerHTML = '<h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Accounts Receivable / Payable</h2>' +
+            '<p style="color: #6B7280; margin-bottom: 24px;">Orders by status (receivable: unpaid/invoiced; payables are managed via POs).</p>' +
+            '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">' +
+            Object.keys(byStatus).map(function(s) {
+                return '<div style="background: #f9fafb; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb;"><div style="font-size: 24px; font-weight: 700; color: #111;">' + (byStatus[s]) + '</div><div style="font-size: 13px; color: #6B7280; text-transform: capitalize;">' + s + '</div></div>';
+            }).join('') + '</div>' +
+            '<p style="font-size: 14px;"><a href="#" onclick="renderAdminPanel(\'orders\'); return false;" style="color: #FF7A00; font-weight: 600;">View all orders &rarr;</a> for details and payment status.</p>' +
+            '<p style="font-size: 14px; margin-top: 16px;"><a href="#" onclick="renderAdminPanel(\'purchase-orders\'); return false;" style="color: #FF7A00; font-weight: 600;">Purchase orders &rarr;</a> for payables.</p>';
+    } catch (e) {
+        el.innerHTML = '<p style="color: #DC2626;">Failed to load: ' + (e.message || '') + '</p>';
     }
 }
 
@@ -9108,7 +10364,7 @@ async function loadAdminRFQs() {
                             </div>
                         </div>
                         <div style="background: #ffffff; padding: 16px; border-radius: 8px; margin-top: 16px;">
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 12px;">
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 12px;">
                                 <div>
                                     <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Quantity</div>
                                     <div style="font-weight: 600; color: #1a1a1a;">${rfq.quantity || 'N/A'}</div>
@@ -9120,6 +10376,10 @@ async function loadAdminRFQs() {
                                 <div>
                                     <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Use Case</div>
                                     <div style="font-weight: 600; color: #1a1a1a;">${rfq.use_case || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Cases / Pallets</div>
+                                    <div style="font-weight: 600; color: #1a1a1a;">${rfq.cases_or_pallets || '—'}</div>
                                 </div>
                             </div>
                             ${rfq.notes ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;"><div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;">Notes</div><div style="color: #1a1a1a;">${rfq.notes}</div></div>` : ''}

@@ -3,8 +3,22 @@ const envPath = path.join(__dirname, '.env');
 require('dotenv').config({ path: envPath });
 console.log('[boot] cwd:', process.cwd());
 console.log('[boot] env file path:', envPath);
-console.log('[boot] supabase url set:', !!process.env.SUPABASE_URL);
-console.log('[boot] service role set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Supabase is required: single source of truth. Crash if missing.
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Supabase configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env (or environment).');
+}
+console.log('[boot] supabase url set: true');
+console.log('[boot] service role set: true');
+
+// JWT_SECRET: require in production; reject unsafe default
+const JWT_SECRET_RAW = process.env.JWT_SECRET || '';
+const JWT_SECRET_DEFAULT = 'glovecubs-secret-key-2024';
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && (!JWT_SECRET_RAW.trim() || JWT_SECRET_RAW === JWT_SECRET_DEFAULT)) {
+  throw new Error('JWT_SECRET must be set to a strong random value in production. Do not use the default.');
+}
+
 const express = require('express');
 const cors = require('cors');
 const os = require('os');
@@ -13,7 +27,8 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const fishbowl = require('./fishbowl');
 const rateLimit = require('express-rate-limit');
-const { sendMail, isConfigured: emailConfigured } = require('./lib/email');
+const { sendMail, isConfigured: emailConfigured, getConfigStatus: getEmailConfigStatus, verifyConnection: verifyEmailConnection } = require('./lib/email');
+const emailTemplates = require('./lib/email-templates');
 const productStore = require('./lib/product-store');
 const { getEffectiveMargin, computeSellPrice } = require('./lib/pricing');
 const { importCsvToSupabase } = require('./lib/import-csv-supabase');
@@ -23,232 +38,228 @@ const { aiNormalizeProduct, normalizeFromExtracted, isConfigured: aiNormalizeCon
 const { validateImageUrls, validateImageUrlsWithVerification } = require('./lib/validate-image-urls');
 const { getSupabase, isConfigured: supabaseConfigured } = require('./lib/supabase');
 const { getSupabaseAdmin, isSupabaseAdminConfigured } = require('./lib/supabaseAdmin');
+const productsService = require('./services/productsService');
+const usersService = require('./services/usersService');
+const companiesService = require('./services/companiesService');
+const dataService = require('./services/dataService');
+const inventory = require('./lib/inventory');
+const addressValidation = require('./lib/address-validation');
+const taxLib = require('./lib/tax');
 const { logParseEvent } = require('./lib/parse-log');
 const { aiGenerate, aiExtractInvoice, aiRecommendFromInvoice, isConfigured: aiConfigured } = require('./lib/ai/provider');
 const { validateGloveFinderRequest, validateGloveFinderResponse, validateInvoiceExtractResponse, validateInvoiceRecommendResponse } = require('./lib/ai/schemas');
 const { hashIp, logConversation, logInvoiceUpload, logInvoiceLines, logRecommendations } = require('./lib/ai/ai-log');
 const { enqueueBulkUrls, runWorker, approveDraft } = require('./lib/bulk-import');
 const Stripe = require('stripe');
+const paymentLog = require('./lib/payment-logger');
+const webhookIdempotency = require('./lib/webhook-idempotency');
+const { sortByRelevance } = require('./lib/search-relevance');
 
 const app = express();
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const PORT = parseInt(process.env.PORT, 10) || 3004;
-const JWT_SECRET = process.env.JWT_SECRET || 'glovecubs-secret-key-2024';
-
-// Simple JSON file database. In serverless (Vercel/Lambda) the app dir is read-only;
-// we use os.tmpdir() when a write fails with EROFS so CSV import and other writes succeed.
-const DB_PATH_BUNDLED = path.join(__dirname, 'database.json');
-const DB_PATH_TMP = path.join(os.tmpdir(), 'glovecubs-database.json');
-let dbPathActive = DB_PATH_BUNDLED; // switched to DB_PATH_TMP on first EROFS
+const JWT_SECRET = (process.env.JWT_SECRET || '').trim() || JWT_SECRET_DEFAULT;
 
 // Fishbowl customer export: file path and schedule (every 30 min)
 const FISHBOWL_EXPORT_DIR = path.join(__dirname, 'data');
 const FISHBOWL_EXPORT_FILE = path.join(FISHBOWL_EXPORT_DIR, 'fishbowl-customers.csv');
 const FISHBOWL_EXPORT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
-function loadDB() {
-    try {
-        // If we've already switched to temp dir but it's empty (e.g. new instance), seed from bundled
-        if (dbPathActive === DB_PATH_TMP && !fs.existsSync(DB_PATH_TMP) && fs.existsSync(DB_PATH_BUNDLED)) {
-            try {
-                const bundled = fs.readFileSync(DB_PATH_BUNDLED, 'utf8');
-                fs.writeFileSync(DB_PATH_TMP, bundled, 'utf8');
-            } catch (e) { /* ignore */ }
-        }
-        const pathToRead = dbPathActive;
-        if (fs.existsSync(pathToRead)) {
-            const db = JSON.parse(fs.readFileSync(pathToRead, 'utf8'));
-            let changed = false;
-            if (!db.rfqs) { db.rfqs = []; changed = true; }
-            if (!db.saved_lists) { db.saved_lists = []; changed = true; }
-            if (!db.ship_to_addresses) { db.ship_to_addresses = []; changed = true; }
-            if (!db.contact_messages) { db.contact_messages = []; changed = true; }
-            if (!db.password_reset_tokens) { db.password_reset_tokens = []; changed = true; }
-            if (!db.uploaded_invoices) { db.uploaded_invoices = []; changed = true; }
-            if (!db.companies) { db.companies = []; changed = true; }
-            if (!db.manufacturers) { db.manufacturers = []; changed = true; }
-            if (!db.customer_manufacturer_pricing) { db.customer_manufacturer_pricing = []; changed = true; }
-            if (!db.app_admins) { db.app_admins = []; changed = true; }
-            if (!db.inventory) { db.inventory = []; changed = true; }
-            if (!db.purchase_orders) { db.purchase_orders = []; changed = true; }
-            // Seed companies from users (unique company_name) if empty
-            if (db.companies.length === 0 && (db.users || []).length > 0) {
-                const seen = new Set();
-                let nextId = 1;
-                (db.users || []).forEach((u) => {
-                    const name = (u.company_name || '').trim();
-                    if (name && !seen.has(name.toLowerCase())) {
-                        seen.add(name.toLowerCase());
-                        db.companies.push({
-                            id: nextId++,
-                            name,
-                            default_gross_margin_percent: 30,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-                    }
-                });
-                changed = true;
-            }
-            // Seed manufacturers from products (unique brand) if empty
-            if (db.manufacturers.length === 0 && (db.products || []).length > 0) {
-                const seen = new Set();
-                let nextId = 1;
-                (db.products || []).forEach((p) => {
-                    const name = (p.brand || '').trim();
-                    if (name && !seen.has(name.toLowerCase())) {
-                        seen.add(name.toLowerCase());
-                        db.manufacturers.push({
-                            id: nextId++,
-                            name,
-                            created_at: new Date().toISOString()
-                        });
-                    }
-                });
-                changed = true;
-            }
-            // Ensure companies have default_gross_margin_percent
-            (db.companies || []).forEach((c) => {
-                if (c.default_gross_margin_percent == null) {
-                    c.default_gross_margin_percent = 30;
-                    changed = true;
-                }
-            });
-            // Ensure orders can have tracking
-            (db.orders || []).forEach(o => {
-                if (o.tracking_number === undefined) o.tracking_number = '';
-                if (o.tracking_url === undefined) o.tracking_url = '';
-            });
-            // Ensure users can have budget and rep
-            (db.users || []).forEach(u => {
-                if (u.budget_amount === undefined) u.budget_amount = null;
-                if (u.budget_period === undefined) u.budget_period = 'monthly';
-                if (u.rep_name === undefined) u.rep_name = '';
-                if (u.rep_email === undefined) u.rep_email = '';
-                if (u.rep_phone === undefined) u.rep_phone = '';
-            });
-            // Ensure demo user exists so demo@company.com / demo123 always works
-            const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe';
-            const hasDemo = (db.users || []).some(u => (u.email || '').toLowerCase() === 'demo@company.com');
-            if (!hasDemo) {
-                if (!db.users) db.users = [];
-                db.users.push({
-                    id: (db.users.length === 0) ? 1 : Math.max(...db.users.map(u => u.id)) + 1,
-                    company_name: 'Demo Company Inc',
-                    email: 'demo@company.com',
-                    password: demoHash,
-                    contact_name: 'John Demo',
-                    phone: '555-123-4567',
-                    address: '123 Demo Street',
-                    city: 'Chicago',
-                    state: 'IL',
-                    zip: '60601',
-                    is_approved: 1,
-                    discount_tier: 'silver',
-                    created_at: new Date().toISOString()
-                });
-                changed = true;
-            }
-            if (changed) saveDB(db);
-            return db;
-        }
-    } catch (e) {
-        console.log('Creating new database...');
-    }
-    let db = { users: [], products: [], orders: [], carts: {}, rfqs: [], saved_lists: [], ship_to_addresses: [], contact_messages: [], password_reset_tokens: [], uploaded_invoices: [], companies: [], manufacturers: [], customer_manufacturer_pricing: [], app_admins: [], inventory: [], purchase_orders: [] };
-    // Ensure demo user exists so login works even when database.json is missing or empty (e.g. fresh Vercel deploy)
-    const demoHash = '$2a$10$7nnjp9KcyS8aFsRkE1dvEumROrZEldTROMteztG3UZXZQqw8lWFFe'; // bcrypt hash of 'demo123'
-    if (!db.users || db.users.length === 0) {
-        db.users = [{
-            id: 1,
-            company_name: 'Demo Company Inc',
-            email: 'demo@company.com',
-            password: demoHash,
-            contact_name: 'John Demo',
-            phone: '555-123-4567',
-            address: '123 Demo Street',
-            city: 'Chicago',
-            state: 'IL',
-            zip: '60601',
-            is_approved: 1,
-            discount_tier: 'silver',
-            created_at: new Date().toISOString()
-        }];
-        try { saveDB(db); } catch (err) { /* ignore on read-only (e.g. serverless) */ }
-    } else {
-        const hasDemo = db.users.some(u => (u.email || '').toLowerCase() === 'demo@company.com');
-        if (!hasDemo) {
-            db.users.push({
-                id: Math.max(1, ...db.users.map(u => u.id)) + 1,
-                company_name: 'Demo Company Inc',
-                email: 'demo@company.com',
-                password: demoHash,
-                contact_name: 'John Demo',
-                phone: '555-123-4567',
-                address: '123 Demo Street',
-                city: 'Chicago',
-                state: 'IL',
-                zip: '60601',
-                is_approved: 1,
-                discount_tier: 'silver',
-                created_at: new Date().toISOString()
-            });
-            try { saveDB(db); } catch (err) { /* ignore */ }
-        }
-    }
-    return db;
+/** Build pricing context from Supabase for getEffectiveMargin. */
+async function getPricingContext() {
+  const [companies, customer_manufacturer_pricing] = await Promise.all([
+    companiesService.getCompanies(),
+    companiesService.getCustomerManufacturerPricing()
+  ]);
+  return { companies, customer_manufacturer_pricing };
 }
 
-function saveDB(data) {
-    const payload = JSON.stringify(data, null, 2);
-    try {
-        fs.writeFileSync(dbPathActive, payload);
-    } catch (err) {
-        if (err.code === 'EROFS' && dbPathActive === DB_PATH_BUNDLED) {
-            dbPathActive = DB_PATH_TMP;
-            fs.writeFileSync(dbPathActive, payload);
-        } else {
-            throw err;
-        }
-    }
+/** Get company IDs the authenticated user can access (for company-scoped record access). */
+async function getCompanyIdsForAuthenticatedUser(req) {
+  if (!req.user?.id) return [];
+  const user = await usersService.getUserById(req.user.id);
+  return user ? companiesService.getCompanyIdsForUser(user) : [];
 }
-
-let db = loadDB();
 
 // Middleware (increase limit for large CSV imports)
 const bodyLimit = '50mb';
 app.use(cors());
 
 // Stripe webhook needs raw body for signature verification (must be before express.json).
-app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+// PRODUCTION HARDENED: Includes idempotency, structured logging, and comprehensive error handling.
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+    const startTime = Date.now();
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    
+    // Reject if Stripe not configured
     if (!webhookSecret || !stripe) {
+        paymentLog.webhookRejected('stripe_not_configured', sig);
         res.status(200).send();
         return;
     }
+    
+    // Verify webhook signature
     let event;
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-        console.error('[Stripe] Webhook signature verification failed:', err.message);
+        paymentLog.webhookRejected('signature_verification_failed', sig);
         res.status(400).send('Webhook signature verification failed');
         return;
     }
-    if (event.type === 'payment_intent.succeeded') {
-        const pi = event.data.object;
-        const orderId = pi.metadata && pi.metadata.order_id;
-        if (orderId) {
-            const dbLocal = loadDB();
-            const order = dbLocal.orders.find(o => String(o.id) === String(orderId));
-            if (order && order.status === 'pending_payment') {
-                order.status = 'pending';
-                saveDB(dbLocal);
-            }
+    
+    const eventId = event.id;
+    const eventType = event.type;
+    paymentLog.webhookReceived(eventId, eventType);
+    paymentLog.webhookVerified(eventId, eventType);
+    
+    // Idempotency check - skip if already processed
+    try {
+        const isDuplicate = await webhookIdempotency.isDuplicateEvent(eventId);
+        if (isDuplicate) {
+            paymentLog.webhookSkipped(eventId, eventType, 'duplicate_event', null);
+            res.status(200).send();
+            return;
         }
+    } catch (idempotencyErr) {
+        // Continue processing if idempotency check fails
+        console.error('[Stripe] Idempotency check error:', idempotencyErr.message);
     }
-    res.status(200).send();
+
+    const pi = event.data.object;
+    const orderId = pi.metadata && pi.metadata.order_id;
+
+    try {
+        // ====== PAYMENT SUCCEEDED ======
+        if (eventType === 'payment_intent.succeeded') {
+            if (orderId) {
+                const order = await dataService.getOrderByIdAdmin(orderId);
+                if (order && order.status === 'pending_payment') {
+                    // Update order status
+                    await dataService.updateOrderStatus(orderId, 'pending');
+                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'pending');
+                    paymentLog.paymentIntentSucceeded(pi.id, orderId, order.order_number);
+                    
+                    // Update payment_confirmed_at timestamp
+                    try {
+                        const supabase = getSupabaseAdmin();
+                        await supabase.from('orders').update({ payment_confirmed_at: new Date().toISOString() }).eq('id', orderId);
+                    } catch (_) { /* non-fatal */ }
+
+                    // Send payment confirmation email with improved template
+                    try {
+                        const user = await usersService.getUserById(order.user_id);
+                        if (user && user.email) {
+                            const emailContent = emailTemplates.paymentSuccess(order, user);
+                            await sendMail({ 
+                                to: user.email, 
+                                subject: emailContent.subject, 
+                                text: emailContent.text,
+                                html: emailContent.html 
+                            });
+                            paymentLog.emailSent(orderId, order.order_number, 'payment_confirmed', user.email);
+                        }
+                    } catch (emailErr) {
+                        paymentLog.emailFailed(orderId, order.order_number, 'payment_confirmed', emailErr);
+                    }
+                } else if (order) {
+                    // Order exists but not in pending_payment status - already processed
+                    paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
+                }
+            } else {
+                paymentLog.webhookSkipped(eventId, eventType, 'no_order_id_in_metadata', null);
+            }
+            
+            await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
+            paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
+            res.status(200).send();
+            return;
+        }
+
+        // ====== PAYMENT FAILED ======
+        if (eventType === 'payment_intent.payment_failed') {
+            paymentLog.paymentIntentFailed(pi.id, orderId, pi.last_payment_error?.message || 'unknown');
+            
+            if (orderId) {
+                const order = await dataService.getOrderByIdAdmin(orderId);
+                if (order && order.status === 'pending_payment') {
+                    // Release reserved stock
+                    try {
+                        await inventory.releaseStockForOrder(orderId);
+                        paymentLog.inventoryReleased(orderId, 'payment_failed');
+                    } catch (releaseErr) {
+                        console.error(`[Stripe] Failed to release stock for order ${orderId}:`, releaseErr.message);
+                    }
+                    
+                    // Mark order as payment_failed
+                    await dataService.updateOrderStatus(orderId, 'payment_failed');
+                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'payment_failed');
+
+                    // Notify customer with improved template
+                    try {
+                        const user = await usersService.getUserById(order.user_id);
+                        if (user && user.email) {
+                            const emailContent = emailTemplates.paymentFailed(order, user);
+                            await sendMail({ 
+                                to: user.email, 
+                                subject: emailContent.subject, 
+                                text: emailContent.text,
+                                html: emailContent.html 
+                            });
+                            paymentLog.emailSent(orderId, order.order_number, 'payment_failed', user.email);
+                        }
+                    } catch (emailErr) {
+                        paymentLog.emailFailed(orderId, order.order_number, 'payment_failed', emailErr);
+                    }
+                } else if (order) {
+                    paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
+                }
+            }
+            
+            await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
+            paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
+            res.status(200).send();
+            return;
+        }
+
+        // ====== PAYMENT CANCELED ======
+        if (eventType === 'payment_intent.canceled') {
+            paymentLog.paymentIntentCanceled(pi.id, orderId);
+            
+            if (orderId) {
+                const order = await dataService.getOrderByIdAdmin(orderId);
+                if (order && order.status === 'pending_payment') {
+                    try {
+                        await inventory.releaseStockForOrder(orderId);
+                        paymentLog.inventoryReleased(orderId, 'payment_canceled');
+                    } catch (releaseErr) {
+                        console.error(`[Stripe] Failed to release stock for canceled order ${orderId}:`, releaseErr.message);
+                    }
+                    await dataService.updateOrderStatus(orderId, 'cancelled');
+                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'cancelled');
+                } else if (order) {
+                    paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
+                }
+            }
+            
+            await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
+            paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
+            res.status(200).send();
+            return;
+        }
+
+        // Unhandled event type - acknowledge but don't process
+        await webhookIdempotency.markEventProcessed(eventId, eventType, null, 'skipped');
+        paymentLog.webhookSkipped(eventId, eventType, 'unhandled_event_type', null);
+        res.status(200).send();
+    } catch (err) {
+        // Return 500 on error so Stripe retries
+        paymentLog.webhookError(eventId, eventType, err);
+        await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'error');
+        res.status(500).send('Webhook processing failed');
+    }
 });
 
 app.use(express.json({ limit: bodyLimit }));
@@ -266,31 +277,32 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // Supabase health (registered first so never hit by catch-all; no auth for diagnostics)
+// In production, returns minimal payload to avoid leaking config paths
 app.get('/api/admin/supabase/health', async (req, res) => {
-    const envPath = path.join(__dirname, '.env');
-    const payload = {
+    const minimal = process.env.NODE_ENV === 'production';
+    const payload = minimal ? { ok: false } : {
         ok: false,
         cwd: process.cwd(),
-        envFilePath: envPath,
+        envFilePath: path.join(__dirname, '.env'),
         supabaseUrlSet: !!process.env.SUPABASE_URL,
         serviceRoleSet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     };
     try {
         if (!isSupabaseAdminConfigured()) {
-            payload.error = 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set';
+            payload.error = minimal ? 'Not configured' : 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set';
             return res.status(200).json(payload);
         }
         const supabase = getSupabaseAdmin();
         const { error } = await supabase.from('products').select('id').limit(1);
         if (error) {
-            payload.error = error.message;
+            payload.error = minimal ? 'DB error' : error.message;
             return res.status(200).json(payload);
         }
         payload.ok = true;
-        payload.productsReachable = true;
+        if (!minimal) payload.productsReachable = true;
         return res.json(payload);
     } catch (e) {
-        payload.error = (e && e.message) || 'Supabase check failed';
+        payload.error = minimal ? 'Check failed' : ((e && e.message) || 'Supabase check failed');
         return res.status(200).json(payload);
     }
 });
@@ -368,42 +380,29 @@ const optionalAuth = (req, res, next) => {
 
 app.post('/api/auth/register', authContactLimiter, async (req, res) => {
     try {
-        const { company_name, email, password, contact_name, phone, address, city, state, zip, allow_free_upgrades } = req.body;
-        
-        db = loadDB();
-        const existing = db.users.find(u => u.email === email);
-        if (existing) {
-            return res.status(400).json({ error: 'Email already registered' });
-        }
-
+        const { company_name, email, password, contact_name, phone, address, city, state, zip, cases_or_pallets, allow_free_upgrades } = req.body;
+        const existing = await usersService.getUserByEmail(email);
+        if (existing) return res.status(400).json({ error: 'Email already registered' });
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = {
-            id: Date.now(),
+        const newUser = await usersService.createUser({
             company_name,
             email,
-            password: hashedPassword,
+            password_hash: hashedPassword,
             contact_name,
             phone: phone || '',
             address: address || '',
             city: city || '',
             state: state || '',
             zip: zip || '',
+            cases_or_pallets: (cases_or_pallets || '').toString().trim() || '',
             allow_free_upgrades: !!allow_free_upgrades,
             payment_terms: 'credit_card',
             is_approved: 0,
-            discount_tier: 'standard',
-            created_at: new Date().toISOString()
-        };
-
-        db.users.push(newUser);
-        saveDB(db);
-
-        res.json({ 
-            success: true, 
-            message: 'Account created! Pending approval for B2B pricing.',
-            userId: newUser.id 
+            discount_tier: 'standard'
         });
+        res.json({ success: true, message: 'Account created! Pending approval for B2B pricing.', userId: newUser.id });
     } catch (error) {
+        console.error('[POST /api/auth/register]', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -412,60 +411,44 @@ app.post('/api/auth/login', authContactLimiter, async (req, res) => {
     try {
         const email = (req.body.email || '').toString().trim();
         const password = (req.body.password != null && req.body.password !== '') ? String(req.body.password).trim() : '';
-        
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Please enter email and password.' });
-        }
-        
-        db = loadDB();
-        const emailLower = email.toLowerCase();
-        const user = db.users.find(u => (u.email || '').toString().trim().toLowerCase() === emailLower);
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
-        let validPassword = await bcrypt.compare(password, user.password);
-        // Always allow demo login; fix stored hash if it was from a different bcrypt/version
-        if (!validPassword && emailLower === 'demo@company.com' && password === 'demo123') {
+        if (!email || !password) return res.status(400).json({ error: 'Please enter email and password.' });
+        const user = await usersService.getUserByEmail(email);
+        if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
+        let validPassword = await bcrypt.compare(password, user.password || user.password_hash);
+        if (!validPassword && email.toLowerCase() === 'demo@company.com' && password === 'demo123') {
             const newHash = bcrypt.hashSync('demo123', 10);
-            user.password = newHash;
-            try { saveDB(db); } catch (e) { /* ignore on read-only */ }
+            await usersService.updateUser(user.id, { password_hash: newHash });
             validPassword = true;
         }
-        if (!validPassword) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
+        if (!validPassword) return res.status(401).json({ error: 'Invalid email or password.' });
         const token = jwt.sign(
             { id: user.id, email: user.email, company: user.company_name, approved: user.is_approved },
             JWT_SECRET,
             { expiresIn: '7d' }
         );
-
+        const isAdminUser = await usersService.isAdmin(user.id);
         res.json({
             success: true,
             token,
-            user: {
-                id: user.id,
-                company_name: user.company_name,
-                email: user.email,
-                contact_name: user.contact_name,
-                is_approved: user.is_approved,
-                discount_tier: user.discount_tier
-            }
+            user: { id: user.id, company_name: user.company_name, email: user.email, contact_name: user.contact_name, is_approved: user.is_approved, discount_tier: user.discount_tier, is_admin: isAdminUser }
         });
     } catch (error) {
+        console.error('[POST /api/auth/login]', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/auth/me', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    
-    const { password, ...safeUser } = user;
-    res.json(safeUser);
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const isAdminUser = await usersService.isAdmin(user.id);
+        const { password, password_hash, ...safeUser } = user;
+        res.json({ ...safeUser, is_admin: isAdminUser });
+    } catch (err) {
+        console.error('[GET /api/auth/me]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // ============ CONTACT ============
@@ -483,18 +466,7 @@ app.post('/api/contact', authContactLimiter, async (req, res) => {
         if (!emailTrim || !nameTrim || !messageTrim) {
             return res.status(400).json({ error: 'Name, email, and message are required.' });
         }
-        db = loadDB();
-        if (!db.contact_messages) db.contact_messages = [];
-        const contactMsg = {
-            id: Date.now(),
-            name: nameTrim,
-            email: emailTrim,
-            company: companyTrim,
-            message: messageTrim,
-            created_at: new Date().toISOString()
-        };
-        db.contact_messages.push(contactMsg);
-        saveDB(db);
+        await dataService.createContactMessage({ name: nameTrim, email: emailTrim, company: companyTrim, message: messageTrim });
 
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'sales@glovecubs.com';
         const text = `New contact form submission from Glovecubs\n\nName: ${nameTrim}\nEmail: ${emailTrim}\nCompany: ${companyTrim}\n\nMessage:\n${messageTrim}`;
@@ -525,26 +497,14 @@ app.post('/api/auth/forgot-password', authContactLimiter, async (req, res) => {
         if (!email) {
             return res.status(400).json({ error: 'Email is required.' });
         }
-        db = loadDB();
-        const user = db.users.find(u => (u.email || '').toLowerCase() === email);
+        const user = await usersService.getUserByEmail(email);
         if (!user) {
-            // Don't reveal whether email exists
             return res.json({ success: true, message: 'If that email is on file, we sent a reset link.' });
         }
-        if (!db.password_reset_tokens) db.password_reset_tokens = [];
         const token = require('crypto').randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS).toISOString();
-        db.password_reset_tokens.push({
-            token,
-            user_id: user.id,
-            expires_at: expiresAt,
-            created_at: new Date().toISOString()
-        });
-        // Remove old tokens for this user
-        db.password_reset_tokens = db.password_reset_tokens.filter(
-            t => t.user_id !== user.id || t.expires_at > new Date().toISOString()
-        );
-        saveDB(db);
+        await dataService.deletePasswordResetTokensByUserId(user.id);
+        await dataService.createPasswordResetToken(email, token, expiresAt, user.id);
 
         const baseUrl = process.env.DOMAIN || process.env.BASE_URL || 'http://localhost:3004';
         const resetLink = `${baseUrl}#reset-password?token=${token}`;
@@ -560,15 +520,16 @@ app.post('/api/auth/forgot-password', authContactLimiter, async (req, res) => {
     }
 });
 
-app.get('/api/auth/reset-check', (req, res) => {
+app.get('/api/auth/reset-check', async (req, res) => {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).json({ error: 'Token required.', valid: false });
-    db = loadDB();
-    const row = (db.password_reset_tokens || []).find(
-        t => t.token === token && new Date(t.expires_at) > new Date()
-    );
-    if (!row) return res.json({ valid: false, error: 'Invalid or expired link.' });
-    return res.json({ valid: true });
+    try {
+        const row = await dataService.findPasswordResetToken(token);
+        if (!row) return res.json({ valid: false, error: 'Invalid or expired link.' });
+        return res.json({ valid: true });
+    } catch (e) {
+        return res.json({ valid: false, error: e.message || 'Invalid or expired link.' });
+    }
 });
 
 app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
@@ -577,18 +538,16 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
         if (!token || !password || String(password).length < 6) {
             return res.status(400).json({ error: 'Valid token and password (min 6 characters) are required.' });
         }
-        db = loadDB();
-        const row = (db.password_reset_tokens || []).find(
-            t => t.token === token && new Date(t.expires_at) > new Date()
-        );
+        const row = await dataService.findPasswordResetToken(token);
         if (!row) {
             return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
         }
-        const user = db.users.find(u => u.id === row.user_id);
+        const userId = row.user_id;
+        const user = userId != null ? await usersService.getUserById(userId) : await usersService.getUserByEmail(row.email);
         if (!user) return res.status(400).json({ error: 'User not found.' });
-        user.password = await bcrypt.hash(String(password).trim(), 10);
-        db.password_reset_tokens = db.password_reset_tokens.filter(t => t.token !== token);
-        saveDB(db);
+        const password_hash = await bcrypt.hash(String(password).trim(), 10);
+        await usersService.updateUser(user.id, { password_hash });
+        await dataService.deletePasswordResetToken(token);
         return res.json({ success: true, message: 'Password updated. You can log in now.' });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Reset failed.' });
@@ -609,14 +568,116 @@ function applyInventoryToProducts(products, inventoryList) {
 
 // Public config for front end (e.g. Stripe publishable key for checkout).
 app.get('/api/config', (req, res) => {
+    const taxConfig = taxLib.getConfig();
     res.json({
-        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || ''
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+        tax: {
+            businessState: taxConfig.businessState,
+            rate: taxConfig.taxRate,
+            rateFormatted: taxLib.formatTaxRate(taxConfig.taxRate),
+            configured: taxConfig.configured
+        }
     });
 });
 
-app.get('/api/products', optionalAuth, (req, res) => {
-    db = loadDB();
-    let products = Array.isArray(db.products) ? [...db.products] : [];
+// Tax estimate for cart/checkout display
+app.post('/api/tax/estimate', (req, res) => {
+    const { subtotal, shipping_state, shipping } = req.body;
+    
+    if (typeof subtotal !== 'number' || subtotal < 0) {
+        return res.status(400).json({ error: 'subtotal must be a non-negative number' });
+    }
+    
+    const result = taxLib.calculateTax({
+        subtotal,
+        shippingState: shipping_state,
+        shipping: shipping || 0
+    });
+    
+    res.json({
+        tax: result.tax,
+        rate: result.rate,
+        rateFormatted: taxLib.formatTaxRate(result.rate),
+        taxable: result.taxable,
+        reason: result.reason,
+        summary: taxLib.getTaxSummary(result)
+    });
+});
+
+// ============ EMAIL ADMIN ROUTES ============
+
+// Get email configuration status (admin only)
+app.get('/api/admin/email/status', authenticateToken, requireAdmin, async (req, res) => {
+    const status = getEmailConfigStatus();
+    let connectionStatus = { ok: false, error: 'Not tested' };
+    
+    if (status.configured && req.query.verify === 'true') {
+        connectionStatus = await verifyEmailConnection();
+    }
+    
+    res.json({
+        ...status,
+        connection: connectionStatus
+    });
+});
+
+// Send test email (admin only)
+app.post('/api/admin/email/test', authenticateToken, requireAdmin, async (req, res) => {
+    const status = getEmailConfigStatus();
+    
+    if (!status.configured) {
+        return res.status(400).json({
+            error: 'Email not configured',
+            missing: status.missing,
+            instructions: 'Set SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables'
+        });
+    }
+    
+    const recipientEmail = req.body.to || req.body.email || req.user.email;
+    if (!recipientEmail) {
+        return res.status(400).json({ error: 'No recipient email specified' });
+    }
+    
+    const emailContent = emailTemplates.testEmail(recipientEmail);
+    const result = await sendMail({
+        to: recipientEmail,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html
+    });
+    
+    if (result.sent) {
+        res.json({
+            success: true,
+            message: `Test email sent to ${recipientEmail}`,
+            messageId: result.messageId
+        });
+    } else {
+        res.status(500).json({
+            success: false,
+            error: result.error,
+            message: 'Failed to send test email'
+        });
+    }
+});
+
+app.get('/api/products', optionalAuth, async (req, res) => {
+    try {
+        const { products: rawProducts, total } = await productsService.getProducts({
+            search: req.query.search,
+            category: req.query.category,
+            brand: req.query.brand,
+            material: req.query.material,
+            powder: req.query.powder,
+            thickness: req.query.thickness,
+            size: req.query.size,
+            color: req.query.color,
+            grade: req.query.grade,
+            useCase: req.query.useCase,
+            page: req.query.page || 1,
+            limit: Math.min(parseInt(req.query.limit, 10) || 100, 100)
+        });
+        let products = rawProducts || [];
 
     // Search filter first so it runs on full catalog
     if (req.query.search && String(req.query.search).trim()) {
@@ -1015,26 +1076,56 @@ app.get('/api/products', optionalAuth, (req, res) => {
         products = products.filter(p => p.featured === 1);
     }
 
-    products.sort((a, b) => {
-        if (a.featured !== b.featured) return (b.featured || 0) - (a.featured || 0);
-        return (a.name || '').localeCompare(b.name || '');
-    });
+    // Sorting: if search query present, use relevance sorting; otherwise sort by featured then name
+    const searchQuery = req.query.search ? String(req.query.search).trim() : '';
+    const sortParam = (req.query.sort || '').toLowerCase();
+    
+    if (searchQuery && (sortParam === 'relevance' || sortParam === '' || !sortParam)) {
+        // Apply relevance scoring and sort by it
+        products = sortByRelevance(products, searchQuery);
+    } else if (sortParam === 'price_low') {
+        products.sort((a, b) => (a.price || 0) - (b.price || 0));
+    } else if (sortParam === 'price_high') {
+        products.sort((a, b) => (b.price || 0) - (a.price || 0));
+    } else if (sortParam === 'name_az') {
+        products.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else if (sortParam === 'name_za') {
+        products.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+    } else if (sortParam === 'newest') {
+        products.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else {
+        // Default: featured first, then by name
+        products.sort((a, b) => {
+            if (a.featured !== b.featured) return (b.featured || 0) - (a.featured || 0);
+            return (a.name || '').localeCompare(b.name || '');
+        });
+    }
 
     // Apply inventory (in-app fishbowl): in_stock and quantity_on_hand from inventory table when present
-    products = applyInventoryToProducts(products, db.inventory);
+    const inventory = await dataService.getInventory();
+    products = applyInventoryToProducts(products, inventory);
 
     // Customer pricing: when user has a company, add sell_price using manufacturer_id (no brand string)
-    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
+    let companyId = null;
+    if (req.user) {
+        const user = await usersService.getUserById(req.user.id);
+        if (user) companyId = await companiesService.getCompanyIdForUser(user);
+    }
     if (companyId != null) {
+        const ctx = await getPricingContext();
         products = products.map(p => {
             const cost = p.cost != null && p.cost !== '' ? Number(p.cost) : (p.price != null ? Number(p.price) : 0);
-            const margin = getEffectiveMargin(db, companyId, p.manufacturer_id);
+            const margin = getEffectiveMargin(ctx, companyId, p.manufacturer_id);
             const sell = computeSellPrice(cost, margin);
             return { ...p, sell_price: Number.isNaN(sell) ? (p.price || 0) : sell };
         });
     }
 
     res.json(products);
+    } catch (err) {
+        console.error('[GET /api/products]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // SEO: slug from product name (or stored slug)
@@ -1043,55 +1134,60 @@ function productSlug(p) {
     return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
 }
 
-app.get('/api/products/:id', optionalAuth, (req, res) => {
-    db = loadDB();
-    let product = db.products.find(p => p.id == req.params.id || p.sku === req.params.id);
-    if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
+app.get('/api/products/:id', optionalAuth, async (req, res) => {
+    try {
+        let product = await productsService.getProductById(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const inventory = await dataService.getInventory();
+        const applied = applyInventoryToProducts([{ ...product }], inventory);
+        product = applied[0] || product;
+        let companyId = null;
+        if (req.user) {
+            const user = await usersService.getUserById(req.user.id);
+            if (user) companyId = await companiesService.getCompanyIdForUser(user);
+        }
+        if (companyId != null) {
+            const ctx = await getPricingContext();
+            const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+            const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
+            const sell = computeSellPrice(cost, margin);
+            product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
+        }
+        res.json(product);
+    } catch (err) {
+        console.error('[GET /api/products/:id]', err);
+        res.status(500).json({ error: 'Database error' });
     }
-    const applied = applyInventoryToProducts([{ ...product }], db.inventory);
-    product = applied[0] || product;
-    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
-    if (companyId != null) {
-        const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-        const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
-        const sell = computeSellPrice(cost, margin);
-        product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
-    }
-    res.json(product);
 });
 
 // SEO: get product by URL slug (e.g. black-nitrile-exam-gloves). Optional category/material to disambiguate.
-app.get('/api/products/by-slug', optionalAuth, (req, res) => {
-    db = loadDB();
-    const slug = (req.query.slug || '').toString().trim().toLowerCase();
-    const categorySegment = (req.query.category || '').toString().trim().toLowerCase();
-    if (!slug) {
-        return res.status(400).json({ error: 'slug query parameter required' });
+app.get('/api/products/by-slug', optionalAuth, async (req, res) => {
+    try {
+        const slug = (req.query.slug || '').toString().trim().toLowerCase();
+        const categorySegment = (req.query.category || '').toString().trim().toLowerCase();
+        if (!slug) return res.status(400).json({ error: 'slug query parameter required' });
+        let product = await productsService.getProductBySlug(slug, categorySegment);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const inventory = await dataService.getInventory();
+        const applied = applyInventoryToProducts([{ ...product }], inventory);
+        product = { ...(applied[0] || product), slug: product.slug || productsService.slugFromName(product.name) };
+        let companyId = null;
+        if (req.user) {
+            const user = await usersService.getUserById(req.user.id);
+            if (user) companyId = await companiesService.getCompanyIdForUser(user);
+        }
+        if (companyId != null) {
+            const ctx = await getPricingContext();
+            const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+            const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
+            const sell = computeSellPrice(cost, margin);
+            product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
+        }
+        res.json(product);
+    } catch (err) {
+        console.error('[GET /api/products/by-slug]', err);
+        res.status(500).json({ error: 'Database error' });
     }
-    let products = db.products.filter(p => productSlug(p) === slug);
-    if (products.length > 1 && categorySegment) {
-        products = products.filter(p => {
-            const mat = (p.material || '').toLowerCase().replace(/\s+/g, '-');
-            const sub = (p.subcategory || '').toLowerCase().replace(/\s+/g, '-');
-            const cat = (p.category || '').toLowerCase().replace(/\s+/g, '-');
-            return mat === categorySegment || sub === categorySegment || cat === categorySegment;
-        });
-    }
-    let product = products.length > 0 ? products[0] : null;
-    if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
-    }
-    const applied = applyInventoryToProducts([{ ...product }], db.inventory);
-    product = { ...(applied[0] || product), slug: productSlug(product) };
-    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
-    if (companyId != null) {
-        const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-        const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
-        const sell = computeSellPrice(cost, margin);
-        product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
-    }
-    res.json(product);
 });
 
 // SEO: list industries for landing pages (slug, title, description, useCase param)
@@ -1114,15 +1210,14 @@ app.get('/api/seo/industries', (req, res) => {
 });
 
 // SEO: single industry landing page data (products + meta)
-app.get('/api/seo/industry/:slug', (req, res) => {
-    db = loadDB();
-    const slug = (req.params.slug || '').toString().trim().toLowerCase();
-    const industry = SEO_INDUSTRIES.find(i => i.slug === slug);
-    if (!industry) {
-        return res.status(404).json({ error: 'Industry not found' });
-    }
-    const useCase = industry.useCase;
-    let products = (db.products || []).filter(p => {
+app.get('/api/seo/industry/:slug', async (req, res) => {
+    try {
+        const slug = (req.params.slug || '').toString().trim().toLowerCase();
+        const industry = SEO_INDUSTRIES.find(i => i.slug === slug);
+        if (!industry) return res.status(404).json({ error: 'Industry not found' });
+        const useCase = industry.useCase;
+        let products = await productsService.getProductsForIndustry(useCase);
+        products = products.filter(p => {
         const nameDesc = (p.name + ' ' + (p.description || '') + ' ' + (p.useCase || '') + ' ' + (p.industry || '')).toLowerCase();
         const industryLower = (useCase || '').toLowerCase();
         if (industryLower === 'healthcare') {
@@ -1147,11 +1242,17 @@ app.get('/api/seo/industry/:slug', (req, res) => {
     });
     products.sort((a, b) => (b.featured || 0) - (a.featured || 0) || (a.name || '').localeCompare(b.name || ''));
     res.json({ industry: { ...industry }, products });
+    } catch (err) {
+        console.error('[GET /api/seo/industry/:slug]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // SEO: sitemap URLs (for generating sitemap.xml or crawlers)
-app.get('/api/seo/sitemap-urls', (req, res) => {
-    db = loadDB();
+app.get('/api/seo/sitemap-urls', async (req, res) => {
+    try {
+        const { products } = await productsService.getProducts({ limit: 10000 });
+        const db = { products };
     const base = (process.env.DOMAIN || process.env.BASE_URL || 'https://glovecubs.com').replace(/\/$/, '');
     const pages = [
         { url: base + '/', priority: '1.0', changefreq: 'weekly' },
@@ -1165,7 +1266,8 @@ app.get('/api/seo/sitemap-urls', (req, res) => {
     SEO_INDUSTRIES.forEach(ind => {
         pages.push({ url: base + '/industries/' + ind.slug + '/', priority: '0.8', changefreq: 'weekly' });
     });
-    (db.products || []).forEach(p => {
+    const { products: productList } = await productsService.getProducts({ limit: 10000 });
+    (productList || []).forEach(p => {
         const slug = productSlug(p);
         if (!slug) return;
         const seg = (p.material || p.subcategory || 'gloves').toString().toLowerCase().replace(/\s+/g, '-');
@@ -1176,16 +1278,16 @@ app.get('/api/seo/sitemap-urls', (req, res) => {
         });
     });
     res.json({ pages });
+    } catch (err) {
+        console.error('[GET /api/seo/sitemap-urls]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // CSV import: Supabase (when configured) or JSON DB. Row-fault-tolerant; returns parsedRows, created, updated, failed, skipped, errorSamples.
 app.post('/api/products/import-csv', authenticateToken, async (req, res) => {
     try {
-        db = loadDB();
-        const user = db.users.find(u => u.id === req.user.id);
-        if (!user || !user.is_approved) {
-            return res.status(403).json({ error: 'Admin access required' });
-        }
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
         let csvContent = req.body.csvContent;
         if (!csvContent) {
             return res.status(400).json({ error: 'CSV content is required' });
@@ -1197,47 +1299,15 @@ app.post('/api/products/import-csv', authenticateToken, async (req, res) => {
 
         let parsedRows, created, updated, failed, skipped, deleted, withImage, errorSamples;
 
-        if (supabaseLib.isConfigured()) {
-            const result = await importCsvToSupabase(csvContent);
-            parsedRows = result.parsedRows;
-            created = result.created;
-            updated = result.updated;
-            failed = result.failed;
-            skipped = result.skipped;
-            deleted = 0;
-            withImage = 0;
-            errorSamples = result.errorSamples || [];
-        } else {
-            const deleteNotInImport = !!req.body.deleteNotInImport;
-            const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
-            parsedRows = result.parsedRows ?? result.dataRowCount ?? 0;
-            created = result.created;
-            updated = result.updated;
-            failed = result.failed;
-            skipped = result.skipped;
-            deleted = result.deleted || 0;
-            withImage = result.withImage || 0;
-            errorSamples = result.errorSamples || [];
-            saveDB(db);
-            // Sync manufacturers from products (distinct brand) and backfill manufacturer_id
-            const manufacturers = db.manufacturers || [];
-            let nextMfrId = manufacturers.length ? Math.max(...manufacturers.map(m => m.id)) + 1 : 1;
-            const byName = new Map(manufacturers.map(m => [(m.name || '').trim().toLowerCase(), m]));
-            (db.products || []).forEach((p) => {
-                const brand = (p.brand || '').trim();
-                if (!brand) return;
-                const key = brand.toLowerCase();
-                if (!byName.has(key)) {
-                    manufacturers.push({ id: nextMfrId, name: brand, created_at: new Date().toISOString() });
-                    byName.set(key, { id: nextMfrId, name: brand });
-                    nextMfrId++;
-                }
-                const mfr = byName.get(key);
-                if (mfr) p.manufacturer_id = mfr.id;
-            });
-            db.manufacturers = manufacturers;
-            saveDB(db);
-        }
+        const result = await importCsvToSupabase(csvContent);
+        parsedRows = result.parsedRows;
+        created = result.created;
+        updated = result.updated;
+        failed = result.failed;
+        skipped = result.skipped;
+        deleted = 0;
+        withImage = 0;
+        errorSamples = result.errorSamples || [];
 
         const msgParts = [
             parsedRows != null && `${parsedRows} row(s) in file`,
@@ -1269,22 +1339,14 @@ app.post('/api/products/import-csv', authenticateToken, async (req, res) => {
 });
 
 // Update product images only from CSV (admin only) - simple 2-column: sku, image_url
-app.post('/api/products/update-images-csv', authenticateToken, (req, res) => {
+app.post('/api/products/update-images-csv', authenticateToken, async (req, res) => {
     try {
-        db = loadDB();
-        const user = db.users.find(u => u.id === req.user.id);
-        if (!user || !user.is_approved) {
-            return res.status(403).json({ error: 'Admin access required' });
-        }
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
         let csvContent = req.body.csvContent;
-        if (!csvContent) {
-            return res.status(400).json({ error: 'CSV content is required' });
-        }
+        if (!csvContent) return res.status(400).json({ error: 'CSV content is required' });
         if (csvContent.charCodeAt(0) === 0xFEFF) csvContent = csvContent.slice(1);
         const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
-        if (lines.length < 2) {
-            return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
-        }
+        if (lines.length < 2) return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
         const firstLine = lines[0];
         const useSemicolon = firstLine.indexOf(';') !== -1 && firstLine.indexOf(',') === -1;
         const delimiter = useSemicolon ? ';' : ',';
@@ -1306,13 +1368,7 @@ app.post('/api/products/update-images-csv', authenticateToken, (req, res) => {
         };
         const headers = parseCSVLine(lines[0]).map(h => (h || '').replace(/^"|"$/g, '').trim().replace(/^\ufeff/, '').toLowerCase());
         const iSku = headers.indexOf('sku');
-        const iImage = Math.max(
-            headers.indexOf('image_url'),
-            headers.indexOf('image url'),
-            headers.indexOf('imageurl'),
-            headers.indexOf('image'),
-            headers.indexOf('url')
-        );
+        const iImage = Math.max(headers.indexOf('image_url'), headers.indexOf('image url'), headers.indexOf('imageurl'), headers.indexOf('image'), headers.indexOf('url'));
         if (iSku === -1 || iImage === -1) {
             return res.status(400).json({
                 error: 'CSV must have columns: sku and image_url (or image url, image, url)',
@@ -1327,27 +1383,25 @@ app.post('/api/products/update-images-csv', authenticateToken, (req, res) => {
             const sku = values[iSku] || '';
             if (!sku) continue;
             let imageUrl = (values[iImage] || '').trim();
-            if (values.length > 2 && iImage >= 0) {
-                imageUrl = values.slice(iImage).join(',').trim();
-            }
+            if (values.length > 2 && iImage >= 0) imageUrl = values.slice(iImage).join(',').trim();
             if (!imageUrl) continue;
             if (!imageUrl.startsWith('http') && !imageUrl.startsWith('/')) imageUrl = '/' + imageUrl;
-            const product = db.products.find(p => (p.sku || '').toString().trim().toLowerCase() === sku.toLowerCase());
+            const product = await productsService.getProductById(sku);
             if (product) {
-                product.image_url = imageUrl;
+                await productsService.updateProduct(product.id, { image_url: imageUrl });
                 updated++;
             }
         }
-        saveDB(db);
         const resBody = { success: true, updated, message: `Updated images for ${updated} product(s).` };
         if (updated === 0 && lines.length > 1) {
             const firstValues = parseCSVLine(lines[1]).map(v => (v || '').replace(/^"|"$/g, '').trim());
+            const { products: sample } = await productsService.getProducts({ limit: 3 });
             resBody.debug = {
                 headers: parseCSVLine(lines[0]).map(h => (h || '').replace(/^"|"$/g, '').trim()),
                 firstRowColumnCount: firstValues.length,
                 firstRowSku: firstValues[iSku] || '(empty)',
                 firstRowImageUrl: (firstValues[iImage] || '').substring(0, 60) + ((firstValues[iImage] || '').length > 60 ? '...' : ''),
-                dbSkuSample: db.products.slice(0, 3).map(p => p.sku)
+                dbSkuSample: (sample || []).slice(0, 3).map(p => p.sku)
             };
         }
         res.json(resBody);
@@ -1633,6 +1687,53 @@ app.post('/api/internal/import/run', requireInternalCron, async (req, res) => {
     }
 });
 
+// ---------- AI Email Routing: review queue (approve/reject/send AI-drafted responses) ----------
+const emailRouting = require('./lib/email-routing');
+app.get('/api/email-routing/review', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const list = await emailRouting.reviewQueue.listPending({ status: 'pending_review', limit });
+        res.json({ items: list });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to list review queue' });
+    }
+});
+app.get('/api/email-routing/review/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const action = await emailRouting.reviewQueue.getActionById(req.params.id);
+        if (!action) return res.status(404).json({ error: 'Action not found' });
+        res.json(action);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to get action' });
+    }
+});
+app.post('/api/email-routing/review/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const reviewedBy = req.user && (req.user.email || req.user.id);
+        await emailRouting.reviewQueue.approve(req.params.id, reviewedBy);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to approve' });
+    }
+});
+app.post('/api/email-routing/review/:id/reject', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const reviewedBy = req.user && (req.user.email || req.user.id);
+        await emailRouting.reviewQueue.reject(req.params.id, reviewedBy);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to reject' });
+    }
+});
+app.post('/api/email-routing/review/:id/send', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const result = await emailRouting.reviewQueue.sendApproved(req.params.id);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to send' });
+    }
+});
+
 app.get('/api/admin/import/drafts', authenticateToken, requireAdmin, async (req, res) => {
     if (!supabaseConfigured()) return res.status(503).json({ error: 'Supabase not configured' });
     try {
@@ -1809,182 +1910,147 @@ app.post('/api/ai/invoice/recommend', optionalAuth, aiLimiter, async (req, res) 
     }
 });
 
-app.post('/api/products', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin/approved
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.post('/api/products', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const skuRaw = (req.body.sku || '').toString().trim();
+        if (!skuRaw) return res.status(400).json({ error: 'Product SKU is required.' });
+        const { products } = await productsService.getProducts({ limit: 1 });
+        const existingBySku = await productsService.getProductById(skuRaw);
+        if (existingBySku) return res.status(409).json({ error: 'A product with this SKU already exists. Use Edit to update it instead of adding a duplicate.' });
+        const images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : [];
+        const thicknessVal = req.body.thickness;
+        const thickness = thicknessVal !== undefined && thicknessVal !== null && thicknessVal !== '' ? (thicknessVal === '7+' || thicknessVal === 7 ? 7 : parseFloat(thicknessVal)) : null;
+        const newProduct = await productsService.createProduct({
+            sku: req.body.sku || '',
+            name: req.body.name || '',
+            brand: req.body.brand || '',
+            category: req.body.category || 'Disposable Gloves',
+            subcategory: req.body.subcategory || '',
+            description: req.body.description || '',
+            material: req.body.material || '',
+            sizes: req.body.sizes || '',
+            color: req.body.color || '',
+            pack_qty: parseInt(req.body.pack_qty) || 100,
+            case_qty: parseInt(req.body.case_qty) || 1000,
+            price: parseFloat(req.body.price) || 0,
+            bulk_price: parseFloat(req.body.bulk_price) || 0,
+            image_url: req.body.image_url || '',
+            images,
+            video_url: (req.body.video_url || '').trim() || '',
+            in_stock: req.body.in_stock ? 1 : 0,
+            featured: req.body.featured ? 1 : 0,
+            powder: req.body.powder || '',
+            thickness: isNaN(thickness) ? null : thickness,
+            sterility: req.body.sterility || '',
+            grade: req.body.grade || '',
+            useCase: req.body.useCase || '',
+            certifications: req.body.certifications || '',
+            texture: req.body.texture || '',
+            cuffStyle: req.body.cuffStyle || ''
+        });
+        res.json({ success: true, product: newProduct });
+    } catch (err) {
+        console.error('[POST /api/products]', err);
+        res.status(500).json({ error: err.message || 'Database error' });
     }
-
-    // Prevent duplicates: reject if a product with this SKU already exists (case-insensitive)
-    const skuRaw = (req.body.sku || '').toString().trim();
-    if (!skuRaw) {
-        return res.status(400).json({ error: 'Product SKU is required.' });
-    }
-    const skuLower = skuRaw.toLowerCase();
-    const existingBySku = (db.products || []).find(p => (p.sku || '').toString().trim().toLowerCase() === skuLower);
-    if (existingBySku) {
-        return res.status(409).json({ error: 'A product with this SKU already exists. Use Edit to update it instead of adding a duplicate.' });
-    }
-    
-    const images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : [];
-    const thicknessVal = req.body.thickness;
-    const thickness = thicknessVal !== undefined && thicknessVal !== null && thicknessVal !== ''
-        ? (thicknessVal === '7+' || thicknessVal === 7 ? 7 : parseFloat(thicknessVal))
-        : null;
-    const newProduct = {
-        id: db.products.length > 0 ? Math.max(...db.products.map(p => p.id)) + 1 : 1,
-        sku: req.body.sku || '',
-        name: req.body.name || '',
-        brand: req.body.brand || '',
-        category: req.body.category || 'Disposable Gloves',
-        subcategory: req.body.subcategory || '',
-        description: req.body.description || '',
-        material: req.body.material || '',
-        sizes: req.body.sizes || '',
-        color: req.body.color || '',
-        pack_qty: parseInt(req.body.pack_qty) || 100,
-        case_qty: parseInt(req.body.case_qty) || 1000,
-        price: parseFloat(req.body.price) || 0,
-        bulk_price: parseFloat(req.body.bulk_price) || 0,
-        image_url: req.body.image_url || '',
-        images: images,
-        video_url: (req.body.video_url || '').trim() || '',
-        in_stock: req.body.in_stock ? 1 : 0,
-        featured: req.body.featured ? 1 : 0,
-        powder: req.body.powder || '',
-        thickness: isNaN(thickness) ? null : thickness,
-        sterility: req.body.sterility || '',
-        grade: req.body.grade || '',
-        useCase: req.body.useCase || '',
-        certifications: req.body.certifications || '',
-        texture: req.body.texture || '',
-        cuffStyle: req.body.cuffStyle || '',
-        case_weight: req.body.case_weight != null && req.body.case_weight !== '' ? parseFloat(req.body.case_weight) : null,
-        case_length: req.body.case_length != null && req.body.case_length !== '' ? parseFloat(req.body.case_length) : null,
-        case_width: req.body.case_width != null && req.body.case_width !== '' ? parseFloat(req.body.case_width) : null,
-        case_height: req.body.case_height != null && req.body.case_height !== '' ? parseFloat(req.body.case_height) : null
-    };
-    
-    db.products.push(newProduct);
-    saveDB(db);
-    
-    res.json({ success: true, product: newProduct });
 });
 
 // Update product (admin only)
-app.put('/api/products/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin/approved
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.put('/api/products/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const product = await productsService.getProductById(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const payload = { ...product };
+    if (req.body.sku !== undefined) payload.sku = req.body.sku;
+    if (req.body.name !== undefined) payload.name = req.body.name;
+    if (req.body.brand !== undefined) payload.brand = req.body.brand;
+    if (req.body.category !== undefined) payload.category = req.body.category;
+    if (req.body.subcategory !== undefined) payload.subcategory = req.body.subcategory;
+    if (req.body.description !== undefined) payload.description = req.body.description;
+    if (req.body.material !== undefined) payload.material = req.body.material;
+    if (req.body.sizes !== undefined) payload.sizes = req.body.sizes;
+    if (req.body.color !== undefined) payload.color = req.body.color;
+    if (req.body.pack_qty !== undefined) payload.pack_qty = parseInt(req.body.pack_qty);
+    if (req.body.case_qty !== undefined) payload.case_qty = parseInt(req.body.case_qty);
+    if (req.body.price !== undefined) payload.price = parseFloat(req.body.price);
+    if (req.body.bulk_price !== undefined) payload.bulk_price = parseFloat(req.body.bulk_price);
+    if (req.body.image_url !== undefined) payload.image_url = req.body.image_url;
+    if (req.body.images !== undefined) payload.images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : (payload.images || []);
+    if (req.body.video_url !== undefined) payload.video_url = (req.body.video_url || '').trim() || '';
+    if (req.body.in_stock !== undefined) payload.in_stock = req.body.in_stock ? 1 : 0;
+    if (req.body.featured !== undefined) payload.featured = req.body.featured ? 1 : 0;
+    if (req.body.powder !== undefined) payload.powder = req.body.powder || '';
+    if (req.body.thickness !== undefined) payload.thickness = req.body.thickness ? parseFloat(req.body.thickness) : null;
+    if (req.body.grade !== undefined) payload.grade = req.body.grade || '';
+    if (req.body.useCase !== undefined) payload.useCase = req.body.useCase || '';
+    if (req.body.certifications !== undefined) payload.certifications = req.body.certifications || '';
+    if (req.body.texture !== undefined) payload.texture = req.body.texture || '';
+    if (req.body.cuffStyle !== undefined) payload.cuffStyle = req.body.cuffStyle || '';
+    if (req.body.sterility !== undefined) payload.sterility = req.body.sterility || '';
+        const updated = await productsService.updateProduct(product.id, payload);
+        res.json({ success: true, product: updated });
+    } catch (err) {
+        console.error('[PUT /api/products/:id]', err);
+        res.status(500).json({ error: err.message || 'Database error' });
     }
-    
-    const product = db.products.find(p => p.id == req.params.id);
-    if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
-    }
-    
-    // Update product fields
-    if (req.body.sku !== undefined) product.sku = req.body.sku;
-    if (req.body.name !== undefined) product.name = req.body.name;
-    if (req.body.brand !== undefined) product.brand = req.body.brand;
-    if (req.body.category !== undefined) product.category = req.body.category;
-    if (req.body.subcategory !== undefined) product.subcategory = req.body.subcategory;
-    if (req.body.description !== undefined) product.description = req.body.description;
-    if (req.body.material !== undefined) product.material = req.body.material;
-    if (req.body.sizes !== undefined) product.sizes = req.body.sizes;
-    if (req.body.color !== undefined) product.color = req.body.color;
-    if (req.body.pack_qty !== undefined) product.pack_qty = parseInt(req.body.pack_qty);
-    if (req.body.case_qty !== undefined) product.case_qty = parseInt(req.body.case_qty);
-    if (req.body.price !== undefined) product.price = parseFloat(req.body.price);
-    if (req.body.bulk_price !== undefined) product.bulk_price = parseFloat(req.body.bulk_price);
-    if (req.body.image_url !== undefined) product.image_url = req.body.image_url;
-    if (req.body.images !== undefined) product.images = Array.isArray(req.body.images) ? req.body.images.filter(u => typeof u === 'string' && u.trim()) : (product.images || []);
-    if (req.body.video_url !== undefined) product.video_url = (req.body.video_url || '').trim() || '';
-    if (req.body.in_stock !== undefined) product.in_stock = req.body.in_stock ? 1 : 0;
-    if (req.body.featured !== undefined) product.featured = req.body.featured ? 1 : 0;
-    if (req.body.powder !== undefined) product.powder = req.body.powder || '';
-    if (req.body.thickness !== undefined) product.thickness = req.body.thickness ? parseFloat(req.body.thickness) : null;
-    if (req.body.grade !== undefined) product.grade = req.body.grade || '';
-    if (req.body.useCase !== undefined) product.useCase = req.body.useCase || '';
-    if (req.body.certifications !== undefined) product.certifications = req.body.certifications || '';
-    if (req.body.texture !== undefined) product.texture = req.body.texture || '';
-    if (req.body.cuffStyle !== undefined) product.cuffStyle = req.body.cuffStyle || '';
-    if (req.body.sterility !== undefined) product.sterility = req.body.sterility || '';
-    if (req.body.case_weight !== undefined) product.case_weight = req.body.case_weight != null && req.body.case_weight !== '' ? parseFloat(req.body.case_weight) : null;
-    if (req.body.case_length !== undefined) product.case_length = req.body.case_length != null && req.body.case_length !== '' ? parseFloat(req.body.case_length) : null;
-    if (req.body.case_width !== undefined) product.case_width = req.body.case_width != null && req.body.case_width !== '' ? parseFloat(req.body.case_width) : null;
-    if (req.body.case_height !== undefined) product.case_height = req.body.case_height != null && req.body.case_height !== '' ? parseFloat(req.body.case_height) : null;
-
-    saveDB(db);
-    res.json({ success: true, product });
 });
 
 // Delete product (admin only)
-app.delete('/api/products/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin/approved
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.delete('/api/products/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const product = await productsService.getProductById(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        await productsService.deleteProduct(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[DELETE /api/products/:id]', err);
+        res.status(500).json({ error: err.message || 'Database error' });
     }
-    
-    const index = db.products.findIndex(p => p.id == req.params.id);
-    if (index === -1) {
-        return res.status(404).json({ error: 'Product not found' });
-    }
-    
-    db.products.splice(index, 1);
-    saveDB(db);
-    res.json({ success: true });
 });
 
 // Batch delete products (admin only)
-app.post('/api/products/batch-delete', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.post('/api/products/batch-delete', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const ids = req.body.ids;
+        if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array is required and must not be empty' });
+        const deleted = await productsService.deleteProductsByIds(ids);
+        res.json({ success: true, deleted });
+    } catch (err) {
+        console.error('[POST /api/products/batch-delete]', err);
+        res.status(500).json({ error: err.message || 'Database error' });
     }
-    const ids = req.body.ids;
-    if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'ids array is required and must not be empty' });
-    }
-    const idSet = new Set(ids.map(id => Number(id)).filter(n => !isNaN(n)));
-    const before = db.products.length;
-    db.products = db.products.filter(p => !idSet.has(Number(p.id)));
-    const deleted = before - db.products.length;
-    saveDB(db);
-    res.json({ success: true, deleted });
 });
 
-app.get('/api/categories', (req, res) => {
-    db = loadDB();
-    const categories = [...new Set(db.products.map(p => p.category).filter(Boolean))].sort();
-    res.json(categories);
+app.get('/api/categories', async (req, res) => {
+    try {
+        const categories = await productsService.getCategories();
+        res.json(categories);
+    } catch (err) {
+        console.error('[GET /api/categories]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
-app.get('/api/brands', (req, res) => {
-    db = loadDB();
-    const brands = [...new Set(db.products.map(p => p.brand).filter(Boolean))].sort();
-    res.json(brands);
+app.get('/api/brands', async (req, res) => {
+    try {
+        const brands = await productsService.getBrands();
+        res.json(brands);
+    } catch (err) {
+        console.error('[GET /api/brands]', err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // Products CSV export: stream CSV for download (optionally save to disk when writable)
-app.get('/api/products/export.csv', authenticateToken, (req, res) => {
+app.get('/api/products/export.csv', authenticateToken, async (req, res) => {
     try {
-        db = loadDB();
-        const user = db.users.find(u => u.id === req.user.id);
-        if (!user || !user.is_approved) {
-            return res.status(403).send('Admin access required');
-        }
-        let products = Array.isArray(db.products) ? [...db.products] : [];
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).send('Admin access required');
+        const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
+        let products = Array.isArray(rawProducts) ? [...rawProducts] : [];
         const brand = (req.query.brand || '').trim();
         const category = (req.query.category || '').trim();
         const colorsParam = req.query.colors;
@@ -2006,8 +2072,8 @@ app.get('/api/products/export.csv', authenticateToken, (req, res) => {
             products = products.filter(p => matSet.has((p.material || '').trim().toLowerCase()));
         }
 
-        const manufacturers = Array.isArray(db.manufacturers) ? db.manufacturers : [];
-        const { csvContent, filename } = productStore.productsToCsv(products, { manufacturers });
+        const manufacturers = await dataService.getManufacturers();
+        const { csvContent, filename } = productStore.productsToCsv(products, { manufacturers: manufacturers || [] });
         try {
             if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
                 fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
@@ -2043,44 +2109,36 @@ app.get('/api/fishbowl/status', (req, res) => {
 });
 
 app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required to sync inventory' });
-    }
-    if (!fishbowl.isConfigured()) {
-        return res.status(400).json({ error: 'Fishbowl not configured. Set FISHBOWL_BASE_URL, FISHBOWL_USERNAME, FISHBOWL_PASSWORD in .env' });
-    }
+    if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required to sync inventory' });
+    if (!fishbowl.isConfigured()) return res.status(400).json({ error: 'Fishbowl not configured. Set FISHBOWL_BASE_URL, FISHBOWL_USERNAME, FISHBOWL_PASSWORD in .env' });
     try {
         const inventoryList = await fishbowl.getAllInventory(true);
-        // Import from Fishbowl: only products that start with GLV- (gloves only), as requested
         const GLV_PREFIX = 'GLV-';
         const qtyByPartNumber = {};
         for (const row of inventoryList) {
             const num = (row.partNumber || row.number || '').toString().trim().toUpperCase();
             if (!num || !num.startsWith(GLV_PREFIX)) continue;
-            const existing = qtyByPartNumber[num] || 0;
-            qtyByPartNumber[num] = existing + (row.quantity || 0);
+            qtyByPartNumber[num] = (qtyByPartNumber[num] || 0) + (row.quantity || 0);
         }
+        const { products: productList } = await productsService.getProducts({ limit: 10000 });
         let updated = 0;
-        for (const product of db.products) {
+        for (const product of productList || []) {
             const mainSku = (product.sku || '').toString().trim().toUpperCase();
             if (!mainSku) continue;
             let totalQty = qtyByPartNumber[mainSku] || 0;
             const sizes = (product.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
             for (const size of sizes) {
-                const variantSku = mainSku + '-' + size.toUpperCase().replace(/\s+/g, '');
-                totalQty += qtyByPartNumber[variantSku] || 0;
+                totalQty += qtyByPartNumber[mainSku + '-' + size.toUpperCase().replace(/\s+/g, '')] || 0;
             }
             const inStock = totalQty > 0 ? 1 : 0;
-            if (product.in_stock !== inStock || product.quantity_on_hand !== totalQty) {
-                product.in_stock = inStock;
-                product.quantity_on_hand = totalQty;
+            const currentQoh = product.quantity_on_hand ?? 0;
+            if (product.in_stock !== inStock || currentQoh !== totalQty) {
+                await dataService.upsertInventory(product.id, { quantity_on_hand: totalQty });
+                await productsService.updateProduct(product.id, { in_stock: inStock });
                 updated++;
             }
         }
-        saveDB(db);
-        res.json({ success: true, updated, totalProducts: db.products.length, message: `Synced: ${updated} product(s) updated from Fishbowl (GLV- only)` });
+        res.json({ success: true, updated, totalProducts: (productList || []).length, message: `Synced: ${updated} product(s) updated from Fishbowl (GLV- only)` });
     } catch (err) {
         console.error('Fishbowl sync error:', err);
         res.status(500).json({
@@ -2090,89 +2148,42 @@ app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => 
     }
 });
 
-/**
- * Export customers who have placed orders — for Fishbowl to create customers and fulfill orders.
- * Admin only. Returns customers with company, contact, address for Fishbowl import.
- */
-function getCustomersForFishbowlExport(db) {
-    const userIdsWithOrders = [...new Set((db.orders || []).map(o => o.user_id))];
-    const customers = (db.users || [])
-        .filter(u => userIdsWithOrders.includes(u.id))
-        .map(u => {
-            const orderCount = (db.orders || []).filter(o => o.user_id === u.id).length;
-            const lastOrder = (db.orders || []).filter(o => o.user_id === u.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-            return {
-                id: u.id,
-                company_name: u.company_name || '',
-                contact_name: u.contact_name || '',
-                email: u.email || '',
-                phone: (u.phone || '').replace(/\D/g, '').slice(0, 15) || '',
-                address: u.address || '',
-                city: u.city || '',
-                state: u.state || '',
-                zip: (u.zip || '').replace(/\D/g, '').slice(0, 10) || '',
-                country: 'USA',
-                order_count: orderCount,
-                last_order_number: lastOrder ? lastOrder.order_number : '',
-                last_order_date: lastOrder ? lastOrder.created_at : ''
-            };
-        })
-        .sort((a, b) => (b.company_name || '').localeCompare(a.company_name || ''));
-    return customers;
-}
-
-app.get('/api/fishbowl/export-customers', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
-    }
-    const customers = getCustomersForFishbowlExport(db);
-    res.json({ customers, count: customers.length });
-});
-
-app.get('/api/fishbowl/export-customers.csv', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).send('Admin access required');
-    }
-    // Create the CSV file on disk when exporting (so the file exists for Fishbowl)
-    writeFishbowlCustomersExport();
-    const customers = getCustomersForFishbowlExport(db);
-    const escapeCsv = (v) => {
-        const s = (v == null ? '' : String(v)).replace(/"/g, '""');
-        return /[",\r\n]/.test(s) ? `"${s}"` : s;
-    };
-    const headers = ['id', 'company_name', 'contact_name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'country', 'order_count', 'last_order_number', 'last_order_date'];
-    const rows = [headers.join(',')].concat(
-        customers.map(c => headers.map(h => escapeCsv(c[h])).join(','))
-    );
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="fishbowl-customers.csv"');
-    res.send(rows.join('\r\n'));
-});
-
-/**
- * Write customer export to file (for scheduled export every 30 min).
- * Fishbowl can read this file or poll GET /api/fishbowl/export-customers-file
- */
-function writeFishbowlCustomersExport() {
+app.get('/api/fishbowl/export-customers', authenticateToken, async (req, res) => {
     try {
-        const data = loadDB();
-        const customers = getCustomersForFishbowlExport(data);
-        const escapeCsv = (v) => {
-            const s = (v == null ? '' : String(v)).replace(/"/g, '""');
-            return /[",\r\n]/.test(s) ? `"${s}"` : s;
-        };
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const customers = await dataService.getCustomersForFishbowlExport();
+        res.json({ customers, count: customers.length });
+    } catch (err) {
+        console.error('[fishbowl/export-customers]', err);
+        res.status(500).json({ error: err.message || 'Failed to export customers' });
+    }
+});
+
+app.get('/api/fishbowl/export-customers.csv', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).send('Admin access required');
+        await writeFishbowlCustomersExport();
+        const customers = await dataService.getCustomersForFishbowlExport();
+        const escapeCsv = (v) => { const s = (v == null ? '' : String(v)).replace(/"/g, '""'); return /[",\r\n]/.test(s) ? `"${s}"` : s; };
         const headers = ['id', 'company_name', 'contact_name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'country', 'order_count', 'last_order_number', 'last_order_date'];
-        const rows = [headers.join(',')].concat(
-            customers.map(c => headers.map(h => escapeCsv(c[h])).join(','))
-        );
+        const rows = [headers.join(',')].concat(customers.map(c => headers.map(h => escapeCsv(c[h])).join(',')));
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="fishbowl-customers.csv"');
+        res.send(rows.join('\r\n'));
+    } catch (err) {
+        console.error('[fishbowl/export-customers.csv]', err);
+        res.status(500).send('Export failed');
+    }
+});
+
+async function writeFishbowlCustomersExport() {
+    try {
+        const customers = await dataService.getCustomersForFishbowlExport();
+        const escapeCsv = (v) => { const s = (v == null ? '' : String(v)).replace(/"/g, '""'); return /[",\r\n]/.test(s) ? `"${s}"` : s; };
+        const headers = ['id', 'company_name', 'contact_name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'country', 'order_count', 'last_order_number', 'last_order_date'];
+        const rows = [headers.join(',')].concat(customers.map(c => headers.map(h => escapeCsv(c[h])).join(',')));
         const csvContent = rows.join('\r\n');
-        if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) {
-            fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
-        }
+        if (!fs.existsSync(FISHBOWL_EXPORT_DIR)) fs.mkdirSync(FISHBOWL_EXPORT_DIR, { recursive: true });
         fs.writeFileSync(FISHBOWL_EXPORT_FILE, csvContent, 'utf8');
         console.log(`[Fishbowl] Customer export written: ${customers.length} customers -> ${FISHBOWL_EXPORT_FILE}`);
     } catch (err) {
@@ -2180,32 +2191,22 @@ function writeFishbowlCustomersExport() {
     }
 }
 
-/**
- * Serve the scheduled Fishbowl customer export file.
- * Auth: admin JWT, or query param ?secret=FISHBOWL_EXPORT_SECRET for polling by Fishbowl.
- */
-app.get('/api/fishbowl/export-customers-file', (req, res) => {
+app.get('/api/fishbowl/export-customers-file', async (req, res) => {
     const secret = process.env.FISHBOWL_EXPORT_SECRET;
     const useSecret = secret && req.query.secret === secret;
     if (!useSecret) {
-        // Require admin auth
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
-        if (!token) {
-            return res.status(401).json({ error: 'Missing auth: use Authorization header or ?secret=FISHBOWL_EXPORT_SECRET' });
-        }
-        jwt.verify(token, JWT_SECRET, (err, user) => {
-            if (err) {
-                const isExpired = err.name === 'TokenExpiredError';
-                return res.status(isExpired ? 401 : 403).json({ error: isExpired ? 'Session expired' : 'Invalid token' });
-            }
-            const data = loadDB();
-            const adminUser = data.users.find(u => u.id === user.id);
-            if (!adminUser || !adminUser.is_approved) {
-                return res.status(403).json({ error: 'Admin access required' });
-            }
+        if (!token) return res.status(401).json({ error: 'Missing auth: use Authorization header or ?secret=FISHBOWL_EXPORT_SECRET' });
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const isAdminUser = await usersService.isAdmin(decoded.id);
+            if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
             serveExportFile(res);
-        });
+        } catch (err) {
+            const isExpired = err.name === 'TokenExpiredError';
+            return res.status(isExpired ? 401 : 403).json({ error: isExpired ? 'Session expired' : 'Invalid token' });
+        }
         return;
     }
     serveExportFile(res);
@@ -2222,251 +2223,291 @@ function serveExportFile(res) {
 
 // ============ CART ROUTES ============
 
-app.get('/api/cart', optionalAuth, (req, res) => {
-    db = loadDB();
-    const sessionId = req.headers['x-session-id'] || 'anonymous';
-    const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
-    const cartItems = db.carts[cartKey] || [];
-    const companyId = req.user ? getCompanyIdForUser(db, req.user) : null;
-
-    const enrichedCart = cartItems.map(item => {
-        const product = db.products.find(p => p.id === item.product_id);
-        let price = product?.price || 0;
-        const bulk_price = product?.bulk_price ?? null;
-        if (companyId != null && product) {
-            const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-            const margin = getEffectiveMargin(db, companyId, product.manufacturer_id);
-            const sell = computeSellPrice(cost, margin);
-            if (!Number.isNaN(sell)) price = sell;
+app.get('/api/cart', optionalAuth, async (req, res) => {
+    try {
+        const sessionId = req.headers['x-session-id'] || 'anonymous';
+        const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
+        const cartItems = await dataService.getCart(cartKey);
+        let companyId = null;
+        let ctx = { companies: [], customer_manufacturer_pricing: [] };
+        if (req.user) {
+            const user = await usersService.getUserById(req.user.id);
+            if (user) companyId = await companiesService.getCompanyIdForUser(user);
+            ctx = await getPricingContext();
         }
-
-        let variantSku = product?.sku || '';
-        if (item.size && variantSku) {
-            const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
-            variantSku = `${variantSku}-${sizeSuffix}`;
+        const enrichedCart = [];
+        for (const item of cartItems) {
+            const product = await productsService.getProductById(item.product_id);
+            let price = product?.price || 0;
+            const bulk_price = product?.bulk_price ?? null;
+            if (companyId != null && product) {
+                const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
+                const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
+                const sell = computeSellPrice(cost, margin);
+                if (!Number.isNaN(sell)) price = sell;
+            }
+            let variantSku = product?.sku || '';
+            if (item.size && variantSku) {
+                const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
+                variantSku = `${variantSku}-${sizeSuffix}`;
+            }
+            enrichedCart.push({
+                ...item,
+                name: product?.name || 'Unknown',
+                price,
+                bulk_price: companyId != null ? price : bulk_price,
+                image_url: product?.image_url || '',
+                sku: product?.sku || '',
+                variant_sku: variantSku
+            });
         }
-
-        return {
-            ...item,
-            name: product?.name || 'Unknown',
-            price,
-            bulk_price: companyId != null ? price : bulk_price,
-            image_url: product?.image_url || '',
-            sku: product?.sku || '',
-            variant_sku: variantSku
-        };
-    });
-
-    res.json(enrichedCart);
+        res.json(enrichedCart);
+    } catch (err) {
+        console.error('[cart GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load cart' });
+    }
 });
 
-app.post('/api/cart', optionalAuth, (req, res) => {
-    const { product_id, size, quantity } = req.body;
-    db = loadDB();
-    
-    const qty = Math.max(1, parseInt(quantity, 10) || 1);
-    const product = db.products && db.products.find(p => p.id == product_id);
-    if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
+app.post('/api/cart', optionalAuth, async (req, res) => {
+    try {
+        const { product_id, size, quantity } = req.body;
+        const qty = Math.max(1, parseInt(quantity, 10) || 1);
+        const product = await productsService.getProductById(product_id);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const sessionId = req.headers['x-session-id'] || 'anonymous';
+        const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
+        const cartItems = await dataService.getCart(cartKey);
+        const existing = cartItems.find(item => item.product_id === product_id && item.size === size);
+        if (existing) {
+            existing.quantity += qty;
+        } else {
+            cartItems.push({
+                id: Date.now(),
+                product_id,
+                size: size || null,
+                quantity: qty
+            });
+        }
+        await dataService.setCart(cartKey, cartItems);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[cart POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to update cart' });
     }
-    
-    const sessionId = req.headers['x-session-id'] || 'anonymous';
-    const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
-    if (!db.carts[cartKey]) db.carts[cartKey] = [];
-    
-    const existing = db.carts[cartKey].find(item => item.product_id === product_id && item.size === size);
-    
-    if (existing) {
-        existing.quantity += qty;
-    } else {
-        db.carts[cartKey].push({
-            id: Date.now(),
-            product_id,
-            size: size || null,
-            quantity: qty
-        });
-    }
-    
-    saveDB(db);
-    res.json({ success: true });
 });
 
-app.put('/api/cart/:id', optionalAuth, (req, res) => {
-    const quantity = parseInt(req.body?.quantity, 10);
-    db = loadDB();
-    
-    const sessionId = req.headers['x-session-id'] || 'anonymous';
-    const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
-    if (!db.carts[cartKey]) return res.json({ success: true });
-    
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-        db.carts[cartKey] = db.carts[cartKey].filter(item => item.id != req.params.id);
-    } else {
-        const item = db.carts[cartKey].find(item => item.id == req.params.id);
-        if (item) item.quantity = quantity;
+app.put('/api/cart/:id', optionalAuth, async (req, res) => {
+    try {
+        const quantity = parseInt(req.body?.quantity, 10);
+        const sessionId = req.headers['x-session-id'] || 'anonymous';
+        const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
+        const cartItems = await dataService.getCart(cartKey);
+        if (!cartItems.length) return res.json({ success: true });
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            const filtered = cartItems.filter(item => item.id != req.params.id);
+            await dataService.setCart(cartKey, filtered);
+        } else {
+            const item = cartItems.find(i => i.id == req.params.id);
+            if (item) item.quantity = quantity;
+            await dataService.setCart(cartKey, cartItems);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[cart PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update cart' });
     }
-    
-    saveDB(db);
-    res.json({ success: true });
 });
 
-app.delete('/api/cart/:id', optionalAuth, (req, res) => {
-    db = loadDB();
-    const sessionId = req.headers['x-session-id'] || 'anonymous';
-    const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
-    if (db.carts[cartKey]) {
-        db.carts[cartKey] = db.carts[cartKey].filter(item => item.id != req.params.id);
-        saveDB(db);
+app.delete('/api/cart/:id', optionalAuth, async (req, res) => {
+    try {
+        const sessionId = req.headers['x-session-id'] || 'anonymous';
+        const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
+        const cartItems = await dataService.getCart(cartKey);
+        const filtered = cartItems.filter(item => item.id != req.params.id);
+        await dataService.setCart(cartKey, filtered);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[cart DELETE :id]', err);
+        res.status(500).json({ error: err.message || 'Failed to update cart' });
     }
-    res.json({ success: true });
 });
 
-app.delete('/api/cart', optionalAuth, (req, res) => {
-    db = loadDB();
-    const sessionId = req.headers['x-session-id'] || 'anonymous';
-    const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
-    db.carts[cartKey] = [];
-    saveDB(db);
-    res.json({ success: true });
+app.delete('/api/cart', optionalAuth, async (req, res) => {
+    try {
+        const sessionId = req.headers['x-session-id'] || 'anonymous';
+        const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
+        await dataService.setCart(cartKey, []);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[cart DELETE]', err);
+        res.status(500).json({ error: err.message || 'Failed to clear cart' });
+    }
 });
 
 // ============ ORDER ROUTES ============
 
-app.post('/api/orders', authenticateToken, (req, res) => {
-    const { shipping_address, notes, ship_to_id, payment_method } = req.body;
-    db = loadDB();
-    
-    let finalShippingAddress = shipping_address;
-    if (ship_to_id) {
-        const shipTo = (db.ship_to_addresses || []).find(s => s.id == ship_to_id && s.user_id === req.user.id);
-        if (shipTo) {
-            finalShippingAddress = `${shipTo.label || 'Ship-to'}: ${shipTo.address}, ${shipTo.city}, ${shipTo.state} ${shipTo.zip}`;
-        }
-    }
-    
-    const cartKey = `user_${req.user.id}`;
-    const cartItems = db.carts[cartKey] || [];
-
-    if (cartItems.length === 0) {
-        return res.status(400).json({ error: 'Cart is empty' });
-    }
-
-    // Reject checkout if any cart item references a missing or out-of-stock product
-    const missing = cartItems.filter(item => {
-        const product = db.products.find(p => p.id === item.product_id);
-        return !product || !product.in_stock;
-    });
-    if (missing.length > 0) {
-        return res.status(400).json({
-            error: 'Some items in your cart are no longer available. Please update your cart.',
-            unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
-        });
-    }
-
-    const user = db.users.find(u => u.id === req.user.id);
-    
-    // Get discount percent for tier
-    let discountPercent = 0;
-    if (user && user.is_approved) {
-        switch (user.discount_tier) {
-            case 'bronze': discountPercent = 5; break;
-            case 'silver': discountPercent = 10; break;
-            case 'gold': discountPercent = 15; break;
-            case 'platinum': discountPercent = 20; break;
-        }
-    }
-    
-    let subtotal = 0;
-    const orderItems = cartItems.map(item => {
-        const product = db.products.find(p => p.id === item.product_id);
-        let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
-        // Apply discount tier to price
-        if (discountPercent > 0) {
-            price = price * (1 - discountPercent / 100);
-        }
-        subtotal += price * item.quantity;
+app.post('/api/orders', authenticateToken, async (req, res) => {
+    try {
+        const { shipping_address, notes, ship_to_id, payment_method } = req.body;
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        let finalShippingAddress = null;
         
-        // Generate variant SKU with size suffix (e.g., GLV-AMS-N400-M)
-        let variantSku = product.sku || '';
-        if (item.size && product.sku) {
-            const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
-            variantSku = `${product.sku}-${sizeSuffix}`;
+        if (ship_to_id) {
+            const shipTos = await dataService.getShipToByCompanyId(companyIds, req.user.id);
+            const shipTo = shipTos.find(s => s.id == ship_to_id);
+            if (shipTo) {
+                finalShippingAddress = addressValidation.normalizeAddress({
+                    full_name: shipTo.label || 'Ship-to',
+                    address_line1: shipTo.address,
+                    city: shipTo.city,
+                    state: shipTo.state,
+                    zip_code: shipTo.zip
+                });
+            }
         }
         
-        return {
-            product_id: item.product_id,
-            sku: product.sku || '',
-            variant_sku: variantSku,
-            name: product.name || 'Unknown',
-            size: item.size || null,
-            quantity: item.quantity,
-            price
+        if (!finalShippingAddress) {
+            // Validate custom address from request
+            const addressData = typeof shipping_address === 'object' ? shipping_address : null;
+            if (!addressData) {
+                return res.status(400).json({ 
+                    error: 'Shipping address is required',
+                    field_errors: { shipping_address: 'Please provide a shipping address' }
+                });
+            }
+            
+            const validation = addressValidation.validateAddress(addressData);
+            if (!validation.valid) {
+                return res.status(400).json({
+                    error: addressValidation.getErrorMessage(validation),
+                    field_errors: addressValidation.getErrorsByField(validation)
+                });
+            }
+            
+            finalShippingAddress = addressValidation.normalizeAddress(addressData);
+        }
+        
+        const cartKey = `user_${req.user.id}`;
+        const cartItems = await dataService.getCart(cartKey);
+        if (cartItems.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+
+        const missing = [];
+        for (const item of cartItems) {
+            const product = await productsService.getProductById(item.product_id);
+            if (!product || !product.in_stock) missing.push(item);
+        }
+        if (missing.length > 0) {
+            return res.status(400).json({
+                error: 'Some items in your cart are no longer available. Please update your cart.',
+                unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
+            });
+        }
+        const avail = await inventory.checkAvailability(cartItems);
+        if (!avail.ok) {
+            const first = avail.insufficient[0];
+            return res.status(400).json({
+                error: `Insufficient stock for one or more items. Product ${first.product_id}: need ${first.needed}, available ${first.available}.`,
+                insufficient: avail.insufficient
+            });
+        }
+
+        const user = await usersService.getUserById(req.user.id);
+        let discountPercent = 0;
+        if (user && user.is_approved) {
+            switch (user.discount_tier) {
+                case 'bronze': discountPercent = 5; break;
+                case 'silver': discountPercent = 10; break;
+                case 'gold': discountPercent = 15; break;
+                case 'platinum': discountPercent = 20; break;
+            }
+        }
+
+        let subtotal = 0;
+        const orderItems = [];
+        for (const item of cartItems) {
+            const product = await productsService.getProductById(item.product_id);
+            let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
+            if (discountPercent > 0) price = price * (1 - discountPercent / 100);
+            subtotal += price * item.quantity;
+            let variantSku = product.sku || '';
+            if (item.size && product.sku) variantSku = `${product.sku}-${item.size.toUpperCase().replace(/\s+/g, '')}`;
+            orderItems.push({
+                product_id: item.product_id,
+                sku: product.sku || '',
+                variant_sku: variantSku,
+                name: product.name || 'Unknown',
+                size: item.size || null,
+                quantity: item.quantity,
+                price
+            });
+        }
+
+        const discount = 0;
+        const shipping = subtotal >= 500 ? 0 : 25;
+        
+        // Nexus-based tax calculation: only charge tax for in-state orders
+        const taxResult = taxLib.calculateTaxForAddress(finalShippingAddress, subtotal, shipping);
+        const tax = taxResult.tax;
+        const total = subtotal + shipping + tax;
+        
+        const allowedMethods = ['credit_card', 'ach', 'net30'];
+        const requested = (payment_method && allowedMethods.includes(payment_method)) ? payment_method : (user.payment_terms === 'net30' ? 'net30' : 'credit_card');
+        if (requested === 'net30' && !user.is_approved) {
+            return res.status(400).json({ error: 'Net 30 payment terms require account approval. Please use Credit Card or ACH, or contact us to request Net 30.' });
+        }
+        const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
+
+        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const orderPayload = {
+            user_id: req.user.id,
+            order_number: orderNumber,
+            status: 'pending',
+            payment_method: requested,
+            subtotal,
+            discount,
+            shipping,
+            tax,
+            tax_rate: taxResult.rate,
+            tax_reason: taxResult.reason,
+            total,
+            shipping_address: finalShippingAddress,
+            ship_to_id: ship_to_id || null,
+            notes: notes || null,
+            tracking_number: '',
+            tracking_url: '',
+            items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, size: i.size, unit_price: i.price }))
         };
-    });
+        const order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+        try {
+            await inventory.reserveStockForOrder(order.id, order.items);
+        } catch (resErr) {
+            console.error('[POST /api/orders] reserve stock failed:', resErr.message);
+            return res.status(400).json({ error: resErr.message || 'Insufficient stock. Please update your cart.' });
+        }
+        await dataService.setCart(cartKey, []);
 
-    // Discount is already applied to prices, so discount amount is 0
-    const discount = 0;
-    const shipping = subtotal >= 500 ? 0 : 25;
-    const tax = subtotal * 0.08;
-    const total = subtotal + shipping + tax;
-
-    // Normalize payment_method: credit_card | ach | net30. Net 30 requires approved account.
-    const allowedMethods = ['credit_card', 'ach', 'net30'];
-    const requested = (payment_method && allowedMethods.includes(payment_method)) ? payment_method : (user.payment_terms === 'net30' ? 'net30' : 'credit_card');
-    if (requested === 'net30' && !user.is_approved) {
-        return res.status(400).json({ error: 'Net 30 payment terms require account approval. Please use Credit Card or ACH, or contact us to request Net 30.' });
+        // Send order confirmation email with improved template
+        if (user && user.email) {
+            const emailOrder = { ...orderPayload, order_number: orderNumber, items: orderItems.map(i => ({ ...i, product_name: i.name, unit_price: i.price })) };
+            const emailContent = emailTemplates.orderConfirmation(emailOrder, user);
+            sendMail({ to: user.email, subject: emailContent.subject, text: emailContent.text, html: emailContent.html }).catch(() => {});
+        }
+        // Send admin notification
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+        if (adminEmail) {
+            const adminOrder = { ...orderPayload, order_number: orderNumber, items: orderItems.map(i => ({ ...i, product_name: i.name, unit_price: i.price })) };
+            const adminContent = emailTemplates.adminNewOrder(adminOrder, user);
+            sendMail({ to: adminEmail, subject: adminContent.subject, text: adminContent.text, html: adminContent.html }).catch(() => {});
+        }
+        res.json({ success: true, order_number: orderNumber, order_id: order.id, total });
+    } catch (err) {
+        console.error('[POST /api/orders]', err);
+        res.status(500).json({ error: err.message || 'Failed to create order' });
     }
-    const orderPaymentMethod = requested;
-
-    const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
-
-    const order = {
-        id: Date.now(),
-        user_id: req.user.id,
-        order_number: orderNumber,
-        status: 'pending',
-        payment_method: orderPaymentMethod,
-        subtotal,
-        discount,
-        shipping,
-        tax,
-        total,
-        shipping_address: finalShippingAddress,
-        ship_to_id: ship_to_id || null,
-        notes,
-        items: orderItems,
-        tracking_number: '',
-        tracking_url: '',
-        created_at: new Date().toISOString()
-    };
-
-    db.orders.push(order);
-    db.carts[cartKey] = [];
-    saveDB(db);
-
-    // Order confirmation email
-    const orderUser = db.users.find(u => u.id === req.user.id);
-    if (orderUser && orderUser.email) {
-        const orderSummary = order.items.map(i => `  ${i.name} x${i.quantity} - $${(i.price * i.quantity).toFixed(2)}`).join('\n');
-        const orderText = `Thank you for your order!\n\nOrder: ${orderNumber}\nTotal: $${order.total.toFixed(2)}\n\nItems:\n${orderSummary}\n\nShipping to: ${order.shipping_address}\n\nWe'll notify you when your order ships.\n\nGlovecubs`;
-        sendMail({ to: orderUser.email, subject: `Order confirmed: ${orderNumber}`, text: orderText }).catch(() => {});
-    }
-    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
-    if (adminEmail) {
-        const adminText = `New order ${orderNumber} from ${orderUser?.company_name || orderUser?.email} - Total: $${order.total.toFixed(2)}`;
-        sendMail({ to: adminEmail, subject: `[Glovecubs] New order: ${orderNumber}`, text: adminText }).catch(() => {});
-    }
-
-    res.json({
-        success: true,
-        order_number: orderNumber,
-        order_id: order.id,
-        total
-    });
 });
 
 // Create order in pending_payment and Stripe PaymentIntent for card/ACH (returns client_secret for Stripe.js).
-app.post('/api/orders/create-payment-intent', authenticateToken, (req, res) => {
+app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res) => {
     if (!stripe) {
         return res.status(503).json({ error: 'Stripe is not configured. Use Credit Card or ACH after setting STRIPE_SECRET_KEY.' });
     }
@@ -2474,70 +2515,143 @@ app.post('/api/orders/create-payment-intent', authenticateToken, (req, res) => {
     if (payment_method !== 'credit_card' && payment_method !== 'ach') {
         return res.status(400).json({ error: 'Use this endpoint only for credit_card or ach. Use POST /api/orders for Net 30.' });
     }
-    db = loadDB();
-    let finalShippingAddress = shipping_address;
+
+    // ====== FIX 4: Duplicate order prevention (idempotency) ======
+    // Check for existing pending_payment order within last 10 minutes
+    try {
+        const existingOrder = await dataService.getRecentPendingPaymentOrder(req.user.id, 10);
+        if (existingOrder && existingOrder.stripe_payment_intent_id) {
+            // Return existing order's payment intent to continue payment
+            try {
+                const existingIntent = await stripe.paymentIntents.retrieve(existingOrder.stripe_payment_intent_id);
+                if (existingIntent && existingIntent.status !== 'succeeded' && existingIntent.status !== 'canceled') {
+                    paymentLog.duplicatePrevented(req.user.id, existingOrder.order_number, existingOrder.id);
+                    return res.json({
+                        success: true,
+                        client_secret: existingIntent.client_secret,
+                        order_id: existingOrder.id,
+                        order_number: existingOrder.order_number,
+                        total: existingOrder.total,
+                        reused_existing: true
+                    });
+                }
+            } catch (intentErr) {
+                // PaymentIntent may be expired or invalid, continue to create new one
+                console.log(`[create-payment-intent] Existing PaymentIntent not reusable: ${intentErr.message}`);
+            }
+        }
+    } catch (idempotencyErr) {
+        console.error('[create-payment-intent] Idempotency check failed:', idempotencyErr.message);
+        // Continue with order creation on error
+    }
+
+    const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+    let finalShippingAddress = null;
+    
     if (ship_to_id) {
-        const shipTo = (db.ship_to_addresses || []).find(s => s.id == ship_to_id && s.user_id === req.user.id);
+        const shipTos = await dataService.getShipToByCompanyId(companyIds, req.user.id);
+        const shipTo = shipTos.find(s => s.id == ship_to_id);
         if (shipTo) {
-            finalShippingAddress = `${shipTo.label || 'Ship-to'}: ${shipTo.address}, ${shipTo.city}, ${shipTo.state} ${shipTo.zip}`;
+            finalShippingAddress = addressValidation.normalizeAddress({
+                full_name: shipTo.label || 'Ship-to',
+                address_line1: shipTo.address,
+                city: shipTo.city,
+                state: shipTo.state,
+                zip_code: shipTo.zip
+            });
         }
     }
-    const cartKey = `user_${req.user.id}`;
-    const cartItems = db.carts[cartKey] || [];
-    if (cartItems.length === 0) {
-        return res.status(400).json({ error: 'Cart is empty' });
+    
+    if (!finalShippingAddress) {
+        const addressData = typeof shipping_address === 'object' ? shipping_address : null;
+        if (!addressData) {
+            return res.status(400).json({ 
+                error: 'Shipping address is required',
+                field_errors: { shipping_address: 'Please provide a shipping address' }
+            });
+        }
+        
+        const validation = addressValidation.validateAddress(addressData);
+        if (!validation.valid) {
+            return res.status(400).json({
+                error: addressValidation.getErrorMessage(validation),
+                field_errors: addressValidation.getErrorsByField(validation)
+            });
+        }
+        
+        finalShippingAddress = addressValidation.normalizeAddress(addressData);
     }
-    const missing = cartItems.filter(item => {
-        const product = db.products.find(p => p.id === item.product_id);
-        return !product || !product.in_stock;
-    });
+    
+    const cartKey = `user_${req.user.id}`;
+    const cartItems = await dataService.getCart(cartKey);
+    if (cartItems.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+    const missing = [];
+    for (const item of cartItems) {
+        const product = await productsService.getProductById(item.product_id);
+        if (!product || !product.in_stock) missing.push(item);
+    }
     if (missing.length > 0) {
         return res.status(400).json({
             error: 'Some items in your cart are no longer available. Please update your cart.',
             unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
         });
     }
-    const user = db.users.find(u => u.id === req.user.id);
+    const avail = await inventory.checkAvailability(cartItems);
+    if (!avail.ok) {
+        const first = avail.insufficient[0];
+        return res.status(400).json({
+            error: `Insufficient stock for one or more items. Product ${first.product_id}: need ${first.needed}, available ${first.available}.`,
+            insufficient: avail.insufficient
+        });
+    }
+    const user = await usersService.getUserById(req.user.id);
     let discountPercent = 0;
     if (user && user.is_approved) {
-        switch (user.discount_tier) {
-            case 'bronze': discountPercent = 5; break;
-            case 'silver': discountPercent = 10; break;
-            case 'gold': discountPercent = 15; break;
-            case 'platinum': discountPercent = 20; break;
-        }
+        switch (user.discount_tier) { case 'bronze': discountPercent = 5; break; case 'silver': discountPercent = 10; break; case 'gold': discountPercent = 15; break; case 'platinum': discountPercent = 20; break; }
     }
     let subtotal = 0;
-    const orderItems = cartItems.map(item => {
-        const product = db.products.find(p => p.id === item.product_id);
+    const orderItems = [];
+    for (const item of cartItems) {
+        const product = await productsService.getProductById(item.product_id);
         let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
         if (discountPercent > 0) price = price * (1 - discountPercent / 100);
         subtotal += price * item.quantity;
-        let variantSku = product.sku || '';
-        if (item.size && product.sku) {
-            variantSku = `${product.sku}-${(item.size || '').toUpperCase().replace(/\s+/g, '')}`;
-        }
-        return {
+        orderItems.push({
             product_id: item.product_id,
             sku: product.sku || '',
-            variant_sku: variantSku,
+            variant_sku: item.size && product.sku ? `${product.sku}-${(item.size || '').toUpperCase().replace(/\s+/g, '')}` : (product.sku || ''),
             name: product.name || 'Unknown',
             size: item.size || null,
             quantity: item.quantity,
             price
-        };
-    });
+        });
+    }
     const discount = 0;
     const shipping = subtotal >= 500 ? 0 : 25;
-    const tax = subtotal * 0.08;
+    
+    // Nexus-based tax calculation: only charge tax for in-state orders
+    const taxResult = taxLib.calculateTaxForAddress(finalShippingAddress, subtotal, shipping);
+    const tax = taxResult.tax;
     const total = subtotal + shipping + tax;
+    
     const amountCents = Math.round(total * 100);
-    if (amountCents < 50) {
-        return res.status(400).json({ error: 'Order total must be at least $0.50 to pay by card or ACH.' });
-    }
+    if (amountCents < 50) return res.status(400).json({ error: 'Order total must be at least $0.50 to pay by card or ACH.' });
     const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
-    const order = {
-        id: Date.now(),
+    let paymentIntent;
+    try {
+        paymentIntent = await stripe.paymentIntents.create({
+            amount: amountCents,
+            currency: 'usd',
+            automatic_payment_methods: { enabled: true },
+            metadata: { order_number: orderNumber, user_id: String(req.user.id) }
+        });
+        paymentLog.paymentIntentCreated(paymentIntent.id, orderNumber, req.user.id, amountCents);
+    } catch (err) {
+        console.error('[Stripe] PaymentIntent create failed:', err.message);
+        return res.status(502).json({ error: 'Could not create payment session. Please try again or use a different payment method.' });
+    }
+    const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+    const orderPayload = {
         user_id: req.user.id,
         order_number: orderNumber,
         status: 'pending_payment',
@@ -2546,32 +2660,45 @@ app.post('/api/orders/create-payment-intent', authenticateToken, (req, res) => {
         discount,
         shipping,
         tax,
+        tax_rate: taxResult.rate,
+        tax_reason: taxResult.reason,
         total,
         shipping_address: finalShippingAddress,
         ship_to_id: ship_to_id || null,
         notes: notes || '',
-        items: orderItems,
+        stripe_payment_intent_id: paymentIntent.id,
         tracking_number: '',
         tracking_url: '',
-        created_at: new Date().toISOString()
+        items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, size: i.size, unit_price: i.price }))
     };
-    let paymentIntent;
+    const order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+    paymentLog.orderCreated(order.id, orderNumber, req.user.id, total, payment_method);
+    
     try {
-        // Card + ACH via Stripe Payment Element (enable both in Stripe Dashboard if needed).
-        paymentIntent = await stripe.paymentIntents.create({
-            amount: amountCents,
-            currency: 'usd',
-            automatic_payment_methods: { enabled: true },
-            metadata: { order_id: String(order.id), order_number: orderNumber, user_id: String(req.user.id) }
-        });
-    } catch (err) {
-        console.error('[Stripe] PaymentIntent create failed:', err.message);
-        return res.status(502).json({ error: 'Could not create payment session. Please try again or use a different payment method.' });
+        await inventory.reserveStockForOrder(order.id, order.items);
+        paymentLog.inventoryReserved(order.id, order.items);
+    } catch (resErr) {
+        // If reservation fails, cancel the PaymentIntent and mark order as failed
+        console.error('[create-payment-intent] reserve stock failed:', resErr.message);
+        try {
+            await stripe.paymentIntents.cancel(paymentIntent.id);
+            await dataService.updateOrderStatus(order.id, 'cancelled');
+        } catch (_) { /* best effort cleanup */ }
+        return res.status(400).json({ error: resErr.message || 'Insufficient stock. Please update your cart.' });
     }
-    order.stripe_payment_intent_id = paymentIntent.id;
-    db.orders.push(order);
-    db.carts[cartKey] = [];
-    saveDB(db);
+    
+    await dataService.setCart(cartKey, []);
+    
+    // Update PaymentIntent with order_id in metadata
+    try {
+        await stripe.paymentIntents.update(paymentIntent.id, { 
+            metadata: { ...paymentIntent.metadata, order_id: String(order.id) } 
+        });
+    } catch (updateErr) {
+        // Non-fatal but log it
+        console.warn('[create-payment-intent] Failed to update PaymentIntent metadata:', updateErr.message);
+    }
+    
     res.json({
         success: true,
         client_secret: paymentIntent.client_secret,
@@ -2581,61 +2708,284 @@ app.post('/api/orders/create-payment-intent', authenticateToken, (req, res) => {
     });
 });
 
-app.get('/api/orders', authenticateToken, (req, res) => {
-    db = loadDB();
-    const orders = db.orders.filter(o => o.user_id === req.user.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json(orders);
+app.get('/api/orders', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        let orders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
+        
+        const { page = 1, limit = 25, status, from, to, search } = req.query;
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
+        
+        if (status) {
+            orders = orders.filter(o => o.status === status);
+        }
+        if (from) {
+            const fromDate = new Date(from).toISOString();
+            orders = orders.filter(o => o.created_at >= fromDate);
+        }
+        if (to) {
+            const toDate = new Date(to);
+            toDate.setDate(toDate.getDate() + 1);
+            orders = orders.filter(o => o.created_at < toDate.toISOString());
+        }
+        if (search) {
+            const searchLower = search.toLowerCase();
+            orders = orders.filter(o => {
+                const orderNum = (o.order_number || `GC-${o.id}`).toLowerCase();
+                if (orderNum.includes(searchLower)) return true;
+                const items = o.items || [];
+                return items.some(item => {
+                    const name = (item.product_name || item.name || '').toLowerCase();
+                    const sku = (item.sku || '').toLowerCase();
+                    return name.includes(searchLower) || sku.includes(searchLower);
+                });
+            });
+        }
+        
+        orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        
+        const total = orders.length;
+        const pages = Math.ceil(total / limitNum);
+        const offset = (pageNum - 1) * limitNum;
+        const paginatedOrders = orders.slice(offset, offset + limitNum);
+        
+        res.json({
+            orders: paginatedOrders,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                pages
+            }
+        });
+    } catch (err) {
+        console.error('[GET /api/orders]', err);
+        res.status(500).json({ error: err.message || 'Failed to load orders' });
+    }
 });
 
-app.get('/api/orders/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const order = db.orders.find(o => o.id == req.params.id && o.user_id === req.user.id);
-    if (!order) {
-        return res.status(404).json({ error: 'Order not found' });
+app.get('/api/orders/:id', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display) {
+            order.shipping_address = order.shipping_address.display;
+        }
+        res.json(order);
+    } catch (err) {
+        console.error('[GET /api/orders/:id]', err);
+        res.status(500).json({ error: err.message || 'Failed to load order' });
     }
-    res.json(order);
 });
 
 // Reorder: add all items from an order back to cart
-app.post('/api/orders/:id/reorder', authenticateToken, (req, res) => {
-    db = loadDB();
-    const order = db.orders.find(o => o.id == req.params.id && o.user_id === req.user.id);
-    if (!order || !order.items || order.items.length === 0) {
-        return res.status(404).json({ error: 'Order not found or has no items' });
-    }
-    const cartKey = `user_${req.user.id}`;
-    if (!db.carts[cartKey]) db.carts[cartKey] = [];
-    let added = 0;
-    for (const item of order.items) {
-        const product = db.products.find(p => p.id === item.product_id);
-        if (!product || !product.in_stock) continue;
-        const existing = db.carts[cartKey].find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
-        if (existing) {
-            existing.quantity += item.quantity;
-        } else {
-            db.carts[cartKey].push({
-                id: Date.now() + added,
-                product_id: item.product_id,
-                size: item.size || null,
-                quantity: item.quantity
-            });
+app.post('/api/orders/:id/reorder', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order || !order.items || order.items.length === 0) return res.status(404).json({ error: 'Order not found or has no items' });
+        const cartKey = `user_${req.user.id}`;
+        const cartItems = await dataService.getCart(cartKey);
+        let added = 0;
+        for (const item of order.items) {
+            const product = await productsService.getProductById(item.product_id);
+            if (!product || !product.in_stock) continue;
+            const existing = cartItems.find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
+            if (existing) existing.quantity += item.quantity;
+            else cartItems.push({ id: Date.now() + added, product_id: item.product_id, size: item.size || null, quantity: item.quantity });
+            added++;
         }
-        added++;
+        await dataService.setCart(cartKey, cartItems);
+        res.json({ success: true, added: order.items.length, message: 'Items added to cart' });
+    } catch (err) {
+        console.error('[POST /api/orders/:id/reorder]', err);
+        res.status(500).json({ error: err.message || 'Failed to reorder' });
     }
-    saveDB(db);
-    res.json({ success: true, added: order.items.length, message: 'Items added to cart' });
 });
 
 // Invoice data for an order (for display/print)
-app.get('/api/orders/:id/invoice', authenticateToken, (req, res) => {
-    db = loadDB();
-    const order = db.orders.find(o => o.id == req.params.id && o.user_id === req.user.id);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    const user = db.users.find(u => u.id === req.user.id);
-    res.json({
-        order,
-        company: user ? { company_name: user.company_name, contact_name: user.contact_name, address: user.address, city: user.city, state: user.state, zip: user.zip, email: user.email, phone: user.phone } : null
-    });
+app.get('/api/orders/:id/invoice', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display) order.shipping_address = order.shipping_address.display;
+        const user = await usersService.getUserById(req.user.id);
+        res.json({
+            order,
+            company: user ? { company_name: user.company_name, contact_name: user.contact_name, address: user.address, city: user.city, state: user.state, zip: user.zip, email: user.email, phone: user.phone } : null
+        });
+    } catch (err) {
+        console.error('[GET /api/orders/:id/invoice]', err);
+        res.status(500).json({ error: err.message || 'Failed to load invoice' });
+    }
+});
+
+// Invoice PDF download
+app.get('/api/orders/:id/invoice/pdf', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        
+        const user = await usersService.getUserById(req.user.id);
+        const company = user ? {
+            company_name: user.company_name || '',
+            contact_name: user.contact_name || '',
+            address: user.address || '',
+            city: user.city || '',
+            state: user.state || '',
+            zip: user.zip || '',
+            email: user.email || '',
+            phone: user.phone || ''
+        } : {};
+        
+        const orderNumber = order.order_number || `GC-${order.id}`;
+        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString() : '';
+        const items = order.items || [];
+        const subtotal = items.reduce((sum, item) => sum + (item.quantity * (item.unit_price || 0)), 0);
+        const shipping = order.shipping_cost || 0;
+        const tax = order.tax || 0;
+        const total = order.total || (subtotal + shipping + tax);
+        
+        let shippingAddress = order.shipping_address || '';
+        if (typeof shippingAddress === 'object' && shippingAddress.display) {
+            shippingAddress = shippingAddress.display;
+        }
+        
+        const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice ${orderNumber}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 40px; }
+        .logo { font-size: 28px; font-weight: bold; color: #2563eb; }
+        .invoice-title { font-size: 24px; color: #666; }
+        .invoice-number { font-size: 14px; color: #666; margin-top: 5px; }
+        .addresses { display: flex; justify-content: space-between; margin-bottom: 30px; }
+        .address-block { width: 45%; }
+        .address-block h3 { font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th { background: #f3f4f6; text-align: left; padding: 12px; font-size: 12px; text-transform: uppercase; color: #666; }
+        td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+        .totals { text-align: right; }
+        .totals table { width: 300px; margin-left: auto; }
+        .totals td { padding: 8px 12px; }
+        .total-row { font-weight: bold; font-size: 18px; border-top: 2px solid #333; }
+        .footer { margin-top: 50px; text-align: center; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="logo">GLOVECUBS</div>
+            <div style="font-size: 12px; color: #666;">Industrial Gloves & Safety Supplies</div>
+        </div>
+        <div style="text-align: right;">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-number">${orderNumber}</div>
+            <div class="invoice-number">Date: ${orderDate}</div>
+        </div>
+    </div>
+    
+    <div class="addresses">
+        <div class="address-block">
+            <h3>Bill To</h3>
+            <div><strong>${company.company_name}</strong></div>
+            <div>${company.contact_name}</div>
+            <div>${company.address}</div>
+            <div>${company.city}${company.city && company.state ? ', ' : ''}${company.state} ${company.zip}</div>
+            <div>${company.email}</div>
+            <div>${company.phone}</div>
+        </div>
+        <div class="address-block">
+            <h3>Ship To</h3>
+            <div>${shippingAddress || 'Same as billing'}</div>
+        </div>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>SKU</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Unit Price</th>
+                <th style="text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${items.map(item => `
+            <tr>
+                <td>${item.product_name || item.name || 'Product'}${item.size ? ` - ${item.size}` : ''}</td>
+                <td>${item.sku || '-'}</td>
+                <td style="text-align: center;">${item.quantity}</td>
+                <td style="text-align: right;">$${(item.unit_price || 0).toFixed(2)}</td>
+                <td style="text-align: right;">$${((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)}</td>
+            </tr>
+            `).join('')}
+        </tbody>
+    </table>
+    
+    <div class="totals">
+        <table>
+            <tr><td>Subtotal:</td><td style="text-align: right;">$${subtotal.toFixed(2)}</td></tr>
+            <tr><td>Shipping:</td><td style="text-align: right;">$${shipping.toFixed(2)}</td></tr>
+            <tr><td>Tax:</td><td style="text-align: right;">$${tax.toFixed(2)}</td></tr>
+            <tr class="total-row"><td>Total:</td><td style="text-align: right;">$${total.toFixed(2)}</td></tr>
+        </table>
+    </div>
+    
+    <div class="footer">
+        <p>Thank you for your business!</p>
+        <p>Questions? Contact us at support@glovecubs.com</p>
+    </div>
+</body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Content-Disposition', `attachment; filename="invoice-${orderNumber}.html"`);
+        res.send(htmlContent);
+    } catch (err) {
+        console.error('[GET /api/orders/:id/invoice/pdf]', err);
+        res.status(500).json({ error: err.message || 'Failed to generate invoice' });
+    }
+});
+
+// Order tracking details
+app.get('/api/orders/:id/tracking', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        
+        const trackingEvents = order.tracking_events || [];
+        let status = 'processing';
+        if (order.status === 'delivered' || order.actual_delivery) status = 'delivered';
+        else if (order.status === 'shipped' || order.tracking_number) status = 'shipped';
+        else if (order.status === 'cancelled') status = 'cancelled';
+        else if (order.status) status = order.status;
+        
+        res.json({
+            order_id: order.id,
+            order_number: order.order_number || `GC-${order.id}`,
+            carrier: order.carrier || null,
+            tracking_number: order.tracking_number || null,
+            tracking_url: order.tracking_url || null,
+            status,
+            estimated_delivery: order.estimated_delivery || null,
+            actual_delivery: order.actual_delivery || null,
+            events: trackingEvents
+        });
+    } catch (err) {
+        console.error('[GET /api/orders/:id/tracking]', err);
+        res.status(500).json({ error: err.message || 'Failed to load tracking' });
+    }
 });
 
 // ============ ACCOUNT: BUDGET, REP, TIER PROGRESS ============
@@ -2648,339 +2998,489 @@ function getTierOrder() {
     return ['standard', 'bronze', 'silver', 'gold', 'platinum'];
 }
 
-app.get('/api/account/tier-progress', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
-    const orders = (db.orders || []).filter(o => o.user_id === req.user.id && o.created_at >= yearStart);
-    const ytdSpend = orders.reduce((sum, o) => sum + (o.total || 0), 0);
-    const tiers = getTierThresholds();
-    const order = getTierOrder();
-    const currentTier = user.discount_tier || 'standard';
-    const currentIdx = order.indexOf(currentTier);
-    const nextTier = currentIdx < order.length - 1 ? order[currentIdx + 1] : null;
-    const nextThreshold = nextTier ? (tiers[nextTier] || 0) : null;
-    const amountToNextTier = nextThreshold != null ? Math.max(0, nextThreshold - ytdSpend) : 0;
-    res.json({
-        ytd_spend: ytdSpend,
-        current_tier: currentTier,
-        next_tier: nextTier,
-        next_tier_threshold: nextThreshold,
-        amount_to_next_tier: amountToNextTier
-    });
-});
-
-app.get('/api/account/budget', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const budgetAmount = user.budget_amount != null ? user.budget_amount : null;
-    const budgetPeriod = user.budget_period || 'monthly';
-    const now = new Date();
-    let periodStart;
-    if (budgetPeriod === 'annual') {
-        periodStart = new Date(now.getFullYear(), 0, 1).toISOString();
-    } else {
-        periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+app.get('/api/account/tier-progress', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const companyIds = await companiesService.getCompanyIdsForUser(user);
+        const orders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
+        const now = new Date();
+        const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+        const ytdOrders = orders.filter(o => o.created_at >= yearStart);
+        const ytdSpend = ytdOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+        const tiers = getTierThresholds();
+        const order = getTierOrder();
+        const currentTier = user.discount_tier || 'standard';
+        const currentIdx = order.indexOf(currentTier);
+        const nextTier = currentIdx < order.length - 1 ? order[currentIdx + 1] : null;
+        const nextThreshold = nextTier ? (tiers[nextTier] || 0) : null;
+        res.json({
+            ytd_spend: ytdSpend,
+            current_tier: currentTier,
+            next_tier: nextTier,
+            next_tier_threshold: nextThreshold,
+            amount_to_next_tier: nextThreshold != null ? Math.max(0, nextThreshold - ytdSpend) : 0
+        });
+    } catch (err) {
+        console.error('[account/tier-progress]', err);
+        res.status(500).json({ error: err.message || 'Failed to load tier progress' });
     }
-    const orders = (db.orders || []).filter(o => o.user_id === req.user.id && o.created_at >= periodStart);
-    const spent = orders.reduce((sum, o) => sum + (o.total || 0), 0);
-    res.json({
-        budget_amount: budgetAmount,
-        budget_period: budgetPeriod,
-        spent,
-        remaining: budgetAmount != null ? Math.max(0, budgetAmount - spent) : null
-    });
 });
 
-app.put('/api/account/budget', authenticateToken, (req, res) => {
-    const { budget_amount, budget_period } = req.body;
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (budget_amount !== undefined) user.budget_amount = budget_amount == null || budget_amount === '' ? null : parseFloat(budget_amount);
-    if (budget_period !== undefined) user.budget_period = budget_period === 'annual' ? 'annual' : 'monthly';
-    saveDB(db);
-    const { password, ...safeUser } = user;
-    res.json({ success: true, user: safeUser });
+app.get('/api/account/budget', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const companyIds = await companiesService.getCompanyIdsForUser(user);
+        const orders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
+        const budgetAmount = user.budget_amount != null ? user.budget_amount : null;
+        const budgetPeriod = user.budget_period || 'monthly';
+        const now = new Date();
+        const periodStart = budgetPeriod === 'annual' ? new Date(now.getFullYear(), 0, 1).toISOString() : new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const periodOrders = orders.filter(o => o.created_at >= periodStart);
+        const spent = periodOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+        res.json({ budget_amount: budgetAmount, budget_period: budgetPeriod, spent, remaining: budgetAmount != null ? Math.max(0, budgetAmount - spent) : null });
+    } catch (err) {
+        console.error('[account/budget]', err);
+        res.status(500).json({ error: err.message || 'Failed to load budget' });
+    }
 });
 
-// Spend, savings, and summary for dashboard (all-time, YTD, last 30 days; savings vs list price)
-app.get('/api/account/summary', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const allOrders = (db.orders || []).filter(o => o.user_id === req.user.id);
-    const ytdOrders = allOrders.filter(o => o.created_at >= yearStart);
-    const last30Orders = allOrders.filter(o => o.created_at >= thirtyDaysAgo);
-    const totalSpend = allOrders.reduce((s, o) => s + (o.total || 0), 0);
-    const ytdSpend = ytdOrders.reduce((s, o) => s + (o.total || 0), 0);
-    const last30Spend = last30Orders.reduce((s, o) => s + (o.total || 0), 0);
-    let totalSavings = 0;
-    let totalUnits = 0;
-    for (const order of allOrders) {
-        for (const item of order.items || []) {
-            const product = db.products.find(p => p.id === item.product_id);
-            const listPrice = product ? (product.price || 0) : item.price;
-            const paid = (item.price || 0) * (item.quantity || 0);
-            const listTotal = listPrice * (item.quantity || 0);
-            if (listTotal > paid) totalSavings += listTotal - paid;
-            totalUnits += item.quantity || 0;
+app.put('/api/account/budget', authenticateToken, async (req, res) => {
+    try {
+        const { budget_amount, budget_period } = req.body;
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const updates = {};
+        if (budget_amount !== undefined) updates.budget_amount = budget_amount == null || budget_amount === '' ? null : parseFloat(budget_amount);
+        if (budget_period !== undefined) updates.budget_period = budget_period === 'annual' ? 'annual' : 'monthly';
+        await usersService.updateUser(user.id, updates);
+        const updated = await usersService.getUserById(req.user.id);
+        const { password, password_hash, ...safeUser } = updated || {};
+        res.json({ success: true, user: safeUser });
+    } catch (err) {
+        console.error('[account/budget PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update budget' });
+    }
+});
+
+app.get('/api/account/summary', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const companyIds = await companiesService.getCompanyIdsForUser(user);
+        const allOrders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
+        const now = new Date();
+        const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const ytdOrders = allOrders.filter(o => o.created_at >= yearStart);
+        const last30Orders = allOrders.filter(o => o.created_at >= thirtyDaysAgo);
+        const totalSpend = allOrders.reduce((s, o) => s + (o.total || 0), 0);
+        const ytdSpend = ytdOrders.reduce((s, o) => s + (o.total || 0), 0);
+        const last30Spend = last30Orders.reduce((s, o) => s + (o.total || 0), 0);
+        let totalSavings = 0, totalUnits = 0;
+        for (const order of allOrders) {
+            for (const item of order.items || []) {
+                const product = await productsService.getProductById(item.product_id);
+                const listPrice = product ? (product.price || 0) : (item.unit_price != null ? item.unit_price : item.price);
+                const paid = (item.unit_price != null ? item.unit_price : item.price || 0) * (item.quantity || 0);
+                const listTotal = listPrice * (item.quantity || 0);
+                if (listTotal > paid) totalSavings += listTotal - paid;
+                totalUnits += item.quantity || 0;
+            }
         }
+        res.json({
+            total_spend: Math.round(totalSpend * 100) / 100,
+            ytd_spend: Math.round(ytdSpend * 100) / 100,
+            last_30_days_spend: Math.round(last30Spend * 100) / 100,
+            total_savings: Math.round(totalSavings * 100) / 100,
+            order_count: allOrders.length,
+            total_units: totalUnits,
+            ytd_orders: ytdOrders.length
+        });
+    } catch (err) {
+        console.error('[account/summary]', err);
+        res.status(500).json({ error: err.message || 'Failed to load summary' });
     }
-    res.json({
-        total_spend: Math.round(totalSpend * 100) / 100,
-        ytd_spend: Math.round(ytdSpend * 100) / 100,
-        last_30_days_spend: Math.round(last30Spend * 100) / 100,
-        total_savings: Math.round(totalSavings * 100) / 100,
-        order_count: allOrders.length,
-        total_units: totalUnits,
-        ytd_orders: ytdOrders.length
-    });
 });
 
-// Default rep (from env or first approved user); per-user override in user record
-app.get('/api/account/rep', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const rep = {
-        name: user.rep_name || process.env.REP_NAME || 'Glovecubs Sales',
-        email: user.rep_email || process.env.REP_EMAIL || 'sales@glovecubs.com',
-        phone: user.rep_phone || process.env.REP_PHONE || '1-800-GLOVECUBS'
-    };
-    res.json(rep);
+// Dashboard aggregate stats for customer portal
+app.get('/api/account/dashboard', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        
+        const companyIds = await companiesService.getCompanyIdsForUser(user);
+        const supabase = getSupabaseAdmin();
+        
+        const allOrders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const ordersThisMonth = allOrders.filter(o => o.created_at >= monthStart);
+        
+        const pendingShipments = allOrders.filter(o => 
+            o.status === 'processing' || o.status === 'shipped' || 
+            (o.status === 'pending' && o.payment_status === 'paid')
+        );
+        
+        const { count: favoritesCount } = await supabase
+            .from('product_favorites')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', req.user.id);
+        
+        const recentOrders = allOrders
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .slice(0, 5)
+            .map(o => ({
+                id: o.id,
+                order_number: o.order_number || `GC-${o.id}`,
+                created_at: o.created_at,
+                status: o.status || 'pending',
+                total: o.total || 0,
+                item_count: (o.items || []).length,
+                tracking_number: o.tracking_number || null
+            }));
+        
+        res.json({
+            orders_this_month: ordersThisMonth.length,
+            pending_shipments: pendingShipments.length,
+            favorites_count: favoritesCount || 0,
+            recent_orders: recentOrders,
+            account: {
+                company_name: user.company_name || '',
+                customer_id: `CUST-${user.id}`,
+                pricing_tier: user.discount_tier || 'standard',
+                contact_name: user.contact_name || '',
+                email: user.email || ''
+            }
+        });
+    } catch (err) {
+        console.error('[account/dashboard]', err);
+        res.status(500).json({ error: err.message || 'Failed to load dashboard' });
+    }
+});
+
+app.get('/api/account/rep', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json({
+            name: user.rep_name || process.env.REP_NAME || 'Glovecubs Sales',
+            email: user.rep_email || process.env.REP_EMAIL || 'sales@glovecubs.com',
+            phone: user.rep_phone || process.env.REP_PHONE || '1-800-GLOVECUBS'
+        });
+    } catch (err) {
+        console.error('[account/rep]', err);
+        res.status(500).json({ error: err.message || 'Failed to load rep' });
+    }
 });
 
 // ============ SHIP-TO ADDRESSES ============
 
-app.get('/api/ship-to', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = (db.ship_to_addresses || []).filter(s => s.user_id === req.user.id);
-    res.json(list);
+app.get('/api/ship-to', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const list = await dataService.getShipToByCompanyId(companyIds, req.user.id);
+        res.json(list);
+    } catch (err) {
+        console.error('[ship-to GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load ship-to addresses' });
+    }
 });
 
-app.post('/api/ship-to', authenticateToken, (req, res) => {
-    const { label, address, city, state, zip, is_default } = req.body;
-    if (!address || !city || !state || !zip) {
-        return res.status(400).json({ error: 'Address, city, state, and zip are required' });
+app.post('/api/ship-to', authenticateToken, async (req, res) => {
+    try {
+        const { label, address, city, state, zip, is_default } = req.body;
+        if (!address || !city || !state || !zip) return res.status(400).json({ error: 'Address, city, state, and zip are required' });
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const user = await usersService.getUserById(req.user.id);
+        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const list = await dataService.getShipToByCompanyId(companyIds, req.user.id);
+        if (list.some(s => (s.label || '').toLowerCase() === (label || '').toLowerCase())) return res.status(400).json({ error: 'A ship-to address with this label already exists' });
+        const newShipTo = await dataService.createShipTo({ companyId, createdByUserId: req.user.id, label, address, city, state, zip, is_default });
+        res.json({ success: true, ship_to: newShipTo });
+    } catch (err) {
+        console.error('[ship-to POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to add ship-to address' });
     }
-    db = loadDB();
-    const list = db.ship_to_addresses || [];
-    if (list.some(s => s.user_id === req.user.id && (s.label || '').toLowerCase() === (label || '').toLowerCase())) {
-        return res.status(400).json({ error: 'A ship-to address with this label already exists' });
-    }
-    const newShipTo = {
-        id: Date.now(),
-        user_id: req.user.id,
-        label: label || 'Primary',
-        address,
-        city,
-        state,
-        zip,
-        is_default: !!is_default
-    };
-    if (newShipTo.is_default) {
-        list.filter(s => s.user_id === req.user.id).forEach(s => { s.is_default = false; });
-    }
-    list.push(newShipTo);
-    db.ship_to_addresses = list;
-    saveDB(db);
-    res.json({ success: true, ship_to: newShipTo });
 });
 
-app.put('/api/ship-to/:id', authenticateToken, (req, res) => {
-    const { label, address, city, state, zip, is_default } = req.body;
-    db = loadDB();
-    const shipTo = (db.ship_to_addresses || []).find(s => s.id == req.params.id && s.user_id === req.user.id);
-    if (!shipTo) return res.status(404).json({ error: 'Ship-to address not found' });
-    if (label !== undefined) shipTo.label = label;
-    if (address !== undefined) shipTo.address = address;
-    if (city !== undefined) shipTo.city = city;
-    if (state !== undefined) shipTo.state = state;
-    if (zip !== undefined) shipTo.zip = zip;
-    if (is_default !== undefined) {
-        shipTo.is_default = !!is_default;
-        if (shipTo.is_default) {
-            (db.ship_to_addresses || []).filter(s => s.user_id === req.user.id).forEach(s => { s.is_default = s.id === shipTo.id; });
-        }
+app.put('/api/ship-to/:id', authenticateToken, async (req, res) => {
+    try {
+        const { label, address, city, state, zip, is_default } = req.body;
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const shipTo = await dataService.updateShipTo(req.params.id, companyIds, req.user.id, { label, address, city, state, zip, is_default });
+        res.json({ success: true, ship_to: shipTo });
+    } catch (err) {
+        if (err.message === 'Ship-to address not found') return res.status(404).json({ error: err.message });
+        console.error('[ship-to PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update ship-to address' });
     }
-    saveDB(db);
-    res.json({ success: true, ship_to: shipTo });
 });
 
-app.delete('/api/ship-to/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = db.ship_to_addresses || [];
-    const idx = list.findIndex(s => s.id == req.params.id && s.user_id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'Ship-to address not found' });
-    list.splice(idx, 1);
-    db.ship_to_addresses = list;
-    saveDB(db);
-    res.json({ success: true });
+app.delete('/api/ship-to/:id', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        await dataService.deleteShipTo(req.params.id, companyIds, req.user.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[ship-to DELETE]', err);
+        res.status(404).json({ error: 'Ship-to address not found' });
+    }
 });
 
 // ============ SAVED LISTS ============
 
-app.get('/api/saved-lists', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = (db.saved_lists || []).filter(s => s.user_id === req.user.id);
-    res.json(list);
-});
-
-app.post('/api/saved-lists', authenticateToken, (req, res) => {
-    const { name, items } = req.body;
-    if (!name || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'Name and items (array of { product_id, size, quantity }) are required' });
+app.get('/api/saved-lists', authenticateToken, async (req, res) => {
+    try {
+        const list = await dataService.getSavedListsByUserId(req.user.id);
+        res.json(list);
+    } catch (err) {
+        console.error('[saved-lists GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load saved lists' });
     }
-    db = loadDB();
-    const newList = {
-        id: Date.now(),
-        user_id: req.user.id,
-        name: name.trim(),
-        items: items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) })),
-        created_at: new Date().toISOString()
-    };
-    if (!db.saved_lists) db.saved_lists = [];
-    db.saved_lists.push(newList);
-    saveDB(db);
-    res.json({ success: true, list: newList });
 });
 
-app.put('/api/saved-lists/:id', authenticateToken, (req, res) => {
-    const { name, items } = req.body;
-    db = loadDB();
-    const list = (db.saved_lists || []).find(s => s.id == req.params.id && s.user_id === req.user.id);
-    if (!list) return res.status(404).json({ error: 'Saved list not found' });
-    if (name !== undefined) list.name = name.trim();
-    if (Array.isArray(items)) list.items = items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) }));
-    saveDB(db);
-    res.json({ success: true, list });
-});
-
-app.delete('/api/saved-lists/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const arr = db.saved_lists || [];
-    const idx = arr.findIndex(s => s.id == req.params.id && s.user_id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'Saved list not found' });
-    arr.splice(idx, 1);
-    db.saved_lists = arr;
-    saveDB(db);
-    res.json({ success: true });
-});
-
-// Add saved list items to cart
-app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = (db.saved_lists || []).find(s => s.id == req.params.id && s.user_id === req.user.id);
-    if (!list || !list.items || list.items.length === 0) {
-        return res.status(404).json({ error: 'Saved list not found or empty' });
+app.post('/api/saved-lists', authenticateToken, async (req, res) => {
+    try {
+        const { name, items } = req.body;
+        if (!name || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Name and items (array of { product_id, size, quantity }) are required' });
+        const newList = await dataService.createSavedList(req.user.id, { name: name.trim(), items: items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) })) });
+        res.json({ success: true, list: newList });
+    } catch (err) {
+        console.error('[saved-lists POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to create saved list' });
     }
-    const cartKey = `user_${req.user.id}`;
-    if (!db.carts[cartKey]) db.carts[cartKey] = [];
-    for (const item of list.items) {
-        const product = db.products.find(p => p.id === item.product_id);
-        if (!product) continue;
-        const existing = db.carts[cartKey].find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
-        if (existing) existing.quantity += item.quantity;
-        else db.carts[cartKey].push({ id: Date.now() + Math.random(), product_id: item.product_id, size: item.size || null, quantity: item.quantity });
+});
+
+app.put('/api/saved-lists/:id', authenticateToken, async (req, res) => {
+    try {
+        const { name, items } = req.body;
+        const updates = {};
+        if (name !== undefined) updates.name = name.trim();
+        if (Array.isArray(items)) updates.items = items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) }));
+        const list = await dataService.updateSavedList(req.params.id, req.user.id, updates);
+        res.json({ success: true, list });
+    } catch (err) {
+        console.error('[saved-lists PUT]', err);
+        res.status(404).json({ error: 'Saved list not found' });
     }
-    saveDB(db);
-    res.json({ success: true, message: 'List items added to cart' });
+});
+
+app.delete('/api/saved-lists/:id', authenticateToken, async (req, res) => {
+    try {
+        await dataService.deleteSavedList(req.params.id, req.user.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[saved-lists DELETE]', err);
+        res.status(404).json({ error: 'Saved list not found' });
+    }
+});
+
+app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, async (req, res) => {
+    try {
+        const list = await dataService.getSavedListById(req.params.id, req.user.id);
+        if (!list || !list.items || list.items.length === 0) return res.status(404).json({ error: 'Saved list not found or empty' });
+        const cartKey = `user_${req.user.id}`;
+        const cartItems = await dataService.getCart(cartKey);
+        for (const item of list.items) {
+            const product = await productsService.getProductById(item.product_id);
+            if (!product) continue;
+            const existing = cartItems.find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
+            if (existing) existing.quantity += item.quantity;
+            else cartItems.push({ id: Date.now() + Math.random(), product_id: item.product_id, size: item.size || null, quantity: item.quantity });
+        }
+        await dataService.setCart(cartKey, cartItems);
+        res.json({ success: true, message: 'List items added to cart' });
+    } catch (err) {
+        console.error('[saved-lists add-to-cart]', err);
+        res.status(500).json({ error: err.message || 'Failed to add to cart' });
+    }
+});
+
+// ============ PRODUCT FAVORITES (Wishlist) ============
+
+app.get('/api/favorites', authenticateToken, async (req, res) => {
+    try {
+        const supabase = getSupabaseAdmin();
+        const { data: favorites, error } = await supabase
+            .from('product_favorites')
+            .select('id, product_id, created_at')
+            .eq('user_id', req.user.id)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        
+        const productIds = favorites.map(f => f.product_id);
+        let products = [];
+        if (productIds.length > 0) {
+            const { data: prods } = await supabase
+                .from('products')
+                .select('id, name, sku, sell_price, stock, images')
+                .in('id', productIds);
+            products = prods || [];
+        }
+        
+        const result = favorites.map(fav => {
+            const product = products.find(p => p.id === fav.product_id);
+            return {
+                id: fav.id,
+                product_id: fav.product_id,
+                created_at: fav.created_at,
+                product: product ? {
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    price: product.sell_price,
+                    stock: product.stock,
+                    image_url: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null
+                } : null
+            };
+        });
+        
+        res.json({ favorites: result, count: result.length });
+    } catch (err) {
+        console.error('[favorites GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load favorites' });
+    }
+});
+
+app.post('/api/favorites', authenticateToken, async (req, res) => {
+    try {
+        const { product_id } = req.body;
+        if (!product_id) return res.status(400).json({ error: 'product_id is required' });
+        
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+            .from('product_favorites')
+            .upsert({ user_id: req.user.id, product_id }, { onConflict: 'user_id,product_id' })
+            .select()
+            .single();
+        if (error) throw error;
+        res.json({ id: data.id, product_id: data.product_id, created_at: data.created_at });
+    } catch (err) {
+        console.error('[favorites POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to add favorite' });
+    }
+});
+
+app.delete('/api/favorites/:productId', authenticateToken, async (req, res) => {
+    try {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase
+            .from('product_favorites')
+            .delete()
+            .eq('user_id', req.user.id)
+            .eq('product_id', req.params.productId);
+        if (error) throw error;
+        res.status(204).send();
+    } catch (err) {
+        console.error('[favorites DELETE]', err);
+        res.status(500).json({ error: err.message || 'Failed to remove favorite' });
+    }
+});
+
+app.get('/api/products/:id/favorite', authenticateToken, async (req, res) => {
+    try {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+            .from('product_favorites')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .eq('product_id', req.params.id)
+            .maybeSingle();
+        if (error) throw error;
+        res.json({ is_favorited: !!data });
+    } catch (err) {
+        console.error('[product favorite check]', err);
+        res.status(500).json({ error: err.message || 'Failed to check favorite status' });
+    }
 });
 
 // ============ UPLOADED INVOICES (for cost analysis) ============
 
-app.get('/api/invoices', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = (db.uploaded_invoices || []).filter(inv => inv.user_id === req.user.id);
-    res.json(list.sort((a, b) => new Date(b.invoice_date || b.created_at) - new Date(a.invoice_date || a.created_at)));
-});
-
-app.post('/api/invoices', authenticateToken, (req, res) => {
-    const { vendor, invoice_date, total_amount, notes, line_items } = req.body;
-    if (!total_amount || isNaN(parseFloat(total_amount))) {
-        return res.status(400).json({ error: 'Total amount is required.' });
+app.get('/api/invoices', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const list = await dataService.getUploadedInvoicesByCompanyId(companyIds, req.user.id);
+        res.json(list.sort((a, b) => new Date(b.invoice_date || b.created_at) - new Date(a.invoice_date || a.created_at)));
+    } catch (err) {
+        console.error('[invoices GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load invoices' });
     }
-    db = loadDB();
-    if (!db.uploaded_invoices) db.uploaded_invoices = [];
-    const inv = {
-        id: Date.now(),
-        user_id: req.user.id,
-        vendor: (vendor || '').toString().trim() || 'Unknown',
-        invoice_date: (invoice_date || '').toString().trim() || new Date().toISOString().split('T')[0],
-        total_amount: parseFloat(total_amount),
-        notes: (notes || '').toString().trim() || '',
-        line_items: Array.isArray(line_items) ? line_items : [],
-        created_at: new Date().toISOString()
-    };
-    db.uploaded_invoices.push(inv);
-    saveDB(db);
-    res.json({ success: true, invoice: inv });
 });
 
-app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = db.uploaded_invoices || [];
-    const idx = list.findIndex(inv => inv.id == req.params.id && inv.user_id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'Invoice not found' });
-    list.splice(idx, 1);
-    db.uploaded_invoices = list;
-    saveDB(db);
-    res.json({ success: true });
+app.post('/api/invoices', authenticateToken, async (req, res) => {
+    try {
+        const { vendor, invoice_date, total_amount, notes, line_items } = req.body;
+        if (!total_amount || isNaN(parseFloat(total_amount))) return res.status(400).json({ error: 'Total amount is required.' });
+        const user = await usersService.getUserById(req.user.id);
+        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const inv = await dataService.createUploadedInvoice({ companyId, createdByUserId: req.user.id, vendor, invoice_date, total_amount: parseFloat(total_amount), notes, line_items });
+        res.json({ success: true, invoice: inv });
+    } catch (err) {
+        console.error('[invoices POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to save invoice' });
+    }
+});
+
+app.delete('/api/invoices/:id', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        await dataService.deleteUploadedInvoice(req.params.id, companyIds, req.user.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[invoices DELETE]', err);
+        res.status(404).json({ error: 'Invoice not found' });
+    }
 });
 
 // ============ BULK ADD TO CART (CSV / SKU list) ============
 
-app.post('/api/cart/bulk', authenticateToken, (req, res) => {
-    const { items } = req.body;
-    if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'items array required (e.g. [{ sku, quantity, size? }])' });
+app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
+    try {
+        const { items } = req.body;
+        if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items array required (e.g. [{ sku, quantity, size? }])' });
+        const cartKey = `user_${req.user.id}`;
+        const cartItems = await dataService.getCart(cartKey);
+        let added = 0, skipped = 0;
+        for (const row of items) {
+            const sku = (row.sku || row.SKU || '').toString().trim();
+            const qty = Math.max(1, parseInt(row.quantity || row.qty || 1, 10));
+            const size = row.size || null;
+            if (!sku) { skipped++; continue; }
+            const product = await productsService.getProductById(sku);
+            if (!product) { skipped++; continue; }
+            const existing = cartItems.find(c => c.product_id === product.id && (c.size || null) === (size || null));
+            if (existing) existing.quantity += qty;
+            else cartItems.push({ id: Date.now() + added, product_id: product.id, size, quantity: qty });
+            added++;
+        }
+        await dataService.setCart(cartKey, cartItems);
+        res.json({ success: true, added, skipped });
+    } catch (err) {
+        console.error('[cart/bulk]', err);
+        res.status(500).json({ error: err.message || 'Failed to add to cart' });
     }
-    db = loadDB();
-    const cartKey = `user_${req.user.id}`;
-    if (!db.carts[cartKey]) db.carts[cartKey] = [];
-    let added = 0, skipped = 0;
-    for (const row of items) {
-        const sku = (row.sku || row.SKU || '').toString().trim();
-        const qty = Math.max(1, parseInt(row.quantity || row.qty || 1, 10));
-        const size = row.size || null;
-        if (!sku) { skipped++; continue; }
-        const product = db.products.find(p => (p.sku || '').toString().trim().toLowerCase() === sku.toLowerCase());
-        if (!product) { skipped++; continue; }
-        const existing = db.carts[cartKey].find(c => c.product_id === product.id && (c.size || null) === (size || null));
-        if (existing) existing.quantity += qty;
-        else db.carts[cartKey].push({ id: Date.now() + added, product_id: product.id, size, quantity: qty });
-        added++;
-    }
-    saveDB(db);
-    res.json({ success: true, added, skipped });
 });
 
 // ============ RFQ ROUTES ============
 
-app.post('/api/rfqs', (req, res) => {
+app.post('/api/rfqs', async (req, res) => {
     try {
-        const { company_name, contact_name, email, phone, quantity, type, use_case, notes } = req.body;
-        db = loadDB();
+        const { company_name, contact_name, email, phone, quantity, type, use_case, notes, cases_or_pallets, size, material } = req.body;
+        let userId = null;
+        let user = null;
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
-        let userId = null;
         if (token) {
             try {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 userId = decoded.id;
+                user = await usersService.getUserById(userId);
             } catch (e) { /* ignore */ }
         }
-        const user = userId ? db.users.find(u => u.id === userId) : null;
-        const newRFQ = {
-            id: Date.now(),
-            user_id: userId || null,
+        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const newRFQ = await dataService.createRfq({
             company_name: company_name || (user && user.company_name) || '',
             contact_name: contact_name || (user && user.contact_name) || '',
             email: email || (user && user.email) || '',
@@ -2988,148 +3488,166 @@ app.post('/api/rfqs', (req, res) => {
             quantity: quantity || '',
             type: type || '',
             use_case: use_case || '',
-            notes: notes || '',
-            status: 'pending',
-            created_at: new Date().toISOString()
-        };
-        db.rfqs.push(newRFQ);
-        saveDB(db);
-
+            cases_or_pallets: (cases_or_pallets || '').toString().trim() || '',
+            size: size || '',
+            material: material || '',
+            notes: notes || ''
+        }, { companyId, createdByUserId: userId });
+        // Send RFQ confirmation email with improved template
         const rfqEmail = newRFQ.email || (user && user.email);
         if (rfqEmail) {
-            const custText = `Hi ${newRFQ.contact_name || 'there'},\n\nWe received your request for quote (${newRFQ.quantity} ${newRFQ.type || 'gloves'}). Our team will get back to you shortly.\n\nGlovecubs`;
-            sendMail({ to: rfqEmail, subject: 'We received your RFQ - Glovecubs', text: custText }).catch(() => {});
+            const emailContent = emailTemplates.rfqConfirmation(newRFQ, user);
+            sendMail({ to: rfqEmail, subject: emailContent.subject, text: emailContent.text, html: emailContent.html }).catch(() => {});
         }
+        // Send admin notification
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
         if (adminEmail) {
-            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nNotes: ${newRFQ.notes}`;
+            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nCases/pallets: ${newRFQ.cases_or_pallets || '—'}\nNotes: ${newRFQ.notes}`;
             sendMail({ to: adminEmail, subject: `[Glovecubs] New RFQ from ${newRFQ.company_name || newRFQ.email}`, text: adminText }).catch(() => {});
         }
-
         res.json({ success: true, message: 'RFQ submitted successfully', rfq_id: newRFQ.id });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/rfqs/mine', authenticateToken, (req, res) => {
-    db = loadDB();
-    const list = (db.rfqs || []).filter(r => r.user_id === req.user.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json(list);
+app.get('/api/rfqs/mine', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const list = await dataService.getRfqsByCompanyId(companyIds, req.user.id);
+        res.json(list);
+    } catch (err) {
+        console.error('[rfqs/mine]', err);
+        res.status(500).json({ error: err.message || 'Failed to load RFQs' });
+    }
 });
 
-app.get('/api/rfqs', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.get('/api/rfqs', authenticateToken, async (req, res) => {
+    try {
+        const isAdminUser = await usersService.isAdmin(req.user.id);
+        if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
+        const rfqs = await dataService.getRfqs();
+        res.json(rfqs);
+    } catch (err) {
+        console.error('[rfqs GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load RFQs' });
     }
-    
-    const rfqs = db.rfqs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json(rfqs);
 });
 
-app.put('/api/rfqs/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.put('/api/rfqs/:id', authenticateToken, async (req, res) => {
+    try {
+        const isAdminUser = await usersService.isAdmin(req.user.id);
+        if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
+        const updates = {};
+        if (req.body.status) updates.status = req.body.status;
+        if (req.body.notes !== undefined) updates.admin_notes = req.body.notes;
+        const rfq = await dataService.updateRfq(req.params.id, updates);
+        if (!rfq) return res.status(404).json({ error: 'RFQ not found' });
+        res.json({ success: true, rfq });
+    } catch (err) {
+        console.error('[rfqs PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update RFQ' });
     }
-    
-    const rfq = db.rfqs.find(r => r.id == req.params.id);
-    if (!rfq) {
-        return res.status(404).json({ error: 'RFQ not found' });
-    }
-    
-    if (req.body.status) {
-        rfq.status = req.body.status;
-    }
-    if (req.body.notes !== undefined) {
-        rfq.admin_notes = req.body.notes;
-    }
-    
-    saveDB(db);
-    res.json({ success: true, rfq });
 });
 
 // ============ ADMIN ROUTES ============
 
-app.get('/api/admin/orders', authenticateToken, (req, res) => {
-    db = loadDB();
-    
-    // Check if user is admin
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.get('/api/admin/orders', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const orders = await dataService.getAllOrdersAdmin();
+        const userIds = [...new Set(orders.map(o => o.user_id))];
+        const userMap = new Map();
+        for (const id of userIds) {
+            const u = await usersService.getUserById(id);
+            if (u) userMap.set(id, u);
+        }
+        const out = orders.map(o => ({
+            ...o,
+            user: (() => { const u = userMap.get(o.user_id); return u ? { company_name: u.company_name, email: u.email, contact_name: u.contact_name } : null; })()
+        }));
+        res.json(out);
+    } catch (err) {
+        console.error('[admin/orders GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load orders' });
     }
-    
-    // Get all orders with user info
-    const orders = db.orders.map(order => {
-        const orderUser = db.users.find(u => u.id === order.user_id);
-        return {
-            ...order,
-            user: orderUser ? {
-                company_name: orderUser.company_name,
-                email: orderUser.email,
-                contact_name: orderUser.contact_name
-            } : null
-        };
-    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
-    res.json(orders);
 });
 
-app.put('/api/admin/orders/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const adminUser = db.users.find(u => u.id === req.user.id);
-    if (!adminUser || !adminUser.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.put('/api/admin/orders/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const order = await dataService.getOrderByIdAdmin(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        const updates = {};
+        if (req.body.tracking_number !== undefined) updates.tracking_number = String(req.body.tracking_number || '').trim();
+        if (req.body.tracking_url !== undefined) updates.tracking_url = String(req.body.tracking_url || '').trim();
+        if (req.body.status !== undefined) updates.status = req.body.status;
+        const wasShipped = order.status === 'shipped';
+        await dataService.updateOrder(req.params.id, updates);
+        
+        // When order status changes to shipped, deduct inventory and send shipping notification
+        if (updates.status === 'shipped' && !wasShipped) {
+            await inventory.deductStockForOrder(req.params.id);
+            
+            // Send shipping notification email
+            try {
+                const user = await usersService.getUserById(order.user_id);
+                if (user && user.email) {
+                    const updatedOrder = await dataService.getOrderByIdAdmin(req.params.id);
+                    const trackingInfo = {
+                        tracking_number: updates.tracking_number || order.tracking_number || null,
+                        tracking_url: updates.tracking_url || order.tracking_url || null,
+                        carrier: req.body.carrier || null
+                    };
+                    const emailContent = emailTemplates.orderShipped(updatedOrder, user, trackingInfo);
+                    const result = await sendMail({
+                        to: user.email,
+                        subject: emailContent.subject,
+                        text: emailContent.text,
+                        html: emailContent.html
+                    });
+                    if (result.sent) {
+                        console.log(`[Order ${order.order_number}] Shipping notification sent to ${user.email}`);
+                    } else {
+                        console.error(`[Order ${order.order_number}] Failed to send shipping notification:`, result.error);
+                    }
+                }
+            } catch (emailErr) {
+                console.error(`[Order ${order.order_number}] Shipping notification error:`, emailErr.message);
+            }
+        }
+        
+        const updated = await dataService.getOrderByIdAdmin(req.params.id);
+        res.json({ success: true, order: updated });
+    } catch (err) {
+        console.error('[admin/orders PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update order' });
     }
-    const order = db.orders.find(o => o.id == req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (req.body.tracking_number !== undefined) order.tracking_number = String(req.body.tracking_number || '').trim();
-    if (req.body.tracking_url !== undefined) order.tracking_url = String(req.body.tracking_url || '').trim();
-    if (req.body.status !== undefined) order.status = req.body.status;
-    saveDB(db);
-    res.json({ success: true, order });
 });
 
-app.get('/api/admin/users', authenticateToken, (req, res) => {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user || !user.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const users = await usersService.getAllUsers();
+        const safe = users.map(u => { const { password, password_hash, ...rest } = u; return rest; });
+        res.json(safe);
+    } catch (err) {
+        console.error('[admin/users GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load users' });
     }
-    const users = db.users.map(u => {
-        const { password, ...safeUser } = u;
-        return safeUser;
-    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json(users);
 });
 
 // Admin: create new customer (approved, with optional quicklist and payment terms)
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
-    db = loadDB();
-    const adminUser = db.users.find(u => u.id === req.user.id);
-    if (!adminUser || !adminUser.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
-    }
-    const { company_name, contact_name, email, password, phone, address, city, state, zip, payment_terms, allow_free_upgrades, quicklist } = req.body;
-    if (!company_name || !contact_name || !email || !password) {
-        return res.status(400).json({ error: 'Company name, contact name, email, and password are required' });
-    }
-    const emailTrim = (email || '').toString().trim().toLowerCase();
-    const existing = db.users.find(u => (u.email || '').toString().trim().toLowerCase() === emailTrim);
-    if (existing) {
-        return res.status(400).json({ error: 'Email already registered' });
-    }
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = {
-        id: Date.now(),
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const { company_name, contact_name, email, password, phone, address, city, state, zip, payment_terms, allow_free_upgrades, quicklist } = req.body;
+        if (!company_name || !contact_name || !email || !password) return res.status(400).json({ error: 'Company name, contact name, email, and password are required' });
+        const emailTrim = (email || '').toString().trim().toLowerCase();
+        const existing = await usersService.getUserByEmail(emailTrim);
+        if (existing) return res.status(400).json({ error: 'Email already registered' });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newUser = await usersService.createUser({
         company_name: (company_name || '').trim(),
         contact_name: (contact_name || '').trim(),
         email: emailTrim,
@@ -3143,129 +3661,124 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
         allow_free_upgrades: !!allow_free_upgrades,
         is_approved: 1,
         discount_tier: 'standard',
-        created_at: new Date().toISOString(),
         budget_amount: null,
         budget_period: 'monthly',
         rep_name: '',
         rep_email: '',
         rep_phone: ''
-    };
-    db.users.push(newUser);
-    if (quicklist && quicklist.name && Array.isArray(quicklist.items) && quicklist.items.length > 0) {
-        if (!db.saved_lists) db.saved_lists = [];
-        db.saved_lists.push({
-            id: Date.now() + 1,
-            user_id: newUser.id,
-            name: (quicklist.name || 'Quicklist').trim(),
-            items: quicklist.items.map(i => ({
-                product_id: i.product_id,
-                size: i.size || null,
-                quantity: Math.max(1, parseInt(i.quantity, 10) || 1)
-            })),
-            created_at: new Date().toISOString()
         });
+        if (quicklist && quicklist.name && Array.isArray(quicklist.items) && quicklist.items.length > 0) {
+            await dataService.createSavedList(newUser.id, {
+                name: (quicklist.name || 'Quicklist').trim(),
+                items: quicklist.items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) }))
+            });
+        }
+        const { password: _pw, password_hash: _pwh, ...safeUser } = newUser;
+        res.status(201).json({ success: true, user: safeUser, message: 'Customer created. They can sign in and place orders.' });
+    } catch (err) {
+        console.error('[admin/users POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to create user' });
     }
-    saveDB(db);
-    const { password: _p, ...safeUser } = newUser;
-    res.status(201).json({ success: true, user: safeUser, message: 'Customer created. They can sign in and place orders.' });
 });
 
-app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
-    db = loadDB();
-    const adminUser = db.users.find(u => u.id === req.user.id);
-    if (!adminUser || !adminUser.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const user = await usersService.getUserById(req.params.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const updates = {};
+        if (req.body.is_approved !== undefined) updates.is_approved = req.body.is_approved ? 1 : 0;
+        if (req.body.discount_tier) updates.discount_tier = req.body.discount_tier;
+        if (req.body.payment_terms !== undefined) {
+            const pt = req.body.payment_terms;
+            updates.payment_terms = (pt === 'net30' ? 'net30' : pt === 'ach' ? 'ach' : 'credit_card');
+        }
+        await usersService.updateUser(req.params.id, updates);
+        const updated = await usersService.getUserById(req.params.id);
+        const { password, password_hash, ...safeUser } = updated || {};
+        res.json({ success: true, user: safeUser });
+    } catch (err) {
+        console.error('[admin/users PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update user' });
     }
-    const user = db.users.find(u => u.id == req.params.id);
-    if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-    if (req.body.is_approved !== undefined) {
-        user.is_approved = req.body.is_approved ? 1 : 0;
-    }
-    if (req.body.discount_tier) {
-        user.discount_tier = req.body.discount_tier;
-    }
-    if (req.body.payment_terms !== undefined) {
-        const pt = req.body.payment_terms;
-        user.payment_terms = (pt === 'net30' ? 'net30' : pt === 'ach' ? 'ach' : 'credit_card');
-    }
-    saveDB(db);
-    const { password, ...safeUser } = user;
-    res.json({ success: true, user: safeUser });
 });
 
-app.get('/api/admin/contact-messages', authenticateToken, (req, res) => {
-    db = loadDB();
-    const adminUser = db.users.find(u => u.id === req.user.id);
-    if (!adminUser || !adminUser.is_approved) {
-        return res.status(403).json({ error: 'Admin access required' });
+app.get('/api/admin/contact-messages', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const messages = await dataService.listContactMessages();
+        res.json(messages);
+    } catch (err) {
+        console.error('[admin/contact-messages]', err);
+        res.status(500).json({ error: err.message || 'Failed to load messages' });
     }
-    const messages = (db.contact_messages || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json(messages);
 });
 
 // ---------- Admin: customer pricing (companies, default margin, manufacturer overrides) ----------
-/** Resolve company id for a logged-in user (match by company_name). Used for customer pricing. */
-function getCompanyIdForUser(db, reqUser) {
-    if (!db || !reqUser || reqUser.id == null) return null;
-    const user = (db.users || []).find(u => u.id === reqUser.id);
-    if (!user || !(user.company_name || '').trim()) return null;
-    const name = (user.company_name || '').trim().toLowerCase();
-    const company = (db.companies || []).find(c => (c.name || '').trim().toLowerCase() === name);
-    return company ? company.id : null;
-}
-
-function requireAdmin(req, res, next) {
-    db = loadDB();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(403).json({ error: 'Admin access required' });
-    const admins = db.app_admins || [];
-    const isAllowlisted = admins.length > 0 && (admins.includes(user.id) || admins.includes((user.email || '').toLowerCase()));
-    if (!user.is_approved && !isAllowlisted) {
-        return res.status(403).json({ error: 'Admin access required' });
+async function requireAdmin(req, res, next) {
+    try {
+        const isAdminUser = await usersService.isAdmin(req.user.id) || await usersService.isAdmin(req.user.email);
+        if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
+        next();
+    } catch (err) {
+        console.error('[requireAdmin]', err);
+        res.status(500).json({ error: 'Database error' });
     }
-    next();
 }
 
-app.get('/api/admin/companies', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const list = (db.companies || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    res.json(list);
+app.get('/api/admin/companies', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const list = await companiesService.getCompanies();
+        res.json((list || []).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+    } catch (err) {
+        console.error('[admin/companies]', err);
+        res.status(500).json({ error: err.message || 'Failed to load companies' });
+    }
 });
 
-app.get('/api/admin/manufacturers', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const list = (db.manufacturers || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    res.json(list);
+app.get('/api/admin/manufacturers', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const list = await dataService.getManufacturers();
+        res.json(list || []);
+    } catch (err) {
+        console.error('[admin/manufacturers]', err);
+        res.status(500).json({ error: err.message || 'Failed to load manufacturers' });
+    }
 });
 
-app.patch('/api/admin/manufacturers/:id', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const mfr = (db.manufacturers || []).find((m) => m.id == req.params.id);
-    if (!mfr) return res.status(404).json({ error: 'Manufacturer not found' });
-    if (req.body.vendor_email !== undefined) mfr.vendor_email = String(req.body.vendor_email || '').trim() || null;
-    if (req.body.po_email !== undefined) mfr.po_email = String(req.body.po_email || '').trim() || null;
-    saveDB(db);
-    res.json(mfr);
+app.patch('/api/admin/manufacturers/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        await dataService.updateManufacturer(req.params.id, { vendor_email: req.body.vendor_email, po_email: req.body.po_email });
+        const list = await dataService.getManufacturers();
+        const mfr = (list || []).find((m) => m.id == req.params.id);
+        res.json(mfr || {});
+    } catch (err) {
+        console.error('[admin/manufacturers PATCH]', err);
+        res.status(500).json({ error: err.message || 'Failed to update manufacturer' });
+    }
 });
 
 // ---------- Inventory (in-app fishbowl) ----------
-app.get('/api/admin/inventory', authenticateToken, requireAdmin, (req, res) => {
+app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res) => {
     try {
         res.setHeader('Content-Type', 'application/json');
-        db = loadDB();
-        const products = db.products || [];
-        const invList = db.inventory || [];
+        const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
+        const products = rawProducts || [];
+        const invList = await dataService.getInventory();
         const byProduct = new Map(invList.map((i) => [i.product_id, i]));
         const rows = products.map((p) => {
             const inv = byProduct.get(p.id);
+            const onHand = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
+            const reserved = inv ? (inv.quantity_reserved ?? 0) : 0;
+            const available = Math.max(0, onHand - reserved);
             return {
                 product_id: p.id,
                 sku: p.sku,
                 name: p.name,
                 brand: p.brand,
-                quantity_on_hand: inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0),
+                quantity_on_hand: onHand,
+                quantity_reserved: reserved,
+                available_stock: available,
                 reorder_point: inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0),
                 bin_location: inv ? (inv.bin_location || '') : (p.bin_location || ''),
                 last_count_at: inv ? inv.last_count_at : null
@@ -3279,64 +3792,147 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, (req, res) => {
     }
 });
 
-app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const productId = parseInt(req.params.product_id, 10);
-    if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
-    const product = (db.products || []).find((p) => p.id === productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    let inv = (db.inventory || []).find((i) => i.product_id === productId);
-    if (!inv) {
-        inv = { product_id: productId, quantity_on_hand: 0, reorder_point: 0, bin_location: '' };
-        if (!db.inventory) db.inventory = [];
-        db.inventory.push(inv);
+app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.product_id, 10);
+        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
+        const product = await productsService.getProductById(productId);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const existing = await dataService.getInventoryByProductId(productId);
+        const payload = {};
+        if (req.body.quantity_on_hand !== undefined) {
+            payload.quantity_on_hand = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
+            payload.last_count_at = new Date().toISOString();
+        }
+        if (req.body.reorder_point !== undefined) payload.reorder_point = Math.max(0, parseInt(req.body.reorder_point, 10) || 0);
+        if (req.body.bin_location !== undefined) payload.bin_location = String(req.body.bin_location || '').trim();
+        if (existing && payload.quantity_on_hand === undefined && existing.quantity_reserved != null) {
+            payload.quantity_reserved = existing.quantity_reserved;
+        }
+        await dataService.upsertInventory(productId, payload);
+        const inv = await dataService.getInventoryByProductId(productId);
+        res.json(inv || { product_id: productId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
+    } catch (err) {
+        console.error('[admin/inventory PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update inventory' });
     }
-    if (req.body.quantity_on_hand !== undefined) {
-        inv.quantity_on_hand = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
-        inv.last_count_at = new Date().toISOString();
-    }
-    if (req.body.reorder_point !== undefined) inv.reorder_point = Math.max(0, parseInt(req.body.reorder_point, 10) || 0);
-    if (req.body.bin_location !== undefined) inv.bin_location = String(req.body.bin_location || '').trim();
-    saveDB(db);
-    res.json(inv);
 });
 
-app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
-    const byProduct = new Map((db.inventory || []).map((i) => [i.product_id, i]));
-    const products = db.products || [];
-    for (const row of counts) {
-        const pid = row.product_id != null ? parseInt(row.product_id, 10) : NaN;
-        if (isNaN(pid)) continue;
-        const product = products.find((p) => p.id === pid);
-        if (!product) continue;
-        let inv = byProduct.get(pid);
-        if (!inv) {
-            inv = { product_id: pid, quantity_on_hand: 0, reorder_point: 0, bin_location: '' };
-            db.inventory = db.inventory || [];
-            db.inventory.push(inv);
-            byProduct.set(pid, inv);
-        }
-        inv.quantity_on_hand = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
-        inv.last_count_at = new Date().toISOString();
+app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { product_id, delta, reason } = req.body;
+        const productId = parseInt(product_id, 10);
+        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
+        const product = await productsService.getProductById(productId);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const d = parseInt(delta, 10);
+        if (isNaN(d) || d === 0) return res.status(400).json({ error: 'delta must be a non-zero integer (positive to add, negative to subtract)' });
+        await inventory.adjustStock(productId, d, reason || 'Admin adjustment', { type: 'admin' });
+        const stock = await inventory.getStock(productId);
+        res.json({ success: true, stock: stock || { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 } });
+    } catch (err) {
+        console.error('[admin/inventory/adjust]', err);
+        res.status(500).json({ error: err.message || 'Failed to adjust inventory' });
     }
-    saveDB(db);
-    res.json({ success: true, updated: counts.length });
+});
+
+app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const productId = req.query.product_id ? parseInt(req.query.product_id, 10) : undefined;
+        const limit = Math.min(500, parseInt(req.query.limit, 10) || 100);
+        const history = await inventory.getStockHistory(productId, limit);
+        res.json(history);
+    } catch (err) {
+        console.error('[admin/inventory/history]', err);
+        res.status(500).json({ error: err.message || 'Failed to load stock history' });
+    }
+});
+
+app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
+        for (const row of counts) {
+            const pid = row.product_id != null ? parseInt(row.product_id, 10) : NaN;
+            if (isNaN(pid)) continue;
+            const product = await productsService.getProductById(pid);
+            if (!product) continue;
+            const existing = await dataService.getInventoryByProductId(pid);
+            const payload = {
+                quantity_on_hand: Math.max(0, parseInt(row.quantity_on_hand, 10) || 0),
+                last_count_at: new Date().toISOString()
+            };
+            if (existing && existing.quantity_reserved != null) payload.quantity_reserved = existing.quantity_reserved;
+            await dataService.upsertInventory(pid, payload);
+        }
+        res.json({ success: true, updated: counts.length });
+    } catch (err) {
+        console.error('[admin/inventory/cycle]', err);
+        res.status(500).json({ error: err.message || 'Failed to cycle count' });
+    }
+});
+
+// ============ STALE ORDER CLEANUP ============
+
+// View stale pending_payment orders
+app.get('/api/admin/orders/stale', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const minutes = parseInt(req.query.minutes, 10) || 60;
+        const staleOrders = await dataService.getStalePendingPaymentOrders(minutes);
+        res.json({ stale_orders: staleOrders, count: staleOrders.length, threshold_minutes: minutes });
+    } catch (err) {
+        console.error('[admin/orders/stale]', err);
+        res.status(500).json({ error: err.message || 'Failed to fetch stale orders' });
+    }
+});
+
+// Manually trigger cleanup of stale pending_payment orders
+app.post('/api/admin/orders/cleanup-stale', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const minutes = parseInt(req.body.minutes, 10) || 60;
+        const staleOrders = await dataService.getStalePendingPaymentOrders(minutes);
+        
+        if (staleOrders.length === 0) {
+            return res.json({ success: true, cleaned: 0, message: 'No stale orders found' });
+        }
+        
+        let cleaned = 0;
+        let errors = [];
+        
+        for (const order of staleOrders) {
+            try {
+                // Release reserved stock
+                try {
+                    await inventory.releaseStockForOrder(order.id);
+                } catch (releaseErr) {
+                    console.error(`[cleanup-stale] Failed to release stock for order ${order.id}:`, releaseErr.message);
+                }
+                
+                // Mark order as expired
+                await dataService.updateOrderStatus(order.id, 'expired');
+                cleaned++;
+            } catch (orderErr) {
+                errors.push({ order_id: order.id, error: orderErr.message });
+            }
+        }
+        
+        res.json({ success: true, cleaned, errors: errors.length > 0 ? errors : undefined, total: staleOrders.length });
+    } catch (err) {
+        console.error('[admin/orders/cleanup-stale]', err);
+        res.status(500).json({ error: err.message || 'Failed to cleanup stale orders' });
+    }
 });
 
 // Reorder suggestions from historical order usage (last 90 days).
-app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAdmin, (req, res) => {
+app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAdmin, async (req, res) => {
     try {
         res.setHeader('Content-Type', 'application/json');
-        db = loadDB();
-        const products = db.products || [];
-        const invList = db.inventory || [];
+        const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
+        const products = rawProducts || [];
+        const invList = await dataService.getInventory();
         const byProduct = new Map(invList.map((i) => [i.product_id, i]));
-        const orders = (db.orders || []).filter((o) => {
-            const t = o.created_at ? new Date(o.created_at).getTime() : 0;
-            return t >= Date.now() - 90 * 24 * 60 * 60 * 1000;
-        });
+        const allOrders = await dataService.getAllOrdersAdmin();
+        const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
         const usageByProduct = new Map();
         orders.forEach((order) => {
             (order.items || []).forEach((item) => {
@@ -3357,20 +3953,9 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
             const unitsSold90 = usage.units;
             const ordersCount90 = usage.orders;
             const weeklyAvg = unitsSold90 / 13;
-            const weeksSupply = 4;
-            const suggestedNeed = Math.ceil(weeklyAvg * weeksSupply);
+            const suggestedNeed = Math.ceil(weeklyAvg * 4);
             const suggestedOrderQty = Math.max(0, Math.max(reorderPt, suggestedNeed) - qoh);
-            return {
-                product_id: p.id,
-                sku: p.sku,
-                name: p.name,
-                brand: p.brand,
-                quantity_on_hand: qoh,
-                reorder_point: reorderPt,
-                units_sold_90d: unitsSold90,
-                orders_count_90d: ordersCount90,
-                suggested_order_qty: suggestedOrderQty
-            };
+            return { product_id: p.id, sku: p.sku, name: p.name, brand: p.brand, quantity_on_hand: qoh, reorder_point: reorderPt, units_sold_90d: unitsSold90, orders_count_90d: ordersCount90, suggested_order_qty: suggestedOrderQty };
         }).filter((s) => s.suggested_order_qty > 0 || s.quantity_on_hand <= s.reorder_point).sort((a, b) => (b.suggested_order_qty || 0) - (a.suggested_order_qty || 0));
         res.json(suggestions);
     } catch (err) {
@@ -3384,14 +3969,13 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
 app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdmin, async (req, res) => {
     try {
         res.setHeader('Content-Type', 'application/json');
-        db = loadDB();
-        const products = db.products || [];
-        const invList = db.inventory || [];
+        const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
+        const products = rawProducts || [];
+        const invList = await dataService.getInventory();
         const byProduct = new Map(invList.map((i) => [i.product_id, i]));
-        const orders = (db.orders || []).filter((o) => {
-            const t = o.created_at ? new Date(o.created_at).getTime() : 0;
-            return t >= Date.now() - 90 * 24 * 60 * 60 * 1000;
-        });
+        const allOrders = await dataService.getAllOrdersAdmin();
+        const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
         const usageByProduct = new Map();
         orders.forEach((order) => {
             (order.items || []).forEach((item) => {
@@ -3411,8 +3995,7 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
             const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
             const unitsSold90 = usage.units;
             const weeklyAvg = unitsSold90 / 13;
-            const suggestedNeed = Math.ceil(weeklyAvg * 4);
-            const suggestedOrderQty = Math.max(0, Math.max(reorderPt, suggestedNeed) - qoh);
+            const suggestedOrderQty = Math.max(0, Math.max(reorderPt, Math.ceil(weeklyAvg * 4)) - qoh);
             return { product_id: p.id, sku: p.sku, name: p.name, brand: p.brand, quantity_on_hand: qoh, reorder_point: reorderPt, units_sold_90d: unitsSold90, suggested_order_qty: suggestedOrderQty };
         }).filter((s) => s.suggested_order_qty > 0 || s.quantity_on_hand <= s.reorder_point).sort((a, b) => (b.suggested_order_qty || 0) - (a.suggested_order_qty || 0));
         const top = suggestions.slice(0, 25).map((s) => `${s.sku}: ${s.name} (${s.brand || '—'}) — on hand ${s.quantity_on_hand}, reorder pt ${s.reorder_point}, sold ${s.units_sold_90d} in 90d → suggest order ${s.suggested_order_qty}`).join('\n');
@@ -3438,296 +4021,281 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
     }
 });
 
-// ---------- Purchase Orders ----------
-function nextPoNumber(db) {
-    const list = db.purchase_orders || [];
-    const nums = list.map((po) => (po.po_number || '').replace(/^PO-/, '')).filter((n) => /^\d+$/.test(n));
-    const max = nums.length ? Math.max(...nums.map((n) => parseInt(n, 10))) : 0;
-    return 'PO-' + String(max + 1).padStart(5, '0');
-}
-
-app.get('/api/admin/purchase-orders', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const list = (db.purchase_orders || []).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    const manufacturers = db.manufacturers || [];
-    const orders = db.orders || [];
-    const out = list.map((po) => {
-        const mfr = manufacturers.find((m) => m.id === po.manufacturer_id);
-        const order = po.order_id != null ? orders.find((o) => o.id === po.order_id) : null;
-        return {
-            ...po,
-            manufacturer_name: mfr ? mfr.name : '',
-            order_number: order ? order.order_number : null
-        };
-    });
-    res.json(out);
-});
-
-app.get('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
-    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
-    const mfr = (db.manufacturers || []).find((m) => m.id === po.manufacturer_id);
-    const order = po.order_id != null ? (db.orders || []).find((o) => o.id === po.order_id) : null;
-    res.json({ ...po, manufacturer_name: mfr ? mfr.name : '', order, order_number: order ? order.order_number : null });
-});
-
-app.post('/api/admin/purchase-orders', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const { manufacturer_id, order_id, lines, shipping_address, customer_order_number } = req.body;
-    const mid = manufacturer_id != null ? parseInt(manufacturer_id, 10) : null;
-    if (mid == null || isNaN(mid)) return res.status(400).json({ error: 'manufacturer_id required' });
-    const mfr = (db.manufacturers || []).find((m) => m.id === mid);
-    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
-    const lineItems = Array.isArray(lines) ? lines : [];
-    const poNumber = nextPoNumber(db);
-    const id = Date.now();
-    const po = {
-        id,
-        po_number: poNumber,
-        manufacturer_id: mid,
-        manufacturer_name: mfr.name,
-        order_id: order_id != null ? parseInt(order_id, 10) : null,
-        status: 'draft',
-        lines: lineItems.map((l) => ({
-            product_id: l.product_id,
-            sku: l.sku || '',
-            name: l.name || '',
-            quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
-            unit_cost: parseFloat(l.unit_cost) || 0
-        })),
-        subtotal: 0,
-        shipping_address: shipping_address || null,
-        customer_order_number: customer_order_number || null,
-        created_at: new Date().toISOString(),
-        sent_at: null
-    };
-    po.subtotal = po.lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
-    if (!db.purchase_orders) db.purchase_orders = [];
-    db.purchase_orders.push(po);
-    saveDB(db);
-    res.json(po);
-});
-
-app.put('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
-    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
-    if (req.body.lines !== undefined && Array.isArray(req.body.lines)) {
-        po.lines = req.body.lines.map((l) => ({
-            product_id: l.product_id,
-            sku: l.sku || '',
-            name: l.name || '',
-            quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
-            unit_cost: parseFloat(l.unit_cost) || 0
-        }));
-        po.subtotal = po.lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
+// Inventory verification - check for data issues
+app.get('/api/admin/inventory/verify', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const issues = await inventory.getInventoryIssues();
+        res.json({
+            ok: issues.length === 0,
+            issue_count: issues.length,
+            issues: issues.slice(0, 100) // Limit to first 100
+        });
+    } catch (err) {
+        console.error('[admin/inventory/verify]', err);
+        res.status(500).json({ error: err.message || 'Failed to verify inventory' });
     }
-    if (req.body.shipping_address !== undefined) po.shipping_address = req.body.shipping_address;
-    if (req.body.customer_order_number !== undefined) po.customer_order_number = req.body.customer_order_number;
-    saveDB(db);
-    res.json(po);
+});
+
+// Verify specific product inventory
+app.get('/api/admin/inventory/:product_id/verify', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.product_id, 10);
+        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
+        
+        const result = await inventory.verifyInventoryConsistency(productId);
+        res.json(result);
+    } catch (err) {
+        console.error('[admin/inventory/verify/:id]', err);
+        res.status(500).json({ error: err.message || 'Failed to verify inventory' });
+    }
+});
+
+// ---------- Purchase Orders ----------
+app.get('/api/admin/purchase-orders', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const list = await dataService.getPurchaseOrders();
+        const manufacturers = await dataService.getManufacturers();
+        const orders = await dataService.getAllOrdersAdmin();
+        const mfrMap = new Map((manufacturers || []).map((m) => [m.id, m]));
+        const orderMap = new Map((orders || []).map((o) => [o.id, o]));
+        const out = (list || []).map((po) => ({
+            ...po,
+            manufacturer_name: mfrMap.get(po.manufacturer_id)?.name || '',
+            order_number: po.order_id != null ? orderMap.get(po.order_id)?.order_number : null
+        }));
+        res.json(out);
+    } catch (err) {
+        console.error('[admin/purchase-orders GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load POs' });
+    }
+});
+
+app.get('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const po = await dataService.getPurchaseOrderById(req.params.id);
+        if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+        const manufacturers = await dataService.getManufacturers();
+        const mfr = (manufacturers || []).find((m) => m.id === po.manufacturer_id);
+        const order = po.order_id != null ? await dataService.getOrderByIdAdmin(po.order_id) : null;
+        res.json({ ...po, manufacturer_name: mfr ? mfr.name : '', order, order_number: order ? order.order_number : null });
+    } catch (err) {
+        console.error('[admin/purchase-orders/:id GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load PO' });
+    }
+});
+
+app.post('/api/admin/purchase-orders', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { manufacturer_id, order_id, lines, shipping_address, customer_order_number } = req.body;
+        const mid = manufacturer_id != null ? parseInt(manufacturer_id, 10) : null;
+        if (mid == null || isNaN(mid)) return res.status(400).json({ error: 'manufacturer_id required' });
+        const manufacturers = await dataService.getManufacturers();
+        const mfr = (manufacturers || []).find((m) => m.id === mid);
+        if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+        const lineItems = Array.isArray(lines) ? lines.map((l) => ({ product_id: l.product_id, sku: l.sku || '', name: l.name || '', quantity: Math.max(1, parseInt(l.quantity, 10) || 1), unit_cost: parseFloat(l.unit_cost) || 0 })) : [];
+        const poNumber = await dataService.nextPoNumber();
+        const subtotal = lineItems.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
+        const po = await dataService.createPurchaseOrder({
+            po_number: poNumber,
+            manufacturer_id: mid,
+            order_id: order_id != null ? parseInt(order_id, 10) : null,
+            status: 'draft',
+            lines: lineItems,
+            shipping_address: shipping_address || null,
+            customer_order_number: customer_order_number || null
+        });
+        res.json({ ...po, manufacturer_name: mfr.name, subtotal });
+    } catch (err) {
+        console.error('[admin/purchase-orders POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to create PO' });
+    }
+});
+
+app.put('/api/admin/purchase-orders/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const po = await dataService.getPurchaseOrderById(req.params.id);
+        if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+        const updates = {};
+        if (req.body.lines !== undefined && Array.isArray(req.body.lines)) {
+            updates.lines = req.body.lines.map((l) => ({
+                product_id: l.product_id,
+                sku: l.sku || '',
+                name: l.name || '',
+                quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
+                unit_cost: parseFloat(l.unit_cost) || 0
+            }));
+        }
+        if (req.body.shipping_address !== undefined) updates.shipping_address = req.body.shipping_address;
+        if (req.body.customer_order_number !== undefined) updates.customer_order_number = req.body.customer_order_number;
+        await dataService.updatePurchaseOrder(req.params.id, updates);
+        const updated = await dataService.getPurchaseOrderById(req.params.id);
+        res.json(updated);
+    } catch (err) {
+        console.error('[admin/purchase-orders PUT]', err);
+        res.status(500).json({ error: err.message || 'Failed to update PO' });
+    }
 });
 
 app.post('/api/admin/purchase-orders/:id/send', authenticateToken, requireAdmin, async (req, res) => {
-    db = loadDB();
-    const po = (db.purchase_orders || []).find((p) => p.id == req.params.id);
-    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
-    const mfr = (db.manufacturers || []).find((m) => m.id === po.manufacturer_id);
-    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
-    const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
-    if (!toEmail) return res.status(400).json({ error: 'Manufacturer has no PO/vendor email. Add it in Vendors.' });
-    const lineText = (po.lines || []).map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
-    const bodyText = `GloveCubs Purchase Order\n\nPO#: ${po.po_number}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || 'See order').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${(po.subtotal || 0).toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
-    const bodyHtml = bodyText.replace(/\n/g, '<br>');
-    const result = await sendMail({ to: toEmail, subject: `Purchase Order ${po.po_number} - GloveCubs`, text: bodyText, html: bodyHtml });
-    if (!result.sent) return res.status(500).json({ error: result.error || 'Failed to send email' });
-    po.status = 'sent';
-    po.sent_at = new Date().toISOString();
-    saveDB(db);
-    res.json({ success: true, sent: true, po_number: po.po_number });
+    try {
+        const po = await dataService.getPurchaseOrderById(req.params.id);
+        if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+        const manufacturers = await dataService.getManufacturers();
+        const mfr = (manufacturers || []).find((m) => m.id === po.manufacturer_id);
+        if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+        const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
+        if (!toEmail) return res.status(400).json({ error: 'Manufacturer has no PO/vendor email. Add it in Vendors.' });
+        const lineText = (po.lines || []).map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
+        const bodyText = `GloveCubs Purchase Order\n\nPO#: ${po.po_number}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || 'See order').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${(po.subtotal || 0).toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
+        const result = await sendMail({ to: toEmail, subject: `Purchase Order ${po.po_number} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
+        if (!result.sent) return res.status(500).json({ error: result.error || 'Failed to send email' });
+        await dataService.updatePurchaseOrder(req.params.id, { status: 'sent', sent_at: new Date().toISOString() });
+        res.json({ success: true, sent: true, po_number: po.po_number });
+    } catch (err) {
+        console.error('[admin/purchase-orders/:id/send]', err);
+        res.status(500).json({ error: err.message || 'Failed to send PO' });
+    }
+});
+
+app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const poId = parseInt(req.params.id, 10);
+        if (isNaN(poId)) return res.status(400).json({ error: 'Invalid PO ID' });
+        const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
+        if (lines.length === 0) return res.status(400).json({ error: 'lines array required: [{ product_id, quantity_received }]' });
+        await inventory.receivePurchaseOrder(poId, lines);
+        const updated = await dataService.getPurchaseOrderById(poId);
+        res.json({ success: true, po: updated });
+    } catch (err) {
+        console.error('[admin/purchase-orders/:id/receive]', err);
+        res.status(500).json({ error: err.message || 'Failed to receive PO' });
+    }
 });
 
 // Create PO from customer order and send to vendor (drop-ship)
 app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, async (req, res) => {
-    db = loadDB();
-    const order = (db.orders || []).find((o) => o.id == req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    const manufacturers = db.manufacturers || [];
-    const products = db.products || [];
-    const byMfr = new Map();
-    for (const item of order.items || []) {
-        const product = products.find((p) => p.id === item.product_id);
-        const mfrId = product ? (product.manufacturer_id || null) : null;
-        if (!mfrId) continue;
-        if (!byMfr.has(mfrId)) byMfr.set(mfrId, []);
-        byMfr.get(mfrId).push({
-            product_id: item.product_id,
-            sku: item.sku || product?.sku,
-            name: item.name || product?.name,
-            quantity: item.quantity,
-            unit_cost: product ? (product.cost || 0) : 0
-        });
-    }
-    const mfrId = req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : (byMfr.size === 1 ? [...byMfr.keys()][0] : null);
-    if (mfrId == null || isNaN(mfrId)) return res.status(400).json({ error: 'Order has items from multiple or no manufacturers. Specify manufacturer_id.' });
-    const mfr = manufacturers.find((m) => m.id === mfrId);
-    if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
-    const lines = byMfr.get(mfrId) || [];
-    if (lines.length === 0) return res.status(400).json({ error: 'No line items for this manufacturer' });
-    const poNumber = nextPoNumber(db);
-    const poId = Date.now();
-    const po = {
-        id: poId,
-        po_number: poNumber,
-        manufacturer_id: mfrId,
-        manufacturer_name: mfr.name,
-        order_id: order.id,
-        status: 'draft',
-        lines,
-        subtotal: lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0),
-        shipping_address: order.shipping_address || null,
-        customer_order_number: order.order_number || null,
-        created_at: new Date().toISOString(),
-        sent_at: null
-    };
-    if (!db.purchase_orders) db.purchase_orders = [];
-    db.purchase_orders.push(po);
-    const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
-    if (!toEmail) {
-        saveDB(db);
-        return res.json({ success: true, po, message: 'PO created. Add vendor email in Vendors and send from Purchase Orders.' });
-    }
-    const lineText = po.lines.map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
-    const bodyText = `GloveCubs Purchase Order\n\nPO#: ${poNumber}\nDate: ${po.created_at.slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || '').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${po.subtotal.toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
-    const result = await sendMail({ to: toEmail, subject: `Purchase Order ${poNumber} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
-    if (result.sent) {
-        po.status = 'sent';
-        po.sent_at = new Date().toISOString();
-        saveDB(db);
-        return res.json({ success: true, po, sent: true, message: 'PO created and sent to vendor.' });
-    }
-    saveDB(db);
-    res.json({ success: true, po, sent: false, message: 'PO created. Email failed: ' + (result.error || 'unknown') });
-});
-
-app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const company = (db.companies || []).find((c) => c.id == req.params.id);
-    if (!company) {
-        return res.status(404).json({ error: 'Company not found' });
-    }
-    const overrides = (db.customer_manufacturer_pricing || [])
-        .filter((o) => o.company_id == req.params.id)
-        .map((o) => {
-            const mfr = (db.manufacturers || []).find((m) => m.id === o.manufacturer_id);
-            const gross = o.gross_margin_percent != null ? o.gross_margin_percent : o.margin_percent;
-            return {
-                id: o.id,
-                manufacturer_id: o.manufacturer_id,
-                manufacturer_name: mfr ? mfr.name : '',
-                gross_margin_percent: gross,
-                margin_percent: gross
-            };
-        });
-    res.json({ ...company, overrides });
-});
-
-app.post('/api/admin/companies/:id/default-margin', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const company = (db.companies || []).find((c) => c.id == req.params.id);
-    if (!company) {
-        return res.status(404).json({ error: 'Company not found' });
-    }
-    let percent = req.body.default_gross_margin_percent != null ? Number(req.body.default_gross_margin_percent) : null;
-    if (percent == null) percent = req.body.margin_percent != null ? Number(req.body.margin_percent) : null;
-    if (percent == null || isNaN(percent)) {
-        return res.status(400).json({ error: 'default_gross_margin_percent or margin_percent required' });
-    }
-    if (percent < 0 || percent >= 100) {
-        return res.status(400).json({ error: 'Margin must be 0 <= margin < 100' });
-    }
-    company.default_gross_margin_percent = percent;
-    company.updated_at = new Date().toISOString();
-    saveDB(db);
-    res.json({ success: true, company });
-});
-
-app.post('/api/admin/companies/:id/overrides', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const company = (db.companies || []).find((c) => c.id == req.params.id);
-    if (!company) {
-        return res.status(404).json({ error: 'Company not found' });
-    }
-    const manufacturer_id = req.body.manufacturer_id != null ? Number(req.body.manufacturer_id) : null;
-    let gross_margin_percent = req.body.gross_margin_percent != null ? Number(req.body.gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
-    if (manufacturer_id == null || isNaN(manufacturer_id)) {
-        return res.status(400).json({ error: 'manufacturer_id required' });
-    }
-    if (gross_margin_percent == null || isNaN(gross_margin_percent) || gross_margin_percent < 0 || gross_margin_percent >= 100) {
-        return res.status(400).json({ error: 'gross_margin_percent (or margin_percent) required and must be 0 <= value < 100' });
-    }
-    const list = db.customer_manufacturer_pricing || [];
-    const existing = list.find((o) => o.company_id == req.params.id && o.manufacturer_id === manufacturer_id);
-    const companyId = Number(req.params.id);
-    if (existing) {
-        existing.gross_margin_percent = gross_margin_percent;
-        existing.margin_percent = gross_margin_percent;
-        existing.updated_at = new Date().toISOString();
-    } else {
-        const maxId = list.length ? Math.max(...list.map((o) => o.id)) : 0;
-        list.push({
-            id: maxId + 1,
-            company_id: companyId,
-            manufacturer_id,
-            gross_margin_percent,
-            margin_percent: gross_margin_percent,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        });
-    }
-    saveDB(db);
-    const override = list.find((o) => o.company_id == companyId && o.manufacturer_id === manufacturer_id);
-    const mfr = (db.manufacturers || []).find((m) => m.id === manufacturer_id);
-    const gross = override.gross_margin_percent != null ? override.gross_margin_percent : override.margin_percent;
-    res.json({
-        success: true,
-        override: {
-            id: override.id,
-            manufacturer_id: override.manufacturer_id,
-            manufacturer_name: mfr ? mfr.name : '',
-            gross_margin_percent: gross,
-            margin_percent: gross
+    try {
+        const order = await dataService.getOrderByIdAdmin(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        const manufacturers = await dataService.getManufacturers();
+        const byMfr = new Map();
+        for (const item of order.items || []) {
+            const product = await productsService.getProductById(item.product_id);
+            const mfrId = product ? (product.manufacturer_id || null) : null;
+            if (!mfrId) continue;
+            if (!byMfr.has(mfrId)) byMfr.set(mfrId, []);
+            byMfr.get(mfrId).push({
+                product_id: item.product_id,
+                sku: item.sku || product?.sku,
+                name: item.name || product?.name,
+                quantity: item.quantity,
+                unit_cost: product ? (product.cost || 0) : 0
+            });
         }
-    });
+        const mfrId = req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : (byMfr.size === 1 ? [...byMfr.keys()][0] : null);
+        if (mfrId == null || isNaN(mfrId)) return res.status(400).json({ error: 'Order has items from multiple or no manufacturers. Specify manufacturer_id.' });
+        const mfr = (manufacturers || []).find((m) => m.id === mfrId);
+        if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
+        const lines = byMfr.get(mfrId) || [];
+        if (lines.length === 0) return res.status(400).json({ error: 'No line items for this manufacturer' });
+        const poNumber = await dataService.nextPoNumber();
+        const shippingDisplay = order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display ? order.shipping_address.display : (order.shipping_address || null);
+        const po = await dataService.createPurchaseOrder({
+            po_number: poNumber,
+            manufacturer_id: mfrId,
+            order_id: order.id,
+            status: 'draft',
+            lines,
+            shipping_address: shippingDisplay,
+            customer_order_number: order.order_number || null
+        });
+        const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
+        const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
+        if (!toEmail) return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, message: 'PO created. Add vendor email in Vendors and send from Purchase Orders.' });
+        const lineText = lines.map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
+        const bodyText = `GloveCubs Purchase Order\n\nPO#: ${poNumber}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(shippingDisplay || '').replace(/\n/g, '\n')}\n\nCustomer Order: ${order.order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${subtotal.toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
+        const result = await sendMail({ to: toEmail, subject: `Purchase Order ${poNumber} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
+        if (result.sent) {
+            await dataService.updatePurchaseOrder(po.id, { status: 'sent', sent_at: new Date().toISOString() });
+            return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, sent: true, message: 'PO created and sent to vendor.' });
+        }
+        res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, sent: false, message: 'PO created. Email failed: ' + (result.error || 'unknown') });
+    } catch (err) {
+        console.error('[admin/orders/:id/create-po]', err);
+        res.status(500).json({ error: err.message || 'Failed to create PO' });
+    }
 });
 
-app.delete('/api/admin/companies/:id/overrides/:overrideId', authenticateToken, requireAdmin, (req, res) => {
-    db = loadDB();
-    const company = (db.companies || []).find((c) => c.id == req.params.id);
-    if (!company) {
-        return res.status(404).json({ error: 'Company not found' });
+app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const company = await companiesService.getCompanyById(req.params.id);
+        if (!company) return res.status(404).json({ error: 'Company not found' });
+        const overrides = await dataService.getOverridesByCompanyId(Number(req.params.id));
+        res.json({ ...company, overrides });
+    } catch (err) {
+        console.error('[admin/companies/:id]', err);
+        res.status(500).json({ error: err.message || 'Failed to load company' });
     }
-    const list = db.customer_manufacturer_pricing || [];
-    const idx = list.findIndex((o) => o.id == req.params.overrideId && o.company_id == req.params.id);
-    if (idx === -1) {
-        return res.status(404).json({ error: 'Override not found' });
-    }
-    list.splice(idx, 1);
-    saveDB(db);
-    res.json({ success: true });
 });
 
-// Optional: get effective margin and sell price (for admin or storefront)
-app.get('/api/pricing/effective-margin', authenticateToken, (req, res) => {
-    db = loadDB();
-    const companyId = req.query.companyId != null ? Number(req.query.companyId) : null;
-    const manufacturerId = req.query.manufacturerId != null ? Number(req.query.manufacturerId) : null;
-    if (companyId == null) {
-        return res.status(400).json({ error: 'companyId required' });
+app.post('/api/admin/companies/:id/default-margin', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        let percent = req.body.default_gross_margin_percent != null ? Number(req.body.default_gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
+        if (percent == null || isNaN(percent)) return res.status(400).json({ error: 'default_gross_margin_percent or margin_percent required' });
+        if (percent < 0 || percent >= 100) return res.status(400).json({ error: 'Margin must be 0 <= margin < 100' });
+        const company = await companiesService.updateCompany(req.params.id, { default_gross_margin_percent: percent });
+        if (!company) return res.status(404).json({ error: 'Company not found' });
+        res.json({ success: true, company });
+    } catch (err) {
+        console.error('[admin/companies default-margin]', err);
+        res.status(500).json({ error: err.message || 'Failed to update margin' });
     }
-    const margin = getEffectiveMargin(db, companyId, manufacturerId);
-    res.json({ margin_percent: margin });
+});
+
+app.post('/api/admin/companies/:id/overrides', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const companyId = Number(req.params.id);
+        const company = await companiesService.getCompanyById(req.params.id);
+        if (!company) return res.status(404).json({ error: 'Company not found' });
+        const manufacturer_id = req.body.manufacturer_id != null ? Number(req.body.manufacturer_id) : null;
+        let gross_margin_percent = req.body.gross_margin_percent != null ? Number(req.body.gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
+        if (manufacturer_id == null || isNaN(manufacturer_id)) return res.status(400).json({ error: 'manufacturer_id required' });
+        if (gross_margin_percent == null || isNaN(gross_margin_percent) || gross_margin_percent < 0 || gross_margin_percent >= 100) return res.status(400).json({ error: 'gross_margin_percent (or margin_percent) required and must be 0 <= value < 100' });
+        await dataService.upsertCustomerManufacturerPricing(companyId, manufacturer_id, gross_margin_percent);
+        const overrides = await dataService.getOverridesByCompanyId(companyId);
+        const override = overrides.find((o) => o.manufacturer_id === manufacturer_id);
+        res.json({ success: true, override: override || { id: null, manufacturer_id, manufacturer_name: '', gross_margin_percent, margin_percent: gross_margin_percent } });
+    } catch (err) {
+        console.error('[admin/companies overrides]', err);
+        res.status(500).json({ error: err.message || 'Failed to save override' });
+    }
+});
+
+app.delete('/api/admin/companies/:id/overrides/:overrideId', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const company = await companiesService.getCompanyById(req.params.id);
+        if (!company) return res.status(404).json({ error: 'Company not found' });
+        await dataService.deleteCustomerManufacturerPricingOverride(req.params.overrideId, Number(req.params.id));
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[admin/companies delete override]', err);
+        res.status(404).json({ error: 'Override not found' });
+    }
+});
+
+app.get('/api/pricing/effective-margin', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+        if (companyId == null) return res.status(400).json({ error: 'User has no associated company' });
+        const manufacturerId = req.query.manufacturerId != null ? Number(req.query.manufacturerId) : null;
+        const ctx = await getPricingContext();
+        const margin = getEffectiveMargin(ctx, companyId, manufacturerId);
+        res.json({ margin_percent: margin });
+    } catch (err) {
+        console.error('[pricing/effective-margin]', err);
+        res.status(500).json({ error: err.message || 'Failed to get margin' });
+    }
 });
 
 app.get('/api/pricing/sell-price', (req, res) => {
