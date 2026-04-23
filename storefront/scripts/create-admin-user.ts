@@ -5,8 +5,11 @@
  *   BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... node scripts/bootstrap-admin.js
  * That creates auth.users + public.users (same UUID) + app_admins.
  *
- * Run: npx tsx scripts/create-admin-user.ts
+ * Run: CREATE_ADMIN_EMAIL=... CREATE_ADMIN_PASSWORD=... npx tsx scripts/create-admin-user.ts
  * Requires .env.local with NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+ *
+ * For full portal admin (Express + app_admins), prefer repo root:
+ *   BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... node scripts/bootstrap-admin.js
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -31,10 +34,23 @@ function loadEnv() {
 
 loadEnv();
 
-const email = "jjbarrett12@gmail.com";
-const password = "Jb121212!";
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (v == null || String(v).trim() === "") {
+    console.error(`Missing ${name}. Set in the environment (do not commit passwords).`);
+    process.exit(1);
+  }
+  return String(v).trim();
+}
 
 async function main() {
+  const email = requireEnv("CREATE_ADMIN_EMAIL").toLowerCase();
+  const password = requireEnv("CREATE_ADMIN_PASSWORD");
+  if (password.length < 8) {
+    console.error("CREATE_ADMIN_PASSWORD must be at least 8 characters.");
+    process.exit(1);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
