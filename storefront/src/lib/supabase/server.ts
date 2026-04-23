@@ -36,7 +36,7 @@ export function getSupabaseAdmin() {
 /** Singleton admin client; throws if env vars are missing. Use getSupabaseAdmin() in try/catch or check isSupabaseConfigured() first. */
 export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient<Database>>, {
   get(_, prop) {
-    return (getSupabaseAdmin() as Record<string, unknown>)[prop as string];
+    return (getSupabaseAdmin() as unknown as Record<string, unknown>)[prop as string];
   },
 });
 
