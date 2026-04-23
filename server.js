@@ -27,10 +27,14 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const fishbowl = require('./fishbowl');
 const rateLimit = require('express-rate-limit');
-const { sendMail, isConfigured: emailConfigured, getConfigStatus: getEmailConfigStatus, verifyConnection: verifyEmailConnection } = require('./lib/email');
+const { isConfigured: emailConfigured, getConfigStatus: getEmailConfigStatus, verifyConnection: verifyEmailConnection } = require('./lib/email');
 const emailTemplates = require('./lib/email-templates');
 const productStore = require('./lib/product-store');
 const { getEffectiveMargin, computeSellPrice } = require('./lib/pricing');
+const commercePricing = require('./lib/commerce-pricing');
+const checkoutCompute = require('./lib/checkout-compute');
+const { assertNoClientSuppliedTotals } = require('./lib/checkout-client-body-guard');
+const orderReorder = require('./lib/order-reorder');
 const { importCsvToSupabase } = require('./lib/import-csv-supabase');
 const supabaseLib = require('./lib/supabase');
 const { parseProductUrl } = require('./lib/parse-product-url');
@@ -41,10 +45,46 @@ const { getSupabaseAdmin, isSupabaseAdminConfigured } = require('./lib/supabaseA
 const productsService = require('./services/productsService');
 const usersService = require('./services/usersService');
 const companiesService = require('./services/companiesService');
+const pricingTiersService = require('./services/pricingTiersService');
+const pricingTierEvaluationService = require('./services/pricingTierEvaluationService');
+const netTermsService = require('./services/netTermsService');
+const supplierCostImportService = require('./services/supplierCostImportService');
+const growthPipelineService = require('./services/growthPipelineService');
+const shippingMarginAnalyticsService = require('./services/shippingMarginAnalyticsService');
+const {
+    canPlaceInvoiceOrder,
+    evaluateNet30Credit,
+    formatInvoiceTermsLabel,
+} = require('./lib/invoice-terms-guard');
+const {
+    buildOrderEconomicsOrderFields,
+    buildLineCostSnapshotFields,
+} = require('./lib/orderEconomicsSnapshot');
+const ownerCockpitService = require('./services/ownerCockpitService');
+const adminOperationsDashboardService = require('./services/adminOperationsDashboardService');
+const adminChannelAnalyticsService = require('./services/adminChannelAnalyticsService');
+const { sanitizeMarketingAttribution } = require('./lib/marketing-attribution');
+const arInvoiceService = require('./services/arInvoiceService');
+const arAgingService = require('./services/arAgingService');
+const shippingPolicyService = require('./services/shippingPolicyService');
 const dataService = require('./services/dataService');
+const {
+    ensureCommerceLinesHaveCanonical,
+    normalizeCanonicalUuidInput,
+    resolveLineCatalogProductId,
+} = require('./lib/resolve-canonical-product-id');
+const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
+const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
+const {
+    validateAdminOrderStatusTransition,
+    ABANDON_STATUSES,
+    orderRequiresOnlinePaymentConfirmation,
+} = require('./lib/adminOrderGuards');
 const addressValidation = require('./lib/address-validation');
 const taxLib = require('./lib/tax');
+const orderInvoiceTotals = require('./lib/order-invoice-totals');
+const commerceShipping = require('./lib/commerce-shipping');
 const { logParseEvent } = require('./lib/parse-log');
 const { aiGenerate, aiExtractInvoice, aiRecommendFromInvoice, isConfigured: aiConfigured } = require('./lib/ai/provider');
 const { validateGloveFinderRequest, validateGloveFinderResponse, validateInvoiceExtractResponse, validateInvoiceRecommendResponse } = require('./lib/ai/schemas');
@@ -52,8 +92,14 @@ const { hashIp, logConversation, logInvoiceUpload, logInvoiceLines, logRecommend
 const { enqueueBulkUrls, runWorker, approveDraft } = require('./lib/bulk-import');
 const Stripe = require('stripe');
 const paymentLog = require('./lib/payment-logger');
+const { dispatchEmail, dispatchEmailInBackground } = require('./lib/email-dispatch');
 const webhookIdempotency = require('./lib/webhook-idempotency');
 const { sortByRelevance } = require('./lib/search-relevance');
+const cartLineContract = require('./lib/contracts/cart-line');
+const {
+    sanitizeProductForPublicApi,
+    sanitizeProductsArrayForPublicApi,
+} = require('./lib/public-product-api');
 
 const app = express();
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -68,18 +114,205 @@ const FISHBOWL_EXPORT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 /** Build pricing context from Supabase for getEffectiveMargin. */
 async function getPricingContext() {
-  const [companies, customer_manufacturer_pricing] = await Promise.all([
+  const [companies, customer_manufacturer_pricing, tier_discount_by_code] = await Promise.all([
     companiesService.getCompanies(),
-    companiesService.getCustomerManufacturerPricing()
+    companiesService.getCustomerManufacturerPricing(),
+    pricingTiersService.getTierDiscountMap(),
   ]);
-  return { companies, customer_manufacturer_pricing };
+  return { companies, customer_manufacturer_pricing, tier_discount_by_code };
+}
+
+/** Customer-safe tier label + source (no internal rule math). */
+async function attachPricingTierPresentation(userLike) {
+  if (!userLike) return userLike;
+  const out = { ...userLike };
+  try {
+    const meta = await pricingTiersService.getTierByCode(out.discount_tier);
+    out.pricing_tier_display =
+      meta && meta.display_name
+        ? meta.display_name
+        : String(out.discount_tier || 'standard').replace(/\b\w/g, (c) => c.toUpperCase());
+  } catch (_) {
+    out.pricing_tier_display = out.discount_tier || 'Standard';
+  }
+  if (out.pricing_tier_source == null) out.pricing_tier_source = 'manual';
+  try {
+    const map = await pricingTiersService.getTierDiscountMap();
+    out.pricing_tier_discount_percent_applied = commercePricing.getTierDiscountPercentForUser(out, map);
+  } catch (_) {
+    out.pricing_tier_discount_percent_applied = commercePricing.getTierDiscountPercentForUser(out, null);
+  }
+  return out;
+}
+
+function schedulePricingTierReevaluation(userId, source) {
+  const sid = userId != null ? String(userId).trim() : '';
+  if (!sid) return;
+  setImmediate(() => {
+    pricingTierEvaluationService
+      .evaluateAndApplyUserTier(sid, { source: source || 'post_order' })
+      .catch((e) => console.error('[pricing_tier_eval]', e && e.message ? e.message : e));
+  });
 }
 
 /** Get company IDs the authenticated user can access (for company-scoped record access). */
 async function getCompanyIdsForAuthenticatedUser(req) {
-  if (!req.user?.id) return [];
-  const user = await usersService.getUserById(req.user.id);
-  return user ? companiesService.getCompanyIdsForUser(user) : [];
+    if (!req.user?.id) return [];
+    const user = await usersService.getUserById(req.user.id);
+    return user ? companiesService.getCompanyIdsForUser(user) : [];
+}
+
+/** Admin sees full product rows (cost, etc.); storefront users get sanitized JSON. */
+async function getPublicProductApiAccess(req) {
+    if (!req.user?.id) {
+        return { isAdmin: false, isApprovedB2B: false, companyId: null };
+    }
+    if (await usersService.isAdmin(req.user.id)) {
+        return { isAdmin: true, isApprovedB2B: false, companyId: null };
+    }
+    const user = await usersService.getUserById(req.user.id);
+    const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+    return {
+        isAdmin: false,
+        isApprovedB2B: !!(user && user.is_approved),
+        companyId,
+    };
+}
+
+/** @returns {boolean} true if response was sent */
+function respondCommerceCanonicalError(err, res) {
+  if (err && err.name === 'MissingSellableProductError') {
+    res.status(422).json({
+      error: err.message,
+      code: 'MISSING_SELLABLE_PRODUCT',
+      catalog_product_id: err.canonicalProductId,
+    });
+    return true;
+  }
+  if (err && err.name === 'MissingCanonicalProductIdError') {
+    res.status(422).json({
+      error: err.message,
+      code: 'MISSING_CANONICAL_PRODUCT_ID',
+      context: err.context,
+    });
+    return true;
+  }
+  if (err && err.name === 'MissingVariantCanonicalProductIdError') {
+    res.status(422).json({
+      error: err.message,
+      code: 'MISSING_VARIANT_CANONICAL_PRODUCT_ID',
+      context: err.context,
+      size: err.size,
+    });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Same shipping resolution as checkout/order routes: saved ship-to wins; else validated custom address.
+ * @returns {Promise<{ ok: true, finalShippingAddress: object } | { ok: false, status: number, body: object }>}
+ */
+async function resolveFinalShippingAddressForCheckout(companyIds, userId, ship_to_id, shipping_address) {
+    let finalShippingAddress = null;
+    if (ship_to_id) {
+        const shipTos = await dataService.getShipToByCompanyId(companyIds, userId);
+        const shipTo = shipTos.find((s) => s.id == ship_to_id);
+        if (shipTo) {
+            finalShippingAddress = addressValidation.normalizeAddress({
+                full_name: shipTo.label || 'Ship-to',
+                address_line1: shipTo.address,
+                city: shipTo.city,
+                state: shipTo.state,
+                zip_code: shipTo.zip,
+            });
+        }
+    }
+    if (!finalShippingAddress) {
+        const addressData = typeof shipping_address === 'object' && shipping_address !== null ? shipping_address : null;
+        if (!addressData) {
+            return {
+                ok: false,
+                status: 400,
+                body: {
+                    error: 'Shipping address is required',
+                    field_errors: { shipping_address: 'Please provide a shipping address' },
+                    code: 'SHIPPING_ADDRESS_REQUIRED',
+                },
+            };
+        }
+        const validation = addressValidation.validateAddress(addressData);
+        if (!validation.valid) {
+            return {
+                ok: false,
+                status: 400,
+                body: {
+                    error: addressValidation.getErrorMessage(validation),
+                    field_errors: addressValidation.getErrorsByField(validation),
+                    code: 'SHIPPING_ADDRESS_INVALID',
+                },
+            };
+        }
+        finalShippingAddress = addressValidation.normalizeAddress(addressData);
+    }
+    return { ok: true, finalShippingAddress };
+}
+
+/** Load cart and run canonical + availability checks. Sends response and returns null on failure. */
+async function loadAndValidateCartForCheckout(cartKey, res, contextLabel) {
+    const cartItems = await dataService.getCart(cartKey);
+    if (cartItems.length === 0) {
+        res.status(400).json({ error: 'Cart is empty' });
+        return null;
+    }
+    try {
+        await ensureCommerceLinesHaveCanonical(cartItems, contextLabel);
+    } catch (e) {
+        if (respondCommerceCanonicalError(e, res)) return null;
+        throw e;
+    }
+    const missing = [];
+    for (const item of cartItems) {
+        const product = await productsService.getProductById(item.product_id);
+        if (!product || !product.in_stock) missing.push(item);
+    }
+    if (missing.length > 0) {
+        res.status(400).json({
+            error: 'Some items in your cart are no longer available. Please update your cart.',
+            unavailable_product_ids: [...new Set(missing.map((m) => m.product_id))],
+        });
+        return null;
+    }
+    const avail = await inventory.checkAvailability(cartItems);
+    if (!avail.ok) {
+        const first = avail.insufficient[0];
+        const idLabel = first.canonical_product_id || 'unknown';
+        res.status(400).json({
+            error: `Insufficient stock for one or more items. Catalog product ${idLabel}: need ${first.needed}, available ${first.available}.`,
+            insufficient: avail.insufficient,
+        });
+        return null;
+    }
+    return cartItems;
+}
+
+/**
+ * Resolve order for PaymentIntent webhooks: prefer orders.stripe_payment_intent_id;
+ * legacy fallback when metadata.order_id exists and the row has no PI yet.
+ */
+async function resolveOrderForStripePaymentIntent(pi) {
+  const piId = pi && pi.id;
+  if (!piId) return { order: null, reason: 'no_pi_id' };
+  const byPi = await dataService.getOrderByStripePaymentIntentId(piId);
+  if (byPi) return { order: byPi, reason: null };
+  const metaOid = pi.metadata && pi.metadata.order_id;
+  if (!metaOid) return { order: null, reason: 'no_order_for_pi' };
+  const byMeta = await dataService.getOrderByIdAdmin(metaOid);
+  if (!byMeta) return { order: null, reason: 'metadata_order_missing' };
+  const storedPi = byMeta.stripe_payment_intent_id && String(byMeta.stripe_payment_intent_id).trim();
+  if (!storedPi) return { order: byMeta, reason: null };
+  if (storedPi === piId) return { order: byMeta, reason: null };
+  return { order: null, reason: 'order_pi_mismatch', conflictingOrderId: byMeta.id };
 }
 
 // Middleware (increase limit for large CSV imports)
@@ -129,95 +362,166 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
     }
 
     const pi = event.data.object;
-    const orderId = pi.metadata && pi.metadata.order_id;
+    let webhookOrderId = null;
 
     try {
         // ====== PAYMENT SUCCEEDED ======
         if (eventType === 'payment_intent.succeeded') {
-            if (orderId) {
-                const order = await dataService.getOrderByIdAdmin(orderId);
-                if (order && order.status === 'pending_payment') {
-                    // Update order status
-                    await dataService.updateOrderStatus(orderId, 'pending');
-                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'pending');
-                    paymentLog.paymentIntentSucceeded(pi.id, orderId, order.order_number);
-                    
-                    // Update payment_confirmed_at timestamp
-                    try {
-                        const supabase = getSupabaseAdmin();
-                        await supabase.from('orders').update({ payment_confirmed_at: new Date().toISOString() }).eq('id', orderId);
-                    } catch (_) { /* non-fatal */ }
+            const { order: ord, reason: resolveReason, conflictingOrderId } = await resolveOrderForStripePaymentIntent(pi);
 
-                    // Send payment confirmation email with improved template
-                    try {
-                        const user = await usersService.getUserById(order.user_id);
-                        if (user && user.email) {
-                            const emailContent = emailTemplates.paymentSuccess(order, user);
-                            await sendMail({ 
-                                to: user.email, 
-                                subject: emailContent.subject, 
-                                text: emailContent.text,
-                                html: emailContent.html 
-                            });
-                            paymentLog.emailSent(orderId, order.order_number, 'payment_confirmed', user.email);
-                        }
-                    } catch (emailErr) {
-                        paymentLog.emailFailed(orderId, order.order_number, 'payment_confirmed', emailErr);
-                    }
-                } else if (order) {
-                    // Order exists but not in pending_payment status - already processed
-                    paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
-                }
-            } else {
-                paymentLog.webhookSkipped(eventId, eventType, 'no_order_id_in_metadata', null);
+            if (resolveReason === 'order_pi_mismatch') {
+                paymentLog.logError('stripe.critical_pi_order_mismatch', new Error('metadata order does not own this PaymentIntent'), {
+                    pi_id: pi.id,
+                    conflicting_order_id: conflictingOrderId,
+                });
+                webhookOrderId = conflictingOrderId || null;
+                await webhookIdempotency.markEventProcessed(eventId, eventType, webhookOrderId, 'processed');
+                paymentLog.webhookProcessed(eventId, eventType, webhookOrderId, Date.now() - startTime);
+                res.status(200).send();
+                return;
             }
-            
-            await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
-            paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
+
+            if (!ord) {
+                paymentLog.webhookSkipped(eventId, eventType, resolveReason || 'order_not_found', null);
+                await webhookIdempotency.markEventProcessed(eventId, eventType, null, 'skipped');
+                paymentLog.webhookProcessed(eventId, eventType, null, Date.now() - startTime);
+                res.status(200).send();
+                return;
+            }
+
+            webhookOrderId = ord.id;
+
+            if (ord.status !== 'pending_payment') {
+                paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', ord.id);
+                await webhookIdempotency.markEventProcessed(eventId, eventType, ord.id, 'processed');
+                paymentLog.webhookProcessed(eventId, eventType, ord.id, Date.now() - startTime);
+                res.status(200).send();
+                return;
+            }
+
+            const expectedCents = Math.round(Number(ord.total) * 100);
+            const receivedCents = Number(
+                typeof pi.amount_received === 'number' ? pi.amount_received : pi.amount
+            );
+            const currency = String(pi.currency || '').toLowerCase();
+            if (receivedCents !== expectedCents || currency !== 'usd') {
+                paymentLog.logError('stripe.critical_payment_amount_mismatch', new Error('Stripe amount/currency does not match order'), {
+                    order_id: ord.id,
+                    order_number: ord.order_number,
+                    pi_id: pi.id,
+                    amount_received: receivedCents,
+                    expected_cents: expectedCents,
+                    currency: pi.currency,
+                    order_total: ord.total,
+                });
+                await dataService.flagPaymentIntegrityHold(
+                    ord.id,
+                    JSON.stringify({
+                        reason: 'amount_or_currency_mismatch',
+                        payment_intent_id: pi.id,
+                        amount_received: receivedCents,
+                        expected_cents: expectedCents,
+                        currency: pi.currency,
+                    })
+                );
+                await webhookIdempotency.markEventProcessed(eventId, eventType, ord.id, 'processed');
+                paymentLog.webhookProcessed(eventId, eventType, ord.id, Date.now() - startTime);
+                res.status(200).send();
+                return;
+            }
+
+            await dataService.updateOrderStatus(ord.id, 'pending');
+            paymentLog.orderStatusUpdated(ord.id, ord.order_number, 'pending_payment', 'pending');
+            paymentLog.paymentIntentSucceeded(pi.id, ord.id, ord.order_number);
+            schedulePricingTierReevaluation(ord.user_id, 'post_order');
+
+            try {
+                await dataService.updateOrder(ord.id, { payment_confirmed_at: new Date().toISOString() });
+            } catch (_) { /* non-fatal */ }
+
+            try {
+                const user = await usersService.getUserById(ord.user_id);
+                if (user && user.email) {
+                    const emailContent = emailTemplates.paymentSuccess(ord, user);
+                    await dispatchEmail({
+                        to: user.email,
+                        subject: emailContent.subject,
+                        text: emailContent.text,
+                        html: emailContent.html,
+                        emailType: 'payment_confirmed',
+                        orderId: ord.id,
+                        orderNumber: ord.order_number,
+                    });
+                }
+            } catch (emailErr) {
+                paymentLog.emailFailed(ord.id, ord.order_number, 'payment_confirmed', emailErr);
+                paymentLog.adminEmailAlert({
+                    severity: 'error',
+                    email_type: 'payment_confirmed',
+                    order_id: ord.id,
+                    order_number: ord.order_number,
+                    error_message: emailErr.message || String(emailErr),
+                    note: 'exception_before_or_during_dispatch',
+                });
+            }
+
+            await webhookIdempotency.markEventProcessed(eventId, eventType, ord.id, 'processed');
+            paymentLog.webhookProcessed(eventId, eventType, ord.id, Date.now() - startTime);
             res.status(200).send();
             return;
         }
 
         // ====== PAYMENT FAILED ======
         if (eventType === 'payment_intent.payment_failed') {
+            const { order: ord } = await resolveOrderForStripePaymentIntent(pi);
+            const orderId = ord ? ord.id : null;
+            webhookOrderId = orderId;
             paymentLog.paymentIntentFailed(pi.id, orderId, pi.last_payment_error?.message || 'unknown');
-            
-            if (orderId) {
-                const order = await dataService.getOrderByIdAdmin(orderId);
-                if (order && order.status === 'pending_payment') {
-                    // Release reserved stock
-                    try {
-                        await inventory.releaseStockForOrder(orderId);
-                        paymentLog.inventoryReleased(orderId, 'payment_failed');
-                    } catch (releaseErr) {
-                        console.error(`[Stripe] Failed to release stock for order ${orderId}:`, releaseErr.message);
-                    }
-                    
-                    // Mark order as payment_failed
-                    await dataService.updateOrderStatus(orderId, 'payment_failed');
-                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'payment_failed');
 
-                    // Notify customer with improved template
+            if (orderId) {
+                if (ord.status === 'pending_payment') {
+                    const needRelease =
+                        ord.inventory_reserved_at &&
+                        !ord.inventory_released_at &&
+                        !ord.inventory_deducted_at;
+                    if (needRelease) {
+                        await inventory.tryReleaseReservedStockForNonFulfillment(orderId);
+                        paymentLog.inventoryReleased(orderId, 'payment_failed');
+                    }
+
+                    await dataService.updateOrderStatus(orderId, 'payment_failed');
+                    paymentLog.orderStatusUpdated(orderId, ord.order_number, 'pending_payment', 'payment_failed');
+
                     try {
-                        const user = await usersService.getUserById(order.user_id);
+                        const user = await usersService.getUserById(ord.user_id);
                         if (user && user.email) {
-                            const emailContent = emailTemplates.paymentFailed(order, user);
-                            await sendMail({ 
-                                to: user.email, 
-                                subject: emailContent.subject, 
+                            const emailContent = emailTemplates.paymentFailed(ord, user);
+                            await dispatchEmail({
+                                to: user.email,
+                                subject: emailContent.subject,
                                 text: emailContent.text,
-                                html: emailContent.html 
+                                html: emailContent.html,
+                                emailType: 'payment_failed',
+                                orderId,
+                                orderNumber: ord.order_number,
                             });
-                            paymentLog.emailSent(orderId, order.order_number, 'payment_failed', user.email);
                         }
                     } catch (emailErr) {
-                        paymentLog.emailFailed(orderId, order.order_number, 'payment_failed', emailErr);
+                        paymentLog.emailFailed(orderId, ord.order_number, 'payment_failed', emailErr);
+                        paymentLog.adminEmailAlert({
+                            severity: 'error',
+                            email_type: 'payment_failed',
+                            order_id: orderId,
+                            order_number: ord.order_number,
+                            error_message: emailErr.message || String(emailErr),
+                            note: 'exception_before_or_during_dispatch',
+                        });
                     }
-                } else if (order) {
+                } else {
                     paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
                 }
             }
-            
+
             await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
             paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
             res.status(200).send();
@@ -226,24 +530,28 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         // ====== PAYMENT CANCELED ======
         if (eventType === 'payment_intent.canceled') {
+            const { order: ord } = await resolveOrderForStripePaymentIntent(pi);
+            const orderId = ord ? ord.id : null;
+            webhookOrderId = orderId;
             paymentLog.paymentIntentCanceled(pi.id, orderId);
-            
+
             if (orderId) {
-                const order = await dataService.getOrderByIdAdmin(orderId);
-                if (order && order.status === 'pending_payment') {
-                    try {
-                        await inventory.releaseStockForOrder(orderId);
+                if (ord.status === 'pending_payment') {
+                    const needRelease =
+                        ord.inventory_reserved_at &&
+                        !ord.inventory_released_at &&
+                        !ord.inventory_deducted_at;
+                    if (needRelease) {
+                        await inventory.tryReleaseReservedStockForNonFulfillment(orderId);
                         paymentLog.inventoryReleased(orderId, 'payment_canceled');
-                    } catch (releaseErr) {
-                        console.error(`[Stripe] Failed to release stock for canceled order ${orderId}:`, releaseErr.message);
                     }
                     await dataService.updateOrderStatus(orderId, 'cancelled');
-                    paymentLog.orderStatusUpdated(orderId, order.order_number, 'pending_payment', 'cancelled');
-                } else if (order) {
+                    paymentLog.orderStatusUpdated(orderId, ord.order_number, 'pending_payment', 'cancelled');
+                } else {
                     paymentLog.webhookSkipped(eventId, eventType, 'order_not_pending_payment', orderId);
                 }
             }
-            
+
             await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'processed');
             paymentLog.webhookProcessed(eventId, eventType, orderId, Date.now() - startTime);
             res.status(200).send();
@@ -257,7 +565,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
     } catch (err) {
         // Return 500 on error so Stripe retries
         paymentLog.webhookError(eventId, eventType, err);
-        await webhookIdempotency.markEventProcessed(eventId, eventType, orderId, 'error');
+        await webhookIdempotency.markEventProcessed(eventId, eventType, webhookOrderId, 'error');
         res.status(500).send('Webhook processing failed');
     }
 });
@@ -293,7 +601,7 @@ app.get('/api/admin/supabase/health', async (req, res) => {
             return res.status(200).json(payload);
         }
         const supabase = getSupabaseAdmin();
-        const { error } = await supabase.from('products').select('id').limit(1);
+        const { error } = await supabase.schema('gc_commerce').from('sellable_products').select('id').limit(1);
         if (error) {
             payload.error = minimal ? 'DB error' : error.message;
             return res.status(200).json(payload);
@@ -327,6 +635,14 @@ const authContactLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
     message: { error: 'Too many attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const leadCaptureLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many lead submissions from this network. Try again later.' },
     standardHeaders: true,
     legacyHeaders: false
 });
@@ -388,6 +704,7 @@ app.post('/api/auth/register', authContactLimiter, async (req, res) => {
             company_name,
             email,
             password_hash: hashedPassword,
+            plain_password: password,
             contact_name,
             phone: phone || '',
             address: address || '',
@@ -414,23 +731,38 @@ app.post('/api/auth/login', authContactLimiter, async (req, res) => {
         if (!email || !password) return res.status(400).json({ error: 'Please enter email and password.' });
         const user = await usersService.getUserByEmail(email);
         if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
-        let validPassword = await bcrypt.compare(password, user.password || user.password_hash);
-        if (!validPassword && email.toLowerCase() === 'demo@company.com' && password === 'demo123') {
-            const newHash = bcrypt.hashSync('demo123', 10);
-            await usersService.updateUser(user.id, { password_hash: newHash });
-            validPassword = true;
-        }
+        const validPassword = await bcrypt.compare(password, user.password || user.password_hash);
         if (!validPassword) return res.status(401).json({ error: 'Invalid email or password.' });
+        const authSubject = String(user.id);
         const token = jwt.sign(
-            { id: user.id, email: user.email, company: user.company_name, approved: user.is_approved },
+            { id: authSubject, email: user.email, company: user.company_name, approved: user.is_approved },
             JWT_SECRET,
             { expiresIn: '7d' }
         );
-        const isAdminUser = await usersService.isAdmin(user.id);
+        const isAdminUser = await usersService.isAdmin(authSubject);
+        let company_net_terms = null;
+        try {
+            company_net_terms = await netTermsService.getCommercialSnapshotForUserId(user.id);
+        } catch (e) {
+            console.error('[login net_terms snapshot]', e.message || e);
+        }
+        const loginUser = await attachPricingTierPresentation({
+            id: authSubject,
+            company_name: user.company_name,
+            email: user.email,
+            contact_name: user.contact_name,
+            is_approved: user.is_approved,
+            discount_tier: user.discount_tier,
+            pricing_tier_source: user.pricing_tier_source,
+        });
         res.json({
             success: true,
             token,
-            user: { id: user.id, company_name: user.company_name, email: user.email, contact_name: user.contact_name, is_approved: user.is_approved, discount_tier: user.discount_tier, is_admin: isAdminUser }
+            user: {
+                ...loginUser,
+                is_admin: isAdminUser,
+                company_net_terms,
+            },
         });
     } catch (error) {
         console.error('[POST /api/auth/login]', error);
@@ -444,10 +776,47 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
         const isAdminUser = await usersService.isAdmin(user.id);
         const { password, password_hash, ...safeUser } = user;
-        res.json({ ...safeUser, is_admin: isAdminUser });
+        let company_net_terms = null;
+        try {
+            company_net_terms = await netTermsService.getCommercialSnapshotForUserId(user.id);
+        } catch (e) {
+            console.error('[GET /api/auth/me net_terms]', e.message || e);
+        }
+        const presented = await attachPricingTierPresentation(safeUser);
+        res.json({ ...presented, is_admin: isAdminUser, company_net_terms });
     } catch (err) {
         console.error('[GET /api/auth/me]', err);
         res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ============ ACCOUNT: NET TERMS APPLICATION ============
+
+app.post('/api/account/net-terms-application', authenticateToken, async (req, res) => {
+    try {
+        const application = await netTermsService.submitApplication(req.user.id, req.body || {});
+        res.status(201).json({ success: true, application });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[POST /api/account/net-terms-application]', err);
+        res.status(code).json({ error: err.message || 'Failed to submit application' });
+    }
+});
+
+app.get('/api/account/net-terms-application', authenticateToken, async (req, res) => {
+    try {
+        const user = await usersService.getUserById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const companyId = await companiesService.getCompanyIdForUser(user);
+        let application = null;
+        if (companyId != null) {
+            application = await netTermsService.getLatestApplicationForCompany(companyId);
+        }
+        const company_net_terms = await netTermsService.getCommercialSnapshotForUserId(req.user.id);
+        res.json({ application, company_net_terms });
+    } catch (err) {
+        console.error('[GET /api/account/net-terms-application]', err);
+        res.status(500).json({ error: err.message || 'Failed to load application' });
     }
 });
 
@@ -470,15 +839,19 @@ app.post('/api/contact', authContactLimiter, async (req, res) => {
 
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'sales@glovecubs.com';
         const text = `New contact form submission from Glovecubs\n\nName: ${nameTrim}\nEmail: ${emailTrim}\nCompany: ${companyTrim}\n\nMessage:\n${messageTrim}`;
-        await sendMail({
+        await dispatchEmail({
             to: adminEmail,
             subject: `[Glovecubs] Contact from ${nameTrim}`,
-            text
+            text,
+            emailType: 'contact_form_admin',
+            metadata: { contact_email: emailTrim },
         });
-        await sendMail({
+        await dispatchEmail({
             to: emailTrim,
             subject: 'We received your message - Glovecubs',
-            text: `Hi ${nameTrim},\n\nThank you for contacting Glovecubs. We have received your message and will get back to you soon.\n\nBest regards,\nGlovecubs Team`
+            text: `Hi ${nameTrim},\n\nThank you for contacting Glovecubs. We have received your message and will get back to you soon.\n\nBest regards,\nGlovecubs Team`,
+            emailType: 'contact_form_user_receipt',
+            alertOnFailure: false,
         });
 
         res.json({ success: true, message: 'Message sent! We\'ll get back to you soon.' });
@@ -509,10 +882,12 @@ app.post('/api/auth/forgot-password', authContactLimiter, async (req, res) => {
         const baseUrl = process.env.DOMAIN || process.env.BASE_URL || 'http://localhost:3004';
         const resetLink = `${baseUrl}#reset-password?token=${token}`;
         const text = `Hi ${user.contact_name || 'there'},\n\nYou requested a password reset for your Glovecubs account. Click the link below to set a new password (valid for 1 hour):\n\n${resetLink}\n\nIf you didn't request this, you can ignore this email.\n\nGlovecubs`;
-        await sendMail({
+        await dispatchEmail({
             to: user.email,
             subject: 'Reset your Glovecubs password',
-            text
+            text,
+            emailType: 'password_reset',
+            metadata: { user_id: user.id },
         });
         return res.json({ success: true, message: 'If that email is on file, we sent a reset link.' });
     } catch (error) {
@@ -556,10 +931,21 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
 
 // ============ PRODUCT ROUTES ============
 // When inventory table has a record, use quantity_on_hand for availability (in_stock = qty > 0).
+/** Map legacy public.products id -> inventory row (product_id may come from DB column or dataService join). */
+function inventoryRowsByLegacyProductId(inventoryList) {
+    const byProduct = new Map();
+    for (const i of inventoryList || []) {
+        const pid = i.product_id != null ? Number(i.product_id) : null;
+        if (pid != null && Number.isFinite(pid)) byProduct.set(pid, i);
+    }
+    return byProduct;
+}
+
 function applyInventoryToProducts(products, inventoryList) {
-    const byProduct = new Map((inventoryList || []).map((i) => [i.product_id, i]));
+    const byProduct = inventoryRowsByLegacyProductId(inventoryList);
     return products.map((p) => {
-        const inv = byProduct.get(p.id);
+        const idNum = Number(p.id);
+        const inv = Number.isFinite(idNum) ? byProduct.get(idNum) : null;
         if (inv == null) return p;
         const qty = inv.quantity_on_hand ?? 0;
         return { ...p, in_stock: qty > 0 ? 1 : 0, quantity_on_hand: qty };
@@ -567,17 +953,72 @@ function applyInventoryToProducts(products, inventoryList) {
 }
 
 // Public config for front end (e.g. Stripe publishable key for checkout).
-app.get('/api/config', (req, res) => {
-    const taxConfig = taxLib.getConfig();
-    res.json({
-        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
-        tax: {
-            businessState: taxConfig.businessState,
-            rate: taxConfig.taxRate,
-            rateFormatted: taxLib.formatTaxRate(taxConfig.taxRate),
-            configured: taxConfig.configured
-        }
-    });
+function buildPurchaseAnalyticsClientPayload(orderItems, order, user, paymentMethod) {
+    const customer_type = user && (user.company_id != null || user.is_approved) ? 'company' : 'retail';
+    return {
+        order_id: order.id,
+        order_number: order.order_number,
+        total: Number(order.total),
+        subtotal: Number(order.subtotal),
+        shipping: Number(order.shipping),
+        tax: Number(order.tax),
+        discount: Number(order.discount) || 0,
+        payment_method: paymentMethod,
+        customer_type,
+        items: (orderItems || []).map((i) => ({
+            product_id: i.product_id,
+            sku: i.sku || null,
+            name: (i.name || i.product_name || '').toString().slice(0, 200),
+            quantity: i.quantity,
+            unit_price: Number(i.price != null ? i.price : i.unit_price) || 0,
+        })),
+    };
+}
+
+app.get('/api/config', async (req, res) => {
+    try {
+        const taxConfig = taxLib.getConfig();
+        const shipCfg = await shippingPolicyService.resolveShippingConfigForCheckout();
+        res.json({
+            stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+            ga4MeasurementId: process.env.GA4_MEASUREMENT_ID || '',
+            posthogKey: process.env.POSTHOG_KEY || '',
+            posthogHost: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            tax: {
+                businessState: taxConfig.businessState,
+                rate: taxConfig.taxRate,
+                rateFormatted: taxLib.formatTaxRate(taxConfig.taxRate),
+                configured: taxConfig.configured
+            },
+            shipping: {
+                free_shipping_threshold: shipCfg.freeShippingThreshold,
+                flat_shipping_rate: shipCfg.flatShippingRate,
+                min_order_amount: shipCfg.minOrderAmount,
+                shipping_policy_version_id: shipCfg.shipping_policy_version_id,
+                policy_source: shipCfg.policy_source,
+            },
+        });
+    } catch (e) {
+        console.error('[GET /api/config]', e);
+        res.status(500).json({ error: e.message || 'Config failed' });
+    }
+});
+
+/** Public thresholds for cart/checkout (must match server order creation). */
+app.get('/api/commerce/shipping-config', async (req, res) => {
+    try {
+        const c = await shippingPolicyService.resolveShippingConfigForCheckout();
+        res.json({
+            free_shipping_threshold: c.freeShippingThreshold,
+            flat_shipping_rate: c.flatShippingRate,
+            min_order_amount: c.minOrderAmount,
+            shipping_policy_version_id: c.shipping_policy_version_id,
+            policy_source: c.policy_source,
+        });
+    } catch (e) {
+        console.error('[GET /api/commerce/shipping-config]', e);
+        res.status(500).json({ error: e.message || 'Shipping config failed' });
+    }
 });
 
 // Tax estimate for cart/checkout display
@@ -639,11 +1080,13 @@ app.post('/api/admin/email/test', authenticateToken, requireAdmin, async (req, r
     }
     
     const emailContent = emailTemplates.testEmail(recipientEmail);
-    const result = await sendMail({
+    const result = await dispatchEmail({
         to: recipientEmail,
         subject: emailContent.subject,
         text: emailContent.text,
-        html: emailContent.html
+        html: emailContent.html,
+        emailType: 'test_email',
+        alertOnFailure: false,
     });
     
     if (result.sent) {
@@ -1105,23 +1548,29 @@ app.get('/api/products', optionalAuth, async (req, res) => {
     const inventory = await dataService.getInventory();
     products = applyInventoryToProducts(products, inventory);
 
-    // Customer pricing: when user has a company, add sell_price using manufacturer_id (no brand string)
-    let companyId = null;
-    if (req.user) {
-        const user = await usersService.getUserById(req.user.id);
-        if (user) companyId = await companiesService.getCompanyIdForUser(user);
-    }
-    if (companyId != null) {
+    const access = await getPublicProductApiAccess(req);
+    if (!access.isAdmin && access.companyId != null) {
         const ctx = await getPricingContext();
-        products = products.map(p => {
+        products = products.map((p) => {
             const cost = p.cost != null && p.cost !== '' ? Number(p.cost) : (p.price != null ? Number(p.price) : 0);
-            const margin = getEffectiveMargin(ctx, companyId, p.manufacturer_id);
+            const margin = getEffectiveMargin(ctx, access.companyId, p.manufacturer_id);
             const sell = computeSellPrice(cost, margin);
-            return { ...p, sell_price: Number.isNaN(sell) ? (p.price || 0) : sell };
+            const fallback =
+                p.list_price != null && !Number.isNaN(Number(p.list_price)) ? Number(p.list_price) : (p.price || 0);
+            return { ...p, sell_price: Number.isNaN(sell) ? fallback : sell };
         });
     }
 
-    res.json(products);
+    if (access.isAdmin) {
+        res.json(products);
+    } else {
+        res.json(
+            sanitizeProductsArrayForPublicApi(products, {
+                isAdmin: false,
+                isApprovedB2B: access.isApprovedB2B,
+            })
+        );
+    }
     } catch (err) {
         console.error('[GET /api/products]', err);
         res.status(500).json({ error: 'Database error' });
@@ -1141,19 +1590,29 @@ app.get('/api/products/:id', optionalAuth, async (req, res) => {
         const inventory = await dataService.getInventory();
         const applied = applyInventoryToProducts([{ ...product }], inventory);
         product = applied[0] || product;
-        let companyId = null;
-        if (req.user) {
-            const user = await usersService.getUserById(req.user.id);
-            if (user) companyId = await companiesService.getCompanyIdForUser(user);
-        }
-        if (companyId != null) {
+        const access = await getPublicProductApiAccess(req);
+        if (!access.isAdmin && access.companyId != null) {
             const ctx = await getPricingContext();
             const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-            const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
+            const margin = getEffectiveMargin(ctx, access.companyId, product.manufacturer_id);
             const sell = computeSellPrice(cost, margin);
-            product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
+            const fallback =
+                product.list_price != null && !Number.isNaN(Number(product.list_price))
+                    ? Number(product.list_price)
+                    : (product.price || 0);
+            product.sell_price = Number.isNaN(sell) ? fallback : sell;
         }
-        res.json(product);
+        if (access.isAdmin) {
+            res.json(product);
+        } else {
+            res.json(
+                sanitizeProductForPublicApi(product, {
+                    isAdmin: false,
+                    isApprovedB2B: access.isApprovedB2B,
+                    sellPrice: product.sell_price,
+                })
+            );
+        }
     } catch (err) {
         console.error('[GET /api/products/:id]', err);
         res.status(500).json({ error: 'Database error' });
@@ -1171,19 +1630,29 @@ app.get('/api/products/by-slug', optionalAuth, async (req, res) => {
         const inventory = await dataService.getInventory();
         const applied = applyInventoryToProducts([{ ...product }], inventory);
         product = { ...(applied[0] || product), slug: product.slug || productsService.slugFromName(product.name) };
-        let companyId = null;
-        if (req.user) {
-            const user = await usersService.getUserById(req.user.id);
-            if (user) companyId = await companiesService.getCompanyIdForUser(user);
-        }
-        if (companyId != null) {
+        const access = await getPublicProductApiAccess(req);
+        if (!access.isAdmin && access.companyId != null) {
             const ctx = await getPricingContext();
             const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-            const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
+            const margin = getEffectiveMargin(ctx, access.companyId, product.manufacturer_id);
             const sell = computeSellPrice(cost, margin);
-            product.sell_price = Number.isNaN(sell) ? (product.price || 0) : sell;
+            const fallback =
+                product.list_price != null && !Number.isNaN(Number(product.list_price))
+                    ? Number(product.list_price)
+                    : (product.price || 0);
+            product.sell_price = Number.isNaN(sell) ? fallback : sell;
         }
-        res.json(product);
+        if (access.isAdmin) {
+            res.json(product);
+        } else {
+            res.json(
+                sanitizeProductForPublicApi(product, {
+                    isAdmin: false,
+                    isApprovedB2B: access.isApprovedB2B,
+                    sellPrice: product.sell_price,
+                })
+            );
+        }
     } catch (err) {
         console.error('[GET /api/products/by-slug]', err);
         res.status(500).json({ error: 'Database error' });
@@ -1555,16 +2024,6 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
     const additionalImages = image_urls.length > 1 ? image_urls.slice(1).map(u => (u || '').toString().trim()).filter(Boolean) : [];
     const brand = (body.brand || '').toString().trim();
     try {
-        let manufacturer_id = null;
-        if (brand) {
-            const { data: existingMfr } = await supabase.from('manufacturers').select('id').eq('name', brand).limit(1).maybeSingle();
-            if (existingMfr && existingMfr.id) {
-                manufacturer_id = existingMfr.id;
-            } else {
-                const { data: inserted, error } = await supabase.from('manufacturers').insert({ name: brand }).select('id').single();
-                if (!error && inserted) manufacturer_id = inserted.id;
-            }
-        }
         const attributes = body.attributes && typeof body.attributes === 'object' ? body.attributes : {};
         const attribute_warnings = Array.isArray(body.attribute_warnings) ? body.attribute_warnings : [];
         const source_confidence = body.source_confidence && typeof body.source_confidence === 'object' ? body.source_confidence : {};
@@ -1572,11 +2031,14 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
             sku,
             name,
             brand: brand || null,
+            manufacturer_id:
+                body.manufacturer_id != null && !Number.isNaN(Number(body.manufacturer_id))
+                    ? Number(body.manufacturer_id)
+                    : undefined,
             description: (body.description || '').toString().trim() || null,
             cost: body.cost != null && !Number.isNaN(Number(body.cost)) ? Number(body.cost) : 0,
             image_url: (primaryImage || '').toString().trim() || null,
             images: additionalImages,
-            manufacturer_id,
             material: (body.material || '').toString().trim() || null,
             color: (body.color || '').toString().trim() || null,
             sizes: (body.sizes || '').toString().trim() || null,
@@ -1590,21 +2052,20 @@ app.post('/api/admin/products/save', authenticateToken, requireAdmin, async (req
             attributes,
             attribute_warnings,
             source_confidence,
-            updated_at: new Date().toISOString()
         };
-        const { data: existingProduct } = await supabase.from('products').select('id').eq('sku', sku).limit(1).maybeSingle();
-        if (existingProduct) {
-            const { error } = await supabase.from('products').update(productPayload).eq('id', existingProduct.id);
-            if (error) throw error;
+        const existingBySku = await productsService.getProductBySkuForWrite(sku);
+        if (existingBySku && existingBySku.ambiguous) {
+            return res.status(409).json({ error: 'Multiple catalog rows share this SKU; resolve in catalog admin.' });
+        }
+        if (existingBySku && existingBySku.id) {
+            await productsService.updateProduct(existingBySku.id, productPayload);
             logParseEvent({ event: 'save', action: 'updated', sku, name });
             if (req.body && req.body.logParse) {
                 console.log('[admin/products] save updated', sku);
             }
             return res.json({ success: true, action: 'updated', sku });
         }
-        productPayload.created_at = new Date().toISOString();
-        const { error } = await supabase.from('products').insert(productPayload);
-        if (error) throw error;
+        await productsService.createProduct(productPayload);
         console.log('Product inserted:', sku);
         logParseEvent({ event: 'save', action: 'created', sku, name });
         if (req.body && req.body.logParse) {
@@ -2133,7 +2594,11 @@ app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => 
             const inStock = totalQty > 0 ? 1 : 0;
             const currentQoh = product.quantity_on_hand ?? 0;
             if (product.in_stock !== inStock || currentQoh !== totalQty) {
-                await dataService.upsertInventory(product.id, { quantity_on_hand: totalQty });
+                const invCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
+                await dataService.upsertInventory(product.id, {
+                    quantity_on_hand: totalQty,
+                    ...(invCanon ? { canonical_product_id: invCanon } : {}),
+                });
                 await productsService.updateProduct(product.id, { in_stock: inStock });
                 updated++;
             }
@@ -2229,23 +2694,38 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
         const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
         const cartItems = await dataService.getCart(cartKey);
         let companyId = null;
+        let user = null;
         let ctx = { companies: [], customer_manufacturer_pricing: [] };
         if (req.user) {
-            const user = await usersService.getUserById(req.user.id);
+            user = await usersService.getUserById(req.user.id);
             if (user) companyId = await companiesService.getCompanyIdForUser(user);
             ctx = await getPricingContext();
         }
         const enrichedCart = [];
         for (const item of cartItems) {
-            const product = await productsService.getProductById(item.product_id);
-            let price = product?.price || 0;
-            const bulk_price = product?.bulk_price ?? null;
-            if (companyId != null && product) {
-                const cost = product.cost != null && product.cost !== '' ? Number(product.cost) : (product.price != null ? Number(product.price) : 0);
-                const margin = getEffectiveMargin(ctx, companyId, product.manufacturer_id);
-                const sell = computeSellPrice(cost, margin);
-                if (!Number.isNaN(sell)) price = sell;
+            const catalogId = resolveLineCatalogProductId(item);
+            if (!catalogId) {
+                enrichedCart.push({
+                    ...item,
+                    name: 'Unknown',
+                    price: 0,
+                    bulk_price: null,
+                    checkout_unit_price: 0,
+                    image_url: '',
+                    sku: '',
+                    variant_sku: '',
+                    catalog_error: 'MISSING_CANONICAL_PRODUCT_ID',
+                });
+                continue;
             }
+            const product = await productsService.getProductById(catalogId);
+            const resolved = commercePricing.resolveLineUnitPriceForCheckout({
+                user,
+                companyId,
+                product,
+                quantity: item.quantity,
+                pricingContext: ctx,
+            });
             let variantSku = product?.sku || '';
             if (item.size && variantSku) {
                 const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
@@ -2254,8 +2734,9 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
             enrichedCart.push({
                 ...item,
                 name: product?.name || 'Unknown',
-                price,
-                bulk_price: companyId != null ? price : bulk_price,
+                price: resolved.listUnitPrice,
+                bulk_price: resolved.catalogBulkUnitPrice,
+                checkout_unit_price: resolved.unitPrice,
                 image_url: product?.image_url || '',
                 sku: product?.sku || '',
                 variant_sku: variantSku
@@ -2270,27 +2751,35 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
 
 app.post('/api/cart', optionalAuth, async (req, res) => {
     try {
-        const { product_id, size, quantity } = req.body;
+        const { product_id, size, quantity, canonical_product_id } = req.body;
         const qty = Math.max(1, parseInt(quantity, 10) || 1);
-        const product = await productsService.getProductById(product_id);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
         const sessionId = req.headers['x-session-id'] || 'anonymous';
         const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
         const cartItems = await dataService.getCart(cartKey);
-        const existing = cartItems.find(item => item.product_id === product_id && item.size === size);
+        const lineForCanon = { product_id, size, canonical_product_id };
+        try {
+            await ensureCommerceLinesHaveCanonical([lineForCanon], 'cart_post');
+        } catch (e) {
+            if (respondCommerceCanonicalError(e, res)) return;
+            throw e;
+        }
+        const catalogId = lineForCanon.canonical_product_id;
+        const product = await productsService.getProductById(catalogId);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const existing = cartItems.find(
+            (item) => String(resolveLineCatalogProductId(item)) === String(catalogId) && item.size === size
+        );
         if (existing) {
             existing.quantity += qty;
+            existing.canonical_product_id = catalogId;
+            existing.product_id = catalogId;
         } else {
-            cartItems.push({
-                id: Date.now(),
-                product_id,
-                size: size || null,
-                quantity: qty
-            });
+            cartItems.push(cartLineContract.newCartLineFromBody({ product_id: catalogId, size, quantity: qty, canonical_product_id: catalogId }));
         }
         await dataService.setCart(cartKey, cartItems);
         res.json({ success: true });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[cart POST]', err);
         res.status(500).json({ error: err.message || 'Failed to update cart' });
     }
@@ -2344,123 +2833,205 @@ app.delete('/api/cart', optionalAuth, async (req, res) => {
     }
 });
 
+// ============ CHECKOUT QUOTE (server-authoritative totals) ============
+
+app.post('/api/checkout/quote', authenticateToken, async (req, res) => {
+    const totalsGuard = assertNoClientSuppliedTotals(req.body || {});
+    if (!totalsGuard.ok) {
+        return res.status(400).json({
+            error: 'Client-supplied totals are not accepted.',
+            code: 'CLIENT_TOTALS_REJECTED',
+        });
+    }
+    try {
+        const { shipping_address, ship_to_id, payment_method: quotePaymentMethod } = req.body || {};
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const addrRes = await resolveFinalShippingAddressForCheckout(companyIds, req.user.id, ship_to_id, shipping_address);
+        if (!addrRes.ok) return res.status(addrRes.status).json(addrRes.body);
+
+        const cartKey = `user_${req.user.id}`;
+        const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_quote');
+        if (!cartItems) return;
+
+        const user = await usersService.getUserById(req.user.id);
+        const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const pricingCtx = await getPricingContext();
+        const money = await checkoutCompute.computeCheckoutMoneyFromCart({
+            cartItems,
+            finalShippingAddress: addrRes.finalShippingAddress,
+            user,
+            companyId: companyIdForPricing,
+            pricingContext: pricingCtx,
+            productsService,
+        });
+        if (!money.ok) return res.status(money.status).json(money.body);
+
+        const v = money.value;
+        const tierPct = commercePricing.getTierDiscountPercentForUser(user, pricingCtx.tier_discount_by_code);
+        const thr = v.shipCfg.freeShippingThreshold;
+        const amountToFree =
+            thr > 0 && v.subtotal < thr ? Math.round((thr - v.subtotal) * 100) / 100 : 0;
+
+        const quotePm =
+            quotePaymentMethod === 'net30' || quotePaymentMethod === 'credit_card' || quotePaymentMethod === 'ach'
+                ? quotePaymentMethod
+                : null;
+
+        const quotePayload = {
+            ok: true,
+            lines: v.orderItems.map((row) => ({
+                product_id: row.product_id,
+                name: row.name,
+                sku: row.sku,
+                variant_sku: row.variant_sku,
+                size: row.size,
+                quantity: row.quantity,
+                unit_price: row.price,
+                line_total: Math.round(row.price * row.quantity * 100) / 100,
+                canonical_product_id: row.canonical_product_id || undefined,
+            })),
+            subtotal: v.subtotal,
+            discount: v.discount,
+            shipping: v.shipping,
+            tax: v.tax,
+            total: v.total,
+            tax_rate: v.taxResult.rate,
+            tax_reason: v.taxResult.reason,
+            tax_summary: taxLib.getTaxSummary(v.taxResult),
+            tax_taxable: v.taxResult.taxable,
+            tier_discount_percent_applied: tierPct,
+            shipping_policy: {
+                free_shipping_threshold: v.shipCfg.freeShippingThreshold,
+                flat_shipping_rate: v.shipCfg.flatShippingRate,
+                min_order_amount: v.shipCfg.minOrderAmount,
+            },
+            amount_to_free_shipping: amountToFree,
+        };
+
+        if (quotePm === 'net30') {
+            let coQuote = null;
+            try {
+                coQuote = await netTermsService.fetchCompanyForUser(user);
+            } catch (qe) {
+                console.error('[POST /api/checkout/quote] company for net30 credit preview', qe.message || qe);
+            }
+            const ev = evaluateNet30Credit(coQuote, v.total);
+            if (ev.credit) {
+                quotePayload.net30_credit = Object.assign({}, ev.credit, { within_limit: ev.ok });
+            }
+        }
+
+        res.json(quotePayload);
+    } catch (err) {
+        console.error('[POST /api/checkout/quote]', err);
+        res.status(500).json({ error: err.message || 'Failed to build checkout quote' });
+    }
+});
+
 // ============ ORDER ROUTES ============
 
 app.post('/api/orders', authenticateToken, async (req, res) => {
     try {
+        const totalsGuardPostOrders = assertNoClientSuppliedTotals(req.body || {});
+        if (!totalsGuardPostOrders.ok) {
+            return res.status(400).json({
+                error: 'Client-supplied totals are not accepted. Pricing is calculated on the server.',
+                code: 'CLIENT_TOTALS_REJECTED',
+            });
+        }
+
+        const idemHeader = req.headers['idempotency-key'];
+        const idemKey =
+            typeof idemHeader === 'string' && idemHeader.trim().length > 0
+                ? idemHeader.trim().slice(0, 255)
+                : null;
+
+        const marketingAtt = sanitizeMarketingAttribution(req.body && req.body.marketing_attribution);
+
         const { shipping_address, notes, ship_to_id, payment_method } = req.body;
         const companyIds = await getCompanyIdsForAuthenticatedUser(req);
-        let finalShippingAddress = null;
-        
-        if (ship_to_id) {
-            const shipTos = await dataService.getShipToByCompanyId(companyIds, req.user.id);
-            const shipTo = shipTos.find(s => s.id == ship_to_id);
-            if (shipTo) {
-                finalShippingAddress = addressValidation.normalizeAddress({
-                    full_name: shipTo.label || 'Ship-to',
-                    address_line1: shipTo.address,
-                    city: shipTo.city,
-                    state: shipTo.state,
-                    zip_code: shipTo.zip
-                });
-            }
-        }
-        
-        if (!finalShippingAddress) {
-            // Validate custom address from request
-            const addressData = typeof shipping_address === 'object' ? shipping_address : null;
-            if (!addressData) {
-                return res.status(400).json({ 
-                    error: 'Shipping address is required',
-                    field_errors: { shipping_address: 'Please provide a shipping address' }
-                });
-            }
-            
-            const validation = addressValidation.validateAddress(addressData);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    error: addressValidation.getErrorMessage(validation),
-                    field_errors: addressValidation.getErrorsByField(validation)
-                });
-            }
-            
-            finalShippingAddress = addressValidation.normalizeAddress(addressData);
-        }
-        
-        const cartKey = `user_${req.user.id}`;
-        const cartItems = await dataService.getCart(cartKey);
-        if (cartItems.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+        const addrRes = await resolveFinalShippingAddressForCheckout(companyIds, req.user.id, ship_to_id, shipping_address);
+        if (!addrRes.ok) return res.status(addrRes.status).json(addrRes.body);
+        const { finalShippingAddress } = addrRes;
 
-        const missing = [];
-        for (const item of cartItems) {
-            const product = await productsService.getProductById(item.product_id);
-            if (!product || !product.in_stock) missing.push(item);
+        const cartKey = `user_${req.user.id}`;
+        if (idemKey) {
+            const idemDone = await dataService.getOrderByUserIdempotencyKey(req.user.id, idemKey);
+            if (idemDone && idemDone.status !== 'cancelled' && idemDone.inventory_reserved_at) {
+                const uIdem = await usersService.getUserById(req.user.id);
+                const pmIdem = idemDone.payment_method || 'net30';
+                const purchase_analytics = buildPurchaseAnalyticsClientPayload(
+                    idemDone.items || [],
+                    idemDone,
+                    uIdem,
+                    pmIdem
+                );
+                return res.json({
+                    success: true,
+                    order_number: idemDone.order_number,
+                    order_id: idemDone.id,
+                    total: Number(idemDone.total),
+                    purchase_analytics,
+                });
+            }
         }
-        if (missing.length > 0) {
-            return res.status(400).json({
-                error: 'Some items in your cart are no longer available. Please update your cart.',
-                unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
-            });
-        }
-        const avail = await inventory.checkAvailability(cartItems);
-        if (!avail.ok) {
-            const first = avail.insufficient[0];
-            return res.status(400).json({
-                error: `Insufficient stock for one or more items. Product ${first.product_id}: need ${first.needed}, available ${first.available}.`,
-                insufficient: avail.insufficient
-            });
-        }
+
+        const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_post_orders');
+        if (!cartItems) return;
 
         const user = await usersService.getUserById(req.user.id);
-        let discountPercent = 0;
-        if (user && user.is_approved) {
-            switch (user.discount_tier) {
-                case 'bronze': discountPercent = 5; break;
-                case 'silver': discountPercent = 10; break;
-                case 'gold': discountPercent = 15; break;
-                case 'platinum': discountPercent = 20; break;
+        const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const pricingCtxOrders = await getPricingContext();
+        const money = await checkoutCompute.computeCheckoutMoneyFromCart({
+            cartItems,
+            finalShippingAddress,
+            user,
+            companyId: companyIdForPricing,
+            pricingContext: pricingCtxOrders,
+            productsService,
+        });
+        if (!money.ok) return res.status(money.status).json(money.body);
+
+        const { orderItems, subtotal, discount, shipping, tax, total, taxResult, shipCfg } = money.value;
+
+        const allowedMethods = ['credit_card', 'ach', 'net30'];
+        const requested = (payment_method && allowedMethods.includes(payment_method)) ? payment_method : (user.payment_terms === 'net30' ? 'net30' : 'credit_card');
+        let companyRowForTerms = null;
+        try {
+            companyRowForTerms = await netTermsService.fetchCompanyForUser(user);
+        } catch (e) {
+            console.error('[POST /api/orders] company for terms', e.message || e);
+        }
+        if (requested === 'net30') {
+            const inv = canPlaceInvoiceOrder(user, companyRowForTerms, { orderTotal: total, skipCreditCheck: false });
+            if (!inv.ok) {
+                const body = {
+                    error: inv.message || 'Invoice checkout is not available for this account.',
+                    code: inv.code || 'INVOICE_CHECKOUT_BLOCKED',
+                };
+                if (inv.code === 'CREDIT_LIMIT_EXCEEDED' && inv.credit) {
+                    Object.assign(body, inv.credit);
+                }
+                return res.status(400).json(body);
             }
         }
 
-        let subtotal = 0;
-        const orderItems = [];
-        for (const item of cartItems) {
-            const product = await productsService.getProductById(item.product_id);
-            let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
-            if (discountPercent > 0) price = price * (1 - discountPercent / 100);
-            subtotal += price * item.quantity;
-            let variantSku = product.sku || '';
-            if (item.size && product.sku) variantSku = `${product.sku}-${item.size.toUpperCase().replace(/\s+/g, '')}`;
-            orderItems.push({
-                product_id: item.product_id,
-                sku: product.sku || '',
-                variant_sku: variantSku,
-                name: product.name || 'Unknown',
-                size: item.size || null,
-                quantity: item.quantity,
-                price
-            });
+        const companyId = companyIdForPricing;
+
+        let order;
+        let orderNumber;
+
+        if (idemKey) {
+            const idemRow = await dataService.getOrderByUserIdempotencyKey(req.user.id, idemKey);
+            if (idemRow && idemRow.status !== 'cancelled' && !idemRow.inventory_reserved_at) {
+                order = idemRow;
+                orderNumber = idemRow.order_number;
+            }
         }
 
-        const discount = 0;
-        const shipping = subtotal >= 500 ? 0 : 25;
-        
-        // Nexus-based tax calculation: only charge tax for in-state orders
-        const taxResult = taxLib.calculateTaxForAddress(finalShippingAddress, subtotal, shipping);
-        const tax = taxResult.tax;
-        const total = subtotal + shipping + tax;
-        
-        const allowedMethods = ['credit_card', 'ach', 'net30'];
-        const requested = (payment_method && allowedMethods.includes(payment_method)) ? payment_method : (user.payment_terms === 'net30' ? 'net30' : 'credit_card');
-        if (requested === 'net30' && !user.is_approved) {
-            return res.status(400).json({ error: 'Net 30 payment terms require account approval. Please use Credit Card or ACH, or contact us to request Net 30.' });
-        }
-        const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
-
-        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
         const orderPayload = {
             user_id: req.user.id,
-            order_number: orderNumber,
+            order_number: orderNumber || 'GC-' + Date.now().toString(36).toUpperCase(),
             status: 'pending',
             payment_method: requested,
             subtotal,
@@ -2475,47 +3046,219 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             notes: notes || null,
             tracking_number: '',
             tracking_url: '',
-            items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, size: i.size, unit_price: i.price }))
+            ...buildOrderEconomicsOrderFields({ subtotal, shipping, shipCfg }),
+            items: orderItems.map((i) => {
+                const snap = buildLineCostSnapshotFields(i.cost_at_order, i.quantity);
+                return {
+                    product_id: i.product_id,
+                    quantity: i.quantity,
+                    size: i.size,
+                    unit_price: i.price,
+                    canonical_product_id: i.canonical_product_id,
+                    unit_cost_at_order: snap.unit_cost_at_order,
+                    total_cost_at_order: snap.total_cost_at_order,
+                };
+            }),
         };
-        const order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+        if (idemKey) orderPayload.idempotency_key = idemKey;
+        if (marketingAtt) orderPayload.marketing_attribution = marketingAtt;
+
+        if (!order) {
+            orderNumber = orderPayload.order_number;
+            try {
+                order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+            } catch (createErr) {
+                if (idemKey && createErr && String(createErr.code) === '23505') {
+                    const replay = await dataService.getOrderByUserIdempotencyKey(req.user.id, idemKey);
+                    if (replay && replay.status !== 'cancelled') {
+                        order = replay;
+                        orderNumber = replay.order_number;
+                    } else {
+                        throw createErr;
+                    }
+                } else {
+                    throw createErr;
+                }
+            }
+        } else {
+            orderNumber = order.order_number;
+            if (marketingAtt) {
+                try {
+                    await dataService.updateOrder(order.id, { marketing_attribution: marketingAtt });
+                } catch (maErr) {
+                    console.warn('[POST /api/orders] marketing_attribution update failed:', maErr.message || maErr);
+                }
+            }
+        }
+
+        if (requested === 'net30') {
+            let coFresh = null;
+            try {
+                coFresh = await netTermsService.fetchCompanyForUser(user);
+            } catch (cfe) {
+                console.error('[POST /api/orders] credit re-check company', cfe.message || cfe);
+            }
+            const credEv = evaluateNet30Credit(coFresh, total);
+            if (!credEv.ok) {
+                try {
+                    await dataService.cancelOrderClearIdempotencyKey(order.id);
+                } catch (cErr) {
+                    console.error('[POST /api/orders] cancel after credit re-check', cErr);
+                }
+                return res.status(400).json({
+                    error: credEv.message,
+                    code: 'CREDIT_LIMIT_EXCEEDED',
+                    ...credEv.credit,
+                });
+            }
+        }
+
         try {
             await inventory.reserveStockForOrder(order.id, order.items);
         } catch (resErr) {
-            console.error('[POST /api/orders] reserve stock failed:', resErr.message);
+            paymentLog.logError('inventory.reserve_failed', resErr, {
+                order_id: order.id,
+                user_id: req.user.id,
+                order_number: orderNumber,
+                flow: 'post_orders_net30',
+            });
+            try {
+                await dataService.cancelOrderClearIdempotencyKey(order.id);
+            } catch (cancelErr) {
+                paymentLog.logError('order.cancel_after_reserve_failed', cancelErr, {
+                    order_id: order.id,
+                    user_id: req.user.id,
+                    order_number: orderNumber,
+                    flow: 'post_orders_net30',
+                });
+            }
             return res.status(400).json({ error: resErr.message || 'Insufficient stock. Please update your cart.' });
         }
+
+        if (requested === 'net30') {
+            try {
+                await arInvoiceService.applyNet30OrderOpen({
+                    orderId: order.id,
+                    companyId: order.company_id,
+                    orderTotal: Number(order.total),
+                    companyRow: companyRowForTerms || { invoice_terms_code: 'net30' },
+                    orderCreatedAt: order.created_at,
+                });
+            } catch (arErr) {
+                paymentLog.logError('ar.net30_open_failed', arErr, {
+                    order_id: order.id,
+                    user_id: req.user.id,
+                    order_number: orderNumber,
+                });
+                try {
+                    await inventory.releaseStockForOrder(order.id, req.user.id);
+                } catch (relErr) {
+                    paymentLog.logError('ar.rollback_release_failed', relErr, { order_id: order.id });
+                }
+                try {
+                    await dataService.cancelOrderClearIdempotencyKey(order.id);
+                } catch (cErr) {
+                    paymentLog.logError('ar.rollback_cancel_failed', cErr, { order_id: order.id });
+                }
+                try {
+                    await dataService.setCart(cartKey, cartItems);
+                } catch (cartErr) {
+                    paymentLog.logError('ar.rollback_cart_failed', cartErr, { order_id: order.id });
+                }
+                const isCredit =
+                    arErr.code === 'CREDIT_LIMIT_EXCEEDED' ||
+                    (arErr.arPayload && arErr.arPayload.error === 'CREDIT_LIMIT_EXCEEDED');
+                const status = isCredit ? 400 : 500;
+                const body = {
+                    error:
+                        arErr.message ||
+                        'Could not open accounts receivable for this invoice order. Your cart was restored. Try again or pay by card.',
+                    code: isCredit ? 'CREDIT_LIMIT_EXCEEDED' : 'AR_OPEN_FAILED',
+                };
+                if (isCredit) {
+                    const src = arErr.arPayload || arErr;
+                    for (const k of [
+                        'credit_limit',
+                        'outstanding_balance',
+                        'order_total',
+                        'projected_outstanding',
+                        'available_credit',
+                    ]) {
+                        if (src[k] != null) body[k] = Number(src[k]);
+                    }
+                }
+                return res.status(status).json(body);
+            }
+        }
+
         await dataService.setCart(cartKey, []);
 
-        // Send order confirmation email with improved template
+        // Send order confirmation email (non-blocking; failures: [EmailFailed] + [EmailAlert] + Payment log)
         if (user && user.email) {
             const emailOrder = { ...orderPayload, order_number: orderNumber, items: orderItems.map(i => ({ ...i, product_name: i.name, unit_price: i.price })) };
-            const emailContent = emailTemplates.orderConfirmation(emailOrder, user);
-            sendMail({ to: user.email, subject: emailContent.subject, text: emailContent.text, html: emailContent.html }).catch(() => {});
+            const invoiceTermsLabel =
+                requested === 'net30' && companyRowForTerms ? formatInvoiceTermsLabel(companyRowForTerms) : null;
+            const emailContent = emailTemplates.orderConfirmation(emailOrder, user, { invoiceTermsLabel });
+            dispatchEmailInBackground({
+                to: user.email,
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html,
+                emailType: 'order_confirmation',
+                orderId: order.id,
+                orderNumber: orderNumber,
+            });
         }
-        // Send admin notification
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
         if (adminEmail) {
             const adminOrder = { ...orderPayload, order_number: orderNumber, items: orderItems.map(i => ({ ...i, product_name: i.name, unit_price: i.price })) };
             const adminContent = emailTemplates.adminNewOrder(adminOrder, user);
-            sendMail({ to: adminEmail, subject: adminContent.subject, text: adminContent.text, html: adminContent.html }).catch(() => {});
+            dispatchEmailInBackground({
+                to: adminEmail,
+                subject: adminContent.subject,
+                text: adminContent.text,
+                html: adminContent.html,
+                emailType: 'admin_new_order',
+                orderId: order.id,
+                orderNumber: orderNumber,
+            });
         }
-        res.json({ success: true, order_number: orderNumber, order_id: order.id, total });
+        schedulePricingTierReevaluation(req.user.id, 'post_order');
+        const purchase_analytics = buildPurchaseAnalyticsClientPayload(orderItems, order, user, requested);
+        res.json({
+            success: true,
+            order_number: orderNumber,
+            order_id: order.id,
+            total: Number(order.total),
+            purchase_analytics,
+        });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[POST /api/orders]', err);
         res.status(500).json({ error: err.message || 'Failed to create order' });
     }
 });
 
 // Create order in pending_payment and Stripe PaymentIntent for card/ACH (returns client_secret for Stripe.js).
+// Subtotal, tax, shipping, and total are computed only on the server; PaymentIntent amount matches persisted order.total.
 app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res) => {
     if (!stripe) {
         return res.status(503).json({ error: 'Stripe is not configured. Use Credit Card or ACH after setting STRIPE_SECRET_KEY.' });
     }
+    const piTotalsGuard = assertNoClientSuppliedTotals(req.body || {});
+    if (!piTotalsGuard.ok) {
+        return res.status(400).json({
+            error: 'Client-supplied totals are not accepted. Pricing is calculated on the server.',
+            code: 'CLIENT_TOTALS_REJECTED',
+        });
+    }
     const { shipping_address, notes, ship_to_id, payment_method } = req.body;
+    const marketingAttPi = sanitizeMarketingAttribution(req.body && req.body.marketing_attribution);
     if (payment_method !== 'credit_card' && payment_method !== 'ach') {
         return res.status(400).json({ error: 'Use this endpoint only for credit_card or ach. Use POST /api/orders for Net 30.' });
     }
 
+    try {
     // ====== FIX 4: Duplicate order prevention (idempotency) ======
     // Check for existing pending_payment order within last 10 minutes
     try {
@@ -2526,13 +3269,22 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
                 const existingIntent = await stripe.paymentIntents.retrieve(existingOrder.stripe_payment_intent_id);
                 if (existingIntent && existingIntent.status !== 'succeeded' && existingIntent.status !== 'canceled') {
                     paymentLog.duplicatePrevented(req.user.id, existingOrder.order_number, existingOrder.id);
+                    const uReuse = await usersService.getUserById(req.user.id);
+                    const pmReuse = existingOrder.payment_method || payment_method;
+                    const purchase_analytics = buildPurchaseAnalyticsClientPayload(
+                        existingOrder.items || [],
+                        existingOrder,
+                        uReuse,
+                        pmReuse
+                    );
                     return res.json({
                         success: true,
                         client_secret: existingIntent.client_secret,
                         order_id: existingOrder.id,
                         order_number: existingOrder.order_number,
                         total: existingOrder.total,
-                        reused_existing: true
+                        reused_existing: true,
+                        purchase_analytics,
                     });
                 }
             } catch (intentErr) {
@@ -2546,94 +3298,29 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
     }
 
     const companyIds = await getCompanyIdsForAuthenticatedUser(req);
-    let finalShippingAddress = null;
-    
-    if (ship_to_id) {
-        const shipTos = await dataService.getShipToByCompanyId(companyIds, req.user.id);
-        const shipTo = shipTos.find(s => s.id == ship_to_id);
-        if (shipTo) {
-            finalShippingAddress = addressValidation.normalizeAddress({
-                full_name: shipTo.label || 'Ship-to',
-                address_line1: shipTo.address,
-                city: shipTo.city,
-                state: shipTo.state,
-                zip_code: shipTo.zip
-            });
-        }
-    }
-    
-    if (!finalShippingAddress) {
-        const addressData = typeof shipping_address === 'object' ? shipping_address : null;
-        if (!addressData) {
-            return res.status(400).json({ 
-                error: 'Shipping address is required',
-                field_errors: { shipping_address: 'Please provide a shipping address' }
-            });
-        }
-        
-        const validation = addressValidation.validateAddress(addressData);
-        if (!validation.valid) {
-            return res.status(400).json({
-                error: addressValidation.getErrorMessage(validation),
-                field_errors: addressValidation.getErrorsByField(validation)
-            });
-        }
-        
-        finalShippingAddress = addressValidation.normalizeAddress(addressData);
-    }
-    
+    const addrResPi = await resolveFinalShippingAddressForCheckout(companyIds, req.user.id, ship_to_id, shipping_address);
+    if (!addrResPi.ok) return res.status(addrResPi.status).json(addrResPi.body);
+    const { finalShippingAddress } = addrResPi;
+
     const cartKey = `user_${req.user.id}`;
-    const cartItems = await dataService.getCart(cartKey);
-    if (cartItems.length === 0) return res.status(400).json({ error: 'Cart is empty' });
-    const missing = [];
-    for (const item of cartItems) {
-        const product = await productsService.getProductById(item.product_id);
-        if (!product || !product.in_stock) missing.push(item);
-    }
-    if (missing.length > 0) {
-        return res.status(400).json({
-            error: 'Some items in your cart are no longer available. Please update your cart.',
-            unavailable_product_ids: [...new Set(missing.map(m => m.product_id))]
-        });
-    }
-    const avail = await inventory.checkAvailability(cartItems);
-    if (!avail.ok) {
-        const first = avail.insufficient[0];
-        return res.status(400).json({
-            error: `Insufficient stock for one or more items. Product ${first.product_id}: need ${first.needed}, available ${first.available}.`,
-            insufficient: avail.insufficient
-        });
-    }
+    const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_create_payment_intent');
+    if (!cartItems) return;
+
     const user = await usersService.getUserById(req.user.id);
-    let discountPercent = 0;
-    if (user && user.is_approved) {
-        switch (user.discount_tier) { case 'bronze': discountPercent = 5; break; case 'silver': discountPercent = 10; break; case 'gold': discountPercent = 15; break; case 'platinum': discountPercent = 20; break; }
-    }
-    let subtotal = 0;
-    const orderItems = [];
-    for (const item of cartItems) {
-        const product = await productsService.getProductById(item.product_id);
-        let price = user && user.is_approved && product.bulk_price ? product.bulk_price : product.price;
-        if (discountPercent > 0) price = price * (1 - discountPercent / 100);
-        subtotal += price * item.quantity;
-        orderItems.push({
-            product_id: item.product_id,
-            sku: product.sku || '',
-            variant_sku: item.size && product.sku ? `${product.sku}-${(item.size || '').toUpperCase().replace(/\s+/g, '')}` : (product.sku || ''),
-            name: product.name || 'Unknown',
-            size: item.size || null,
-            quantity: item.quantity,
-            price
-        });
-    }
-    const discount = 0;
-    const shipping = subtotal >= 500 ? 0 : 25;
-    
-    // Nexus-based tax calculation: only charge tax for in-state orders
-    const taxResult = taxLib.calculateTaxForAddress(finalShippingAddress, subtotal, shipping);
-    const tax = taxResult.tax;
-    const total = subtotal + shipping + tax;
-    
+    const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
+    const pricingCtxPi = await getPricingContext();
+    const moneyPi = await checkoutCompute.computeCheckoutMoneyFromCart({
+        cartItems,
+        finalShippingAddress,
+        user,
+        companyId: companyIdForPricing,
+        pricingContext: pricingCtxPi,
+        productsService,
+    });
+    if (!moneyPi.ok) return res.status(moneyPi.status).json(moneyPi.body);
+
+    const { orderItems, subtotal, discount, shipping, tax, total, taxResult, shipCfg: shipCfgPi } = moneyPi.value;
+
     const amountCents = Math.round(total * 100);
     if (amountCents < 50) return res.status(400).json({ error: 'Order total must be at least $0.50 to pay by card or ACH.' });
     const orderNumber = 'GC-' + Date.now().toString(36).toUpperCase();
@@ -2650,7 +3337,7 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
         console.error('[Stripe] PaymentIntent create failed:', err.message);
         return res.status(502).json({ error: 'Could not create payment session. Please try again or use a different payment method.' });
     }
-    const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
+    const companyId = companyIdForPricing;
     const orderPayload = {
         user_id: req.user.id,
         order_number: orderNumber,
@@ -2669,17 +3356,49 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
         stripe_payment_intent_id: paymentIntent.id,
         tracking_number: '',
         tracking_url: '',
-        items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, size: i.size, unit_price: i.price }))
+        ...buildOrderEconomicsOrderFields({ subtotal, shipping, shipCfg: shipCfgPi }),
+        items: orderItems.map((i) => {
+            const snap = buildLineCostSnapshotFields(i.cost_at_order, i.quantity);
+            return {
+                product_id: i.product_id,
+                quantity: i.quantity,
+                size: i.size,
+                unit_price: i.price,
+                canonical_product_id: i.canonical_product_id,
+                unit_cost_at_order: snap.unit_cost_at_order,
+                total_cost_at_order: snap.total_cost_at_order,
+            };
+        }),
     };
-    const order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+    if (marketingAttPi) orderPayload.marketing_attribution = marketingAttPi;
+    let order;
+    try {
+        order = await dataService.createOrder(orderPayload, { companyId, createdByUserId: req.user.id });
+    } catch (createErr) {
+        const code = createErr && (createErr.code || createErr.cause?.code);
+        if (code === '23505' || (createErr.message && /duplicate key|unique constraint/i.test(createErr.message))) {
+            try {
+                await stripe.paymentIntents.cancel(paymentIntent.id);
+            } catch (_) { /* best effort */ }
+            paymentLog.logError('create_payment_intent.duplicate_stripe_pi', createErr, { pi_id: paymentIntent.id });
+            return res.status(409).json({
+                error: 'Payment session conflict. Please start checkout again.',
+                code: 'DUPLICATE_PAYMENT_INTENT',
+            });
+        }
+        throw createErr;
+    }
     paymentLog.orderCreated(order.id, orderNumber, req.user.id, total, payment_method);
     
     try {
         await inventory.reserveStockForOrder(order.id, order.items);
         paymentLog.inventoryReserved(order.id, order.items);
     } catch (resErr) {
-        // If reservation fails, cancel the PaymentIntent and mark order as failed
-        console.error('[create-payment-intent] reserve stock failed:', resErr.message);
+        paymentLog.logError('inventory.reserve_failed_create_payment_intent', resErr, {
+            order_id: order.id,
+            user_id: req.user.id,
+            order_number: orderNumber,
+        });
         try {
             await stripe.paymentIntents.cancel(paymentIntent.id);
             await dataService.updateOrderStatus(order.id, 'cancelled');
@@ -2698,14 +3417,21 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
         // Non-fatal but log it
         console.warn('[create-payment-intent] Failed to update PaymentIntent metadata:', updateErr.message);
     }
-    
+
+    const purchase_analytics = buildPurchaseAnalyticsClientPayload(orderItems, order, user, payment_method);
     res.json({
         success: true,
         client_secret: paymentIntent.client_secret,
         order_id: order.id,
         order_number: orderNumber,
-        total
+        total,
+        purchase_analytics,
     });
+    } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
+        console.error('[create-payment-intent]', err);
+        res.status(500).json({ error: err.message || 'Failed to create checkout session' });
+    }
 });
 
 app.get('/api/orders', authenticateToken, async (req, res) => {
@@ -2780,26 +3506,135 @@ app.get('/api/orders/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Reorder: add all items from an order back to cart
+// Reorder preview: current B2B pricing vs last order (no cart mutation)
+app.get('/api/orders/:id/reorder-preview', authenticateToken, async (req, res) => {
+    try {
+        const companyIds = await getCompanyIdsForAuthenticatedUser(req);
+        const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
+        if (!order || !order.items || order.items.length === 0) {
+            return res.status(404).json({ error: 'Order not found or has no items' });
+        }
+        const user = await usersService.getUserById(req.user.id);
+        const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const pricingContext = await getPricingContext();
+        const lines = await orderReorder.buildReorderPreviews(
+            order.items,
+            user,
+            companyIdForPricing,
+            pricingContext,
+            productsService
+        );
+        res.json({
+            order_id: order.id,
+            order_number: order.order_number,
+            lines,
+            disclaimer:
+                'Prices shown are today’s contract/catalog rates. Cart and checkout use server-verified totals.',
+        });
+    } catch (err) {
+        console.error('[GET /api/orders/:id/reorder-preview]', err);
+        res.status(500).json({ error: err.message || 'Failed to build reorder preview' });
+    }
+});
+
+/**
+ * Reorder into cart: optional body.lines = [{ product_id, size?, quantity }].
+ * Omit lines or send null to add every line that is still available (original quantities).
+ * Empty array is rejected (use omit lines for “all available”).
+ */
 app.post('/api/orders/:id/reorder', authenticateToken, async (req, res) => {
     try {
         const companyIds = await getCompanyIdsForAuthenticatedUser(req);
         const order = await dataService.getOrderByIdForCompany(req.params.id, companyIds, req.user.id);
-        if (!order || !order.items || order.items.length === 0) return res.status(404).json({ error: 'Order not found or has no items' });
+        if (!order || !order.items || order.items.length === 0) {
+            return res.status(404).json({ error: 'Order not found or has no items' });
+        }
+        const user = await usersService.getUserById(req.user.id);
+        const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
+        const pricingContext = await getPricingContext();
+        const previews = await orderReorder.buildReorderPreviews(
+            order.items,
+            user,
+            companyIdForPricing,
+            pricingContext,
+            productsService
+        );
+
+        const rawLines = req.body && req.body.lines;
+        if (Array.isArray(rawLines) && rawLines.length === 0) {
+            return res.status(400).json({
+                error: 'Select items to add, or omit "lines" to add all products that are still available.',
+            });
+        }
+
+        const resolved = orderReorder.resolveReorderSelections(previews, rawLines);
+        if (!resolved.ok) return res.status(400).json({ error: resolved.error });
+
+        const skippedUnavailable = previews.filter((p) => p.status !== 'available');
+        if (resolved.adds.length === 0) {
+            return res.status(400).json({
+                error: 'No items from this order can be added right now (removed from catalog or out of stock).',
+                skipped_unavailable: skippedUnavailable.map((s) => ({
+                    product_id: s.product_id,
+                    size: s.size,
+                    name: s.name,
+                    reason: s.reason,
+                })),
+            });
+        }
+
         const cartKey = `user_${req.user.id}`;
         const cartItems = await dataService.getCart(cartKey);
-        let added = 0;
-        for (const item of order.items) {
-            const product = await productsService.getProductById(item.product_id);
-            if (!product || !product.in_stock) continue;
-            const existing = cartItems.find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
-            if (existing) existing.quantity += item.quantity;
-            else cartItems.push({ id: Date.now() + added, product_id: item.product_id, size: item.size || null, quantity: item.quantity });
-            added++;
+        let n = 0;
+        const results = [];
+
+        for (const { preview, quantity } of resolved.adds) {
+            const existing = cartItems.find(
+                (c) =>
+                    Number(c.product_id) === Number(preview.product_id) &&
+                    orderReorder.normSize(c.size) === orderReorder.normSize(preview.size)
+            );
+            if (existing) existing.quantity += quantity;
+            else {
+                const line = {
+                    id: Date.now() + n,
+                    product_id: preview.product_id,
+                    size: preview.size || null,
+                    quantity,
+                };
+                if (preview.canonical_product_id) line.canonical_product_id = preview.canonical_product_id;
+                cartItems.push(line);
+                n += 1;
+            }
+            results.push({
+                product_id: preview.product_id,
+                size: preview.size,
+                quantity_added: quantity,
+                status: 'added',
+            });
+        }
+
+        try {
+            await ensureCommerceLinesHaveCanonical(cartItems, 'reorder');
+        } catch (e) {
+            if (respondCommerceCanonicalError(e, res)) return;
+            throw e;
         }
         await dataService.setCart(cartKey, cartItems);
-        res.json({ success: true, added: order.items.length, message: 'Items added to cart' });
+        res.json({
+            success: true,
+            mode: resolved.mode,
+            added_lines: results.length,
+            results,
+            skipped_unavailable: skippedUnavailable.map((s) => ({
+                product_id: s.product_id,
+                size: s.size,
+                name: s.name,
+                reason: s.reason,
+            })),
+        });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[POST /api/orders/:id/reorder]', err);
         res.status(500).json({ error: err.message || 'Failed to reorder' });
     }
@@ -2813,9 +3648,17 @@ app.get('/api/orders/:id/invoice', authenticateToken, async (req, res) => {
         if (!order) return res.status(404).json({ error: 'Order not found' });
         if (order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display) order.shipping_address = order.shipping_address.display;
         const user = await usersService.getUserById(req.user.id);
+        const items = order.items || [];
+        const invoiceTotals = orderInvoiceTotals.computeInvoiceTotalsForDisplay(order, items);
+        const totalsValidation = orderInvoiceTotals.validateInvoiceTotalsMatchOrder(order, invoiceTotals);
         res.json({
             order,
-            company: user ? { company_name: user.company_name, contact_name: user.contact_name, address: user.address, city: user.city, state: user.state, zip: user.zip, email: user.email, phone: user.phone } : null
+            company: user ? { company_name: user.company_name, contact_name: user.contact_name, address: user.address, city: user.city, state: user.state, zip: user.zip, email: user.email, phone: user.phone } : null,
+            invoice_totals: {
+                ...invoiceTotals,
+                totals_match_order: totalsValidation.ok,
+                ...(totalsValidation.ok ? {} : { totals_mismatch_message: totalsValidation.error }),
+            },
         });
     } catch (err) {
         console.error('[GET /api/orders/:id/invoice]', err);
@@ -2845,11 +3688,14 @@ app.get('/api/orders/:id/invoice/pdf', authenticateToken, async (req, res) => {
         const orderNumber = order.order_number || `GC-${order.id}`;
         const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString() : '';
         const items = order.items || [];
-        const subtotal = items.reduce((sum, item) => sum + (item.quantity * (item.unit_price || 0)), 0);
-        const shipping = order.shipping_cost || 0;
-        const tax = order.tax || 0;
-        const total = order.total || (subtotal + shipping + tax);
-        
+        const totals = orderInvoiceTotals.computeInvoiceTotalsForDisplay(order, items);
+        const validation = orderInvoiceTotals.validateInvoiceTotalsMatchOrder(order, totals);
+        if (!validation.ok) {
+            console.error('[GET /api/orders/:id/invoice/pdf]', validation.error);
+            return res.status(409).json({ error: validation.error || 'Invoice totals do not match order' });
+        }
+        const { subtotal, shipping, tax, discount, orderTotal: total } = totals;
+
         let shippingAddress = order.shipping_address || '';
         if (typeof shippingAddress === 'object' && shippingAddress.display) {
             shippingAddress = shippingAddress.display;
@@ -2935,6 +3781,7 @@ app.get('/api/orders/:id/invoice/pdf', authenticateToken, async (req, res) => {
     <div class="totals">
         <table>
             <tr><td>Subtotal:</td><td style="text-align: right;">$${subtotal.toFixed(2)}</td></tr>
+            ${discount > 0 ? `<tr><td>Discount:</td><td style="text-align: right;">-$${discount.toFixed(2)}</td></tr>` : ''}
             <tr><td>Shipping:</td><td style="text-align: right;">$${shipping.toFixed(2)}</td></tr>
             <tr><td>Tax:</td><td style="text-align: right;">$${tax.toFixed(2)}</td></tr>
             <tr class="total-row"><td>Total:</td><td style="text-align: right;">$${total.toFixed(2)}</td></tr>
@@ -2990,36 +3837,44 @@ app.get('/api/orders/:id/tracking', authenticateToken, async (req, res) => {
 
 // ============ ACCOUNT: BUDGET, REP, TIER PROGRESS ============
 
-// Tier progress (YTD spend and amount to next tier)
-function getTierThresholds() {
-    return { bronze: 1000, silver: 5000, gold: 15000, platinum: 50000 };
-}
-function getTierOrder() {
-    return ['standard', 'bronze', 'silver', 'gold', 'platinum'];
-}
-
 app.get('/api/account/tier-progress', authenticateToken, async (req, res) => {
     try {
         const user = await usersService.getUserById(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const companyIds = await companiesService.getCompanyIdsForUser(user);
         const orders = await dataService.getOrdersByCompanyId(companyIds, req.user.id);
-        const now = new Date();
-        const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
-        const ytdOrders = orders.filter(o => o.created_at >= yearStart);
-        const ytdSpend = ytdOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-        const tiers = getTierThresholds();
-        const order = getTierOrder();
+        const metrics = pricingTierEvaluationService.computeSpendMetrics(orders);
+        const ytdSpend = metrics.ytd;
         const currentTier = user.discount_tier || 'standard';
-        const currentIdx = order.indexOf(currentTier);
-        const nextTier = currentIdx < order.length - 1 ? order[currentIdx + 1] : null;
-        const nextThreshold = nextTier ? (tiers[nextTier] || 0) : null;
+        let tierRows = [];
+        try {
+            tierRows = await pricingTiersService.listTiersForAdmin();
+        } catch (e) {
+            console.error('[tier-progress] listTiers', e.message || e);
+        }
+        const ladder = tierRows
+            .filter((t) => t.active && t.require_is_approved && t.min_spend_ytd != null && t.sort_priority > 0)
+            .sort((a, b) => (a.min_spend_ytd || 0) - (b.min_spend_ytd || 0));
+        const nextTierRow = ladder.find((t) => ytdSpend < (t.min_spend_ytd || 0));
         res.json({
             ytd_spend: ytdSpend,
             current_tier: currentTier,
-            next_tier: nextTier,
-            next_tier_threshold: nextThreshold,
-            amount_to_next_tier: nextThreshold != null ? Math.max(0, nextThreshold - ytdSpend) : 0
+            next_tier: nextTierRow ? nextTierRow.code : null,
+            next_tier_display: nextTierRow ? nextTierRow.display_name : null,
+            next_tier_threshold: nextTierRow ? nextTierRow.min_spend_ytd : null,
+            amount_to_next_tier:
+                nextTierRow && nextTierRow.min_spend_ytd != null
+                    ? Math.max(0, nextTierRow.min_spend_ytd - ytdSpend)
+                    : 0,
+            pricing_tier_source: user.pricing_tier_source || 'manual',
+            trailing_spend: {
+                d30: metrics.trailing_30,
+                d60: metrics.trailing_60,
+                d90: metrics.trailing_90,
+                calendar_month: metrics.calendar_month,
+            },
+            /** Tier discount is applied on the server on every cart/quote/order (next pricing call after tier changes). */
+            tier_effective_policy: 'next_pricing_refresh',
         });
     } catch (err) {
         console.error('[account/tier-progress]', err);
@@ -3245,9 +4100,16 @@ app.post('/api/saved-lists', authenticateToken, async (req, res) => {
     try {
         const { name, items } = req.body;
         if (!name || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Name and items (array of { product_id, size, quantity }) are required' });
-        const newList = await dataService.createSavedList(req.user.id, { name: name.trim(), items: items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) })) });
+        const listItems = items.map((i) => {
+            const row = { product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) };
+            if (i.canonical_product_id) row.canonical_product_id = String(i.canonical_product_id);
+            return row;
+        });
+        await ensureCommerceLinesHaveCanonical(listItems, 'saved_list_create');
+        const newList = await dataService.createSavedList(req.user.id, { name: name.trim(), items: listItems });
         res.json({ success: true, list: newList });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[saved-lists POST]', err);
         res.status(500).json({ error: err.message || 'Failed to create saved list' });
     }
@@ -3258,10 +4120,19 @@ app.put('/api/saved-lists/:id', authenticateToken, async (req, res) => {
         const { name, items } = req.body;
         const updates = {};
         if (name !== undefined) updates.name = name.trim();
-        if (Array.isArray(items)) updates.items = items.map(i => ({ product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) }));
+        if (Array.isArray(items)) {
+            const listItems = items.map((i) => {
+                const row = { product_id: i.product_id, size: i.size || null, quantity: Math.max(1, parseInt(i.quantity, 10) || 1) };
+                if (i.canonical_product_id) row.canonical_product_id = String(i.canonical_product_id);
+                return row;
+            });
+            await ensureCommerceLinesHaveCanonical(listItems, 'saved_list_update');
+            updates.items = listItems;
+        }
         const list = await dataService.updateSavedList(req.params.id, req.user.id, updates);
         res.json({ success: true, list });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[saved-lists PUT]', err);
         res.status(404).json({ error: 'Saved list not found' });
     }
@@ -3283,16 +4154,44 @@ app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, async (req, res)
         if (!list || !list.items || list.items.length === 0) return res.status(404).json({ error: 'Saved list not found or empty' });
         const cartKey = `user_${req.user.id}`;
         const cartItems = await dataService.getCart(cartKey);
-        for (const item of list.items) {
-            const product = await productsService.getProductById(item.product_id);
+        const enrichedListLines = list.items.map((i) => ({ ...i }));
+        await ensureCommerceLinesHaveCanonical(enrichedListLines, 'saved_list_add_to_cart_source');
+        for (const item of enrichedListLines) {
+            const catalogId = resolveLineCatalogProductId(item);
+            if (!catalogId) continue;
+            const product = await productsService.getProductById(catalogId);
             if (!product) continue;
-            const existing = cartItems.find(c => c.product_id === item.product_id && (c.size || null) === (item.size || null));
-            if (existing) existing.quantity += item.quantity;
-            else cartItems.push({ id: Date.now() + Math.random(), product_id: item.product_id, size: item.size || null, quantity: item.quantity });
+            const existing = cartItems.find(
+                (c) => String(resolveLineCatalogProductId(c)) === String(catalogId) && (c.size || null) === (item.size || null)
+            );
+            if (existing) {
+                existing.quantity += item.quantity;
+                existing.canonical_product_id = catalogId;
+                existing.product_id = catalogId;
+            } else {
+                cartItems.push(
+                    cartLineContract.newCartLineFromBody(
+                        {
+                            product_id: catalogId,
+                            size: item.size,
+                            quantity: item.quantity,
+                            canonical_product_id: catalogId,
+                        },
+                        Date.now() + Math.random()
+                    )
+                );
+            }
+        }
+        try {
+            await ensureCommerceLinesHaveCanonical(cartItems, 'saved_list_add_to_cart_cart');
+        } catch (e) {
+            if (respondCommerceCanonicalError(e, res)) return;
+            throw e;
         }
         await dataService.setCart(cartKey, cartItems);
         res.json({ success: true, message: 'List items added to cart' });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[saved-lists add-to-cart]', err);
         res.status(500).json({ error: err.message || 'Failed to add to cart' });
     }
@@ -3310,30 +4209,35 @@ app.get('/api/favorites', authenticateToken, async (req, res) => {
             .order('created_at', { ascending: false });
         if (error) throw error;
         
-        const productIds = favorites.map(f => f.product_id);
-        let products = [];
-        if (productIds.length > 0) {
-            const { data: prods } = await supabase
-                .from('products')
-                .select('id, name, sku, sell_price, stock, images')
-                .in('id', productIds);
-            products = prods || [];
-        }
-        
-        const result = favorites.map(fav => {
-            const product = products.find(p => p.id === fav.product_id);
+        const productIds = favorites.map((f) => f.product_id).filter((id) => normalizeCanonicalUuidInput(id));
+        const catalogRows = await Promise.all(productIds.map((id) => productsService.getProductById(id)));
+        const products = catalogRows
+            .filter(Boolean)
+            .map((p) => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+                sell_price: p.list_price,
+                stock: p.quantity_on_hand ?? null,
+                images: p.images,
+            }));
+
+        const result = favorites.map((fav) => {
+            const product = products.find((p) => String(p.id) === String(fav.product_id));
             return {
                 id: fav.id,
                 product_id: fav.product_id,
                 created_at: fav.created_at,
-                product: product ? {
-                    id: product.id,
-                    name: product.name,
-                    sku: product.sku,
-                    price: product.sell_price,
-                    stock: product.stock,
-                    image_url: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null
-                } : null
+                product: product
+                    ? {
+                          id: product.id,
+                          name: product.name,
+                          sku: product.sku,
+                          price: product.sell_price,
+                          stock: product.stock,
+                          image_url: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null,
+                      }
+                    : null,
             };
         });
         
@@ -3347,12 +4251,18 @@ app.get('/api/favorites', authenticateToken, async (req, res) => {
 app.post('/api/favorites', authenticateToken, async (req, res) => {
     try {
         const { product_id } = req.body;
-        if (!product_id) return res.status(400).json({ error: 'product_id is required' });
-        
+        const catalogId = normalizeCanonicalUuidInput(product_id);
+        if (!catalogId) {
+            return res.status(422).json({
+                error: 'product_id must be a catalogos.products UUID',
+                code: 'INVALID_CATALOG_PRODUCT_ID',
+            });
+        }
+
         const supabase = getSupabaseAdmin();
         const { data, error } = await supabase
             .from('product_favorites')
-            .upsert({ user_id: req.user.id, product_id }, { onConflict: 'user_id,product_id' })
+            .upsert({ user_id: req.user.id, product_id: catalogId }, { onConflict: 'user_id,product_id' })
             .select()
             .single();
         if (error) throw error;
@@ -3450,14 +4360,32 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
             if (!sku) { skipped++; continue; }
             const product = await productsService.getProductById(sku);
             if (!product) { skipped++; continue; }
-            const existing = cartItems.find(c => c.product_id === product.id && (c.size || null) === (size || null));
-            if (existing) existing.quantity += qty;
-            else cartItems.push({ id: Date.now() + added, product_id: product.id, size, quantity: qty });
+            const existing = cartItems.find(
+                (c) => String(c.product_id) === String(product.id) && (c.size || null) === (size || null)
+            );
+            if (existing) {
+                existing.quantity += qty;
+                existing.canonical_product_id = product.id;
+                existing.product_id = product.id;
+            } else {
+                const line = cartLineContract.newCartLineFromBody(
+                    { product_id: product.id, size, quantity: qty, canonical_product_id: product.id },
+                    Date.now() + added
+                );
+                cartItems.push(line);
+            }
             added++;
+        }
+        try {
+            await ensureCommerceLinesHaveCanonical(cartItems, 'cart_bulk');
+        } catch (e) {
+            if (respondCommerceCanonicalError(e, res)) return;
+            throw e;
         }
         await dataService.setCart(cartKey, cartItems);
         res.json({ success: true, added, skipped });
     } catch (err) {
+        if (respondCommerceCanonicalError(err, res)) return;
         console.error('[cart/bulk]', err);
         res.status(500).json({ error: err.message || 'Failed to add to cart' });
     }
@@ -3467,7 +4395,10 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
 
 app.post('/api/rfqs', async (req, res) => {
     try {
-        const { company_name, contact_name, email, phone, quantity, type, use_case, notes, cases_or_pallets, size, material } = req.body;
+        const {
+            company_name, contact_name, email, phone, quantity, type, use_case, notes, cases_or_pallets, size, material,
+            product_interest, estimated_volume, source
+        } = req.body;
         let userId = null;
         let user = null;
         const authHeader = req.headers['authorization'];
@@ -3491,19 +4422,34 @@ app.post('/api/rfqs', async (req, res) => {
             cases_or_pallets: (cases_or_pallets || '').toString().trim() || '',
             size: size || '',
             material: material || '',
-            notes: notes || ''
+            notes: notes || '',
+            product_interest: (product_interest || '').toString().trim(),
+            estimated_volume: (estimated_volume || '').toString().trim(),
+            source: (source || (user ? 'buyer_portal' : 'web_modal')).toString().trim().slice(0, 120)
         }, { companyId, createdByUserId: userId });
         // Send RFQ confirmation email with improved template
         const rfqEmail = newRFQ.email || (user && user.email);
         if (rfqEmail) {
             const emailContent = emailTemplates.rfqConfirmation(newRFQ, user);
-            sendMail({ to: rfqEmail, subject: emailContent.subject, text: emailContent.text, html: emailContent.html }).catch(() => {});
+            dispatchEmailInBackground({
+                to: rfqEmail,
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html,
+                emailType: 'rfq_customer_confirmation',
+                metadata: { rfq_id: newRFQ.id },
+            });
         }
-        // Send admin notification
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
         if (adminEmail) {
-            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nCases/pallets: ${newRFQ.cases_or_pallets || '—'}\nNotes: ${newRFQ.notes}`;
-            sendMail({ to: adminEmail, subject: `[Glovecubs] New RFQ from ${newRFQ.company_name || newRFQ.email}`, text: adminText }).catch(() => {});
+            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nSource: ${newRFQ.source || '—'}\nProduct/SKU interest: ${newRFQ.product_interest || '—'}\nEst. volume: ${newRFQ.estimated_volume || '—'}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nCases/pallets: ${newRFQ.cases_or_pallets || '—'}\nNotes: ${newRFQ.notes}`;
+            dispatchEmailInBackground({
+                to: adminEmail,
+                subject: `[Glovecubs] New RFQ from ${newRFQ.company_name || newRFQ.email}`,
+                text: adminText,
+                emailType: 'rfq_admin_notification',
+                metadata: { rfq_id: newRFQ.id },
+            });
         }
         res.json({ success: true, message: 'RFQ submitted successfully', rfq_id: newRFQ.id });
     } catch (error) {
@@ -3540,7 +4486,10 @@ app.put('/api/rfqs/:id', authenticateToken, async (req, res) => {
         if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
         const updates = {};
         if (req.body.status) updates.status = req.body.status;
-        if (req.body.notes !== undefined) updates.admin_notes = req.body.notes;
+        if (req.body.admin_notes !== undefined) updates.admin_notes = req.body.admin_notes;
+        else if (req.body.notes !== undefined) updates.admin_notes = req.body.notes;
+        if (req.body.append_admin_note) updates.append_admin_note = req.body.append_admin_note;
+        if (req.body.lost_reason !== undefined) updates.lost_reason = req.body.lost_reason;
         const rfq = await dataService.updateRfq(req.params.id, updates);
         if (!rfq) return res.status(404).json({ error: 'RFQ not found' });
         res.json({ success: true, rfq });
@@ -3550,12 +4499,29 @@ app.put('/api/rfqs/:id', authenticateToken, async (req, res) => {
     }
 });
 
+/** Lightweight public lead capture (honeypot field "website" must be empty). Rate-limited. */
+app.post('/api/public/lead-capture', leadCaptureLimiter, async (req, res) => {
+    try {
+        const out = await growthPipelineService.capturePublicLead(req.body || {});
+        res.json(out);
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[public/lead-capture]', err);
+        res.status(code).json({ error: err.message || 'Failed to save lead' });
+    }
+});
+
 // ============ ADMIN ROUTES ============
 
 app.get('/api/admin/orders', authenticateToken, async (req, res) => {
     try {
         if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
-        const orders = await dataService.getAllOrdersAdmin();
+        const payHold = req.query.payment_integrity_hold;
+        const statusFilter = req.query.status;
+        const orders = await dataService.getAllOrdersAdmin({
+            payment_integrity_hold: payHold === '1' || payHold === 'true',
+            status: statusFilter && String(statusFilter).trim() ? String(statusFilter).trim() : undefined,
+        });
         const userIds = [...new Set(orders.map(o => o.user_id))];
         const userMap = new Map();
         for (const id of userIds) {
@@ -3573,23 +4539,90 @@ app.get('/api/admin/orders', authenticateToken, async (req, res) => {
     }
 });
 
+/** Record payment on a Net 30 order; updates invoice_status and decreases company.outstanding_balance. */
+app.post('/api/admin/orders/:id/invoice/payment', authenticateToken, async (req, res) => {
+    try {
+        if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
+        const order = await dataService.getOrderByIdAdmin(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (String(order.payment_method || '').toLowerCase() !== 'net30') {
+            return res.status(400).json({ error: 'Order is not a Net 30 invoice order.' });
+        }
+        if (order.invoice_amount_due == null) {
+            return res.status(400).json({
+                error:
+                    'Invoice AR is not opened for this order. Apply net30/AR migrations (including gc_commerce) or contact support.',
+                code: 'INVOICE_NOT_OPENED',
+            });
+        }
+        const paid = Number(order.invoice_amount_paid) || 0;
+        const due = Number(order.invoice_amount_due) || 0;
+        const remaining = Math.round((due - paid) * 100) / 100;
+        let amount = req.body && req.body.amount != null && req.body.amount !== '' ? Number(req.body.amount) : remaining;
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'amount must be a positive number (omit to pay remaining balance).' });
+        }
+        const result = await arInvoiceService.recordInvoicePayment({
+            orderId: order.id,
+            companyId: order.company_id,
+            amount,
+            note: req.body && req.body.note != null ? String(req.body.note).slice(0, 2000) : null,
+            adminUserId: req.user.id,
+        });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/orders invoice/payment]', err);
+        res.status(code).json({ error: err.message || 'Failed to record payment' });
+    }
+});
+
 app.put('/api/admin/orders/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
         const order = await dataService.getOrderByIdAdmin(req.params.id);
         if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (req.body.status !== undefined) {
+            const v = validateAdminOrderStatusTransition(order, req.body.status);
+            if (!v.ok) {
+                return res.status(v.httpStatus).json({ error: v.message, code: v.code });
+            }
+        }
         const updates = {};
         if (req.body.tracking_number !== undefined) updates.tracking_number = String(req.body.tracking_number || '').trim();
         if (req.body.tracking_url !== undefined) updates.tracking_url = String(req.body.tracking_url || '').trim();
         if (req.body.status !== undefined) updates.status = req.body.status;
         const wasShipped = order.status === 'shipped';
-        await dataService.updateOrder(req.params.id, updates);
-        
-        // When order status changes to shipped, deduct inventory and send shipping notification
+
+        if (updates.status !== undefined && ABANDON_STATUSES.has(updates.status)) {
+            try {
+                await inventory.tryReleaseReservedStockForNonFulfillment(req.params.id, req.user.id);
+            } catch (relErr) {
+                paymentLog.logError('inventory.release_on_admin_abandon_failed', relErr, {
+                    order_id: Number(req.params.id),
+                    new_status: updates.status,
+                    user_id: req.user.id,
+                });
+                return res.status(500).json({ error: relErr.message || 'Failed to release reserved inventory' });
+            }
+        }
+
+        // Deduct before persisting shipped so we do not mark fulfilled if deduct fails.
         if (updates.status === 'shipped' && !wasShipped) {
-            await inventory.deductStockForOrder(req.params.id);
-            
-            // Send shipping notification email
+            try {
+                await inventory.deductStockForOrder(req.params.id, req.user.id);
+            } catch (deductErr) {
+                paymentLog.logError('inventory.deduct_failed_admin_ship', deductErr, {
+                    order_id: Number(req.params.id),
+                    user_id: req.user.id,
+                });
+                return res.status(500).json({ error: deductErr.message || 'Failed to deduct inventory; order not marked shipped.' });
+            }
+        }
+
+        await dataService.updateOrder(req.params.id, updates);
+
+        if (updates.status === 'shipped' && !wasShipped) {
             try {
                 const user = await usersService.getUserById(order.user_id);
                 if (user && user.email) {
@@ -3600,20 +4633,26 @@ app.put('/api/admin/orders/:id', authenticateToken, async (req, res) => {
                         carrier: req.body.carrier || null
                     };
                     const emailContent = emailTemplates.orderShipped(updatedOrder, user, trackingInfo);
-                    const result = await sendMail({
+                    await dispatchEmail({
                         to: user.email,
                         subject: emailContent.subject,
                         text: emailContent.text,
-                        html: emailContent.html
+                        html: emailContent.html,
+                        emailType: 'order_shipped',
+                        orderId: order.id,
+                        orderNumber: order.order_number,
                     });
-                    if (result.sent) {
-                        console.log(`[Order ${order.order_number}] Shipping notification sent to ${user.email}`);
-                    } else {
-                        console.error(`[Order ${order.order_number}] Failed to send shipping notification:`, result.error);
-                    }
                 }
             } catch (emailErr) {
-                console.error(`[Order ${order.order_number}] Shipping notification error:`, emailErr.message);
+                paymentLog.emailFailed(order.id, order.order_number, 'order_shipped', emailErr);
+                paymentLog.adminEmailAlert({
+                    severity: 'error',
+                    email_type: 'order_shipped',
+                    order_id: order.id,
+                    order_number: order.order_number,
+                    error_message: emailErr.message || String(emailErr),
+                    note: 'exception_before_or_during_dispatch',
+                });
             }
         }
         
@@ -3651,7 +4690,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
         company_name: (company_name || '').trim(),
         contact_name: (contact_name || '').trim(),
         email: emailTrim,
-        password: hashedPassword,
+        password_hash: hashedPassword,
+        plain_password: password,
         phone: (phone || '').trim(),
         address: (address || '').trim(),
         city: (city || '').trim(),
@@ -3661,6 +4701,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
         allow_free_upgrades: !!allow_free_upgrades,
         is_approved: 1,
         discount_tier: 'standard',
+        pricing_tier_source: 'manual',
         budget_amount: null,
         budget_period: 'monthly',
         rep_name: '',
@@ -3686,14 +4727,39 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
         if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required' });
         const user = await usersService.getUserById(req.params.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
+        const oldTier = user.discount_tier;
         const updates = {};
         if (req.body.is_approved !== undefined) updates.is_approved = req.body.is_approved ? 1 : 0;
-        if (req.body.discount_tier) updates.discount_tier = req.body.discount_tier;
+        if (req.body.discount_tier) {
+            updates.discount_tier = req.body.discount_tier;
+            updates.pricing_tier_source =
+                req.body.pricing_tier_source === 'auto' ? 'auto' : 'manual';
+        }
+        if (req.body.pricing_tier_source !== undefined && !req.body.discount_tier) {
+            updates.pricing_tier_source = req.body.pricing_tier_source === 'auto' ? 'auto' : 'manual';
+        }
         if (req.body.payment_terms !== undefined) {
             const pt = req.body.payment_terms;
             updates.payment_terms = (pt === 'net30' ? 'net30' : pt === 'ach' ? 'ach' : 'credit_card');
         }
         await usersService.updateUser(req.params.id, updates);
+        if (
+            req.body.discount_tier &&
+            String(req.body.discount_tier).toLowerCase() !== String(oldTier || '').toLowerCase()
+        ) {
+            try {
+                await pricingTiersService.insertAuditLog({
+                    userId: user.id,
+                    oldTier,
+                    newTier: String(req.body.discount_tier).toLowerCase(),
+                    reason: (req.body.pricing_tier_change_reason || 'Admin updated tier').toString(),
+                    source: 'admin_override',
+                    metricsSnapshot: null,
+                });
+            } catch (logErr) {
+                console.error('[admin/users PUT] tier audit', logErr);
+            }
+        }
         const updated = await usersService.getUserById(req.params.id);
         const { password, password_hash, ...safeUser } = updated || {};
         res.json({ success: true, user: safeUser });
@@ -3717,14 +4783,167 @@ app.get('/api/admin/contact-messages', authenticateToken, async (req, res) => {
 // ---------- Admin: customer pricing (companies, default margin, manufacturer overrides) ----------
 async function requireAdmin(req, res, next) {
     try {
-        const isAdminUser = await usersService.isAdmin(req.user.id) || await usersService.isAdmin(req.user.email);
-        if (!isAdminUser) return res.status(403).json({ error: 'Admin access required' });
+        if (!(await usersService.isAdmin(req.user.id))) {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
         next();
     } catch (err) {
         console.error('[requireAdmin]', err);
         res.status(500).json({ error: 'Database error' });
     }
 }
+
+app.get('/api/admin/growth/dashboard', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const dashboard = await growthPipelineService.getDashboard();
+        res.json(dashboard);
+    } catch (err) {
+        console.error('[admin/growth/dashboard]', err);
+        res.status(500).json({ error: err.message || 'Failed to load pipeline' });
+    }
+});
+
+app.get('/api/admin/growth/prospects', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit, 10) || 100;
+        const status = req.query.status || null;
+        const prospects = await growthPipelineService.listProspects({ limit, status });
+        res.json({ prospects });
+    } catch (err) {
+        console.error('[admin/growth/prospects GET]', err);
+        res.status(500).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.post('/api/admin/growth/prospects', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const prospect = await growthPipelineService.createProspect(req.body || {}, { adminUserId: req.user.id });
+        res.json({ prospect });
+    } catch (err) {
+        console.error('[admin/growth/prospects POST]', err);
+        res.status(500).json({ error: err.message || 'Failed to create prospect' });
+    }
+});
+
+app.patch('/api/admin/growth/prospects/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const prospect = await growthPipelineService.updateProspect(req.params.id, req.body || {});
+        if (!prospect) return res.status(404).json({ error: 'Prospect not found' });
+        res.json({ prospect });
+    } catch (err) {
+        console.error('[admin/growth/prospects PATCH]', err);
+        res.status(500).json({ error: err.message || 'Failed to update' });
+    }
+});
+
+/** Versioned shipping policy (DB); checkout reads active row via shippingPolicyService.resolveShippingConfigForCheckout. */
+app.get('/api/admin/shipping-policies', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const list = await shippingPolicyService.listPolicyVersions({ limit: 120 });
+        const active = await shippingPolicyService.resolveShippingConfigForCheckout();
+        const enriched = await shippingPolicyService.enrichPoliciesWithOrderCounts(list);
+        res.json({ policies: enriched, active });
+    } catch (err) {
+        console.error('[admin/shipping-policies GET]', err);
+        const code = err.statusCode || 500;
+        res.status(code).json({ error: err.message || 'Failed to load shipping policies' });
+    }
+});
+
+app.post('/api/admin/shipping-policies', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const row = await shippingPolicyService.createPolicyVersion(req.body || {});
+        res.status(201).json({ policy: row });
+    } catch (err) {
+        console.error('[admin/shipping-policies POST]', err);
+        const code = err.statusCode || 500;
+        res.status(code).json({ error: err.message || 'Failed to create policy' });
+    }
+});
+
+app.post('/api/admin/shipping-policies/:id/activate', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const row = await shippingPolicyService.activatePolicyVersion(req.params.id);
+        res.json({ policy: row, message: 'New version created with effective_at = now(); it is now the active policy.' });
+    } catch (err) {
+        console.error('[admin/shipping-policies activate]', err);
+        const code = err.statusCode || 500;
+        res.status(code).json({ error: err.message || 'Failed to activate' });
+    }
+});
+
+/** Read-only shipping / threshold / margin decision support (historical orders + counterfactuals). Does not change checkout. */
+app.get('/api/admin/analytics/shipping-margin', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const maxOrders = parseInt(req.query.max_orders, 10) || 800;
+        const sinceDays = parseInt(req.query.since_days, 10) || 365;
+        const excludeCancelled = req.query.include_cancelled === '1' ? false : true;
+        const report = await shippingMarginAnalyticsService.buildShippingMarginReport({
+            maxOrders,
+            sinceDays,
+            excludeCancelled
+        });
+        res.json(report);
+    } catch (err) {
+        console.error('[admin/analytics/shipping-margin]', err);
+        res.status(500).json({ error: err.message || 'Failed to build report' });
+    }
+});
+
+/** UTM / channel rollup on recent paid orders (read-only; bounded scan). See docs/ANALYTICS.md. */
+app.get('/api/admin/analytics/channels', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = req.query.limit != null ? parseInt(req.query.limit, 10) : undefined;
+        const data = await adminChannelAnalyticsService.getChannelAnalytics({ limit });
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/analytics/channels]', err);
+        res.status(500).json({ error: err.message || 'Failed to load channel analytics' });
+    }
+});
+
+// Operator queues: payment holds, stale checkout, inventory anomalies (JSON).
+app.get('/api/admin/orders/operational-alerts', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit, 10) || 80;
+        const alerts = await dataService.getAdminOrderOperationalAlerts(limit);
+        res.json({
+            ...alerts,
+            hints: {
+                list_payment_holds: '/api/admin/orders?payment_integrity_hold=true',
+                list_by_status: '/api/admin/orders?status=pending_payment',
+                stale_cleanup: 'POST /api/admin/orders/cleanup-stale',
+                po_mapping_health: '/api/admin/po-mapping-health?summary=1',
+                po_mapping_health_full: '/api/admin/po-mapping-health',
+            },
+        });
+    } catch (err) {
+        console.error('[admin/orders/operational-alerts]', err);
+        res.status(500).json({ error: err.message || 'Failed to load operational alerts' });
+    }
+});
+
+/** Active catalog variants: PO-blocking gaps (offers, supplier SKUs, manufacturer linkage). */
+app.get('/api/admin/po-mapping-health', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = req.query.limit != null ? parseInt(req.query.limit, 10) : undefined;
+        const issueCode = req.query.issue_code ? String(req.query.issue_code).trim() : null;
+        const summary = req.query.summary === '1' || req.query.summary === 'true';
+        const report = await runPoMappingHealthReport({
+            limit: Number.isFinite(limit) ? limit : undefined,
+            issueCode: issueCode || null,
+            summary,
+        });
+        res.json(report);
+    } catch (err) {
+        console.error('[admin/po-mapping-health]', err);
+        res.status(500).json({
+            error: err.message || 'PO mapping health report failed',
+            code: err.code || 'PO_MAPPING_HEALTH_ERROR',
+            hint: 'Ensure migration po_mapping_health_report is applied (public.po_mapping_health_report).',
+        });
+    }
+});
 
 app.get('/api/admin/companies', authenticateToken, requireAdmin, async (req, res) => {
     try {
@@ -3733,6 +4952,351 @@ app.get('/api/admin/companies', authenticateToken, requireAdmin, async (req, res
     } catch (err) {
         console.error('[admin/companies]', err);
         res.status(500).json({ error: err.message || 'Failed to load companies' });
+    }
+});
+
+app.post('/api/admin/companies', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const c = await companiesService.createCompany({ name: req.body && req.body.name });
+        res.status(201).json(c);
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/companies POST]', err);
+        res.status(code).json({ error: err.message || 'Failed to create company' });
+    }
+});
+
+app.patch('/api/admin/companies/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!companiesService.isGcCompanyUuid(id)) {
+            return res.status(400).json({ error: 'Invalid company id (UUID required)' });
+        }
+        const payload = {};
+        if (req.body.name !== undefined) payload.name = req.body.name;
+        if (req.body.default_gross_margin_percent !== undefined) {
+            const p = Number(req.body.default_gross_margin_percent);
+            if (Number.isNaN(p) || p < 0 || p >= 100) {
+                return res.status(400).json({ error: 'default_gross_margin_percent must be 0–99.99' });
+            }
+            payload.default_gross_margin_percent = p;
+        }
+        const commercialKeys = [
+            'net_terms_status',
+            'credit_limit',
+            'outstanding_balance',
+            'invoice_terms_code',
+            'invoice_terms_custom',
+            'invoice_orders_allowed',
+            'net_terms_internal_notes',
+        ];
+        for (const k of commercialKeys) {
+            if (req.body[k] !== undefined) payload[k] = req.body[k];
+        }
+        if (Object.keys(payload).length === 0) {
+            return res.status(400).json({
+                error: 'No valid fields (name, default_gross_margin_percent, or net terms / commercial fields)',
+            });
+        }
+        const company = await companiesService.updateCompany(id, payload);
+        if (!company) return res.status(404).json({ error: 'Company not found' });
+        res.json({ success: true, company });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/companies PATCH]', err);
+        res.status(code).json({ error: err.message || 'Failed to update company' });
+    }
+});
+
+app.get('/api/admin/net-terms/applications', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const status = req.query.status ? String(req.query.status).trim() : null;
+        const applications = await netTermsService.listApplicationsForAdmin({ status: status || undefined });
+        res.json({ applications });
+    } catch (err) {
+        console.error('[admin/net-terms/applications GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to list applications' });
+    }
+});
+
+app.patch('/api/admin/net-terms/applications/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const application = await netTermsService.applyAdminDecision(req.user.id, req.params.id, req.body || {});
+        res.json({ success: true, application });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/net-terms/applications PATCH]', err);
+        res.status(code).json({ error: err.message || 'Failed to update application' });
+    }
+});
+
+app.get('/api/admin/pricing-tiers', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const tiers = await pricingTiersService.listTiersForAdmin();
+        res.json({ tiers });
+    } catch (err) {
+        console.error('[admin/pricing-tiers GET]', err);
+        res.status(500).json({ error: err.message || 'Failed to load tiers' });
+    }
+});
+
+app.put('/api/admin/pricing-tiers/:code', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const tier = await pricingTiersService.upsertTier(req.params.code, req.body || {});
+        res.json({ success: true, tier });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/pricing-tiers PUT]', err);
+        res.status(code).json({ error: err.message || 'Failed to save tier' });
+    }
+});
+
+app.get('/api/admin/pricing/supplier-cost/default-rules', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { DEFAULT_RULES, normalizeRules } = require('./lib/supplierCostPricing');
+        res.json({ rules: normalizeRules(DEFAULT_RULES) });
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/default-rules]', err);
+        res.status(500).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.get('/api/admin/pricing/supplier-cost/recent-runs', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.min(40, Math.max(1, parseInt(req.query.limit, 10) || 10));
+        const runs = await supplierCostImportService.listRecentRuns(limit);
+        res.json({ runs });
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/recent-runs]', err);
+        res.status(500).json({ error: err.message || 'Failed to list runs' });
+    }
+});
+
+app.post('/api/admin/pricing/supplier-cost/preview', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const csvText = req.body.csvText || req.body.csvContent || '';
+        const rules = req.body.rules || {};
+        const out = await supplierCostImportService.previewSupplierCostImport({
+            csvText: String(csvText),
+            rules,
+            adminUserId: req.user && req.user.id
+        });
+        if (!out.ok) {
+            return res.status(400).json(Object.assign({ error: out.error || 'Preview failed' }, out));
+        }
+        res.json(out);
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/preview]', err);
+        res.status(500).json({ error: err.message || 'Preview failed' });
+    }
+});
+
+app.post('/api/admin/pricing/supplier-cost/apply', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const runId = parseInt(req.body.runId || req.body.run_id, 10);
+        if (!runId) return res.status(400).json({ error: 'runId required' });
+        const out = await supplierCostImportService.applyRun(runId, req.user && req.user.id);
+        if (!out.ok) return res.status(400).json(out);
+        res.json(out);
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/apply]', err);
+        res.status(500).json({ error: err.message || 'Apply failed' });
+    }
+});
+
+app.get('/api/admin/pricing/supplier-cost/runs/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const run = await supplierCostImportService.getRun(id);
+        if (!run) return res.status(404).json({ error: 'Not found' });
+        res.json({ run });
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/runs GET]', err);
+        res.status(500).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.get('/api/admin/pricing/supplier-cost/runs/:id/lines', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const limit = parseInt(req.query.limit, 10) || 200;
+        const offset = parseInt(req.query.offset, 10) || 0;
+        const { lines, total } = await supplierCostImportService.getRunLines(id, limit, offset);
+        res.json({ lines, total });
+    } catch (err) {
+        console.error('[admin/pricing/supplier-cost/runs/lines]', err);
+        res.status(500).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.get('/api/admin/pricing/rule-sets', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const sets = await supplierCostImportService.listRuleSets();
+        res.json({ rule_sets: sets });
+    } catch (err) {
+        console.error('[admin/pricing/rule-sets GET]', err);
+        res.status(500).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.put('/api/admin/pricing/rule-sets/:name', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const out = await supplierCostImportService.upsertRuleSet(req.params.name, req.body || {});
+        res.json(out);
+    } catch (err) {
+        console.error('[admin/pricing/rule-sets PUT]', err);
+        res.status(400).json({ error: err.message || 'Failed' });
+    }
+});
+
+app.get('/api/admin/users/:id/pricing-tier', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const u = await usersService.getUserById(req.params.id);
+        if (!u) return res.status(404).json({ error: 'User not found' });
+        const preview = await pricingTierEvaluationService.previewEvaluationForUser(req.params.id);
+        const audit = await pricingTiersService.listAuditForUser(req.params.id, 40);
+        res.json({
+            user: {
+                id: u.id,
+                email: u.email,
+                company_name: u.company_name,
+                discount_tier: u.discount_tier,
+                pricing_tier_source: u.pricing_tier_source,
+                pricing_tier_evaluated_at: u.pricing_tier_evaluated_at,
+                is_approved: u.is_approved,
+            },
+            metrics: preview.metrics,
+            recommended: preview.recommended,
+            audit_log: audit,
+        });
+    } catch (err) {
+        console.error('[admin/users/:id/pricing-tier]', err);
+        res.status(500).json({ error: err.message || 'Failed to load tier detail' });
+    }
+});
+
+app.post('/api/admin/pricing-tiers/evaluate-user/:id', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const body = req.body || {};
+        if (body.preview_only === true) {
+            const preview = await pricingTierEvaluationService.previewEvaluationForUser(req.params.id);
+            const audit = await pricingTiersService.listAuditForUser(req.params.id, 40);
+            return res.json({ preview_only: true, ...preview, audit_log: audit });
+        }
+        const result = await pricingTierEvaluationService.evaluateAndApplyUserTier(req.params.id, {
+            source: 'admin_reevaluate',
+            force: body.force === true,
+        });
+        res.json({ success: true, result });
+    } catch (err) {
+        const code = err.statusCode || 500;
+        console.error('[admin/pricing-tiers/evaluate-user]', err);
+        res.status(code).json({ error: err.message || 'Evaluation failed' });
+    }
+});
+
+app.post('/api/admin/pricing-tiers/evaluate-all-auto', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const results = await pricingTierEvaluationService.evaluateAllAutoUsers({ source: 'admin_bulk' });
+        res.json({ success: true, results });
+    } catch (err) {
+        console.error('[admin/pricing-tiers/evaluate-all-auto]', err);
+        res.status(500).json({ error: err.message || 'Bulk evaluation failed' });
+    }
+});
+
+app.get('/api/admin/owner/overview', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const data = await ownerCockpitService.getOverviewSnapshot();
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/owner/overview]', err);
+        res.status(500).json({ error: err.message || 'Overview failed' });
+    }
+});
+
+/** Commerce / operations metrics for admin Overview (bounded queries; see payload.meta). */
+app.get('/api/admin/operations/dashboard', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const data = await adminOperationsDashboardService.getOperationsDashboard();
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/operations/dashboard]', err);
+        res.status(500).json({ error: err.message || 'Operations dashboard failed' });
+    }
+});
+
+app.get('/api/admin/owner/companies-directory', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const rows = await ownerCockpitService.getCompaniesDirectory();
+        res.json({ companies: rows });
+    } catch (err) {
+        console.error('[admin/owner/companies-directory]', err);
+        res.status(500).json({ error: err.message || 'Failed to load directory' });
+    }
+});
+
+app.get('/api/admin/owner/pricing', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const data = await ownerCockpitService.getPricingWorkspace();
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/owner/pricing]', err);
+        res.status(500).json({ error: err.message || 'Failed to load pricing' });
+    }
+});
+
+app.get('/api/admin/owner/stripe', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const data = await ownerCockpitService.getStripeVisibility();
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/owner/stripe]', err);
+        res.status(500).json({ error: err.message || 'Failed to load Stripe snapshot' });
+    }
+});
+
+app.get('/api/admin/owner/inventory-panel', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.min(800, Math.max(50, parseInt(req.query.limit, 10) || 400));
+        const data = await ownerCockpitService.getInventoryIntegrityPanel(limit);
+        res.json(data);
+    } catch (err) {
+        console.error('[admin/owner/inventory-panel]', err);
+        res.status(500).json({ error: err.message || 'Failed to load inventory' });
+    }
+});
+
+app.get('/api/admin/owner/admins-users', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const [cockpitAdmins, allUsers] = await Promise.all([
+            usersService.listAppAdminsForCockpit(),
+            usersService.getAllUsers()
+        ]);
+        const usersPublic = allUsers.map((u) => ({
+            id: u.id,
+            email: u.email,
+            contact_name: u.contact_name,
+            company_name: u.company_name,
+            company_id: u.company_id,
+            is_approved: u.is_approved,
+            created_at: u.created_at,
+            record_type: 'public.users'
+        }));
+        const pending = usersPublic.filter((u) => Number(u.is_approved) !== 1);
+        const approved = usersPublic.filter((u) => Number(u.is_approved) === 1);
+        res.json({
+            app_admins_roster: cockpitAdmins.roster,
+            owner_emails_from_env: cockpitAdmins.owner_emails_from_env,
+            users_approved: approved.length,
+            users_pending_approval: pending.length,
+            pending_queue: pending.slice(0, 100),
+            users_total: usersPublic.length,
+            note: 'public.users.id matches auth.users (UUID); profile holds B2B fields and bcrypt for Express login. Admin UI requires app_admins.auth_user_id.'
+        });
+    } catch (err) {
+        console.error('[admin/owner/admins-users]', err);
+        res.status(500).json({ error: err.message || 'Failed to load admins/users' });
     }
 });
 
@@ -3765,14 +5329,15 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const byProduct = inventoryRowsByLegacyProductId(invList);
         const rows = products.map((p) => {
-            const inv = byProduct.get(p.id);
+            const inv = byProduct.get(Number(p.id));
             const onHand = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reserved = inv ? (inv.quantity_reserved ?? 0) : 0;
             const available = Math.max(0, onHand - reserved);
             return {
                 product_id: p.id,
+                canonical_product_id: inv?.canonical_product_id ?? normalizeCanonicalUuidInput(p.canonical_product_id) ?? null,
                 sku: p.sku,
                 name: p.name,
                 brand: p.brand,
@@ -3799,16 +5364,72 @@ app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, asy
         const product = await productsService.getProductById(productId);
         if (!product) return res.status(404).json({ error: 'Product not found' });
         const existing = await dataService.getInventoryByProductId(productId);
-        const payload = {};
+
+        let bodyCanon = null;
+        if (req.body.canonical_product_id != null && String(req.body.canonical_product_id).trim() !== '') {
+            bodyCanon = normalizeCanonicalUuidInput(req.body.canonical_product_id);
+            if (!bodyCanon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
+        }
+        const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
+        const existingRowCanon = existing ? normalizeCanonicalUuidInput(existing.canonical_product_id) : null;
+        const resolvedCanon = bodyCanon || productCanon || existingRowCanon;
+
+        const writesInventoryRow =
+            req.body.quantity_on_hand !== undefined ||
+            req.body.reorder_point !== undefined ||
+            req.body.bin_location !== undefined ||
+            bodyCanon != null;
+
+        if (writesInventoryRow && !resolvedCanon) {
+            return res.status(422).json({
+                error:
+                    'Assign a catalog canonical_product_id (on the product or in this request) before updating inventory.',
+                code: 'INVENTORY_CANONICAL_REQUIRED',
+            });
+        }
+
         if (req.body.quantity_on_hand !== undefined) {
-            payload.quantity_on_hand = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
-            payload.last_count_at = new Date().toISOString();
+            const newQ = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
+            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
+            if (newQ < reserved) {
+                return res.status(400).json({
+                    error: `quantity_on_hand (${newQ}) cannot be less than quantity_reserved (${reserved}).`,
+                    code: 'ON_HAND_BELOW_RESERVED',
+                });
+            }
+            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
+            const delta = newQ - current;
+            if (delta !== 0) {
+                await inventory.adjustStock(resolvedCanon, delta, 'Admin inventory PUT', { type: 'admin_put' }, req.user.id);
+            }
+            const supabase = getSupabaseAdmin();
+            await supabase
+                .from('inventory')
+                .update({ last_count_at: new Date().toISOString() })
+                .eq('canonical_product_id', resolvedCanon);
         }
-        if (req.body.reorder_point !== undefined) payload.reorder_point = Math.max(0, parseInt(req.body.reorder_point, 10) || 0);
-        if (req.body.bin_location !== undefined) payload.bin_location = String(req.body.bin_location || '').trim();
-        if (existing && payload.quantity_on_hand === undefined && existing.quantity_reserved != null) {
-            payload.quantity_reserved = existing.quantity_reserved;
-        }
+
+        const fresh = await dataService.getInventoryByProductId(productId);
+        const payload = {
+            quantity_on_hand: fresh ? (fresh.quantity_on_hand ?? 0) : 0,
+            reorder_point:
+                req.body.reorder_point !== undefined
+                    ? Math.max(0, parseInt(req.body.reorder_point, 10) || 0)
+                    : fresh
+                      ? (fresh.reorder_point ?? 0)
+                      : (product.reorder_point ?? 0),
+            bin_location:
+                req.body.bin_location !== undefined
+                    ? String(req.body.bin_location || '').trim()
+                    : fresh
+                      ? (fresh.bin_location || '')
+                      : '',
+        };
+        if (fresh && fresh.quantity_reserved != null) payload.quantity_reserved = fresh.quantity_reserved;
+        if (bodyCanon) payload.canonical_product_id = bodyCanon;
+        else if (productCanon) payload.canonical_product_id = productCanon;
+        else if (existingRowCanon) payload.canonical_product_id = existingRowCanon;
+
         await dataService.upsertInventory(productId, payload);
         const inv = await dataService.getInventoryByProductId(productId);
         res.json(inv || { product_id: productId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
@@ -3827,8 +5448,15 @@ app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (
         if (!product) return res.status(404).json({ error: 'Product not found' });
         const d = parseInt(delta, 10);
         if (isNaN(d) || d === 0) return res.status(400).json({ error: 'delta must be a non-zero integer (positive to add, negative to subtract)' });
-        await inventory.adjustStock(productId, d, reason || 'Admin adjustment', { type: 'admin' });
-        const stock = await inventory.getStock(productId);
+        const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
+        if (!productCanon) {
+            return res.status(422).json({
+                error: 'Product must have canonical_product_id (catalog mapping) before stock adjustments.',
+                code: 'INVENTORY_CANONICAL_REQUIRED',
+            });
+        }
+        await inventory.adjustStock(productCanon, d, reason || 'Admin adjustment', { type: 'admin' }, req.user.id);
+        const stock = await inventory.getStock(productCanon);
         res.json({ success: true, stock: stock || { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 } });
     } catch (err) {
         console.error('[admin/inventory/adjust]', err);
@@ -3838,9 +5466,20 @@ app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (
 
 app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (req, res) => {
     try {
-        const productId = req.query.product_id ? parseInt(req.query.product_id, 10) : undefined;
         const limit = Math.min(500, parseInt(req.query.limit, 10) || 100);
-        const history = await inventory.getStockHistory(productId, limit);
+        const rawCanon = req.query.canonical_product_id;
+        let canon = null;
+        if (rawCanon != null && String(rawCanon).trim() !== '') {
+            canon = normalizeCanonicalUuidInput(rawCanon);
+            if (!canon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
+        }
+        const productId = req.query.product_id != null && String(req.query.product_id).trim() !== ''
+            ? parseInt(req.query.product_id, 10)
+            : undefined;
+        if (!canon && productId != null && !Number.isFinite(productId)) {
+            return res.status(400).json({ error: 'Invalid product_id' });
+        }
+        const history = await inventory.getStockHistory(productId, limit, { canonical_product_id: canon });
         res.json(history);
     } catch (err) {
         console.error('[admin/inventory/history]', err);
@@ -3851,20 +5490,65 @@ app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (
 app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
+        const updated = [];
+        const skipped = [];
+        const rowErrors = [];
         for (const row of counts) {
             const pid = row.product_id != null ? parseInt(row.product_id, 10) : NaN;
-            if (isNaN(pid)) continue;
+            if (isNaN(pid)) {
+                skipped.push({ reason: 'invalid_product_id' });
+                continue;
+            }
             const product = await productsService.getProductById(pid);
-            if (!product) continue;
+            if (!product) {
+                skipped.push({ product_id: pid, reason: 'product_not_found' });
+                continue;
+            }
+            const rowCanon =
+                row.canonical_product_id != null && String(row.canonical_product_id).trim() !== ''
+                    ? normalizeCanonicalUuidInput(row.canonical_product_id)
+                    : null;
+            if (row.canonical_product_id != null && String(row.canonical_product_id).trim() !== '' && !rowCanon) {
+                skipped.push({ product_id: pid, reason: 'invalid_canonical_product_id' });
+                continue;
+            }
+            const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
+            const resolvedCanon = rowCanon || productCanon;
+            if (!resolvedCanon) {
+                skipped.push({ product_id: pid, reason: 'missing_canonical_product_id' });
+                continue;
+            }
             const existing = await dataService.getInventoryByProductId(pid);
-            const payload = {
-                quantity_on_hand: Math.max(0, parseInt(row.quantity_on_hand, 10) || 0),
-                last_count_at: new Date().toISOString()
-            };
-            if (existing && existing.quantity_reserved != null) payload.quantity_reserved = existing.quantity_reserved;
-            await dataService.upsertInventory(pid, payload);
+            const target = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
+            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
+            if (target < reserved) {
+                rowErrors.push({
+                    product_id: pid,
+                    code: 'count_below_reserved',
+                    quantity_reserved: reserved,
+                    quantity_on_hand_requested: target,
+                });
+                continue;
+            }
+            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
+            const delta = target - current;
+            if (delta !== 0) {
+                await inventory.adjustStock(resolvedCanon, delta, 'Cycle count', { type: 'cycle_count' }, req.user.id);
+            }
+            const supabase = getSupabaseAdmin();
+            await supabase
+                .from('inventory')
+                .update({ last_count_at: new Date().toISOString() })
+                .eq('canonical_product_id', resolvedCanon);
+            updated.push(pid);
         }
-        res.json({ success: true, updated: counts.length });
+        res.json({
+            success: true,
+            updated_product_ids: updated,
+            skipped,
+            errors: rowErrors,
+            counts_submitted: counts.length,
+        });
     } catch (err) {
         console.error('[admin/inventory/cycle]', err);
         res.status(500).json({ error: err.message || 'Failed to cycle count' });
@@ -3900,14 +5584,24 @@ app.post('/api/admin/orders/cleanup-stale', authenticateToken, requireAdmin, asy
         
         for (const order of staleOrders) {
             try {
-                // Release reserved stock
-                try {
-                    await inventory.releaseStockForOrder(order.id);
-                } catch (releaseErr) {
-                    console.error(`[cleanup-stale] Failed to release stock for order ${order.id}:`, releaseErr.message);
+                const full = await dataService.getOrderByIdAdmin(order.id);
+                const needRelease =
+                    full &&
+                    full.inventory_reserved_at &&
+                    !full.inventory_released_at &&
+                    !full.inventory_deducted_at;
+                if (needRelease) {
+                    try {
+                        await inventory.tryReleaseReservedStockForNonFulfillment(order.id);
+                        paymentLog.inventoryReleased(order.id, 'stale_pending_payment_cleanup');
+                    } catch (releaseErr) {
+                        paymentLog.logError('inventory.release_failed_stale_cleanup', releaseErr, {
+                            order_id: order.id,
+                        });
+                        errors.push({ order_id: order.id, error: releaseErr.message, phase: 'release' });
+                        continue;
+                    }
                 }
-                
-                // Mark order as expired
                 await dataService.updateOrderStatus(order.id, 'expired');
                 cleaned++;
             } catch (orderErr) {
@@ -3929,7 +5623,7 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const byProduct = inventoryRowsByLegacyProductId(invList);
         const allOrders = await dataService.getAllOrdersAdmin();
         const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
         const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
@@ -3946,7 +5640,7 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
             });
         });
         const suggestions = products.map((p) => {
-            const inv = byProduct.get(p.id);
+            const inv = byProduct.get(Number(p.id));
             const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
             const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
@@ -3972,7 +5666,7 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = new Map(invList.map((i) => [i.product_id, i]));
+        const byProduct = inventoryRowsByLegacyProductId(invList);
         const allOrders = await dataService.getAllOrdersAdmin();
         const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
         const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
@@ -3989,7 +5683,7 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
             });
         });
         const suggestions = products.map((p) => {
-            const inv = byProduct.get(p.id);
+            const inv = byProduct.get(Number(p.id));
             const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
             const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
@@ -4036,13 +5730,14 @@ app.get('/api/admin/inventory/verify', authenticateToken, requireAdmin, async (r
     }
 });
 
-// Verify specific product inventory
+// Verify specific product inventory (catalogos.products UUID in URL)
 app.get('/api/admin/inventory/:product_id/verify', authenticateToken, requireAdmin, async (req, res) => {
     try {
-        const productId = parseInt(req.params.product_id, 10);
-        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
-        
-        const result = await inventory.verifyInventoryConsistency(productId);
+        const canon = normalizeCanonicalUuidInput(req.params.product_id);
+        if (!canon) return res.status(400).json({ error: 'Invalid catalog product id (UUID required)' });
+        const product = await productsService.getProductById(canon);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const result = await inventory.verifyInventoryConsistency(canon);
         res.json(result);
     } catch (err) {
         console.error('[admin/inventory/verify/:id]', err);
@@ -4147,7 +5842,16 @@ app.post('/api/admin/purchase-orders/:id/send', authenticateToken, requireAdmin,
         if (!toEmail) return res.status(400).json({ error: 'Manufacturer has no PO/vendor email. Add it in Vendors.' });
         const lineText = (po.lines || []).map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
         const bodyText = `GloveCubs Purchase Order\n\nPO#: ${po.po_number}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(po.shipping_address || 'See order').replace(/\n/g, '\n')}\n\nCustomer Order: ${po.customer_order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${(po.subtotal || 0).toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
-        const result = await sendMail({ to: toEmail, subject: `Purchase Order ${po.po_number} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
+        const result = await dispatchEmail({
+            to: toEmail,
+            subject: `Purchase Order ${po.po_number} - GloveCubs`,
+            text: bodyText,
+            html: bodyText.replace(/\n/g, '<br>'),
+            emailType: 'purchase_order_vendor',
+            orderId: po.order_id || null,
+            orderNumber: po.customer_order_number || null,
+            metadata: { po_id: po.id, po_number: po.po_number },
+        });
         if (!result.sent) return res.status(500).json({ error: result.error || 'Failed to send email' });
         await dataService.updatePurchaseOrder(req.params.id, { status: 'sent', sent_at: new Date().toISOString() });
         res.json({ success: true, sent: true, po_number: po.po_number });
@@ -4162,7 +5866,11 @@ app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdm
         const poId = parseInt(req.params.id, 10);
         if (isNaN(poId)) return res.status(400).json({ error: 'Invalid PO ID' });
         const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
-        if (lines.length === 0) return res.status(400).json({ error: 'lines array required: [{ product_id, quantity_received }]' });
+        if (lines.length === 0) {
+            return res.status(400).json({
+                error: 'lines array required: [{ canonical_product_id (UUID), quantity_received }]',
+            });
+        }
         await inventory.receivePurchaseOrder(poId, lines);
         const updated = await dataService.getPurchaseOrderById(poId);
         res.json({ success: true, po: updated });
@@ -4177,27 +5885,65 @@ app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, asy
     try {
         const order = await dataService.getOrderByIdAdmin(req.params.id);
         if (!order) return res.status(404).json({ error: 'Order not found' });
-        const manufacturers = await dataService.getManufacturers();
-        const byMfr = new Map();
-        for (const item of order.items || []) {
-            const product = await productsService.getProductById(item.product_id);
-            const mfrId = product ? (product.manufacturer_id || null) : null;
-            if (!mfrId) continue;
-            if (!byMfr.has(mfrId)) byMfr.set(mfrId, []);
-            byMfr.get(mfrId).push({
-                product_id: item.product_id,
-                sku: item.sku || product?.sku,
-                name: item.name || product?.name,
-                quantity: item.quantity,
-                unit_cost: product ? (product.cost || 0) : 0
+        if (order.payment_integrity_hold === true || order.payment_integrity_hold === 1) {
+            return res.status(409).json({
+                error: 'Order is on payment integrity hold; resolve Stripe vs order total before creating a PO.',
+                code: 'PAYMENT_INTEGRITY_HOLD',
             });
         }
-        const mfrId = req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : (byMfr.size === 1 ? [...byMfr.keys()][0] : null);
-        if (mfrId == null || isNaN(mfrId)) return res.status(400).json({ error: 'Order has items from multiple or no manufacturers. Specify manufacturer_id.' });
+        if (order.status === 'pending_payment') {
+            return res.status(409).json({
+                error: 'Order has not completed payment; do not create a purchase order yet.',
+                code: 'ORDER_AWAITING_PAYMENT',
+            });
+        }
+        if (orderRequiresOnlinePaymentConfirmation(order) && !order.payment_confirmed_at) {
+            return res.status(409).json({
+                error: 'Payment must be confirmed before creating a PO for card/ACH (Stripe) orders.',
+                code: 'PAYMENT_NOT_CONFIRMED',
+            });
+        }
+        const manufacturers = await dataService.getManufacturers();
+        const resolution = await buildPurchaseOrderLinesFromOrder(order, { orderId: order.id });
+        if (!resolution.ok) {
+            const summary = (resolution.blocked_lines || [])
+                .map((b) => {
+                    const li = b.order_line_index != null ? b.order_line_index + 1 : '?';
+                    const pid = b.canonical_product_id != null ? b.canonical_product_id : '?';
+                    return `Line ${li} (catalog ${pid}): ${b.code}`;
+                })
+                .join('; ');
+            return res.status(422).json({
+                error: `Cannot build purchase order — ${resolution.blocked_lines.length} line(s) blocked. ${summary}`,
+                code: resolution.code || 'PO_LINE_VALIDATION_FAILED',
+                blocked_lines: resolution.blocked_lines,
+            });
+        }
+        const byMfr = resolution.byManufacturer;
+        const mfrId =
+            req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : byMfr.size === 1 ? [...byMfr.keys()][0] : null;
+        if (mfrId == null || isNaN(mfrId)) {
+            const mfrSummaries = [...byMfr.keys()].map((id) => {
+                const m = (manufacturers || []).find((x) => x.id === id);
+                return { id, name: m ? m.name : '', line_count: (byMfr.get(id) || []).length };
+            });
+            return res.status(400).json({
+                error:
+                    'Order has line items for multiple manufacturers. Create one PO per manufacturer by passing manufacturer_id in the request body.',
+                code: 'MULTI_MANUFACTURER_ORDER',
+                manufacturers: mfrSummaries,
+            });
+        }
         const mfr = (manufacturers || []).find((m) => m.id === mfrId);
         if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
         const lines = byMfr.get(mfrId) || [];
-        if (lines.length === 0) return res.status(400).json({ error: 'No line items for this manufacturer' });
+        if (lines.length === 0) {
+            return res.status(400).json({
+                error: 'No validated line items for the selected manufacturer.',
+                code: 'NO_LINES_FOR_MANUFACTURER',
+                manufacturer_id: mfrId,
+            });
+        }
         const poNumber = await dataService.nextPoNumber();
         const shippingDisplay = order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display ? order.shipping_address.display : (order.shipping_address || null);
         const po = await dataService.createPurchaseOrder({
@@ -4214,7 +5960,16 @@ app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, asy
         if (!toEmail) return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, message: 'PO created. Add vendor email in Vendors and send from Purchase Orders.' });
         const lineText = lines.map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
         const bodyText = `GloveCubs Purchase Order\n\nPO#: ${poNumber}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(shippingDisplay || '').replace(/\n/g, '\n')}\n\nCustomer Order: ${order.order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${subtotal.toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
-        const result = await sendMail({ to: toEmail, subject: `Purchase Order ${poNumber} - GloveCubs`, text: bodyText, html: bodyText.replace(/\n/g, '<br>') });
+        const result = await dispatchEmail({
+            to: toEmail,
+            subject: `Purchase Order ${poNumber} - GloveCubs`,
+            text: bodyText,
+            html: bodyText.replace(/\n/g, '<br>'),
+            emailType: 'purchase_order_vendor',
+            orderId: order.id,
+            orderNumber: order.order_number || null,
+            metadata: { po_number: poNumber, po_id: po.id },
+        });
         if (result.sent) {
             await dataService.updatePurchaseOrder(po.id, { status: 'sent', sent_at: new Date().toISOString() });
             return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, sent: true, message: 'PO created and sent to vendor.' });
@@ -4228,10 +5983,19 @@ app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, asy
 
 app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
+        if (!companiesService.isGcCompanyUuid(req.params.id)) {
+            return res.status(400).json({ error: 'Invalid company id (UUID required)' });
+        }
         const company = await companiesService.getCompanyById(req.params.id);
         if (!company) return res.status(404).json({ error: 'Company not found' });
-        const overrides = await dataService.getOverridesByCompanyId(Number(req.params.id));
-        res.json({ ...company, overrides });
+        const overrides = await dataService.getOverridesByCompanyId(req.params.id);
+        let ar_aging = null;
+        try {
+            ar_aging = await arAgingService.getCompanyArAging(req.params.id);
+        } catch (ageErr) {
+            console.error('[admin/companies/:id] ar_aging', ageErr);
+        }
+        res.json({ ...company, overrides, ar_aging });
     } catch (err) {
         console.error('[admin/companies/:id]', err);
         res.status(500).json({ error: err.message || 'Failed to load company' });
@@ -4240,6 +6004,9 @@ app.get('/api/admin/companies/:id', authenticateToken, requireAdmin, async (req,
 
 app.post('/api/admin/companies/:id/default-margin', authenticateToken, requireAdmin, async (req, res) => {
     try {
+        if (!companiesService.isGcCompanyUuid(req.params.id)) {
+            return res.status(400).json({ error: 'Invalid company id (UUID required)' });
+        }
         let percent = req.body.default_gross_margin_percent != null ? Number(req.body.default_gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
         if (percent == null || isNaN(percent)) return res.status(400).json({ error: 'default_gross_margin_percent or margin_percent required' });
         if (percent < 0 || percent >= 100) return res.status(400).json({ error: 'Margin must be 0 <= margin < 100' });
@@ -4254,8 +6021,11 @@ app.post('/api/admin/companies/:id/default-margin', authenticateToken, requireAd
 
 app.post('/api/admin/companies/:id/overrides', authenticateToken, requireAdmin, async (req, res) => {
     try {
-        const companyId = Number(req.params.id);
-        const company = await companiesService.getCompanyById(req.params.id);
+        const companyId = req.params.id;
+        if (!companiesService.isGcCompanyUuid(companyId)) {
+            return res.status(400).json({ error: 'Invalid company id (UUID required)' });
+        }
+        const company = await companiesService.getCompanyById(companyId);
         if (!company) return res.status(404).json({ error: 'Company not found' });
         const manufacturer_id = req.body.manufacturer_id != null ? Number(req.body.manufacturer_id) : null;
         let gross_margin_percent = req.body.gross_margin_percent != null ? Number(req.body.gross_margin_percent) : (req.body.margin_percent != null ? Number(req.body.margin_percent) : null);
@@ -4273,9 +6043,12 @@ app.post('/api/admin/companies/:id/overrides', authenticateToken, requireAdmin, 
 
 app.delete('/api/admin/companies/:id/overrides/:overrideId', authenticateToken, requireAdmin, async (req, res) => {
     try {
+        if (!companiesService.isGcCompanyUuid(req.params.id)) {
+            return res.status(400).json({ error: 'Invalid company id (UUID required)' });
+        }
         const company = await companiesService.getCompanyById(req.params.id);
         if (!company) return res.status(404).json({ error: 'Company not found' });
-        await dataService.deleteCustomerManufacturerPricingOverride(req.params.overrideId, Number(req.params.id));
+        await dataService.deleteCustomerManufacturerPricingOverride(req.params.overrideId, req.params.id);
         res.json({ success: true });
     } catch (err) {
         console.error('[admin/companies delete override]', err);

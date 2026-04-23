@@ -45,10 +45,12 @@ export default function InvoiceSavingsPage() {
     swaps: Swap[];
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [totalsNeedReview, setTotalsNeedReview] = React.useState(false);
 
   async function handleExtract() {
     if (!file) return;
     setError(null);
+    setTotalsNeedReview(false);
     setStep("extracting");
     try {
       const form = new FormData();
@@ -66,6 +68,7 @@ export default function InvoiceSavingsPage() {
         total_amount: data.total_amount,
         lines: data.lines ?? [],
       });
+      setTotalsNeedReview(Boolean(data.totals_need_review));
       setStep("results");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed");
@@ -168,7 +171,8 @@ export default function InvoiceSavingsPage() {
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-semibold text-white mb-2">Invoice savings</h1>
         <p className="text-white/70 text-sm mb-8">
-          Upload an invoice (image or PDF). We extract line items and suggest catalog swaps with estimated savings.
+          Upload a clear photo of your invoice (JPEG, PNG, or WebP). We use AI to suggest line items and catalog swaps;
+          always verify amounts against your original document. PDF is not supported yet.
         </p>
 
         {step === "upload" && (
@@ -183,7 +187,7 @@ export default function InvoiceSavingsPage() {
               <div className="flex flex-wrap gap-3">
                 <input
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/*"
                   className="block w-full min-w-0 text-sm text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-white/10 file:text-white"
                   onChange={(e) => {
                     setFile(e.target.files?.[0] ?? null);
@@ -252,6 +256,14 @@ export default function InvoiceSavingsPage() {
 
         {step === "results" && extracted && (
           <div className="space-y-6">
+            <p className="text-sm text-amber-200/90 border border-amber-500/30 rounded-lg px-3 py-2 bg-amber-500/10">
+              AI-extracted — please verify. Quantities and dollar amounts are not guaranteed.
+            </p>
+            {totalsNeedReview && (
+              <p className="text-sm text-amber-100 border border-amber-400/40 rounded-lg px-3 py-2 bg-amber-500/15" role="status">
+                Some values may be incorrect. Please review.
+              </p>
+            )}
             {extracted.vendor_name && (
               <p className="text-white/70">Vendor: {extracted.vendor_name}</p>
             )}

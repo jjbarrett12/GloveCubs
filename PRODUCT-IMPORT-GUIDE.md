@@ -146,5 +146,5 @@ https://via.placeholder.com/400x400/FFFFFF/[COLOR]?text=[PRODUCT+NAME]
 ## Need Help?
 
 - Check `products-template.csv` for examples
-- All products are saved to `database.json`
+- All products are saved to Supabase (`public.products`)
 - Restart server after CSV import to see changes

@@ -1,0 +1,6 @@
+- Read the minimum number of files needed before acting.
+- Do not scan the entire repository unless explicitly requested.
+- Do not repeat rule text in responses.
+- Keep output concise and action-oriented.
+- Prefer targeted diffs over broad refactors.
+- When uncertain, identify the exact missing file/contract instead of exploring widely.

@@ -1,0 +1,7 @@
+---every user-visible flow must use persisted truth
+remove demo/fake fallback paths in production code
+check migration/schema contract when touching DB-backed features
+test the exact changed flow end-to-end
+call out uncertainty explicitly
+alwaysApply: true
+---

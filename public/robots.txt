@@ -1,0 +1,6 @@
+# GloveCubs — productionization: basic robots.txt
+User-agent: *
+Allow: /
+# Disallow admin and internal APIs if desired:
+# Disallow: /api/internal/
+# Disallow: /dashboard/

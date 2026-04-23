@@ -1,0 +1,23 @@
+change only what is required
+do not invent schema, endpoints, or fields
+preserve existing naming unless explicitly refactoring
+prefer small diffs
+verify touched paths compile/test
+do not scan unrelated files unless needed---
+alwaysApply: true
+---
+- Read the minimum number of files needed before acting.
+- Do not scan the entire repository unless explicitly requested.
+- Do not repeat rule text in responses.
+- Keep output concise and action-oriented.
+- Prefer targeted diffs over broad refactors.
+- When uncertain, identify the exact missing file/contract instead of exploring widely.
+
+# Execution Constraints
+
+- Always minimize file reads before acting.
+- Never scan the entire repo unless explicitly requested.
+- Avoid broad audits unless explicitly scoped.
+- Prefer narrow, surgical changes.
+- Do not restate rules in outputs.
+- Stop when sufficient context is found.

@@ -1,0 +1,8 @@
+# GloveCubs Commerce Truth
+
+- Persisted database values are canonical over UI-calculated values.
+- All money logic must use stored minor-unit values where available.
+- Order totals must reconcile from canonical line, shipping, discount, tax, and total fields.
+- Do not add fake, estimated, or fallback pricing in production paths unless explicitly labeled and approved.
+- Customer-visible prices must trace to a trusted source.
+- When pricing truth is unclear, stop and surface the ambiguity.

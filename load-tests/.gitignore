@@ -1,0 +1,18 @@
+# Results (generated)
+results/*.json
+results/*.txt
+
+# Keep results directory
+!results/.gitkeep
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.env
+.env.local
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db

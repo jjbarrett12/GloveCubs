@@ -1,0 +1,11 @@
+# GloveCubs Operations Truth
+
+- Inventory mutations must be atomic (reserve, release, deduct).
+- Available quantity must reflect real inventory minus reservations.
+- Discounts must not bypass pricing floors or margin constraints.
+- Margin protection rules override promotional logic.
+- Shipping charges shown to users must match persisted order values.
+- Do not replace persisted shipping or discount values with recalculated estimates.
+- Operational state (inventory, shipping, discounts) must always be derived from trusted persisted data.---
+alwaysApply: true
+---

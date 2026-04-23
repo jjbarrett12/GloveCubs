@@ -1,0 +1,7 @@
+---product identity must prefer canonical SKU/manufacturer/UOM mapping
+do not silently merge products without strong match evidence
+import must be idempotent
+supplier cost updates must not corrupt sellable pricing
+never overwrite trusted product identity with weaker extracted data
+alwaysApply: true
+---

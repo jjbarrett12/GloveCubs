@@ -25,15 +25,13 @@
 | `public/index.html` | Single HTML entry; `data-theme` set to `light` for public pages. |
 | `lib/*.js` | Server-side: Supabase client, CSV import to Supabase, product store (CSV parse/export), pricing, parse-product-url, hospeco/globalglove extractors, image validation, AI provider, AI schemas, AI log. |
 | `src/config/industries.ts` | **Existing** industry config (TypeScript): slugs `medical | janitorial | food-service | industrial | automotive`; used by main SPA for industry pages and product filters. |
-| `database.json` | JSON-file DB when Supabase is not used (products, users, etc.). |
-| `loadDB()` / `saveDB()` | In-memory `db` load/save for JSON path. |
 | `.env` | Supabase, JWT, AI keys, etc. Never commit secrets. |
 
 ---
 
 ## 3. Data & auth
 
-- **Database:** Prefer **Supabase** (Postgres) when configured (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`). Fallback: `database.json` + `loadDB()`/`saveDB()`.
+- **Database:** **Supabase** (Postgres) only. No JSON fallback. Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
 - **Auth:** JWT; `authenticateToken` middleware; admin gated by `is_approved` (or equivalent). `requireAdmin` for admin-only routes.
 - **Tables (Supabase):** `products`, `manufacturers`, `companies`, `company_members`, `customer_manufacturer_pricing`, `ai_conversations`, `invoice_uploads`, `invoice_lines`, `recommendations`. Migrations live in `supabase/migrations/`.
 

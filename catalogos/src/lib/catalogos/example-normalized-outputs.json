@@ -1,0 +1,109 @@
+[
+  {
+    "description": "Blue nitrile powder-free exam gloves large 4 mil case 1000",
+    "payload": {
+      "content": {
+        "canonical_title": "Nitrile Exam Gloves, Powder-Free, 4 mil, Large, Blue, 1000/Case",
+        "supplier_sku": "NIT-PF-4-L-BLU-1000",
+        "supplier_cost": 85.0,
+        "images": [],
+        "case_qty": 1000
+      },
+      "category_slug": "disposable_gloves",
+      "filter_attributes": {
+        "category": "disposable_gloves",
+        "material": "nitrile",
+        "size": "l",
+        "color": "blue",
+        "brand": "Acme",
+        "packaging": "case_1000_ct",
+        "powder": "powder_free",
+        "grade": "medical_exam_grade",
+        "thickness_mil": "4"
+      }
+    }
+  },
+  {
+    "description": "Black latex industrial gloves xl powdered 100 ct",
+    "payload": {
+      "content": {
+        "canonical_title": "Latex Industrial Gloves, Powdered, Black, XL, 100/Box",
+        "supplier_sku": "LAT-XL-BLK-100",
+        "supplier_cost": 12.0,
+        "images": [],
+        "box_qty": 100
+      },
+      "category_slug": "disposable_gloves",
+      "filter_attributes": {
+        "category": "disposable_gloves",
+        "material": "latex",
+        "size": "xl",
+        "color": "black",
+        "brand": "Acme",
+        "packaging": "box_100_ct",
+        "powder": "powdered",
+        "grade": "industrial_grade"
+      }
+    }
+  },
+  {
+    "description": "Clear vinyl food service gloves medium box 200",
+    "payload": {
+      "content": {
+        "canonical_title": "Vinyl Food Service Gloves, Clear, Medium, 200/Box",
+        "supplier_sku": "VIN-M-CLR-200",
+        "supplier_cost": 28.0,
+        "images": [],
+        "box_qty": 200
+      },
+      "category_slug": "disposable_gloves",
+      "filter_attributes": {
+        "category": "disposable_gloves",
+        "material": "vinyl",
+        "size": "m",
+        "color": "white",
+        "brand": "Acme",
+        "packaging": "box_200_250_ct",
+        "grade": "food_service_grade"
+      }
+    }
+  },
+  {
+    "description": "ANSI A4 cut resistant work gloves large",
+    "payload": {
+      "content": {
+        "canonical_title": "Cut-Resistant Work Gloves, ANSI A4, Large",
+        "supplier_sku": "CR-A4-L",
+        "supplier_cost": 22.0,
+        "images": []
+      },
+      "category_slug": "reusable_work_gloves",
+      "filter_attributes": {
+        "category": "reusable_work_gloves",
+        "size": "l",
+        "color": "black",
+        "brand": "Acme",
+        "cut_level_ansi": "a4"
+      }
+    }
+  },
+  {
+    "description": "Insulated winter work gloves xl",
+    "payload": {
+      "content": {
+        "canonical_title": "Insulated Winter Work Gloves, XL",
+        "supplier_sku": "INS-WIN-XL",
+        "supplier_cost": 35.0,
+        "images": []
+      },
+      "category_slug": "reusable_work_gloves",
+      "filter_attributes": {
+        "category": "reusable_work_gloves",
+        "size": "xl",
+        "color": "black",
+        "brand": "Acme",
+        "warm_cold_weather": "winter"
+      }
+    }
+  }
+]

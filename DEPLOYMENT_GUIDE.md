@@ -18,8 +18,9 @@ SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=noreply@glovecubs.com
 
-# Database
-DB_PATH=./database.json
+# Supabase (required - single source of truth)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Domain
 DOMAIN=https://glovecubs.com
@@ -35,8 +36,8 @@ DOMAIN=https://glovecubs.com
 - [ ] Set up proper file upload restrictions
 
 ### 3. Database Backup
-- [ ] Backup `database.json` before deployment
-- [ ] Set up automated backups
+- [ ] Supabase: use project backups / point-in-time recovery
+- [ ] Set up automated backups in Supabase dashboard
 - [ ] Test restore process
 
 ### 4. Testing
@@ -255,10 +256,9 @@ lsof -i :3004
 kill -9 <PID>
 ```
 
-**Database file permissions:**
-```bash
-chmod 644 database.json
-```
+**Supabase connection:**
+- Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in .env
+- Check Supabase project status and quotas
 
 **Node modules issues:**
 ```bash

@@ -1,9 +1,15 @@
-node_modules/
+**/node_modules/
+**/.next/
 *.db
 .env
+.env.*
+!.env.example
+!**/.env.example
 .env*.local
 .DS_Store
-storefront/.next
 Thumbs.db
 # Scheduled Fishbowl customer export (generated every 30 min)
 data/
+
+# Legacy JSON database - fully migrated to Supabase; do not recreate
+database.json

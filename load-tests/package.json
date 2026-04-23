@@ -1,0 +1,62 @@
+{
+  "name": "glovecubs-load-tests",
+  "version": "1.0.0",
+  "description": "k6 load testing harness for GLOVECUBS",
+  "scripts": {
+    "run": "k6 run --env PROFILE=normal run-all.js",
+    "run:smoke": "k6 run --env PROFILE=smoke run-all.js",
+    "run:normal": "k6 run --env PROFILE=normal run-all.js",
+    "run:stress": "k6 run --env PROFILE=stress run-all.js",
+    "run:stress:250": "k6 run --env PROFILE=stress_250 run-all.js",
+    "run:stress:500": "k6 run --env PROFILE=stress_500 run-all.js",
+    "run:json": "k6 run --env PROFILE=normal --out json=results/run.json run-all.js",
+    "run:html": "k6 run --env PROFILE=normal --out html=results/run.html run-all.js",
+
+    "test:smoke": "k6 run --env PROFILE=smoke scenarios/mixed-workload.js",
+    "test:normal": "k6 run --env PROFILE=normal scenarios/mixed-workload.js",
+    "test:stress": "k6 run --env PROFILE=stress scenarios/mixed-workload.js",
+    "test:spike": "k6 run --env PROFILE=spike scenarios/mixed-workload.js",
+    "test:soak": "k6 run --env PROFILE=soak scenarios/mixed-workload.js",
+    "test:breakpoint": "k6 run --env PROFILE=breakpoint scenarios/mixed-workload.js",
+    
+    "test:login": "k6 run scenarios/buyer-login.js",
+    "test:login:smoke": "k6 run --env PROFILE=smoke scenarios/buyer-login.js",
+    "test:login:stress": "k6 run --env PROFILE=stress scenarios/buyer-login.js",
+    
+    "test:search": "k6 run scenarios/product-search.js",
+    "test:search:smoke": "k6 run --env PROFILE=smoke scenarios/product-search.js",
+    "test:search:stress": "k6 run --env PROFILE=stress scenarios/product-search.js",
+    
+    "test:product": "k6 run scenarios/product-view.js",
+    "test:product:smoke": "k6 run --env PROFILE=smoke scenarios/product-view.js",
+    "test:product:stress": "k6 run --env PROFILE=stress scenarios/product-view.js",
+    
+    "test:quote": "k6 run scenarios/quote-submit.js",
+    "test:quote:smoke": "k6 run --env PROFILE=smoke scenarios/quote-submit.js",
+    "test:quote:stress": "k6 run --env PROFILE=stress scenarios/quote-submit.js",
+    
+    "test:dashboard": "k6 run scenarios/dashboard-load.js",
+    "test:dashboard:smoke": "k6 run --env PROFILE=smoke scenarios/dashboard-load.js",
+    
+    "test:favorites": "k6 run scenarios/favorites.js",
+    "test:favorites:smoke": "k6 run --env PROFILE=smoke scenarios/favorites.js",
+    
+    "test:admin": "k6 run scenarios/admin-review.js",
+    "test:admin:smoke": "k6 run --env PROFILE=smoke scenarios/admin-review.js",
+    
+    "test:supplier": "k6 run scenarios/supplier-upload.js",
+    "test:supplier:smoke": "k6 run --env PROFILE=smoke scenarios/supplier-upload.js",
+    
+    "test:outcomes": "k6 run scenarios/outcome-write.js",
+    "test:outcomes:smoke": "k6 run --env PROFILE=smoke scenarios/outcome-write.js",
+    
+    "test:all:smoke": "npm run test:login:smoke && npm run test:search:smoke && npm run test:product:smoke && npm run test:quote:smoke && npm run test:favorites:smoke && npm run test:dashboard:smoke",
+    "test:all:normal": "npm run test:login && npm run test:search && npm run test:product && npm run test:quote && npm run test:favorites && npm run test:dashboard",
+    
+    "results:clean": "rmdir /s /q results 2>nul & mkdir results",
+    "report": "node scripts/generate-report.js"
+  },
+  "keywords": ["k6", "load-testing", "glovecubs"],
+  "author": "GloveCubs Team",
+  "license": "UNLICENSED"
+}

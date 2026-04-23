@@ -1,53 +1,57 @@
 /**
- * CLI to import products from a CSV file into database.json.
- * Uses the same parsing and mapping as the API (lib/product-store.js).
+ * CLI to import products from a CSV file into Supabase.
+ * Uses the same parsing and mapping as the API (lib/import-csv-supabase).
  *
  * Usage:
  *   node import-products.js <file.csv> [--replace]
  *
  * --replace  Remove any existing products whose SKU is not in the CSV (full catalog replace).
+ *
+ * Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env (or environment).
  */
 
-const fs = require('fs');
 const path = require('path');
-const productStore = require('./lib/product-store');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const DB_PATH = path.join(__dirname, 'database.json');
+const { importCsvToSupabase } = require('./lib/import-csv-supabase');
+const { isConfigured } = require('./lib/supabase');
 
-function loadDB() {
-    const raw = fs.readFileSync(DB_PATH, 'utf8');
-    const db = JSON.parse(raw);
-    if (!db.products) db.products = [];
-    return db;
-}
-
-function saveDB(db) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-}
-
-function importFromCSV(csvFilePath, options = {}) {
+async function importFromCSV(csvFilePath, options = {}) {
     const { deleteNotInImport = false } = options;
+
+    if (!isConfigured()) {
+        console.error('\n❌ Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env\n');
+        process.exit(1);
+    }
+
     const csvContent = fs.readFileSync(csvFilePath, 'utf8');
-    const db = loadDB();
+    const result = await importCsvToSupabase(csvContent, { deleteNotInImport });
 
-    const result = productStore.upsertProductsFromCsv(db, csvContent, { deleteNotInImport });
-    const { created, updated, skipped, failed, deleted, withImage } = result;
+    const { created, updated, skipped, failed, deleted, parsedRows, errorSamples } = result;
+    let withImage = 0;
+    if (result.withImage != null) withImage = result.withImage;
 
-    saveDB(db);
-
-    console.log(`\n✅ Import complete: ${created} created, ${updated} updated.`);
-    if (deleted > 0) console.log(`   ${deleted} product(s) removed (not in CSV).`);
-    if (skipped > 0) console.log(`   ${skipped} row(s) skipped (empty or too few columns).`);
-    if (failed > 0) console.log(`   ${failed} row(s) failed (missing/invalid required fields).`);
-    if (withImage > 0) console.log(`   ${withImage} row(s) had image URLs.`);
-    console.log(`   Total products in database: ${db.products.length}\n`);
+    console.log('\n✅ Import complete:');
+    console.log(`   Created: ${created} | Updated: ${updated}`);
+    if (deleted > 0) console.log(`   Deleted (not in CSV): ${deleted}`);
+    if (skipped > 0) console.log(`   Skipped: ${skipped} row(s)`);
+    if (failed > 0) console.log(`   Failed: ${failed} row(s)`);
+    if (withImage > 0) console.log(`   With image URLs: ${withImage}`);
+    if (errorSamples && errorSamples.length > 0) {
+        console.log('\n   Sample errors:');
+        errorSamples.slice(0, 5).forEach((e) => {
+            console.log(`     Row ${e.row}${e.sku ? ` SKU ${e.sku}` : ''}: ${e.message}`);
+        });
+    }
+    console.log(`   Total rows in CSV: ${parsedRows}\n`);
 
     return result;
 }
 
 // Parse args: first non-flag is CSV path; --replace enables deleteNotInImport
 const args = process.argv.slice(2);
-const csvFile = args.find(a => !a.startsWith('--'));
+const csvFile = args.find((a) => !a.startsWith('--'));
 const deleteNotInImport = args.includes('--replace');
 
 if (!csvFile) {
@@ -62,9 +66,7 @@ if (!fs.existsSync(csvFile)) {
     process.exit(1);
 }
 
-try {
-    importFromCSV(csvFile, { deleteNotInImport });
-} catch (error) {
-    console.error('\n❌ Error importing products:', error.message);
+importFromCSV(csvFile, { deleteNotInImport }).catch((err) => {
+    console.error('\n❌ Error importing products:', err.message);
     process.exit(1);
-}
+});
