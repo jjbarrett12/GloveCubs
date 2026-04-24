@@ -1,12 +1,6 @@
 /**
- * Derive catalogos.products.attributes JSON from canonical product_attributes rows.
- * Must run after syncProductAttributesFromStaged and before legacy bridge / canonical sync.
- *
- * ## JSON policy (Option A — strict mirror)
- * `catalogos.products.attributes` is **only** a denormalized mirror of rows in
- * `catalogos.product_attributes`. Each successful refresh **replaces** the entire JSON object.
- * **Do not store non-facet / extended data in `catalogos.products.attributes`** — use another
- * column or table if you need data that is not represented as facet attribute rows.
+ * Mirror facet attributes into catalog_v2.catalog_products.metadata.facet_attributes
+ * from catalogos.product_attributes (product_id = catalog_v2 parent id).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -50,15 +44,13 @@ function sleep(ms: number): Promise<void> {
 export type RefreshProductAttributesJsonSnapshotResult = { ok: true } | { ok: false; message: string };
 
 /**
- * Rebuild catalogos.products.attributes from product_attributes + attribute_definitions.
- * Multi-select keys (e.g. industries, compliance_certifications) become deduped string[].
- * Single-value keys: exactly one row per attribute_key after grouping, else failure.
+ * Rebuild facet_attributes JSON on catalog_v2.catalog_products.metadata.
  */
 export async function refreshProductAttributesJsonSnapshot(
-  supabase: SupabaseClient,
+  catalogos: SupabaseClient,
   productId: string
 ): Promise<RefreshProductAttributesJsonSnapshotResult> {
-  const { data: rows, error: selErr } = await supabase
+  const { data: rows, error: selErr } = await catalogos
     .from("product_attributes")
     .select("attribute_definition_id, value_text, value_number, value_boolean, attribute_definitions(attribute_key)")
     .eq("product_id", productId)
@@ -109,20 +101,37 @@ export async function refreshProductAttributesJsonSnapshot(
     }
   }
 
-  const payload = { attributes, updated_at: new Date().toISOString() };
+  const { getSupabase } = await import("@/lib/db/client");
+  const admin = getSupabase(true);
+  const { data: existing, error: exErr } = await admin
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("metadata")
+    .eq("id", productId)
+    .maybeSingle();
 
-  let updErr = (await supabase.from("products").update(payload).eq("id", productId)).error;
+  if (exErr) {
+    const message = `catalog_v2.catalog_products metadata read: ${exErr.message}`;
+    logPublishFailure("product_attributes_snapshot_metadata_read_failed", { product_id: productId, message });
+    return { ok: false, message };
+  }
+
+  const meta = ((existing as { metadata?: Record<string, unknown> } | null)?.metadata ?? {}) as Record<string, unknown>;
+  const merged = { ...meta, facet_attributes: attributes, updated_at: new Date().toISOString() };
+  const payload = { metadata: merged, updated_at: new Date().toISOString() };
+
+  let updErr = (await admin.schema("catalog_v2").from("catalog_products").update(payload).eq("id", productId)).error;
   if (updErr) {
     logPublishFailure("product_attributes_snapshot_update_failed_will_retry", {
       product_id: productId,
       message: updErr.message,
     });
     await sleep(SNAPSHOT_UPDATE_RETRY_DELAY_MS);
-    updErr = (await supabase.from("products").update(payload).eq("id", productId)).error;
+    updErr = (await admin.schema("catalog_v2").from("catalog_products").update(payload).eq("id", productId)).error;
   }
 
   if (updErr) {
-    const message = `products.attributes update (after retry): ${updErr.message}`;
+    const message = `catalog_v2.catalog_products.metadata update (after retry): ${updErr.message}`;
     logPublishFailure("product_attributes_snapshot_update_failed", { product_id: productId, message });
     return { ok: false, message };
   }

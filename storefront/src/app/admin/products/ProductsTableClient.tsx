@@ -37,9 +37,18 @@ interface Props {
     hasAlerts?: string;
     hasOpportunity?: string;
   };
+  /** True when catalogos has zero active listings and no list filters are applied */
+  showCanonicalEmpty?: boolean;
 }
 
-export function ProductsTableClient({ products, categories, currentFilters }: Props) {
+const CATALOGOS_BASE = process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/$/, "") ?? "";
+
+export function ProductsTableClient({
+  products,
+  categories,
+  currentFilters,
+  showCanonicalEmpty = false,
+}: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
@@ -140,10 +149,37 @@ export function ProductsTableClient({ products, categories, currentFilters }: Pr
       </TableToolbar>
 
       {filteredProducts.length === 0 ? (
-        <EmptyState
-          title="No products found"
-          description="Try adjusting your filters"
-        />
+        showCanonicalEmpty && !search ? (
+          <EmptyState
+            title="No catalog products yet"
+            description="Active products live in catalog_v2.catalog_products. Use ingestion or publish to create v2 rows."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link
+                  href="/admin/ingestion"
+                  className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Ingestion & import links
+                </Link>
+                {CATALOGOS_BASE ? (
+                  <a
+                    href={`${CATALOGOS_BASE}/dashboard/products/bulk-add`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Quick create (CatalogOS)
+                  </a>
+                ) : null}
+              </div>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="No products found"
+            description="Try adjusting your filters or search"
+          />
+        )
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">

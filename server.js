@@ -72,6 +72,7 @@ const {
     ensureCommerceLinesHaveCanonical,
     normalizeCanonicalUuidInput,
     resolveLineCatalogProductId,
+    resolveCartLineListingProductId,
 } = require('./lib/resolve-canonical-product-id');
 const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
@@ -100,12 +101,19 @@ const {
     sanitizeProductForPublicApi,
     sanitizeProductsArrayForPublicApi,
 } = require('./lib/public-product-api');
+const { mapPostgrestOrDatabaseError } = require('./lib/postgrestSchema');
 
 const app = express();
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const PORT = parseInt(process.env.PORT, 10) || 3004;
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim() || JWT_SECRET_DEFAULT;
+
+function sendCatalogApiError(res, err, logLabel) {
+    console.error(logLabel, err);
+    const mapped = mapPostgrestOrDatabaseError(err);
+    res.status(mapped.status).json(mapped.body);
+}
 
 // Fishbowl customer export: file path and schedule (every 30 min)
 const FISHBOWL_EXPORT_DIR = path.join(__dirname, 'data');
@@ -206,6 +214,23 @@ function respondCommerceCanonicalError(err, res) {
     });
     return true;
   }
+  if (err && err.name === 'CatalogV2ProductMappingError') {
+    res.status(422).json({
+      error: err.message,
+      code: 'CATALOG_V2_PRODUCT_MAPPING_FAILED',
+      catalogos_product_id: err.catalogosProductId,
+    });
+    return true;
+  }
+  if (err && err.name === 'InvalidCatalogV2ProductIdError') {
+    res.status(err.statusCode || 422).json({
+      error: err.message,
+      code: err.typedCode || 'INVALID_CATALOG_PRODUCT_ID',
+      context: err.context,
+      product_id: err.product_id,
+    });
+    return true;
+  }
   return false;
 }
 
@@ -258,6 +283,45 @@ async function resolveFinalShippingAddressForCheckout(companyIds, userId, ship_t
     return { ok: true, finalShippingAddress };
 }
 
+/**
+ * When the client sends cart_lines[], each canonical_product_id must match the server cart’s
+ * catalog_v2 id (same order as persisted cart). Totals still come from the server cart only.
+ * Each id must exist in catalog_v2.catalog_products (not catalogos.products.id alone).
+ * @returns {Promise<boolean>} false if res was already sent
+ */
+async function assertCheckoutCartLinesMatchBody(cartItems, body, res) {
+    const { assertCatalogV2ProductIdForCommerce } = require('./lib/catalog-v2-product-guard');
+    const cart_lines = body && body.cart_lines;
+    if (!Array.isArray(cart_lines) || cart_lines.length === 0) return true;
+    if (cart_lines.length !== cartItems.length) {
+        res.status(400).json({
+            error: 'cart_lines length does not match server cart.',
+            code: 'CHECKOUT_CART_LINES_MISMATCH',
+        });
+        return false;
+    }
+    for (let i = 0; i < cartItems.length; i++) {
+        const expected = normalizeCanonicalUuidInput(resolveLineCatalogProductId(cartItems[i]));
+        const got = normalizeCanonicalUuidInput(cart_lines[i].canonical_product_id);
+        if (!got || !expected || got !== expected) {
+            res.status(400).json({
+                error:
+                    'cart_lines canonical_product_id does not match server cart. Expected catalog_v2.catalog_products.id per line.',
+                code: 'CHECKOUT_CART_LINES_MISMATCH',
+                line_index: i,
+            });
+            return false;
+        }
+        try {
+            await assertCatalogV2ProductIdForCommerce(got, 'checkout_cart_lines');
+        } catch (e) {
+            if (respondCommerceCanonicalError(e, res)) return false;
+            throw e;
+        }
+    }
+    return true;
+}
+
 /** Load cart and run canonical + availability checks. Sends response and returns null on failure. */
 async function loadAndValidateCartForCheckout(cartKey, res, contextLabel) {
     const cartItems = await dataService.getCart(cartKey);
@@ -273,7 +337,8 @@ async function loadAndValidateCartForCheckout(cartKey, res, contextLabel) {
     }
     const missing = [];
     for (const item of cartItems) {
-        const product = await productsService.getProductById(item.product_id);
+        const listingId = resolveCartLineListingProductId(item);
+        const product = await productsService.getProductById(listingId || item.product_id);
         if (!product || !product.in_stock) missing.push(item);
     }
     if (missing.length > 0) {
@@ -931,21 +996,22 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
 
 // ============ PRODUCT ROUTES ============
 // When inventory table has a record, use quantity_on_hand for availability (in_stock = qty > 0).
-/** Map legacy public.products id -> inventory row (product_id may come from DB column or dataService join). */
-function inventoryRowsByLegacyProductId(inventoryList) {
-    const byProduct = new Map();
+/** Map catalog_v2.catalog_products.id (public.inventory.canonical_product_id) -> inventory row. */
+function inventoryRowsByCanonicalProductId(inventoryList) {
+    const byCanon = new Map();
     for (const i of inventoryList || []) {
-        const pid = i.product_id != null ? Number(i.product_id) : null;
-        if (pid != null && Number.isFinite(pid)) byProduct.set(pid, i);
+        const key = normalizeCanonicalUuidInput(i.canonical_product_id);
+        if (key) byCanon.set(key, i);
     }
-    return byProduct;
+    return byCanon;
 }
 
+/** Join PDP/list products to inventory using catalog_v2 id only (productsService.attachCatalogV2ProductId). */
 function applyInventoryToProducts(products, inventoryList) {
-    const byProduct = inventoryRowsByLegacyProductId(inventoryList);
+    const byCanon = inventoryRowsByCanonicalProductId(inventoryList);
     return products.map((p) => {
-        const idNum = Number(p.id);
-        const inv = Number.isFinite(idNum) ? byProduct.get(idNum) : null;
+        const key = normalizeCanonicalUuidInput(p.catalog_v2_product_id);
+        const inv = key ? byCanon.get(key) : null;
         if (inv == null) return p;
         const qty = inv.quantity_on_hand ?? 0;
         return { ...p, in_stock: qty > 0 ? 1 : 0, quantity_on_hand: qty };
@@ -1572,8 +1638,7 @@ app.get('/api/products', optionalAuth, async (req, res) => {
         );
     }
     } catch (err) {
-        console.error('[GET /api/products]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/products]');
     }
 });
 
@@ -1614,8 +1679,7 @@ app.get('/api/products/:id', optionalAuth, async (req, res) => {
             );
         }
     } catch (err) {
-        console.error('[GET /api/products/:id]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/products/:id]');
     }
 });
 
@@ -1654,8 +1718,7 @@ app.get('/api/products/by-slug', optionalAuth, async (req, res) => {
             );
         }
     } catch (err) {
-        console.error('[GET /api/products/by-slug]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/products/by-slug]');
     }
 });
 
@@ -1712,8 +1775,7 @@ app.get('/api/seo/industry/:slug', async (req, res) => {
     products.sort((a, b) => (b.featured || 0) - (a.featured || 0) || (a.name || '').localeCompare(b.name || ''));
     res.json({ industry: { ...industry }, products });
     } catch (err) {
-        console.error('[GET /api/seo/industry/:slug]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/seo/industry/:slug]');
     }
 });
 
@@ -1748,8 +1810,7 @@ app.get('/api/seo/sitemap-urls', async (req, res) => {
     });
     res.json({ pages });
     } catch (err) {
-        console.error('[GET /api/seo/sitemap-urls]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/seo/sitemap-urls]');
     }
 });
 
@@ -2491,8 +2552,7 @@ app.get('/api/categories', async (req, res) => {
         const categories = await productsService.getCategories();
         res.json(categories);
     } catch (err) {
-        console.error('[GET /api/categories]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/categories]');
     }
 });
 
@@ -2501,8 +2561,7 @@ app.get('/api/brands', async (req, res) => {
         const brands = await productsService.getBrands();
         res.json(brands);
     } catch (err) {
-        console.error('[GET /api/brands]', err);
-        res.status(500).json({ error: 'Database error' });
+        sendCatalogApiError(res, err, '[GET /api/brands]');
     }
 });
 
@@ -2594,10 +2653,11 @@ app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => 
             const inStock = totalQty > 0 ? 1 : 0;
             const currentQoh = product.quantity_on_hand ?? 0;
             if (product.in_stock !== inStock || currentQoh !== totalQty) {
-                const invCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
-                await dataService.upsertInventory(product.id, {
+                const invCanon = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
+                if (!invCanon) continue;
+                await dataService.upsertInventory(invCanon, {
                     quantity_on_hand: totalQty,
-                    ...(invCanon ? { canonical_product_id: invCanon } : {}),
+                    canonical_product_id: invCanon,
                 });
                 await productsService.updateProduct(product.id, { in_stock: inStock });
                 updated++;
@@ -2718,7 +2778,8 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
                 });
                 continue;
             }
-            const product = await productsService.getProductById(catalogId);
+            const listingId = resolveCartLineListingProductId(item);
+            const product = await productsService.getProductById(listingId || catalogId);
             const resolved = commercePricing.resolveLineUnitPriceForCheckout({
                 user,
                 companyId,
@@ -2745,6 +2806,11 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
         res.json(enrichedCart);
     } catch (err) {
         console.error('[cart GET]', err);
+        const mapped = mapPostgrestOrDatabaseError(err);
+        if (mapped.status !== 500) {
+            res.status(mapped.status).json(mapped.body);
+            return;
+        }
         res.status(500).json({ error: err.message || 'Failed to load cart' });
     }
 });
@@ -2763,18 +2829,28 @@ app.post('/api/cart', optionalAuth, async (req, res) => {
             if (respondCommerceCanonicalError(e, res)) return;
             throw e;
         }
-        const catalogId = lineForCanon.canonical_product_id;
-        const product = await productsService.getProductById(catalogId);
+        const catalogV2Id = lineForCanon.canonical_product_id;
+        const listingId = normalizeCanonicalUuidInput(lineForCanon.listing_id);
+        const product = await productsService.getProductById(listingId || catalogV2Id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
         const existing = cartItems.find(
-            (item) => String(resolveLineCatalogProductId(item)) === String(catalogId) && item.size === size
+            (item) => String(resolveLineCatalogProductId(item)) === String(catalogV2Id) && item.size === size
         );
         if (existing) {
             existing.quantity += qty;
-            existing.canonical_product_id = catalogId;
-            existing.product_id = catalogId;
+            existing.canonical_product_id = catalogV2Id;
+            existing.product_id = catalogV2Id;
+            existing.listing_id = lineForCanon.listing_id;
         } else {
-            cartItems.push(cartLineContract.newCartLineFromBody({ product_id: catalogId, size, quantity: qty, canonical_product_id: catalogId }));
+            cartItems.push(
+                cartLineContract.newCartLineFromBody({
+                    product_id: catalogV2Id,
+                    size,
+                    quantity: qty,
+                    canonical_product_id: catalogV2Id,
+                    listing_id: lineForCanon.listing_id,
+                }),
+            );
         }
         await dataService.setCart(cartKey, cartItems);
         res.json({ success: true });
@@ -2852,6 +2928,7 @@ app.post('/api/checkout/quote', authenticateToken, async (req, res) => {
         const cartKey = `user_${req.user.id}`;
         const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_quote');
         if (!cartItems) return;
+        if (!(await assertCheckoutCartLinesMatchBody(cartItems, req.body, res))) return;
 
         const user = await usersService.getUserById(req.user.id);
         const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
@@ -2978,6 +3055,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
         const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_post_orders');
         if (!cartItems) return;
+        if (!(await assertCheckoutCartLinesMatchBody(cartItems, req.body, res))) return;
 
         const user = await usersService.getUserById(req.user.id);
         const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
@@ -3305,6 +3383,7 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
     const cartKey = `user_${req.user.id}`;
     const cartItems = await loadAndValidateCartForCheckout(cartKey, res, 'checkout_create_payment_intent');
     if (!cartItems) return;
+    if (!(await assertCheckoutCartLinesMatchBody(cartItems, req.body, res))) return;
 
     const user = await usersService.getUserById(req.user.id);
     const companyIdForPricing = user ? await companiesService.getCompanyIdForUser(user) : null;
@@ -3591,7 +3670,7 @@ app.post('/api/orders/:id/reorder', authenticateToken, async (req, res) => {
         for (const { preview, quantity } of resolved.adds) {
             const existing = cartItems.find(
                 (c) =>
-                    Number(c.product_id) === Number(preview.product_id) &&
+                    String(c.product_id) === String(preview.product_id) &&
                     orderReorder.normSize(c.size) === orderReorder.normSize(preview.size)
             );
             if (existing) existing.quantity += quantity;
@@ -4157,25 +4236,29 @@ app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, async (req, res)
         const enrichedListLines = list.items.map((i) => ({ ...i }));
         await ensureCommerceLinesHaveCanonical(enrichedListLines, 'saved_list_add_to_cart_source');
         for (const item of enrichedListLines) {
-            const catalogId = resolveLineCatalogProductId(item);
-            if (!catalogId) continue;
-            const product = await productsService.getProductById(catalogId);
+            const catalogV2Id = resolveLineCatalogProductId(item);
+            if (!catalogV2Id) continue;
+            const listingId = resolveCartLineListingProductId(item);
+            const product = await productsService.getProductById(listingId || catalogV2Id);
             if (!product) continue;
             const existing = cartItems.find(
-                (c) => String(resolveLineCatalogProductId(c)) === String(catalogId) && (c.size || null) === (item.size || null)
+                (c) =>
+                    String(resolveLineCatalogProductId(c)) === String(catalogV2Id) && (c.size || null) === (item.size || null)
             );
             if (existing) {
                 existing.quantity += item.quantity;
-                existing.canonical_product_id = catalogId;
-                existing.product_id = catalogId;
+                existing.canonical_product_id = catalogV2Id;
+                existing.product_id = catalogV2Id;
+                existing.listing_id = item.listing_id;
             } else {
                 cartItems.push(
                     cartLineContract.newCartLineFromBody(
                         {
-                            product_id: catalogId,
+                            product_id: catalogV2Id,
                             size: item.size,
                             quantity: item.quantity,
-                            canonical_product_id: catalogId,
+                            canonical_product_id: catalogV2Id,
+                            listing_id: item.listing_id,
                         },
                         Date.now() + Math.random()
                     )
@@ -5329,15 +5412,16 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = inventoryRowsByLegacyProductId(invList);
+        const byCanon = inventoryRowsByCanonicalProductId(invList);
         const rows = products.map((p) => {
-            const inv = byProduct.get(Number(p.id));
+            const canonKey = normalizeCanonicalUuidInput(p.catalog_v2_product_id);
+            const inv = canonKey ? byCanon.get(canonKey) : null;
             const onHand = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reserved = inv ? (inv.quantity_reserved ?? 0) : 0;
             const available = Math.max(0, onHand - reserved);
             return {
                 product_id: p.id,
-                canonical_product_id: inv?.canonical_product_id ?? normalizeCanonicalUuidInput(p.canonical_product_id) ?? null,
+                canonical_product_id: inv?.canonical_product_id ?? canonKey ?? null,
                 sku: p.sku,
                 name: p.name,
                 brand: p.brand,
@@ -5359,31 +5443,26 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res
 
 app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, async (req, res) => {
     try {
-        const productId = parseInt(req.params.product_id, 10);
-        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
-        const product = await productsService.getProductById(productId);
+        const listingId = normalizeCanonicalUuidInput(req.params.product_id);
+        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
+        const product = await productsService.getProductById(listingId);
         if (!product) return res.status(404).json({ error: 'Product not found' });
-        const existing = await dataService.getInventoryByProductId(productId);
+        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
 
         let bodyCanon = null;
         if (req.body.canonical_product_id != null && String(req.body.canonical_product_id).trim() !== '') {
             bodyCanon = normalizeCanonicalUuidInput(req.body.canonical_product_id);
             if (!bodyCanon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
         }
-        const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
+        const lookupKey = bodyCanon || v2;
+        const existing = lookupKey ? await dataService.getInventoryByProductId(lookupKey) : null;
         const existingRowCanon = existing ? normalizeCanonicalUuidInput(existing.canonical_product_id) : null;
-        const resolvedCanon = bodyCanon || productCanon || existingRowCanon;
+        const resolvedCanon = bodyCanon || v2 || existingRowCanon;
 
-        const writesInventoryRow =
-            req.body.quantity_on_hand !== undefined ||
-            req.body.reorder_point !== undefined ||
-            req.body.bin_location !== undefined ||
-            bodyCanon != null;
-
-        if (writesInventoryRow && !resolvedCanon) {
+        if (!resolvedCanon) {
             return res.status(422).json({
                 error:
-                    'Assign a catalog canonical_product_id (on the product or in this request) before updating inventory.',
+                    'Could not resolve catalog_v2 id for this listing; set canonical_product_id on the request body or fix listing→v2 mapping.',
                 code: 'INVENTORY_CANONICAL_REQUIRED',
             });
         }
@@ -5409,7 +5488,7 @@ app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, asy
                 .eq('canonical_product_id', resolvedCanon);
         }
 
-        const fresh = await dataService.getInventoryByProductId(productId);
+        const fresh = resolvedCanon ? await dataService.getInventoryByProductId(resolvedCanon) : null;
         const payload = {
             quantity_on_hand: fresh ? (fresh.quantity_on_hand ?? 0) : 0,
             reorder_point:
@@ -5427,12 +5506,12 @@ app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, asy
         };
         if (fresh && fresh.quantity_reserved != null) payload.quantity_reserved = fresh.quantity_reserved;
         if (bodyCanon) payload.canonical_product_id = bodyCanon;
-        else if (productCanon) payload.canonical_product_id = productCanon;
+        else if (v2) payload.canonical_product_id = v2;
         else if (existingRowCanon) payload.canonical_product_id = existingRowCanon;
 
-        await dataService.upsertInventory(productId, payload);
-        const inv = await dataService.getInventoryByProductId(productId);
-        res.json(inv || { product_id: productId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
+        await dataService.upsertInventory(resolvedCanon, payload);
+        const inv = await dataService.getInventoryByProductId(resolvedCanon);
+        res.json(inv || { product_id: listingId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
     } catch (err) {
         console.error('[admin/inventory PUT]', err);
         res.status(500).json({ error: err.message || 'Failed to update inventory' });
@@ -5442,21 +5521,21 @@ app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, asy
 app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { product_id, delta, reason } = req.body;
-        const productId = parseInt(product_id, 10);
-        if (isNaN(productId)) return res.status(400).json({ error: 'Invalid product_id' });
-        const product = await productsService.getProductById(productId);
+        const listingId = normalizeCanonicalUuidInput(product_id);
+        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
+        const product = await productsService.getProductById(listingId);
         if (!product) return res.status(404).json({ error: 'Product not found' });
         const d = parseInt(delta, 10);
         if (isNaN(d) || d === 0) return res.status(400).json({ error: 'delta must be a non-zero integer (positive to add, negative to subtract)' });
-        const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
-        if (!productCanon) {
+        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
+        if (!v2) {
             return res.status(422).json({
-                error: 'Product must have canonical_product_id (catalog mapping) before stock adjustments.',
+                error: 'Product must resolve to catalog_v2 (listing → v2) before stock adjustments.',
                 code: 'INVENTORY_CANONICAL_REQUIRED',
             });
         }
-        await inventory.adjustStock(productCanon, d, reason || 'Admin adjustment', { type: 'admin' }, req.user.id);
-        const stock = await inventory.getStock(productCanon);
+        await inventory.adjustStock(v2, d, reason || 'Admin adjustment', { type: 'admin' }, req.user.id);
+        const stock = await inventory.getStock(v2);
         res.json({ success: true, stock: stock || { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 } });
     } catch (err) {
         console.error('[admin/inventory/adjust]', err);
@@ -5473,11 +5552,13 @@ app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (
             canon = normalizeCanonicalUuidInput(rawCanon);
             if (!canon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
         }
-        const productId = req.query.product_id != null && String(req.query.product_id).trim() !== ''
-            ? parseInt(req.query.product_id, 10)
-            : undefined;
-        if (!canon && productId != null && !Number.isFinite(productId)) {
-            return res.status(400).json({ error: 'Invalid product_id' });
+        let productId = undefined;
+        if (!canon && req.query.product_id != null && String(req.query.product_id).trim() !== '') {
+            const listing = normalizeCanonicalUuidInput(req.query.product_id);
+            if (!listing) return res.status(400).json({ error: 'Invalid product_id' });
+            const prod = await productsService.getProductById(listing);
+            canon = prod ? normalizeCanonicalUuidInput(prod.catalog_v2_product_id) : null;
+            if (!canon) return res.status(400).json({ error: 'Could not resolve catalog_v2 for listing product_id' });
         }
         const history = await inventory.getStockHistory(productId, limit, { canonical_product_id: canon });
         res.json(history);
@@ -5494,14 +5575,14 @@ app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (r
         const skipped = [];
         const rowErrors = [];
         for (const row of counts) {
-            const pid = row.product_id != null ? parseInt(row.product_id, 10) : NaN;
-            if (isNaN(pid)) {
+            const listingId = normalizeCanonicalUuidInput(row.product_id);
+            if (!listingId) {
                 skipped.push({ reason: 'invalid_product_id' });
                 continue;
             }
-            const product = await productsService.getProductById(pid);
+            const product = await productsService.getProductById(listingId);
             if (!product) {
-                skipped.push({ product_id: pid, reason: 'product_not_found' });
+                skipped.push({ product_id: listingId, reason: 'product_not_found' });
                 continue;
             }
             const rowCanon =
@@ -5509,21 +5590,21 @@ app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (r
                     ? normalizeCanonicalUuidInput(row.canonical_product_id)
                     : null;
             if (row.canonical_product_id != null && String(row.canonical_product_id).trim() !== '' && !rowCanon) {
-                skipped.push({ product_id: pid, reason: 'invalid_canonical_product_id' });
+                skipped.push({ product_id: listingId, reason: 'invalid_canonical_product_id' });
                 continue;
             }
-            const productCanon = normalizeCanonicalUuidInput(product.canonical_product_id);
-            const resolvedCanon = rowCanon || productCanon;
+            const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
+            const resolvedCanon = rowCanon || v2;
             if (!resolvedCanon) {
-                skipped.push({ product_id: pid, reason: 'missing_canonical_product_id' });
+                skipped.push({ product_id: listingId, reason: 'missing_canonical_product_id' });
                 continue;
             }
-            const existing = await dataService.getInventoryByProductId(pid);
+            const existing = await dataService.getInventoryByProductId(resolvedCanon);
             const target = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
             const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
             if (target < reserved) {
                 rowErrors.push({
-                    product_id: pid,
+                    product_id: listingId,
                     code: 'count_below_reserved',
                     quantity_reserved: reserved,
                     quantity_on_hand_requested: target,
@@ -5540,7 +5621,7 @@ app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (r
                 .from('inventory')
                 .update({ last_count_at: new Date().toISOString() })
                 .eq('canonical_product_id', resolvedCanon);
-            updated.push(pid);
+            updated.push(listingId);
         }
         res.json({
             success: true,
@@ -5623,14 +5704,16 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = inventoryRowsByLegacyProductId(invList);
+        const byCanon = inventoryRowsByCanonicalProductId(invList);
         const allOrders = await dataService.getAllOrdersAdmin();
         const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
         const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
         const usageByProduct = new Map();
         orders.forEach((order) => {
             (order.items || []).forEach((item) => {
-                const pid = item.product_id;
+                const pid =
+                    normalizeCanonicalUuidInput(item.canonical_product_id) ||
+                    normalizeCanonicalUuidInput(item.product_id);
                 if (pid == null) return;
                 const qty = Math.max(0, parseInt(item.quantity, 10) || 0);
                 const cur = usageByProduct.get(pid) || { units: 0, orders: 0 };
@@ -5640,10 +5723,11 @@ app.get('/api/admin/inventory/reorder-suggestions', authenticateToken, requireAd
             });
         });
         const suggestions = products.map((p) => {
-            const inv = byProduct.get(Number(p.id));
+            const canonKey = normalizeCanonicalUuidInput(p.catalog_v2_product_id);
+            const inv = canonKey ? byCanon.get(canonKey) : null;
             const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
-            const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
+            const usage = (canonKey && usageByProduct.get(canonKey)) || { units: 0, orders: 0 };
             const unitsSold90 = usage.units;
             const ordersCount90 = usage.orders;
             const weeklyAvg = unitsSold90 / 13;
@@ -5666,14 +5750,16 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
         const { products: rawProducts } = await productsService.getProducts({ limit: 10000 });
         const products = rawProducts || [];
         const invList = await dataService.getInventory();
-        const byProduct = inventoryRowsByLegacyProductId(invList);
+        const byCanon = inventoryRowsByCanonicalProductId(invList);
         const allOrders = await dataService.getAllOrdersAdmin();
         const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
         const orders = allOrders.filter((o) => (o.created_at ? new Date(o.created_at).getTime() : 0) >= ninetyDaysAgo);
         const usageByProduct = new Map();
         orders.forEach((order) => {
             (order.items || []).forEach((item) => {
-                const pid = item.product_id;
+                const pid =
+                    normalizeCanonicalUuidInput(item.canonical_product_id) ||
+                    normalizeCanonicalUuidInput(item.product_id);
                 if (pid == null) return;
                 const qty = Math.max(0, parseInt(item.quantity, 10) || 0);
                 const cur = usageByProduct.get(pid) || { units: 0, orders: 0 };
@@ -5683,10 +5769,11 @@ app.get('/api/admin/inventory/ai-reorder-summary', authenticateToken, requireAdm
             });
         });
         const suggestions = products.map((p) => {
-            const inv = byProduct.get(Number(p.id));
+            const canonKey = normalizeCanonicalUuidInput(p.catalog_v2_product_id);
+            const inv = canonKey ? byCanon.get(canonKey) : null;
             const qoh = inv ? (inv.quantity_on_hand ?? 0) : (p.quantity_on_hand ?? 0);
             const reorderPt = inv ? (inv.reorder_point ?? 0) : (p.reorder_point ?? 0);
-            const usage = usageByProduct.get(p.id) || { units: 0, orders: 0 };
+            const usage = (canonKey && usageByProduct.get(canonKey)) || { units: 0, orders: 0 };
             const unitsSold90 = usage.units;
             const weeklyAvg = unitsSold90 / 13;
             const suggestedOrderQty = Math.max(0, Math.max(reorderPt, Math.ceil(weeklyAvg * 4)) - qoh);

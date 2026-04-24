@@ -509,15 +509,17 @@ async function buildShippingMarginReport(opts = {}) {
   for (let j = 0; j < catalogIds.length; j += 200) {
     const chunk = catalogIds.slice(j, j + 200);
     const { data: rows, error: pErr } = await sb
-      .schema('catalogos')
-      .from('products')
-      .select('id, attributes')
+      .schema('catalog_v2')
+      .from('catalog_products')
+      .select('id, metadata')
       .in('id', chunk);
     if (pErr) throw pErr;
     for (const p of rows || []) {
       const idKey = normalizeCanonicalUuidInput(p.id);
       if (!idKey) continue;
-      const attrs = p.attributes && typeof p.attributes === 'object' ? p.attributes : {};
+      const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+      const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
+      const attrs = { ...meta, ...facet };
       const c =
         attrs.unit_cost != null ? Number(attrs.unit_cost) : attrs.cost != null ? Number(attrs.cost) : null;
       costByProduct.set(idKey, Number.isFinite(c) ? c : null);

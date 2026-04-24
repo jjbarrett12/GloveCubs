@@ -465,7 +465,7 @@ async function upsertInventory(productId, payload) {
     canonical = normalizeCanonicalUuidInput(productId);
   }
   if (!canonical) {
-    const err = new Error('upsertInventory requires catalogos.products id (UUID) or payload.canonical_product_id');
+    const err = new Error('upsertInventory requires catalog_v2 id (payload.canonical_product_id or UUID key)');
     err.statusCode = 400;
     throw err;
   }

@@ -230,16 +230,18 @@ async function getOperationsDashboard() {
       for (let j = 0; j < productIds.length; j += 200) {
         const sl = productIds.slice(j, j + 200);
         const { data: prows } = await sb
-          .schema('catalogos')
-          .from('products')
-          .select('id, sku, name, attributes')
+          .schema('catalog_v2')
+          .from('catalog_products')
+          .select('id, internal_sku, name, metadata')
           .in('id', sl);
         (prows || []).forEach((p) => {
           if (p?.id == null) return;
           const idKey = normalizeCanonicalUuidInput(p.id);
           if (!idKey) return;
-          productMeta[idKey] = { id: p.id, sku: p.sku, name: p.name };
-          const attrs = p.attributes && typeof p.attributes === 'object' ? p.attributes : {};
+          productMeta[idKey] = { id: p.id, sku: p.internal_sku, name: p.name };
+          const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+          const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
+          const attrs = { ...meta, ...facet };
           const c =
             attrs.unit_cost != null
               ? Number(attrs.unit_cost)

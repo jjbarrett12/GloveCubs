@@ -29,66 +29,45 @@ async function getSupabase() {
 async function getProductRow(id: string) {
   const supabase = await getSupabase();
   const { data } = await supabase
-    .schema('catalogos')
-    .from('products')
-    .select('id, name, sku, family_id, is_active, categories(slug)')
+    .schema('catalog_v2')
+    .from('catalog_products')
+    .select('id, name, internal_sku, status, metadata')
     .eq('id', id)
-    .eq('is_active', true)
+    .eq('status', 'active')
     .single();
   if (!data) return null;
-  const cats = data.categories as { slug?: string } | { slug?: string }[] | null | undefined;
-  const slug = Array.isArray(cats) ? cats[0]?.slug : cats?.slug;
   return {
     ...data,
     title: data.name as string,
-    category: slug ?? null,
+    category: null,
+    family_id: null,
   };
 }
 
 async function getVariantsForProduct(
-  familyId: string | null,
-  fallbackId: string
+  _familyId: string | null,
+  catalogProductId: string
 ): Promise<VariantOption[]> {
   const supabase = await getSupabase();
-  if (!familyId) {
-    const { data } = await supabase
-      .schema('catalogos')
-      .from('products')
-      .select('id, sku, attributes')
-      .eq('id', fallbackId)
-      .eq('is_active', true)
-      .single();
-    if (!data) return [];
-    const attrs = (data.attributes as Record<string, unknown> | null) ?? {};
-    return [
-      {
-        id: data.id as string,
-        sku: data.sku as string | null,
-        size: (attrs.size as string | null) ?? null,
-        color: (attrs.color as string | null) ?? null,
-        is_listing_primary: true,
-      },
-    ];
-  }
   const { data } = await supabase
-    .schema('catalogos')
-    .from('products')
-    .select('id, sku, attributes, created_at')
-    .eq('family_id', familyId)
+    .schema('catalog_v2')
+    .from('catalog_variants')
+    .select('id, variant_sku, metadata, sort_order, created_at')
+    .eq('catalog_product_id', catalogProductId)
     .eq('is_active', true)
-    .order('sku', { ascending: true, nullsFirst: false });
+    .order('sort_order', { ascending: true });
   const rows = data ?? [];
   const primaryId =
     [...rows].sort(
       (a, b) =>
-        String(a.sku ?? '').localeCompare(String(b.sku ?? '')) ||
+        String(a.variant_sku ?? '').localeCompare(String(b.variant_sku ?? '')) ||
         String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''))
     )[0]?.id ?? null;
   return rows.map((row) => {
-    const attrs = (row.attributes as Record<string, unknown> | null) ?? {};
+    const attrs = (row.metadata as Record<string, unknown> | null) ?? {};
     return {
       id: row.id as string,
-      sku: row.sku as string | null,
+      sku: row.variant_sku as string | null,
       size: (attrs.size as string | null) ?? null,
       color: (attrs.color as string | null) ?? null,
       is_listing_primary: primaryId != null && row.id === primaryId,
@@ -103,27 +82,13 @@ async function ProductDetailContent({ productId }: { productId: string }) {
     notFound();
   }
 
-  const variants = await getVariantsForProduct(
-    (product.family_id as string | null) ?? null,
-    productId
-  );
+  const variants = await getVariantsForProduct(null, productId);
   if (variants.length === 0) {
     notFound();
   }
 
-  const supabase = await getSupabase();
-  const primaryId =
-    variants.find((v) => v.is_listing_primary)?.id ?? variants[0].id;
-  const { data: headerRow } = await supabase
-    .schema('catalogos')
-    .from('products')
-    .select('name')
-    .eq('id', primaryId)
-    .eq('is_active', true)
-    .single();
-
-  const displayName = (headerRow?.name as string | undefined) ?? (product.name as string);
-  const displayTitle = (headerRow?.name as string | undefined) ?? (product.title as string | undefined);
+  const displayName = product.name as string;
+  const displayTitle = (product.title as string | undefined) ?? displayName;
 
   return (
     <ProductDetailClient

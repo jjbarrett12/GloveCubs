@@ -5,9 +5,24 @@
 
 'use strict';
 
+const path = require('path');
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const commercePricing = require('../lib/commerce-pricing');
+
+const guardPath = path.join(__dirname, '../lib/catalog-v2-product-guard.js');
+const checkoutComputePath = path.join(__dirname, '../lib/checkout-compute.js');
+delete require.cache[guardPath];
+delete require.cache[checkoutComputePath];
+require.cache[guardPath] = {
+  id: guardPath,
+  filename: guardPath,
+  loaded: true,
+  exports: {
+    assertCatalogV2ProductIdForCommerce: async () => {},
+    InvalidCatalogV2ProductIdError: class InvalidCatalogV2ProductIdError extends Error {},
+  },
+};
 const { computeCheckoutMoneyFromCart } = require('../lib/checkout-compute');
 
 const addr = { state: 'NY', city: 'NYC', zip_code: '10001', address_line1: '1 Main', full_name: 'A' };

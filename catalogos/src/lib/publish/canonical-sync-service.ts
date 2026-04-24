@@ -5,7 +5,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseCatalogos } from "@/lib/db/client";
+import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import type { SearchPublishStatus } from "./types";
 
 const SYNC_RPC_ATTEMPTS = 4;
@@ -47,16 +47,15 @@ export async function syncCanonicalProductsWithRetry(
   return { ok: false, message: lastMsg };
 }
 
-/** True if the product is the live, active catalog row (storefront read model). */
-export async function isProductLiveInCatalogos(
-  catalogos: SupabaseClient,
-  productId: string
-): Promise<boolean> {
-  const { data, error } = await catalogos
-    .from("products")
+/** True if catalog_v2 parent exists and is active (only product SoT). */
+export async function isCatalogV2ProductActive(productId: string): Promise<boolean> {
+  const admin = getSupabase(true);
+  const { data, error } = await admin
+    .schema("catalog_v2")
+    .from("catalog_products")
     .select("id")
     .eq("id", productId)
-    .eq("is_active", true)
+    .eq("status", "active")
     .maybeSingle();
   if (error) return false;
   return !!(data as { id?: string } | null)?.id;
@@ -89,8 +88,7 @@ export async function enqueueCanonicalSyncRetry(
 }
 
 /**
- * After product/offer/publish_event writes: optional legacy canonical sync; verify catalogos.products.
- * Publish succeeds when the live catalog row is active — not when public.canonical_products updates.
+ * After product/offer/publish_event writes: optional legacy canonical sync; verify catalog_v2.catalog_products.
  */
 export async function finalizePublishSearchSync(input: {
   catalogos: SupabaseClient;
@@ -134,18 +132,18 @@ export async function finalizePublishSearchSync(input: {
       productIds,
       batchIds,
       phase: "publish_immediate",
-      note: "Non-blocking: storefront reads catalogos.products; legacy canonical_products sync failed.",
+      note: "Non-blocking: legacy canonical_products sync failed.",
     });
   }
 
   const missing: string[] = [];
   for (const pid of productIds) {
-    const visible = await isProductLiveInCatalogos(catalogos, pid);
+    const visible = await isCatalogV2ProductActive(pid);
     if (!visible) missing.push(pid);
   }
 
   if (missing.length > 0) {
-    const msg = `Product(s) not found or inactive in catalogos.products after publish: ${missing.join(", ")}`;
+    const msg = `Product(s) not found or inactive in catalog_v2.catalog_products after publish: ${missing.join(", ")}`;
     const { logPublishFailure, logAdminActionFailure } = await import("@/lib/observability");
     logPublishFailure(msg, { missing, normalizedIds, productIds, batchIds });
     logAdminActionFailure("Catalog product row missing or inactive after publish.", {
@@ -190,7 +188,7 @@ export interface ProcessCanonicalSyncQueueResult {
 }
 
 /**
- * Process due retry rows: optional legacy sync; success when catalogos.products is live for the product.
+ * Process due retry rows: optional legacy sync; success when catalog_v2 row is active.
  */
 export async function processCanonicalSyncRetryQueue(
   limit = 30
@@ -220,7 +218,7 @@ export async function processCanonicalSyncRetryQueue(
     product_id: string;
     attempts: number;
   }[]) {
-    const visible = await isProductLiveInCatalogos(catalogos, row.product_id);
+    const visible = await isCatalogV2ProductActive(row.product_id);
 
     if (visible) {
       await catalogos
@@ -236,9 +234,7 @@ export async function processCanonicalSyncRetryQueue(
     }
 
     const nextAttempts = (row.attempts ?? 0) + 1;
-    const errMsg = sync.ok
-      ? "Product still not active in catalogos.products"
-      : sync.message;
+    const errMsg = sync.ok ? "Product still not active in catalog_v2.catalog_products" : sync.message;
 
     if (nextAttempts >= QUEUE_MAX_ATTEMPTS) {
       await catalogos

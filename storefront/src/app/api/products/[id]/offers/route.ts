@@ -81,11 +81,11 @@ export async function GET(
     
     // Get product info
     const { data: product } = await supabase
-      .schema('catalogos')
-      .from('products')
+      .schema('catalog_v2')
+      .from('catalog_products')
       .select('id, name')
       .eq('id', productId)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .single();
       
     if (!product) {

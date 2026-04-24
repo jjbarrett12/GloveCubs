@@ -577,10 +577,12 @@ async function getMetrics(): Promise<DashboardMetrics> {
     .select("*", { count: "exact", head: true })
     .eq("is_active", true);
 
-  const { count: total_active_products } = await supabase
-    .from("products")
+  const { count: total_active_products, error: activeProductsErr } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
     .select("*", { count: "exact", head: true })
-    .eq("in_stock", true);
+    .eq("status", "active");
+  if (activeProductsErr) throw new Error(`catalog_v2.catalog_products (commercial dashboard): ${activeProductsErr.message}`);
 
   const { count: total_open_opportunities } = await supabase
     .from("margin_opportunities")

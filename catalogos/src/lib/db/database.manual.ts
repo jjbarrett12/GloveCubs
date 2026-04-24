@@ -57,6 +57,8 @@ export interface CatalogosProductRow {
   attributes: Json;
   is_active: boolean;
   published_at: string | null;
+  /** catalog_v2.catalog_products.id when linked; authoritative for commerce/inventory joins. */
+  catalog_product_id: string | null;
   live_product_id: number | null;
   created_at: string;
   updated_at: string;

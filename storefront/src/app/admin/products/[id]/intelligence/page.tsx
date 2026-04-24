@@ -45,6 +45,8 @@ export interface ProductData {
   brand?: string;
   category?: string;
   attributes?: Record<string, unknown>;
+  /** catalog_v2.catalog_products.id when linked from listing */
+  catalog_product_id?: string | null;
   current_price?: number;
   current_cost?: number;
 }
@@ -113,45 +115,42 @@ export interface AnomalyHistoryItem {
 
 async function getProduct(id: string): Promise<ProductData | null> {
   const supabase = await getSupabase();
-  
-  // Try catalogos.products first
-  const { data: catalogProduct } = await supabase
-    .from("products")
-    .select("id, sku, name, brand:brand_id, category:category_id, attributes")
+
+  const { data: row, error: v2Err } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, name, metadata, brand_id")
     .eq("id", id)
-    .single();
-    
-  if (catalogProduct) {
-    return {
-      id: catalogProduct.id,
-      sku: catalogProduct.sku,
-      name: catalogProduct.name,
-      brand: catalogProduct.brand as string | undefined,
-      category: catalogProduct.category as string | undefined,
-      attributes: catalogProduct.attributes as Record<string, unknown> | undefined,
-    };
+    .maybeSingle();
+
+  if (v2Err) {
+    throw new Error(`catalog_v2.catalog_products: ${v2Err.message}`);
   }
-  
-  // Fallback to public.products
-  const { data: publicProduct } = await supabase
-    .from("products")
-    .select("id, sku, name, brand, category, price, cost")
-    .eq("id", id)
-    .single();
-    
-  if (publicProduct) {
-    return {
-      id: String(publicProduct.id),
-      sku: publicProduct.sku,
-      name: publicProduct.name,
-      brand: publicProduct.brand,
-      category: publicProduct.category,
-      current_price: publicProduct.price,
-      current_cost: publicProduct.cost,
-    };
+
+  if (!row) return null;
+
+  const r = row as {
+    id: string;
+    internal_sku: string | null;
+    name: string;
+    metadata?: Record<string, unknown> | null;
+    brand_id: string | null;
+  };
+  let brandName: string | undefined;
+  if (r.brand_id) {
+    const { data: b } = await supabase.schema("catalogos").from("brands").select("name").eq("id", r.brand_id).maybeSingle();
+    brandName = (b as { name?: string } | null)?.name ?? undefined;
   }
-  
-  return null;
+
+  return {
+    id: r.id,
+    sku: r.internal_sku ?? "",
+    name: r.name,
+    brand: brandName,
+    category: undefined,
+    attributes: (r.metadata?.facet_attributes as Record<string, unknown>) ?? r.metadata ?? undefined,
+    catalog_product_id: r.id,
+  };
 }
 
 async function getSupplierOffers(productId: string): Promise<SupplierOffer[]> {
@@ -254,15 +253,17 @@ async function getMarketOverview(productId: string, offers: SupplierOffer[]): Pr
   }
   
   // Calculate volatility from price history
-  const { data: priceHistory } = await supabase
+  const { data: priceHistory, error: priceHistoryError } = await supabase
     .from("price_history")
     .select("price")
     .eq("product_id", productId)
     .gte("recorded_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
     .limit(100);
-    
+
   let volatility = 0;
-  if (priceHistory && priceHistory.length > 1) {
+  if (priceHistoryError) {
+    /* optional table / view — omit volatility when unavailable */
+  } else if (priceHistory && priceHistory.length > 1) {
     const historicalPrices = priceHistory.map((p) => Number(p.price));
     const mean = historicalPrices.reduce((a, b) => a + b, 0) / historicalPrices.length;
     const variance = historicalPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / historicalPrices.length;
@@ -298,35 +299,44 @@ async function getMarketOverview(productId: string, offers: SupplierOffer[]): Pr
 
 async function getPricingAlerts(productId: string): Promise<PricingAlert[]> {
   const supabase = await getSupabase();
-  
-  const { data } = await supabase
+
+  const { data, error } = await supabase
+    .schema("catalogos")
     .from("procurement_alerts")
-    .select("id, alert_type, severity, title, description, created_at, status")
-    .eq("product_id", productId)
+    .select("id, alert_type, severity, title, summary, created_at, status")
+    .eq("entity_type", "product")
+    .eq("entity_id", productId)
     .in("status", ["open", "acknowledged"])
     .order("severity", { ascending: true })
     .order("created_at", { ascending: false })
     .limit(10);
-    
+
+  if (error) throw new Error(`catalogos.procurement_alerts: ${error.message}`);
+
   return (data || []).map((a) => ({
     id: a.id,
     alert_type: a.alert_type,
     severity: a.severity,
     title: a.title,
-    description: a.description,
+    description: (a as { summary?: string }).summary ?? "",
     created_at: a.created_at,
     status: a.status,
   }));
 }
 
-async function getAnomalyHistory(productId: string): Promise<AnomalyHistoryItem[]> {
+async function getAnomalyHistory(canonicalProductId: string | null | undefined): Promise<AnomalyHistoryItem[]> {
   const supabase = await getSupabase();
-  
-  const { data } = await supabase
+
+  if (!canonicalProductId) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .schema("catalogos")
     .from("ai_pricing_analysis")
     .select(`
       id,
-      offer_id,
+      supplier_offer_id,
       analysis_category,
       is_suspicious,
       confidence,
@@ -334,15 +344,17 @@ async function getAnomalyHistory(productId: string): Promise<AnomalyHistoryItem[
       created_at,
       supplier_offers!inner(supplier_id, suppliers!inner(name))
     `)
-    .eq("product_id", productId)
+    .eq("canonical_product_id", canonicalProductId)
     .order("created_at", { ascending: false })
     .limit(20);
-    
+
+  if (error) throw new Error(`catalogos.ai_pricing_analysis: ${error.message}`);
+
   return (data || []).map((a) => {
     const offer = a.supplier_offers as unknown as { supplier_id: string; suppliers: { name: string } };
     return {
       id: a.id,
-      offer_id: a.offer_id,
+      offer_id: (a as { supplier_offer_id?: string }).supplier_offer_id ?? "",
       supplier_name: offer?.suppliers?.name || "Unknown",
       analysis_category: a.analysis_category,
       is_suspicious: a.is_suspicious,
@@ -367,7 +379,7 @@ async function ProductIntelligenceContent({ productId }: { productId: string }) 
   const [offers, alerts, anomalyHistory] = await Promise.all([
     getSupplierOffers(productId),
     getPricingAlerts(productId),
-    getAnomalyHistory(productId),
+    getAnomalyHistory(product.catalog_product_id),
   ]);
   
   const market = await getMarketOverview(productId, offers);

@@ -73,6 +73,20 @@ async function getDashboardStats() {
   };
 }
 
+async function getCatalogListingStats() {
+  const supabase = await getSupabase();
+  const { count: catalogActive, error: catalogErr } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "active");
+
+  return {
+    catalogActive: catalogActive ?? 0,
+    catalogError: catalogErr?.message ?? null,
+  };
+}
+
 async function getRecentIssues() {
   const supabase = await getSupabase();
 
@@ -115,15 +129,32 @@ function formatDuration(ms: number) {
 }
 
 async function DashboardContent() {
-  const [stats, issues] = await Promise.all([
+  const [stats, issues, catalogStats] = await Promise.all([
     getDashboardStats(),
     getRecentIssues(),
+    getCatalogListingStats(),
   ]);
 
   const hasIssues = stats.jobs.failed > 0 || stats.reviews.critical > 0 || stats.jobs.blocked > 0;
 
   return (
     <div className="space-y-8">
+      <section>
+        <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Catalog</h2>
+        <StatGrid columns={2}>
+          <StatCard
+            label="Active catalog products (catalog_v2)"
+            value={catalogStats.catalogError ? "—" : catalogStats.catalogActive}
+            color="default"
+            href="/admin/products"
+          />
+          <StatCard label="Ingestion" value="Open" color="default" href="/admin/ingestion" />
+        </StatGrid>
+        {catalogStats.catalogError ? (
+          <p className="mt-2 text-sm text-red-600">catalog_v2.catalog_products: {catalogStats.catalogError}</p>
+        ) : null}
+      </section>
+
       {/* System Health */}
       <section>
         <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">

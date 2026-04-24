@@ -3,10 +3,10 @@
  * Idempotent: re-publish updates existing product/offer; no duplicate attribute rows or offers.
  * Fails clearly when required attributes (per dictionary) are missing.
  *
- * V2: all product rows are catalogos.products only — no public.products upsert and no live_product_id bridge.
+ * Product rows are catalog_v2.catalog_products only — no catalogos.products listing.
  */
 
-import { getSupabaseCatalogos } from "@/lib/db/client";
+import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 import { setLifecycleStatus } from "@/lib/catalog-expansion/lifecycle";
@@ -15,6 +15,7 @@ import type { CategorySlug } from "@/lib/catalogos/attribute-dictionary-types";
 import { DEFAULT_PRODUCT_TYPE_KEY } from "@/lib/product-types";
 import type { PublishInput, PublishResult } from "./types";
 import { finalizePublishSearchSync } from "./canonical-sync-service";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Product } from "./ensure-catalog-v2-link";
 
 /**
  * Build PublishInput from a normalized row (from getStagingById).
@@ -112,6 +113,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   }
 
   const supabase = getSupabaseCatalogos(true);
+  const admin = getSupabase(true);
   const categorySlug = (input.categorySlug ?? DEFAULT_PRODUCT_TYPE_KEY) as CategorySlug;
   const publishCheck = publishSafe(categorySlug, input.stagedFilterAttributes ?? {});
   if (!publishCheck.publishable) {
@@ -124,64 +126,93 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
 
   let productId: string;
   let slug: string | null = null;
+  let internalSkuForSellable = "";
 
   if (input.masterProductId) {
     productId = input.masterProductId;
-    const { data: prod } = await supabase
-      .from("products")
-      .select("id, sku, slug, name, description, brand_id")
+    const { data: prod, error: pe } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id, internal_sku, slug, name, description, brand_id")
       .eq("id", productId)
       .single();
-    if (!prod) return { success: false, error: "Master product not found" };
-    const prodRow = prod as { sku: string; slug: string | null; name: string; description: string | null; brand_id: string | null };
+    if (pe || !prod) return { success: false, error: "Master catalog product not found" };
+    const prodRow = prod as {
+      internal_sku: string | null;
+      slug: string;
+      name: string;
+      description: string | null;
+      brand_id: string | null;
+    };
+    internalSkuForSellable = (prodRow.internal_sku || "").trim() || `sku-${productId.slice(0, 8)}`;
     slug = prodRow.slug ?? null;
     const name = input.stagedContent.canonical_title || prodRow.name;
     const desc = input.stagedContent.description ?? prodRow.description;
     const brandId = input.stagedContent.brand ? await getOrCreateBrandId(input.stagedContent.brand) : null;
-    if (!slug) slug = slugFrom(prodRow.sku, name);
-    const { error: updateErr } = await supabase
-      .from("products")
+    if (!slug) slug = slugFrom(internalSkuForSellable, name);
+    const { error: updateErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
       .update({
         name: name || prodRow.name,
         description: desc ?? prodRow.description,
         brand_id: brandId ?? prodRow.brand_id,
         slug: slug || undefined,
-        published_at: new Date().toISOString(),
+        status: "active",
+        internal_sku: internalSkuForSellable,
         updated_at: new Date().toISOString(),
       })
       .eq("id", productId);
-    if (updateErr) return { success: false, error: `Product update: ${updateErr.message}` };
+    if (updateErr) return { success: false, error: `catalog_v2.catalog_products update: ${updateErr.message}` };
   } else if (input.newProductPayload) {
     const payload = input.newProductPayload;
     const brandId = input.stagedContent.brand ? await getOrCreateBrandId(input.stagedContent.brand) : payload.brand_id ?? null;
     slug = slugFrom(payload.sku, payload.name);
-    const { data: existingSlug } = await supabase.from("products").select("id").eq("slug", slug).maybeSingle();
+    const { data: existingSlug } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
     if (existingSlug) slug = `${slug}-${Date.now().toString(36)}`;
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from("products")
+    const { data: inserted, error: insertErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
       .insert({
-        sku: payload.sku,
+        product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+        slug: slug!,
+        internal_sku: payload.sku,
         name: payload.name,
-        category_id: payload.category_id,
-        brand_id: brandId,
         description: payload.description ?? input.stagedContent.description ?? null,
-        attributes: {},
-        is_active: true,
-        published_at: new Date().toISOString(),
-        slug,
+        brand_id: brandId,
+        status: "active",
+        metadata: {},
       })
-      .select("id")
+      .select("id, internal_sku")
       .single();
-    if (insertErr || !inserted) return { success: false, error: insertErr?.message ?? "Product insert failed" };
+    if (insertErr || !inserted) return { success: false, error: insertErr?.message ?? "catalog_v2 insert failed" };
     productId = (inserted as { id: string }).id;
+    internalSkuForSellable = (inserted as { internal_sku: string | null }).internal_sku || payload.sku;
+
+    const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
+      catalog_product_id: productId,
+      variant_sku: payload.sku,
+      sort_order: 0,
+      is_active: true,
+      metadata: {},
+    });
+    if (vInsErr) return { success: false, error: `catalog_variants insert: ${vInsErr.message}` };
   } else {
     return { success: false, error: "Either masterProductId or newProductPayload is required" };
   }
 
-  const { data: product } = await supabase.from("products").select("category_id").eq("id", productId).single();
-  const categoryId = product ? (product as { category_id: string }).category_id : null;
-  if (!categoryId) return { success: false, error: "Product category_id missing", productId, slug: slug ?? undefined };
+  const { data: catRow } = await supabase.from("categories").select("id").eq("slug", categorySlug).maybeSingle();
+  const categoryId =
+    (catRow as { id?: string } | null)?.id ??
+    (input.newProductPayload?.category_id as string | undefined) ??
+    null;
+  if (!categoryId) return { success: false, error: "Product category missing (slug lookup failed)", productId, slug: slug ?? undefined };
 
   const { errors: attrErrors } = await syncProductAttributesFromStaged(
     productId,
@@ -222,6 +253,31 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     { onConflict: "supplier_id,product_id,supplier_sku" }
   );
   if (offerErr) return { success: false, error: `Supplier offer: ${offerErr.message}`, productId, slug: slug ?? undefined };
+
+  const listPriceMinor =
+    sellPrice != null && Number.isFinite(Number(sellPrice)) ? Math.round(Number(sellPrice) * 100) : null;
+
+  const { data: v2row } = await admin
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("name, internal_sku")
+    .eq("id", productId)
+    .single();
+  const v2n = v2row as { name: string; internal_sku: string | null } | null;
+  const sellable = await upsertSellableForCatalogV2Product(productId, {
+    name: v2n?.name ?? input.stagedContent.canonical_title ?? "Product",
+    internalSku: (v2n?.internal_sku || internalSkuForSellable || "sku").trim(),
+    listPriceMinor,
+    isActive: true,
+  });
+  if (!sellable.ok) {
+    return {
+      success: false,
+      error: `Publish blocked: sellable — ${sellable.message}`,
+      productId,
+      slug: slug ?? undefined,
+    };
+  }
 
   const { error: eventErr } = await supabase.from("publish_events").insert({
     normalized_id: input.normalizedId,

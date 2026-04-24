@@ -764,7 +764,7 @@ export async function getSpendAnalytics(
   const catalogIds = Array.from(catalogIdSet);
   const { data: cpRows } =
     catalogIds.length > 0
-      ? await supabaseAdmin.schema('catalogos').from('products').select('id, name').in('id', catalogIds)
+      ? await supabaseAdmin.schema('catalog_v2').from('catalog_products').select('id, name').in('id', catalogIds)
       : { data: [] as { id: string; name: string }[] };
   const catalogNameById = new Map((cpRows ?? []).map((r) => [r.id, r.name]));
 

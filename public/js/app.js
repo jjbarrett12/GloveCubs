@@ -129,6 +129,15 @@ function adminNonJsonError(endpoint, text) {
     return new Error('Admin API returned non-JSON; you are likely hitting the UI host. First 200 chars: ' + (text || '').substring(0, 200));
 }
 
+/** Build user-visible message from JSON error body (includes optional `fix` from server). */
+function apiJsonErrorMessage(data, httpStatus) {
+    const base = (data && data.error) || `HTTP error! status: ${httpStatus}`;
+    if (data && data.fix && typeof data.fix === 'string') {
+        return base + ' — ' + data.fix;
+    }
+    return base;
+}
+
 const api = {
     baseUrl: '',
     
@@ -182,7 +191,10 @@ const api = {
             if (!response.ok) {
                 const authErr = handleAuthError(response, data);
                 if (authErr) throw authErr;
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                const err = new Error(apiJsonErrorMessage(data, response.status));
+                if (data && data.code) err.code = data.code;
+                err.responseJson = data;
+                throw err;
             }
             return data;
         } catch (error) {
@@ -2214,16 +2226,34 @@ async function loadProducts() {
         console.log('Search URL:', url);
     }
     
-    const products = await api.get(url);
+    const grid = document.getElementById('productsGrid');
+    const count = document.getElementById('resultsCount');
+    let products = [];
+    try {
+        products = await api.get(url);
+    } catch (e) {
+        console.error('loadProducts', e);
+        state.products = [];
+        const safeMsg = String(e.message || 'Failed to load products').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="cart-empty" style="grid-column: 1/-1;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <h2>Could not load products</h2>
+                    <p style="max-width: 640px; margin: 12px auto;">${safeMsg}</p>
+                    <button type="button" class="btn btn-primary" onclick="loadProducts()">Retry</button>
+                </div>
+            `;
+        }
+        if (count) count.textContent = '0 products found';
+        return;
+    }
     state.products = products;
     
     // Debug logging
     if (state.filters.search) {
         console.log('Search results:', products.length, 'products found');
     }
-    
-    const grid = document.getElementById('productsGrid');
-    const count = document.getElementById('resultsCount');
     
     if (grid) {
         if (products.length === 0) {
@@ -3600,12 +3630,31 @@ window._checkoutQuote = null;
 window._checkoutQuoteRequestSeq = 0;
 let checkoutQuoteDebounceTimer = null;
 
+/**
+ * Cart snapshot for checkout bodies. canonical_product_id must be catalog_v2 (from GET /api/cart).
+ * listing_id is optional catalogos.products.id for support/debug only — not used for stock.
+ */
+function buildCheckoutCartLinesSnapshot() {
+    var cart = state.cart || [];
+    return cart.map(function (item) {
+        var canon = item.canonical_product_id || item.product_id;
+        var row = {
+            canonical_product_id: canon != null ? String(canon) : '',
+            quantity: item.quantity != null ? Number(item.quantity) : 1,
+            size: item.size != null && item.size !== '' ? String(item.size) : null,
+        };
+        if (item.listing_id) row.listing_id = String(item.listing_id);
+        return row;
+    });
+}
+
 function buildCheckoutQuotePayloadFromDom() {
     const shipToSelect = document.getElementById('checkoutShipTo');
     const ship_to_id = shipToSelect && shipToSelect.value ? String(shipToSelect.value) : null;
     const pmRadio = document.querySelector('input[name="checkoutPaymentMethod"]:checked');
     const payment_method = pmRadio && pmRadio.value ? pmRadio.value : 'credit_card';
-    if (ship_to_id) return { ship_to_id, payment_method };
+    const cart_lines = buildCheckoutCartLinesSnapshot();
+    if (ship_to_id) return { ship_to_id, payment_method, cart_lines: cart_lines };
     return {
         payment_method,
         shipping_address: {
@@ -3616,6 +3665,7 @@ function buildCheckoutQuotePayloadFromDom() {
             zip_code: (document.getElementById('checkoutZip') && document.getElementById('checkoutZip').value || '').trim(),
             phone: (document.getElementById('checkoutPhone') && document.getElementById('checkoutPhone').value || '').trim(),
         },
+        cart_lines: cart_lines,
     };
 }
 
@@ -3667,7 +3717,10 @@ function renderCheckoutLineRowsFromQuote(quote) {
     for (let i = 0; i < cart.length; i++) {
         const item = cart[i];
         const L = lines[i];
-        const mismatch = !L || Number(L.product_id) !== Number(item.product_id) || String(L.size || '') !== String(item.size || '');
+        const mismatch =
+            !L ||
+            String(L.product_id) !== String(item.product_id) ||
+            String(L.size || '') !== String(item.size || '');
         const lineTotal = mismatch ? null : L.line_total;
         const img = (item.image_url || '').trim();
         const skuHtml =
@@ -4458,7 +4511,8 @@ async function placeOrder() {
         shipping_address: addressData,
         ship_to_id: ship_to_id || undefined,
         notes: notes,
-        payment_method: payment_method
+        payment_method: payment_method,
+        cart_lines: buildCheckoutCartLinesSnapshot(),
     };
     if (window.GloveCubsAnalytics && typeof GloveCubsAnalytics.getAttributionPayload === 'function') {
         try {

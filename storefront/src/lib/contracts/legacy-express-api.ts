@@ -6,10 +6,13 @@ import { z } from "zod";
  */
 export const LegacyCartLineApiSchema = z.object({
   id: z.union([z.number(), z.string()]),
-  product_id: z.coerce.number(),
+  /** catalog_v2.catalog_products.id */
+  product_id: z.string().uuid(),
   size: z.string().nullable().optional(),
   quantity: z.number().int().nonnegative(),
   canonical_product_id: z.string().uuid().nullable().optional(),
+  /** catalogos.products.id when present */
+  listing_id: z.string().uuid().optional(),
   name: z.string().optional(),
   price: z.number().optional(),
   bulk_price: z.number().nullable().optional(),

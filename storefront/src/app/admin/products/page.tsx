@@ -47,6 +47,14 @@ interface ProductListItem {
   best_trust_band?: string;
 }
 
+type V2ProductRow = {
+  id: string;
+  internal_sku: string | null;
+  name: string;
+  slug: string;
+  brand_id: string | null;
+};
+
 async function getProducts(searchParams: {
   category?: string;
   hasAlerts?: string;
@@ -54,37 +62,25 @@ async function getProducts(searchParams: {
 }): Promise<ProductListItem[]> {
   const supabase = await getSupabase();
 
-  // Get products with offer counts and alert status
-  let query = supabase
-    .from("products")
-    .select(`
-      id,
-      sku,
-      name,
-      brand,
-      category,
-      price
-    `)
-    .eq("in_stock", true)
+  const { data: products, error: productsError } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, name, slug, brand_id")
+    .eq("status", "active")
     .order("name")
     .limit(100);
 
-  if (searchParams.category) {
-    query = query.eq("category", searchParams.category);
-  }
-
-  const { data: products } = await query;
-
+  if (productsError) throw new Error(`catalog_v2.catalog_products: ${productsError.message}`);
   if (!products || products.length === 0) return [];
 
-  const productIds = products.map((p) => String(p.id));
+  const productIds = products.map((p) => String((p as V2ProductRow).id));
 
-  // Get offer counts
-  const { data: offerCounts } = await supabase
+  const { data: offerCounts, error: offerErr } = await supabase
     .from("supplier_offers")
     .select("product_id")
     .in("product_id", productIds)
     .eq("is_active", true);
+  if (offerErr) throw new Error(`supplier_offers: ${offerErr.message}`);
 
   const offerCountMap = new Map<string, number>();
   (offerCounts || []).forEach((o) => {
@@ -92,61 +88,40 @@ async function getProducts(searchParams: {
     offerCountMap.set(pid, (offerCountMap.get(pid) || 0) + 1);
   });
 
-  // Get margin opportunities
-  const { data: opportunities } = await supabase
-    .from("margin_opportunities")
-    .select("product_id, opportunity_band")
-    .in("product_id", productIds)
-    .in("opportunity_band", ["major", "meaningful"]);
+  const brandIds = [...new Set(products.map((p) => (p as V2ProductRow).brand_id).filter(Boolean))] as string[];
+  const brandNameById = new Map<string, string>();
+  if (brandIds.length > 0) {
+    const { data: brands, error: bErr } = await supabase
+      .schema("catalogos")
+      .from("brands")
+      .select("id, name")
+      .in("id", brandIds);
+    if (bErr) throw new Error(`catalogos.brands: ${bErr.message}`);
+    (brands || []).forEach((b: { id: string; name: string }) => brandNameById.set(b.id, b.name));
+  }
 
-  const oppSet = new Set((opportunities || []).map((o) => String(o.product_id)));
-
-  // Get alerts
-  const { data: alerts } = await supabase
-    .from("procurement_alerts")
-    .select("product_id")
-    .in("product_id", productIds)
-    .in("status", ["open", "acknowledged"]);
-
-  const alertSet = new Set((alerts || []).map((a) => String(a.product_id)));
-
-  // Get best trust bands
-  const { data: trustScores } = await supabase
-    .from("offer_trust_scores")
-    .select("product_id, trust_band")
-    .in("product_id", productIds)
-    .order("trust_score", { ascending: false });
-
-  const trustMap = new Map<string, string>();
-  (trustScores || []).forEach((t) => {
-    const pid = String(t.product_id);
-    if (!trustMap.has(pid)) {
-      trustMap.set(pid, t.trust_band);
-    }
-  });
-
-  let result = products.map((p) => {
+  let result = (products as V2ProductRow[]).map((p) => {
     const pid = String(p.id);
     return {
       id: pid,
-      sku: p.sku,
+      sku: p.internal_sku ?? "",
       name: p.name,
-      brand: p.brand,
-      category: p.category,
-      price: p.price,
+      brand: p.brand_id ? brandNameById.get(p.brand_id) : undefined,
+      category: undefined,
+      price: undefined,
       offer_count: offerCountMap.get(pid) || 0,
-      has_margin_opportunity: oppSet.has(pid),
-      has_alerts: alertSet.has(pid),
-      best_trust_band: trustMap.get(pid),
+      has_margin_opportunity: false,
+      has_alerts: false,
+      best_trust_band: undefined,
     };
   });
 
-  // Filter by alerts
+  if (searchParams.category) {
+    result = [];
+  }
   if (searchParams.hasAlerts === "true") {
     result = result.filter((p) => p.has_alerts);
   }
-
-  // Filter by opportunity
   if (searchParams.hasOpportunity === "true") {
     result = result.filter((p) => p.has_margin_opportunity);
   }
@@ -158,48 +133,37 @@ async function getStats() {
   const supabase = await getSupabase();
 
   const [
-    { count: totalProducts },
-    { count: withOffers },
-    { count: withOpportunities },
-    { count: withAlerts },
+    { count: totalProducts, error: totalErr },
+    { count: withOffers, error: offersCountErr },
   ] = await Promise.all([
     supabase
-      .from("products")
+      .schema("catalog_v2")
+      .from("catalog_products")
       .select("*", { count: "exact", head: true })
-      .eq("in_stock", true),
-    supabase
-      .from("supplier_offers")
-      .select("product_id", { count: "exact", head: true })
-      .eq("is_active", true),
-    supabase
-      .from("margin_opportunities")
-      .select("*", { count: "exact", head: true })
-      .in("opportunity_band", ["major", "meaningful"]),
-    supabase
-      .from("procurement_alerts")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["open", "acknowledged"]),
+      .eq("status", "active"),
+    supabase.from("supplier_offers").select("product_id", { count: "exact", head: true }).eq("is_active", true),
   ]);
+
+  if (totalErr) throw new Error(`catalog_v2.catalog_products count: ${totalErr.message}`);
+  if (offersCountErr) throw new Error(`supplier_offers count: ${offersCountErr.message}`);
 
   return {
     total: totalProducts || 0,
     withOffers: withOffers || 0,
-    withOpportunities: withOpportunities || 0,
-    withAlerts: withAlerts || 0,
+    withOpportunities: 0,
+    withAlerts: 0,
   };
 }
 
 async function getCategories(): Promise<string[]> {
   const supabase = await getSupabase();
-
-  const { data } = await supabase
-    .from("products")
-    .select("category")
-    .eq("in_stock", true)
-    .not("category", "is", null);
-
-  const unique = Array.from(new Set((data || []).map((p) => p.category).filter(Boolean))) as string[];
-  return unique.sort();
+  const { data, error } = await supabase
+    .schema("catalogos")
+    .from("categories")
+    .select("slug")
+    .order("slug");
+  if (error) throw new Error(`catalogos.categories: ${error.message}`);
+  return Array.from(new Set((data || []).map((c) => c.slug).filter(Boolean))) as string[];
 }
 
 async function ProductsContent({
@@ -212,6 +176,11 @@ async function ProductsContent({
     getStats(),
     getCategories(),
   ]);
+
+  const filtersActive = Boolean(
+    searchParams.category || searchParams.hasAlerts === "true" || searchParams.hasOpportunity === "true",
+  );
+  const showCanonicalEmpty = stats.total === 0 && !filtersActive;
 
   return (
     <div className="space-y-6">
@@ -236,6 +205,7 @@ async function ProductsContent({
         products={products}
         categories={categories}
         currentFilters={searchParams}
+        showCanonicalEmpty={showCanonicalEmpty}
       />
     </div>
   );

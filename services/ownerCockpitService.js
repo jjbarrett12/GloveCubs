@@ -63,13 +63,17 @@ async function getOverviewSnapshot() {
         )
         .order('created_at', { ascending: false })
         .limit(12),
-      sb.schema('catalogos').from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      sb.schema('catalogos').from('products').select('id', { count: 'exact', head: true }).eq('is_active', true).contains('attributes', { featured: 1 }),
-      sb.schema('catalogos')
-        .from('products')
+      sb.schema('catalog_v2').from('catalog_products').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      sb.schema('catalog_v2')
+        .from('catalog_products')
         .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .or('attributes.is.null,attributes->unit_cost.is.null'),
+        .eq('status', 'active')
+        .contains('metadata', { featured: 1 }),
+      sb.schema('catalog_v2')
+        .from('catalog_products')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .or('metadata.is.null,metadata->facet_attributes->unit_cost.is.null'),
       sb.from('users').select('id, is_approved'),
       sb.from('app_admins').select('auth_user_id', { count: 'exact', head: true }),
       sb.schema(GC).from('company_members').select('company_id'),
@@ -174,8 +178,7 @@ async function getOverviewSnapshot() {
         : {
             row_count: invRowsCount,
             total_quantity_on_hand: invTotalQty,
-            integrity_note:
-              'public.inventory.canonical_product_id → catalogos.products.id; legacy storefront product_id from live_product_id when set',
+            integrity_note: 'public.inventory.canonical_product_id → catalog_v2.catalog_products.id',
           },
       schema_gaps: schemaGaps,
     };
@@ -363,10 +366,14 @@ async function getInventoryIntegrityPanel(limit = 400) {
   let resolution = 'none';
   if (ids.length > 0) {
     const sample = ids.slice(0, 150);
-    const { data: prods, error: perr } = await sb.schema('catalogos').from('products').select('id, sku, name').in('id', sample);
+    const { data: prods, error: perr } = await sb
+      .schema('catalog_v2')
+      .from('catalog_products')
+      .select('id, internal_sku, name')
+      .in('id', sample);
     if (!perr && prods && prods.length) {
       prods.forEach((p) => {
-        productMap[p.id] = { sku: p.sku, name: p.name };
+        productMap[p.id] = { sku: p.internal_sku, name: p.name };
       });
       resolution = 'resolved_for_matching_ids';
     } else {

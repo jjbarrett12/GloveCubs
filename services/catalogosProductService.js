@@ -4,8 +4,15 @@
  */
 
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
+const { normalizeCanonicalUuidInput } = require('../lib/resolve-canonical-product-id');
+const { resolveCatalogV2ProductId } = require('../lib/resolve-catalog-v2-product-id');
 
 const COS = 'catalogos';
+
+/** catalogos.products.id -> catalog_v2.catalog_products.id (successes only; failures are not cached). */
+const catalogV2IdByListingId = new Map();
+/** listing id -> already logged warn for unmapped (cleared when mapping succeeds). */
+const catalogV2UnmappedListingLogged = new Set();
 
 const PRODUCT_SELECT = `
   id, sku, name, slug, description, attributes, is_active, published_at, category_id, brand_id, manufacturer_id, created_at, updated_at,
@@ -21,6 +28,32 @@ function isUuid(s) {
 function slugFromName(name) {
   const raw = (name || '').toString().trim();
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
+}
+
+/** Map UI labels like "Disposable Gloves" to category slug "disposable-gloves". */
+function slugFromCategoryLabel(label) {
+  return slugFromName(label);
+}
+
+/**
+ * Resolve storefront category filter (slug or human-readable name) to catalogos.categories.id.
+ * @param {object} supabase - Supabase admin client
+ * @param {string|undefined|null} category
+ * @returns {Promise<string|null>}
+ */
+async function resolveCategoryIdForProductFilter(supabase, category) {
+  const raw = (category || '').toString().trim();
+  if (!raw) return null;
+  const { data: byExactSlug } = await supabase.schema(COS).from('categories').select('id').eq('slug', raw).maybeSingle();
+  if (byExactSlug?.id) return String(byExactSlug.id);
+  const guessed = slugFromCategoryLabel(raw);
+  if (guessed && guessed !== raw) {
+    const { data: byGuessedSlug } = await supabase.schema(COS).from('categories').select('id').eq('slug', guessed).maybeSingle();
+    if (byGuessedSlug?.id) return String(byGuessedSlug.id);
+  }
+  const { data: byName } = await supabase.schema(COS).from('categories').select('id').ilike('name', raw).limit(1).maybeSingle();
+  if (byName?.id) return String(byName.id);
+  return null;
 }
 
 function rowToProduct(row) {
@@ -51,7 +84,12 @@ function rowToProduct(row) {
     image_url: r.image_url || '',
     images: Array.isArray(r.images) ? r.images : [],
     in_stock: r.in_stock != null ? r.in_stock : r.is_active === false ? 0 : 1,
+    /** Listing row id (catalogos.products.id); same as id. Cart sends this for listing resolution. */
+    listing_id: r.id != null ? String(r.id) : undefined,
+    /** @deprecated Misnomer: equals listing UUID. Prefer listing_id + catalog_v2_product_id. */
     canonical_product_id: r.id != null ? String(r.id) : undefined,
+    /** catalog_v2.catalog_products.id — stock / public.inventory.canonical_product_id. Filled by attachCatalogV2ProductId. */
+    catalog_v2_product_id: undefined,
     featured: r.featured != null ? r.featured : 0,
     powder: r.powder || '',
     thickness: r.thickness ?? null,
@@ -300,6 +338,53 @@ async function attributeValueMap(supabase, productId) {
   return m;
 }
 
+/**
+ * Mutates product: sets catalog_v2_product_id when listing maps to catalog_v2.
+ * @param {{ id?: unknown, catalog_v2_product_id?: unknown, sku?: unknown, name?: unknown }} product
+ */
+async function attachCatalogV2ProductId(product) {
+  if (!product || product.id == null) return product;
+  const key = normalizeCanonicalUuidInput(product.id);
+  if (!key) return product;
+
+  const cached = catalogV2IdByListingId.get(key);
+  if (cached) {
+    product.catalog_v2_product_id = cached;
+    return product;
+  }
+
+  try {
+    const v2 = await resolveCatalogV2ProductId(key);
+    catalogV2IdByListingId.set(key, v2);
+    catalogV2UnmappedListingLogged.delete(key);
+    product.catalog_v2_product_id = v2;
+  } catch (err) {
+    const msg = err && err.message ? String(err.message) : String(err);
+    const code = err && err.name ? String(err.name) : 'CatalogV2ResolveError';
+    if (!catalogV2UnmappedListingLogged.has(key)) {
+      catalogV2UnmappedListingLogged.add(key);
+      console.warn('[catalogosProductService] unmapped listing (no catalog_v2 row)', {
+        listing_id: key,
+        sku: product.sku != null ? String(product.sku) : '',
+        name: product.name != null ? String(product.name).slice(0, 120) : '',
+        resolver_error_code: code,
+        resolver_error_message: msg.slice(0, 500),
+      });
+    }
+  }
+  return product;
+}
+
+/**
+ * @param {Array<{ id?: unknown }>|null|undefined} products
+ */
+async function attachCatalogV2ProductIds(products) {
+  for (const p of products || []) {
+    await attachCatalogV2ProductId(p);
+  }
+  return products;
+}
+
 function rowMatchesFilters(flat, options) {
   const { material, powder, thickness, size, color, grade, useCase } = options;
   if (material && String(material).trim()) {
@@ -345,8 +430,8 @@ async function getProducts(options = {}) {
     q = q.or(`name.ilike.%${t}%,description.ilike.%${t}%,sku.ilike.%${t}%`);
   }
   if (category) {
-    const { data: cat } = await supabase.schema(COS).from('categories').select('id').eq('slug', category).maybeSingle();
-    if (cat?.id) q = q.eq('category_id', cat.id);
+    const catId = await resolveCategoryIdForProductFilter(supabase, category);
+    if (catId) q = q.eq('category_id', catId);
   }
   if (brand && String(brand).trim()) {
     const { data: br } = await supabase.schema(COS).from('brands').select('id').ilike('name', String(brand).trim()).limit(1).maybeSingle();
@@ -366,6 +451,7 @@ async function getProducts(options = {}) {
       throw error;
     }
     const products = (data || []).map((p) => rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, null)));
+    await attachCatalogV2ProductIds(products);
     return { products, total: count ?? products.length };
   }
 
@@ -381,6 +467,7 @@ async function getProducts(options = {}) {
     matched.push(rowToProduct(flat));
   }
   const slice = matched.slice(from, from + pageSize);
+  await attachCatalogV2ProductIds(slice);
   return { products: slice, total: matched.length || count || 0 };
 }
 
@@ -389,7 +476,8 @@ async function getProductById(id) {
   const p = await fetchProductRow(supabase, id);
   if (!p) return null;
   const attrMap = await attributeValueMap(supabase, p.id);
-  return rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, attrMap));
+  const out = rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, attrMap));
+  return attachCatalogV2ProductId(out);
 }
 
 async function getProductBySkuForWrite(sku) {
@@ -437,7 +525,7 @@ async function getProductBySlug(slug, categorySegment) {
       if (mat === seg || sub === seg || cat === seg) {
         const out = rowToProduct(flat);
         out.slug = slugLower;
-        return out;
+        return attachCatalogV2ProductId(out);
       }
     }
   }
@@ -446,7 +534,7 @@ async function getProductBySlug(slug, categorySegment) {
   const attrMap = await attributeValueMap(supabase, row.id);
   const out = rowToProduct(mapJoinedRow(row, row.categories, row.brands, row.product_images, attrMap));
   out.slug = slugLower;
-  return out;
+  return attachCatalogV2ProductId(out);
 }
 
 async function getProductsForIndustry(useCase) {
@@ -473,6 +561,7 @@ async function getProductsForIndustry(useCase) {
     const attrMap = await attributeValueMap(supabase, p.id);
     out.push(rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, attrMap)));
   }
+  await attachCatalogV2ProductIds(out);
   return out;
 }
 
@@ -579,8 +668,7 @@ async function getCategories() {
     .schema(COS)
     .from('products')
     .select('categories(name)')
-    .eq('is_active', true)
-    .not('categories.name', 'is', null);
+    .eq('is_active', true);
   if (error) throw error;
   const set = new Set((data || []).map((r) => r.categories?.name).filter(Boolean));
   return [...set].sort();
@@ -588,15 +676,10 @@ async function getCategories() {
 
 async function getBrands() {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .schema(COS)
-    .from('products')
-    .select('brands(name)')
-    .eq('is_active', true)
-    .not('brands.name', 'is', null);
+  const { data, error } = await supabase.schema(COS).from('brands').select('name').order('name', { ascending: true });
   if (error) throw error;
-  const set = new Set((data || []).map((r) => r.brands?.name).filter(Boolean));
-  return [...set].sort();
+  const names = (data || []).map((r) => r.name).filter(Boolean);
+  return [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
 async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {
@@ -626,6 +709,8 @@ async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {
 module.exports = {
   getProducts,
   getProductById,
+  attachCatalogV2ProductId,
+  attachCatalogV2ProductIds,
   getProductBySkuForWrite,
   getProductBySlug,
   getProductsForIndustry,

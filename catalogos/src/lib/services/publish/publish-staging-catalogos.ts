@@ -6,6 +6,10 @@
 
 import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import { computeSellPrice } from "@/lib/ingestion/pricing-service";
+import {
+  CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+  upsertSellableForCatalogV2Product,
+} from "@/lib/publish/ensure-catalog-v2-link";
 
 export interface PublishInput {
   staging_ids: string[];
@@ -15,6 +19,14 @@ export interface PublishInput {
 export interface PublishResult {
   published: number;
   errors: string[];
+}
+
+function slugFrom(sku: string, name?: string): string {
+  const base = (name || sku || "product").trim();
+  return base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 interface NormalizedRow {
@@ -85,38 +97,49 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     let masterId = row.master_product_id;
 
     if (!masterId) {
-      const sku =
-        String(norm.sku ?? "").trim() || `COS-${row.id.slice(0, 8)}`;
+      const sku = String(norm.sku ?? "").trim() || `COS-${row.id.slice(0, 8)}`;
       const name = String(norm.name ?? "Unknown").trim() || sku;
-
-      const { data: existing } = await catalogos
-        .from("products")
+      const admin = publicClient;
+      let slug = slugFrom(sku, name);
+      const { data: clash } = await admin
+        .schema("catalog_v2")
+        .from("catalog_products")
         .select("id")
-        .eq("sku", sku)
+        .eq("slug", slug)
         .maybeSingle();
+      if (clash) slug = `${slug}-${Date.now().toString(36)}`;
 
-      if (existing?.id) {
-        masterId = existing.id as string;
-      } else {
-        const { data: newMaster, error: masterErr } = await catalogos
-          .from("products")
-          .insert({
-            sku,
-            name,
-            category_id: categoryId,
-            brand_id: null,
-            description: (norm.description as string) ?? null,
-            attributes: { ...attrs, ...norm },
-            is_active: true,
-          })
-          .select("id")
-          .single();
+      const { data: newMaster, error: masterErr } = await admin
+        .schema("catalog_v2")
+        .from("catalog_products")
+        .insert({
+          product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+          slug,
+          internal_sku: sku,
+          name,
+          description: (norm.description as string) ?? null,
+          status: "active",
+          metadata: { ...attrs, ...norm },
+        })
+        .select("id")
+        .single();
 
-        if (masterErr || !newMaster?.id) {
-          errors.push(`Staging ${stagingId}: failed to create master: ${masterErr?.message}`);
-          continue;
-        }
-        masterId = newMaster.id as string;
+      if (masterErr || !newMaster?.id) {
+        errors.push(`Staging ${stagingId}: failed to create catalog_v2 product: ${masterErr?.message}`);
+        continue;
+      }
+      masterId = newMaster.id as string;
+
+      const { error: vErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
+        catalog_product_id: masterId,
+        variant_sku: sku,
+        sort_order: 0,
+        is_active: true,
+        metadata: {},
+      });
+      if (vErr) {
+        errors.push(`Staging ${stagingId}: catalog_variants: ${vErr.message}`);
+        continue;
       }
 
       await catalogos
@@ -176,20 +199,39 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     }
 
     if (manufacturerId != null) {
-      const { error: mfrLinkErr } = await catalogos
-        .from("products")
+      const { error: mfrLinkErr } = await publicClient
+        .schema("catalog_v2")
+        .from("catalog_products")
         .update({ manufacturer_id: manufacturerId, updated_at: new Date().toISOString() })
         .eq("id", masterId);
       if (mfrLinkErr) {
-        errors.push(`Staging ${stagingId}: manufacturer link on catalogos.products: ${mfrLinkErr.message}`);
+        errors.push(`Staging ${stagingId}: manufacturer link on catalog_v2: ${mfrLinkErr.message}`);
         continue;
       }
+    }
+
+    const displayName = String(norm.name ?? "Unknown").trim() || String(norm.sku ?? row.id).trim();
+    const skuForSellable = String(norm.sku ?? "").trim() || `COS-${row.id.slice(0, 8)}`;
+    const { data: v2n } = await publicClient
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("name, internal_sku")
+      .eq("id", masterId)
+      .single();
+    const sellable = await upsertSellableForCatalogV2Product(masterId, {
+      name: (v2n as { name?: string })?.name ?? displayName,
+      internalSku: ((v2n as { internal_sku?: string | null })?.internal_sku ?? skuForSellable).trim(),
+      listPriceMinor: Number.isFinite(cost) ? Math.round(cost * 100) : null,
+      isActive: true,
+    });
+    if (!sellable.ok) {
+      errors.push(`Staging ${stagingId}: ${sellable.message}`);
+      continue;
     }
 
     await catalogos.from("publish_events").insert({
       normalized_id: row.id,
       product_id: masterId,
-      live_product_id: null,
       published_by: input.published_by ?? null,
     });
 

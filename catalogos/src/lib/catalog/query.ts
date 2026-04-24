@@ -3,7 +3,7 @@
  * Uses product_attributes for faceted filtering; product_best_offer_price view for price (no full supplier_offers scan).
  */
 
-import { getSupabaseCatalogos } from "@/lib/db/client";
+import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import type { StorefrontFilterParams } from "./types";
 import type { LiveProductItem, ProductListPayload } from "./types";
 
@@ -115,6 +115,7 @@ function searchRelevanceScore(name: string, description: string | null, sku: str
 
 export async function listLiveProducts(params: StorefrontFilterParams): Promise<ProductListPayload> {
   const supabase = getSupabaseCatalogos(true);
+  const admin = getSupabase(true);
   const page = Math.max(1, params.page ?? DEFAULT_PAGE);
   const limit = Math.min(50, Math.max(1, params.limit ?? DEFAULT_LIMIT));
   const rawSort = params.sort ?? "newest";
@@ -125,15 +126,13 @@ export async function listLiveProducts(params: StorefrontFilterParams): Promise<
   const effectiveSort =
     usePricePerGloveSort || useRelevanceSort || (sort === "relevance" && !searchQ) ? "newest" : sort;
 
-  let query = supabase
-    .from("products")
-    .select("id, sku, slug, name, description, category_id, brand_id, attributes, published_at", { count: "exact" })
-    .eq("is_active", true);
+  let query = admin
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, slug, name, description, brand_id, status, metadata, updated_at", { count: "exact" })
+    .eq("status", "active");
 
-  if (params.category) {
-    const { data: cat } = await supabase.from("categories").select("id").eq("slug", params.category).single();
-    if (cat) query = query.eq("category_id", (cat as { id: string }).id);
-  }
+  /* category filter omitted in v2 cutover — catalog_products has no category_id */
 
   let filteredIds = await getCatalogConstraintProductIds(params);
   if (params.price_min != null || params.price_max != null) {
@@ -191,13 +190,23 @@ export async function listLiveProducts(params: StorefrontFilterParams): Promise<
     const pageIds = priceRows.map((r) => r.product_id);
     const bestPriceByProduct = new Map(priceRows.map((r) => [r.product_id, r.best_price]));
     const offerCountByProduct = new Map(priceRows.map((r) => [r.product_id, r.offer_count]));
-    const { data: products, error: listErr } = await supabase
-      .from("products")
-      .select("id, sku, slug, name, description, category_id, brand_id, attributes, published_at")
-      .eq("is_active", true)
+    const { data: products, error: listErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id, internal_sku, slug, name, description, brand_id, status, metadata, updated_at")
+      .eq("status", "active")
       .in("id", pageIds);
     if (listErr) throw new Error(listErr.message);
-    const list = (products ?? []) as { id: string; sku: string; slug: string | null; name: string; description: string | null; category_id: string; brand_id: string | null; attributes: Record<string, unknown>; published_at: string | null }[];
+    const list = (products ?? []) as {
+      id: string;
+      internal_sku: string | null;
+      slug: string | null;
+      name: string;
+      description: string | null;
+      brand_id: string | null;
+      metadata: Record<string, unknown> | null;
+      updated_at: string | null;
+    }[];
     const orderMap = new Map(pageIds.map((id, i) => [id, i]));
     list.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     const total =
@@ -212,18 +221,18 @@ export async function listLiveProducts(params: StorefrontFilterParams): Promise<
     const brandMap = new Map((brandsRes.data ?? []).map((b: { id: string; name: string }) => [b.id, b.name]));
     const items: LiveProductItem[] = list.map((p) => ({
       id: p.id,
-      sku: p.sku,
+      sku: p.internal_sku ?? "",
       slug: p.slug,
       name: p.name,
       description: p.description,
-      category_id: p.category_id,
-      category_slug: categoryMap.get(p.category_id),
+      category_id: "",
+      category_slug: undefined,
       brand_id: p.brand_id,
       brand_name: p.brand_id ? brandMap.get(p.brand_id) ?? null : null,
-      attributes: p.attributes ?? {},
+      attributes: (p.metadata?.facet_attributes as Record<string, unknown>) ?? p.metadata ?? {},
       best_price: bestPriceByProduct.get(p.id) ?? null,
       supplier_count: offerCountByProduct.get(p.id) ?? 0,
-      published_at: p.published_at,
+      published_at: p.updated_at,
     }));
     return {
       items,
@@ -234,18 +243,27 @@ export async function listLiveProducts(params: StorefrontFilterParams): Promise<
     };
   }
 
-  if (effectiveSort === "newest") query = query.order("published_at", { ascending: false, nullsFirst: false });
+  if (effectiveSort === "newest") query = query.order("updated_at", { ascending: false, nullsFirst: false });
   query = query.range(from, from + limit - 1);
 
   const { data: products, error, count } = await query;
   if (error) throw new Error(error.message);
 
-  const list = (products ?? []) as { id: string; sku: string; slug: string | null; name: string; description: string | null; category_id: string; brand_id: string | null; attributes: Record<string, unknown>; published_at: string | null }[];
+  const list = (products ?? []) as {
+    id: string;
+    internal_sku: string | null;
+    slug: string | null;
+    name: string;
+    description: string | null;
+    brand_id: string | null;
+    metadata: Record<string, unknown> | null;
+    updated_at: string | null;
+  }[];
   if (useRelevanceSort && searchQ) {
     list.sort(
       (a, b) =>
-        searchRelevanceScore(b.name, b.description, b.sku, searchQ) -
-        searchRelevanceScore(a.name, a.description, a.sku, searchQ)
+        searchRelevanceScore(b.name, b.description, b.internal_sku ?? "", searchQ) -
+        searchRelevanceScore(a.name, a.description, a.internal_sku ?? "", searchQ)
     );
   }
   const productIds = list.map((p) => p.id);
@@ -265,18 +283,18 @@ export async function listLiveProducts(params: StorefrontFilterParams): Promise<
 
   const items: LiveProductItem[] = list.map((p) => ({
     id: p.id,
-    sku: p.sku,
+    sku: p.internal_sku ?? "",
     slug: p.slug,
     name: p.name,
     description: p.description,
-    category_id: p.category_id,
-    category_slug: categoryMap.get(p.category_id),
+    category_id: "",
+    category_slug: undefined,
     brand_id: p.brand_id,
     brand_name: p.brand_id ? brandMap.get(p.brand_id) ?? null : null,
-    attributes: p.attributes ?? {},
+    attributes: (p.metadata?.facet_attributes as Record<string, unknown>) ?? p.metadata ?? {},
     best_price: bestPriceByProduct.get(p.id) ?? null,
     supplier_count: offerCountByProduct.get(p.id) ?? 0,
-    published_at: p.published_at,
+    published_at: p.updated_at,
   }));
 
   const total = count ?? 0;
@@ -321,16 +339,17 @@ export async function getOffersSummaryByProductId(productId: string): Promise<{
 /** First image URL per product (for grid thumbnails). Returns product_id -> url. */
 export async function getFirstImageByProductIds(productIds: string[]): Promise<Map<string, string>> {
   if (productIds.length === 0) return new Map();
-  const supabase = getSupabaseCatalogos(true);
-  const { data: rows } = await supabase
-    .from("product_images")
-    .select("product_id, url, sort_order")
-    .in("product_id", productIds)
+  const admin = getSupabase(true);
+  const { data: rows } = await admin
+    .schema("catalog_v2")
+    .from("catalog_product_images")
+    .select("catalog_product_id, url, sort_order")
+    .in("catalog_product_id", productIds)
     .order("sort_order", { ascending: true });
   const map = new Map<string, string>();
   for (const r of rows ?? []) {
-    const row = r as { product_id: string; url: string };
-    if (!map.has(row.product_id)) map.set(row.product_id, row.url);
+    const row = r as { catalog_product_id: string; url: string };
+    if (!map.has(row.catalog_product_id)) map.set(row.catalog_product_id, row.url);
   }
   return map;
 }
@@ -338,19 +357,34 @@ export async function getFirstImageByProductIds(productIds: string[]): Promise<M
 /** Product detail by slug including images (catalog_v2 via catalogos.product_images view). */
 export async function getProductDetailBySlug(slug: string): Promise<(LiveProductItem & { images: string[] }) | null> {
   const supabase = getSupabaseCatalogos(true);
-  const { data: p, error } = await supabase
-    .from("products")
-    .select("id, sku, slug, name, description, category_id, brand_id, attributes, published_at")
-    .eq("is_active", true)
+  const admin = getSupabase(true);
+  const { data: p, error } = await admin
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, slug, name, description, brand_id, metadata, updated_at")
+    .eq("status", "active")
     .eq("slug", slug)
     .single();
   if (error || !p) return null;
-  const product = p as { id: string; sku: string; slug: string | null; name: string; description: string | null; category_id: string; brand_id: string | null; attributes: Record<string, unknown>; published_at: string | null };
-  const [{ data: offers }, { data: cat }, { data: brand }, { data: imgRows }, { data: priceRow }] = await Promise.all([
+  const product = p as {
+    id: string;
+    internal_sku: string | null;
+    slug: string | null;
+    name: string;
+    description: string | null;
+    brand_id: string | null;
+    metadata: Record<string, unknown> | null;
+    updated_at: string | null;
+  };
+  const [{ data: offers }, { data: brand }, { data: imgRows }, { data: priceRow }] = await Promise.all([
     supabase.from("supplier_offers").select("product_id, cost, sell_price").eq("product_id", product.id).eq("is_active", true),
-    supabase.from("categories").select("id, slug").eq("id", product.category_id).single(),
     product.brand_id ? supabase.from("brands").select("id, name").eq("id", product.brand_id).single() : { data: null },
-    supabase.from("product_images").select("url, sort_order").eq("product_id", product.id).order("sort_order", { ascending: true }),
+    admin
+      .schema("catalog_v2")
+      .from("catalog_product_images")
+      .select("url, sort_order")
+      .eq("catalog_product_id", product.id)
+      .order("sort_order", { ascending: true }),
     supabase.from("product_best_offer_price").select("best_price, offer_count").eq("product_id", product.id).maybeSingle(),
   ]);
   const offerRows = (offers ?? []) as { cost: number; sell_price?: number | null }[];
@@ -369,18 +403,18 @@ export async function getProductDetailBySlug(slug: string): Promise<(LiveProduct
     .filter(Boolean);
   return {
     id: product.id,
-    sku: product.sku,
+    sku: product.internal_sku ?? "",
     slug: product.slug,
     name: product.name,
     description: product.description,
-    category_id: product.category_id,
-    category_slug: cat ? (cat as { slug: string }).slug : undefined,
+    category_id: "",
+    category_slug: undefined,
     brand_id: product.brand_id,
     brand_name: brand ? (brand as { name: string }).name : null,
-    attributes: product.attributes ?? {},
+    attributes: (product.metadata?.facet_attributes as Record<string, unknown>) ?? product.metadata ?? {},
     best_price,
     supplier_count: (offers ?? []).length,
-    published_at: product.published_at,
+    published_at: product.updated_at,
     images,
   };
 }

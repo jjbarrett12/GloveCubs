@@ -3,13 +3,14 @@
  * Staging rows must share the same family_group_key and be approved for grouping.
  */
 
-import { getSupabaseCatalogos } from "@/lib/db/client";
+import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import { getCategoryIdBySlug } from "@/lib/catalogos/dictionary-service";
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 import { setLifecycleStatus } from "@/lib/catalog-expansion/lifecycle";
 import { publishSafe, stageSafe } from "@/lib/catalogos/validation-modes";
 import { finalizePublishSearchSync } from "./canonical-sync-service";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Product } from "./ensure-catalog-v2-link";
 import type { SearchPublishStatus } from "./types";
 
 export interface PublishVariantGroupInput {
@@ -220,6 +221,7 @@ async function runPublishVariantGroupAddVariants(params: {
   warnings: string[];
 }): Promise<PublishVariantGroupResult> {
   const supabase = getSupabaseCatalogos(true);
+  const admin = getSupabase(true);
   const productIds: string[] = [];
 
   for (const row of params.rows) {
@@ -246,26 +248,30 @@ async function runPublishVariantGroupAddVariants(params: {
     }
 
     const slug = slugFrom(variantSku, variantName);
-    const { data: existingSlug } = await supabase.from("products").select("id").eq("slug", slug).maybeSingle();
+    const { data: existingSlug } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
     const finalSlug = existingSlug ? `${slug}-${Date.now().toString(36)}` : slug;
 
     const brandId = attrs.brand
       ? await getOrCreateBrandId(String(attrs.brand))
       : (nd.brand ? await getOrCreateBrandId(String(nd.brand)) : null);
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from("products")
+    const { data: inserted, error: insertErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
       .insert({
-        sku: variantSku,
-        name: variantName,
-        category_id: params.categoryId,
-        brand_id: brandId,
-        family_id: params.familyId,
-        description: (nd.description as string) ?? null,
-        attributes: mergedAttrs,
-        is_active: true,
-        published_at: new Date().toISOString(),
+        product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
         slug: finalSlug,
+        internal_sku: variantSku,
+        name: variantName,
+        description: (nd.description as string) ?? null,
+        brand_id: brandId,
+        status: "active",
+        metadata: { ...mergedAttrs, family_id: params.familyId },
       })
       .select("id")
       .single();
@@ -275,12 +281,29 @@ async function runPublishVariantGroupAddVariants(params: {
         success: false,
         familyId: params.familyId,
         productIds,
-        error: `Product insert ${variantSku}: ${insertErr?.message ?? "failed"}`,
+        error: `catalog_v2 insert ${variantSku}: ${insertErr?.message ?? "failed"}`,
         warnings: params.warnings.length ? params.warnings : undefined,
       };
     }
 
     const productId = (inserted as { id: string }).id;
+
+    const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
+      catalog_product_id: productId,
+      variant_sku: variantSku,
+      sort_order: 0,
+      is_active: true,
+      metadata: {},
+    });
+    if (vInsErr) {
+      return {
+        success: false,
+        familyId: params.familyId,
+        productIds,
+        error: `catalog_variants ${variantSku}: ${vInsErr.message}`,
+        warnings: params.warnings.length ? params.warnings : undefined,
+      };
+    }
     productIds.push(productId);
 
     const { errors: attrErrors } = await syncProductAttributesFromStaged(
@@ -329,6 +352,24 @@ async function runPublishVariantGroupAddVariants(params: {
         familyId: params.familyId,
         productIds,
         error: `Supplier offer ${variantSku}: ${offerErr.message}`,
+        warnings: params.warnings.length ? params.warnings : undefined,
+      };
+    }
+
+    const listPriceMinor =
+      cost != null && Number.isFinite(Number(cost)) ? Math.round(Number(cost) * 100) : null;
+    const sellable = await upsertSellableForCatalogV2Product(productId, {
+      name: variantName,
+      internalSku: variantSku,
+      listPriceMinor,
+      isActive: true,
+    });
+    if (!sellable.ok) {
+      return {
+        success: false,
+        familyId: params.familyId,
+        productIds,
+        error: `Publish blocked (variant ${variantSku}): sellable — ${sellable.message}`,
         warnings: params.warnings.length ? params.warnings : undefined,
       };
     }

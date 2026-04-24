@@ -17,6 +17,13 @@ vi.mock("./canonical-sync-service", () => ({
   finalizePublishSearchSync: vi.fn().mockResolvedValue({ ok: true, searchPublishStatus: "synced" }),
 }));
 
+vi.mock("./ensure-catalog-v2-link", () => ({
+  ensureCatalogV2ProductForListing: vi.fn().mockResolvedValue({
+    ok: true,
+    catalogProductId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  }),
+}));
+
 vi.mock("@/lib/catalog-expansion/lifecycle", () => ({
   setLifecycleStatus: vi.fn().mockResolvedValue(undefined),
 }));

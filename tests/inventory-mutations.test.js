@@ -11,6 +11,7 @@ const path = require('path');
 const adminResolved = path.join(__dirname, '..', 'lib', 'supabaseAdmin.js');
 const dataServiceResolved = path.join(__dirname, '..', 'services', 'dataService.js');
 const inventoryResolved = path.join(__dirname, '..', 'lib', 'inventory.js');
+const guardResolved = path.join(__dirname, '..', 'lib', 'catalog-v2-product-guard.js');
 
 const UUID_A = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const UUID_B = '11111111-2222-4333-8444-555555555555';
@@ -31,6 +32,7 @@ describe('inventory mutations (mocked)', () => {
     require.cache[adminResolved] = origAdmin;
     require.cache[dataServiceResolved] = origDataService;
     delete require.cache[inventoryResolved];
+    delete require.cache[guardResolved];
   });
 
   it('getStockForLineItem reads inventory by canonical_product_id only', async () => {
@@ -186,6 +188,47 @@ describe('inventory mutations (mocked)', () => {
       exports: {
         getSupabaseAdmin: () => ({
           schema(schemaName) {
+            if (schemaName === 'catalog_v2') {
+              return {
+                from(table) {
+                  if (table !== 'catalog_products') return {};
+                  return {
+                    select() {
+                      return {
+                        eq(field, val) {
+                          return {
+                            maybeSingle: async () => {
+                              if (field === 'id' && val === UUID_A) {
+                                return { data: { id: UUID_A }, error: null };
+                              }
+                              return { data: null, error: null };
+                            },
+                          };
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            }
+            if (schemaName === 'catalogos') {
+              return {
+                from(table) {
+                  if (table !== 'products') return {};
+                  return {
+                    select() {
+                      return {
+                        eq() {
+                          return {
+                            maybeSingle: async () => ({ data: null, error: null }),
+                          };
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            }
             if (schemaName !== 'gc_commerce') return { from: () => ({}) };
             return {
               from(table) {
