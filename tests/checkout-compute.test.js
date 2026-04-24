@@ -12,7 +12,10 @@ const { computeCheckoutMoneyFromCart } = require('../lib/checkout-compute');
 const addr = { state: 'NY', city: 'NYC', zip_code: '10001', address_line1: '1 Main', full_name: 'A' };
 const CAT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
-describe('checkout-compute', () => {
+const hasSupabaseForGuard = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+const describeCompute = hasSupabaseForGuard ? describe : describe.skip;
+
+describeCompute('checkout-compute', () => {
   it('computes subtotal, shipping, tax, total for simple cart', async () => {
     const productsService = {
       async getProductById(id) {

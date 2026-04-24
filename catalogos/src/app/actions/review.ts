@@ -25,6 +25,14 @@ import {
   type ImportPricingOverridePatch,
 } from "@/lib/ingestion/import-pricing";
 import { stripFacetExtractionUiState } from "@/lib/extraction/staging-facet-merge";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
+import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
+
+function slugForNewCatalogProduct(sku: string, name: string): string {
+  const base = (name || sku || "product").trim();
+  const s = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return s || "product";
+}
 
 const REVIEW_PATHS = [
   "/dashboard/review",
@@ -137,22 +145,35 @@ export async function createNewMasterProduct(
   options?: ReviewOptions
 ): Promise<ReviewResult & { masterProductId?: string }> {
   const supabase = getSupabaseCatalogos(true);
+  const slugBase = slugForNewCatalogProduct(payload.sku, payload.name);
+  const { data: slugClash } = await supabase.schema("catalog_v2").from("catalog_products").select("id").eq("slug", slugBase).maybeSingle();
+  const finalSlug = slugClash?.id ? `${slugBase}-${Date.now().toString(36)}` : slugBase;
   const { data: product, error: insertErr } = await supabase
-    .from("products")
+    .schema("catalog_v2")
+    .from("catalog_products")
     .insert({
-      sku: payload.sku,
+      product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+      slug: finalSlug,
+      internal_sku: payload.sku,
       name: payload.name,
-      category_id: payload.category_id,
-      brand_id: payload.brand_id ?? null,
       description: payload.description ?? null,
-      attributes: {},
-      is_active: true,
+      brand_id: payload.brand_id ?? null,
+      status: "active",
+      metadata: { category_id: payload.category_id, facet_attributes: {} },
     })
     .select("id")
     .single();
   if (insertErr || !product) return { success: false, error: insertErr?.message ?? "Insert failed" };
 
   const masterId = product.id as string;
+  const { error: vInsErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
+    catalog_product_id: masterId,
+    variant_sku: payload.sku,
+    sort_order: 0,
+    is_active: true,
+    metadata: {},
+  });
+  if (vInsErr) return { success: false, error: vInsErr.message };
   const nextSync = await nextSearchPublishStatusWhenAcceptingReview(normalizedId);
   const patch: Record<string, unknown> = {
     status: "approved",
@@ -271,8 +292,14 @@ export async function updateNormalizedAttributes(normalizedId: string, attribute
 
   let categoryId: string | null = null;
   if (row.master_product_id) {
-    const { data: prod } = await supabase.from("products").select("category_id").eq("id", row.master_product_id).single();
-    if (prod) categoryId = (prod as { category_id: string }).category_id;
+    const { data: prod } = await supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("metadata")
+      .eq("id", row.master_product_id)
+      .single();
+    const cid = flattenV2Metadata((prod as { metadata?: unknown } | null)?.metadata).category_id;
+    if (cid != null) categoryId = String(cid);
   }
   if (!categoryId && (normalized_data.category_slug ?? normalized_data.category)) {
     categoryId = await getCategoryIdBySlug(String(normalized_data.category_slug ?? normalized_data.category));
@@ -391,8 +418,14 @@ export async function getAttributeRequirementsForStaged(normalizedId: string): P
   const nd = (row.normalized_data as Record<string, unknown>) ?? {};
   let categoryId: string | null = null;
   if (row.master_product_id) {
-    const { data: prod } = await supabase.from("products").select("category_id").eq("id", row.master_product_id).single();
-    if (prod) categoryId = (prod as { category_id: string }).category_id;
+    const { data: prod } = await supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("metadata")
+      .eq("id", row.master_product_id)
+      .single();
+    const cid = flattenV2Metadata((prod as { metadata?: unknown } | null)?.metadata).category_id;
+    if (cid != null) categoryId = String(cid);
   }
   if (!categoryId && (nd.category_slug ?? nd.category)) {
     categoryId = await getCategoryIdBySlug(String(nd.category_slug ?? nd.category));
@@ -523,8 +556,9 @@ export async function unpublishLiveProduct(
 
   const supabase = getSupabaseCatalogos(true);
   const { error: u1 } = await supabase
-    .from("products")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .update({ status: "archived", updated_at: new Date().toISOString() })
     .eq("id", productId);
   if (u1) return { success: false, error: u1.message };
 

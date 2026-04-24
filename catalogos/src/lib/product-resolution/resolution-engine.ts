@@ -5,6 +5,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import { getMatchDecision } from "./match-decision-service";
 import { resolveAlias } from "./alias-service";
 import { findMatchingPattern, incrementPatternUsage } from "./sku-pattern-service";
@@ -88,10 +89,11 @@ async function resolveByVariantSku(row: NormalizedRowForResolution): Promise<Res
   if (!sku) return null;
   const supabase = getSupabaseCatalogos(true);
   const { data, error } = await supabase
-    .from("products")
+    .schema("catalog_v2")
+    .from("catalog_products")
     .select("id")
-    .eq("sku", sku)
-    .eq("is_active", true)
+    .eq("internal_sku", sku)
+    .eq("status", "active")
     .maybeSingle();
   if (error || !data) return null;
   return {
@@ -151,17 +153,18 @@ async function resolveBySkuPattern(
   const size = (parsed.suffix_value || (row.inferred_size ?? getAttr(row, "size"))).toLowerCase();
   if (size) {
     const { data: variants } = await supabase
-      .from("products")
-      .select("id, attributes")
-      .eq("family_id", familyId)
-      .eq("is_active", true)
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id, metadata")
+      .eq("status", "active")
+      .filter("metadata->>family_id", "eq", familyId)
       .limit(50);
-    const bySize = (variants ?? []).find((p: { attributes?: unknown }) => {
-      const a = (p.attributes ?? {}) as Record<string, unknown>;
+    const bySize = (variants ?? []).find((p: { metadata?: unknown }) => {
+      const a = flattenV2Metadata(p.metadata);
       return String(a.size ?? "").toLowerCase() === size;
     });
     if (bySize) {
-      const productAttrs = ((bySize as { attributes?: Record<string, unknown> }).attributes ?? {}) as Record<string, unknown>;
+      const productAttrs = flattenV2Metadata((bySize as { metadata?: unknown }).metadata);
       const attributesAgree = await supportingAttributesAgree(row, productAttrs);
       incrementPatternUsage(parsed.pattern_id).catch(() => {});
       return {
@@ -204,13 +207,14 @@ async function resolveByFamily(
   const size = (row.inferred_size ?? getAttr(row, "size")).toLowerCase();
   if (size) {
     const { data: variants } = await supabase
-      .from("products")
-      .select("id, attributes")
-      .eq("family_id", familyId)
-      .eq("is_active", true)
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id, metadata")
+      .eq("status", "active")
+      .filter("metadata->>family_id", "eq", familyId)
       .limit(50);
-    const bySize = (variants ?? []).find((p: { attributes?: unknown }) => {
-      const a = (p.attributes ?? {}) as Record<string, unknown>;
+    const bySize = (variants ?? []).find((p: { metadata?: unknown }) => {
+      const a = flattenV2Metadata(p.metadata);
       return String(a.size ?? "").toLowerCase() === size;
     });
     if (bySize) {
@@ -242,10 +246,11 @@ async function resolveBySimilarity(
 ): Promise<ResolutionCandidate | null> {
   const supabase = getSupabaseCatalogos(true);
   const { data: products, error } = await supabase
-    .from("products")
-    .select("id, name, attributes")
-    .eq("category_id", categoryId)
-    .eq("is_active", true)
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, name, metadata")
+    .contains("metadata", { category_id: categoryId })
+    .eq("status", "active")
     .limit(500);
   if (error || !products?.length) return null;
 
@@ -265,8 +270,8 @@ async function resolveBySimilarity(
   const material = resolvedMaterial ?? materialRaw;
 
   let best: { id: string; score: number } | null = null;
-  for (const p of products as { id: string; name: string; attributes?: Record<string, unknown> }[]) {
-    const a = (p.attributes ?? {}) as Record<string, unknown>;
+  for (const p of products as { id: string; name: string; metadata?: unknown }[]) {
+    const a = flattenV2Metadata(p.metadata);
     let match = 0;
     let total = 0;
     if (brand) {

@@ -191,14 +191,15 @@ async function loadPrimaryImagesForProducts(productIds: string[]): Promise<Map<s
 async function loadSkuToProductId(categoryId: string): Promise<Map<string, string>> {
   const supabase = getSupabaseCatalogos(true);
   const { data, error } = await supabase
-    .from("products")
-    .select("id, sku")
-    .eq("category_id", categoryId)
-    .eq("is_active", true);
-  if (error) throw new Error(`products sku map: ${error.message}`);
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId });
+  if (error) throw new Error(`catalog_products sku map: ${error.message}`);
   const m = new Map<string, string>();
   for (const r of data ?? []) {
-    const sku = String((r as { sku: string }).sku ?? "").trim().toLowerCase();
+    const sku = String((r as { internal_sku: string | null }).internal_sku ?? "").trim().toLowerCase();
     if (sku) m.set(sku, (r as { id: string }).id);
   }
   return m;
@@ -210,12 +211,13 @@ async function loadProductsWithImagesForTitleMatch(
 ): Promise<{ id: string; name: string; url: string | null }[]> {
   const supabase = getSupabaseCatalogos(true);
   const { data: products, error } = await supabase
-    .from("products")
+    .schema("catalog_v2")
+    .from("catalog_products")
     .select("id, name")
-    .eq("category_id", categoryId)
-    .eq("is_active", true)
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId })
     .limit(limit);
-  if (error) throw new Error(`products title match: ${error.message}`);
+  if (error) throw new Error(`catalog_products title match: ${error.message}`);
   const list = (products ?? []) as { id: string; name: string }[];
   if (list.length === 0) return [];
   const ids = list.map((p) => p.id);

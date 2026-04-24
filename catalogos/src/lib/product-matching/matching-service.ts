@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import { computeMatch } from "./scoring";
 import type { NormalizedForMatching } from "./scoring";
 import type { MasterForScoring } from "./scoring";
@@ -35,15 +36,16 @@ async function resolveCategoryId(staged: StagedRowForMatching): Promise<string |
 async function loadMastersForCategory(categoryId: string): Promise<MasterForScoring[]> {
   const supabase = getSupabaseCatalogos(true);
   const { data, error } = await supabase
-    .from("products")
-    .select("id, name, attributes")
-    .eq("category_id", categoryId)
-    .eq("is_active", true);
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, name, metadata")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId });
   if (error) return [];
   return (data ?? []).map((p) => ({
     id: p.id as string,
     name: (p.name as string) ?? "",
-    attributes: (p.attributes as Record<string, unknown>) ?? {},
+    attributes: flattenV2Metadata((p as { metadata?: unknown }).metadata),
   }));
 }
 

@@ -188,7 +188,8 @@ export async function migrateThickness7Plus(options: { dryRun?: boolean } = {}):
     if (!paErr && paRows?.length) {
       for (const pa of paRows as { id: string; product_id: string; attribute_definition_id: string; value_text: string }[]) {
         const { data: prod } = await supabase
-          .from("products")
+          .schema("catalog_v2")
+          .from("catalog_products")
           .select("id, name, description")
           .eq("id", pa.product_id)
           .maybeSingle();

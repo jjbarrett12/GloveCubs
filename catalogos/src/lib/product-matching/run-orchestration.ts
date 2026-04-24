@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import { matchStagedRow } from "./matching-service";
 import type { StagedRowForMatching } from "./matching-service";
 import { findDuplicateCandidates, productIdsInDuplicatePairs } from "./duplicate-detection";
@@ -137,12 +138,13 @@ export async function runMatching(input: RunMatchingInput): Promise<RunMatchingR
       let criticalAttributeConflict = false;
       if (result.suggested_master_product_id) {
         const { data: master } = await supabase
-          .from("products")
-          .select("attributes")
+          .schema("catalog_v2")
+          .from("catalog_products")
+          .select("metadata")
           .eq("id", result.suggested_master_product_id)
           .single();
-        if (master?.attributes) {
-          const masterAttrs = master.attributes as Record<string, unknown>;
+        if (master?.metadata) {
+          const masterAttrs = flattenV2Metadata(master.metadata);
           const stagedAttrs = (row.attributes ?? {}) as Record<string, unknown>;
           for (const attrKey of CRITICAL_SAFETY_ATTRIBUTES) {
             const masterVal = masterAttrs[attrKey];

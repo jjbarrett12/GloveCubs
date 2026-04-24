@@ -189,8 +189,9 @@ export async function mergeDuplicateProducts(
 
   if (!offers?.length) {
     const { error: upErr } = await supabase
-      .from("products")
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
       .eq("id", mergeProductId);
     if (upErr) return { success: false, error: upErr.message };
     return { success: true, offersMoved: 0 };
@@ -214,8 +215,9 @@ export async function mergeDuplicateProducts(
   }
 
   const { error: prodErr } = await supabase
-    .from("products")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .update({ status: "archived", updated_at: new Date().toISOString() })
     .eq("id", mergeProductId);
   if (prodErr) return { success: false, error: prodErr.message };
   return { success: true, offersMoved };

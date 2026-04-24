@@ -1,6 +1,6 @@
 /**
- * CatalogService — sole write boundary for catalogos.products / product_attributes / product_images.
- * Facet keys in products.attributes are derived via DB trigger + catalogos.merge_product_attribute_facets (no duplicate facet writes here).
+ * Catalog product service — reads/writes catalog_v2.catalog_products only (no legacy listing table).
+ * Facet rows: catalogos.product_attributes keyed by v2 parent id; images: catalogos.product_images or v2 images via embed.
  */
 
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
@@ -8,18 +8,41 @@ const { normalizeCanonicalUuidInput } = require('../lib/resolve-canonical-produc
 const { resolveCatalogV2ProductId } = require('../lib/resolve-catalog-v2-product-id');
 
 const COS = 'catalogos';
+const V2 = 'catalog_v2';
+const V2_DEFAULT_PRODUCT_TYPE_ID = 'b1111111-1111-4111-8111-111111111111';
 
-/** catalogos.products.id -> catalog_v2.catalog_products.id (successes only; failures are not cached). */
-const catalogV2IdByListingId = new Map();
-/** listing id -> already logged warn for unmapped (cleared when mapping succeeds). */
-const catalogV2UnmappedListingLogged = new Set();
+const catalogV2UnmappedLogged = new Set();
 
-const PRODUCT_SELECT = `
-  id, sku, name, slug, description, attributes, is_active, published_at, category_id, brand_id, manufacturer_id, created_at, updated_at,
-  categories ( name, slug ),
-  brands ( name ),
-  product_images ( url, sort_order )
+const V2_PRODUCT_SELECT = `
+  id, internal_sku, name, slug, description, metadata, status, brand_id, manufacturer_id, product_type_id, created_at, updated_at,
+  catalog_product_images ( url, sort_order )
 `;
+
+/** PostgREST does not expose catalog_products→brands embed across schemas; resolve names from catalogos.brands. */
+async function loadBrandNamesByIds(supabase, brandIds) {
+  const ids = [
+    ...new Set(
+      (brandIds || [])
+        .filter((id) => id != null && String(id).trim() !== '')
+        .map((id) => String(id)),
+    ),
+  ];
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase.schema(COS).from('brands').select('id, name').in('id', ids);
+  if (error) throw error;
+  const m = new Map();
+  for (const b of data || []) {
+    m.set(String(b.id), b.name != null ? String(b.name) : '');
+  }
+  return m;
+}
+
+/** mapJoinedRow expects `{ name }` or null (falls back to attrs.merch_brand). */
+function brandFromMap(p, brandById) {
+  if (!p || p.brand_id == null || !brandById) return null;
+  const name = brandById.get(String(p.brand_id));
+  return name != null && name !== '' ? { name } : null;
+}
 
 function isUuid(s) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s || ''));
@@ -30,16 +53,12 @@ function slugFromName(name) {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
 }
 
-/** Map UI labels like "Disposable Gloves" to category slug "disposable-gloves". */
 function slugFromCategoryLabel(label) {
   return slugFromName(label);
 }
 
 /**
- * Resolve storefront category filter (slug or human-readable name) to catalogos.categories.id.
- * @param {object} supabase - Supabase admin client
- * @param {string|undefined|null} category
- * @returns {Promise<string|null>}
+ * Resolve storefront category filter to catalogos.categories.id (facet / attribute defs still keyed by this id).
  */
 async function resolveCategoryIdForProductFilter(supabase, category) {
   const raw = (category || '').toString().trim();
@@ -56,6 +75,25 @@ async function resolveCategoryIdForProductFilter(supabase, category) {
   return null;
 }
 
+/** Normalize v2 row for mapJoinedRow / rowToProduct (listing shape). */
+function normalizeV2ProductRow(p) {
+  if (!p) return null;
+  const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+  const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
+  const attrs = { ...facet, ...meta };
+  delete attrs.facet_attributes;
+  const imgs = p.catalog_product_images || [];
+  return {
+    ...p,
+    sku: p.internal_sku,
+    is_active: p.status === 'active',
+    attributes: attrs,
+    category_id: meta.category_id != null ? String(meta.category_id) : null,
+    categories: null,
+    product_images: Array.isArray(imgs) ? imgs : [],
+  };
+}
+
 function rowToProduct(row) {
   if (!row) return null;
   const r = row;
@@ -63,9 +101,10 @@ function rowToProduct(row) {
   const listPrice = attrs.list_price != null ? Number(attrs.list_price) : attrs.retail_price != null ? Number(attrs.retail_price) : null;
   const unitCost = attrs.unit_cost != null ? Number(attrs.unit_cost) : attrs.cost != null ? Number(attrs.cost) : null;
   const bulkPrice = attrs.bulk_price != null ? Number(attrs.bulk_price) : null;
+  const idStr = r.id != null ? String(r.id) : '';
   return {
-    id: r.id,
-    sku: r.sku,
+    id: idStr,
+    sku: r.sku || r.internal_sku || '',
     name: r.name || '',
     brand: r.brand || '',
     supplier_name: r.brand || '',
@@ -84,12 +123,9 @@ function rowToProduct(row) {
     image_url: r.image_url || '',
     images: Array.isArray(r.images) ? r.images : [],
     in_stock: r.in_stock != null ? r.in_stock : r.is_active === false ? 0 : 1,
-    /** Listing row id (catalogos.products.id); same as id. Cart sends this for listing resolution. */
-    listing_id: r.id != null ? String(r.id) : undefined,
-    /** @deprecated Misnomer: equals listing UUID. Prefer listing_id + catalog_v2_product_id. */
-    canonical_product_id: r.id != null ? String(r.id) : undefined,
-    /** catalog_v2.catalog_products.id — stock / public.inventory.canonical_product_id. Filled by attachCatalogV2ProductId. */
-    catalog_v2_product_id: undefined,
+    listing_id: idStr || undefined,
+    canonical_product_id: idStr || undefined,
+    catalog_v2_product_id: idStr || undefined,
     featured: r.featured != null ? r.featured : 0,
     powder: r.powder || '',
     thickness: r.thickness ?? null,
@@ -111,7 +147,7 @@ function rowToProduct(row) {
 
 function mapJoinedRow(p, cat, brand, images, attrMap) {
   const m = attrMap || {};
-  const imgRows = (images || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const imgRows = (images || p.product_images || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const urls = imgRows.map((i) => i.url).filter(Boolean);
   const attrs = p.attributes && typeof p.attributes === 'object' ? { ...p.attributes } : {};
   return {
@@ -253,11 +289,6 @@ async function refreshDerivedAttributes(supabase, productId) {
   if (error) throw error;
 }
 
-/**
- * Upsert or delete normalized facet rows by attribute_key for the product's category.
- * @param {string} productId - catalogos.products.id
- * @param {Array<{ attribute_key: string, value_text?: string | null }>} rows
- */
 async function setAttributes(productId, rows) {
   const supabase = getSupabaseAdmin();
   const existing = await fetchProductRow(supabase, productId);
@@ -288,6 +319,7 @@ async function setAttributes(productId, rows) {
   await refreshDerivedAttributes(supabase, productId);
 }
 
+/** Sync catalogos.product_images; product_id is catalog_v2 parent id. */
 async function syncProductImages(supabase, productId, payload) {
   const primary = (payload.image_url || payload.imageUrl || '').toString().trim();
   const extra = Array.isArray(payload.images) ? payload.images : [];
@@ -313,14 +345,15 @@ async function syncProductImages(supabase, productId, payload) {
 async function fetchProductRow(supabase, idOrSku) {
   const s = String(idOrSku || '').trim();
   if (!s) return null;
+  let data;
+  let error;
   if (isUuid(s)) {
-    const { data, error } = await supabase.schema(COS).from('products').select(PRODUCT_SELECT).eq('id', s).maybeSingle();
-    if (error) throw error;
-    return data;
+    ({ data, error } = await supabase.schema(V2).from('catalog_products').select(V2_PRODUCT_SELECT).eq('id', s).maybeSingle());
+  } else {
+    ({ data, error } = await supabase.schema(V2).from('catalog_products').select(V2_PRODUCT_SELECT).eq('internal_sku', s).maybeSingle());
   }
-  const { data, error } = await supabase.schema(COS).from('products').select(PRODUCT_SELECT).eq('sku', s).maybeSingle();
   if (error) throw error;
-  return data;
+  return normalizeV2ProductRow(data);
 }
 
 async function attributeValueMap(supabase, productId) {
@@ -338,33 +371,27 @@ async function attributeValueMap(supabase, productId) {
   return m;
 }
 
-/**
- * Mutates product: sets catalog_v2_product_id when listing maps to catalog_v2.
- * @param {{ id?: unknown, catalog_v2_product_id?: unknown, sku?: unknown, name?: unknown }} product
- */
 async function attachCatalogV2ProductId(product) {
   if (!product || product.id == null) return product;
-  const key = normalizeCanonicalUuidInput(product.id);
-  if (!key) return product;
-
-  const cached = catalogV2IdByListingId.get(key);
-  if (cached) {
-    product.catalog_v2_product_id = cached;
+  if (product.catalog_v2_product_id) {
+    product.canonical_product_id = product.catalog_v2_product_id;
     return product;
   }
-
+  const key = normalizeCanonicalUuidInput(product.id);
+  if (!key) return product;
   try {
-    const v2 = await resolveCatalogV2ProductId(key);
-    catalogV2IdByListingId.set(key, v2);
-    catalogV2UnmappedListingLogged.delete(key);
-    product.catalog_v2_product_id = v2;
+    const v2Id = await resolveCatalogV2ProductId(key);
+    product.catalog_v2_product_id = v2Id;
+    product.canonical_product_id = v2Id;
+    product.listing_id = key;
+    catalogV2UnmappedLogged.delete(key);
   } catch (err) {
     const msg = err && err.message ? String(err.message) : String(err);
     const code = err && err.name ? String(err.name) : 'CatalogV2ResolveError';
-    if (!catalogV2UnmappedListingLogged.has(key)) {
-      catalogV2UnmappedListingLogged.add(key);
-      console.warn('[catalogosProductService] unmapped listing (no catalog_v2 row)', {
-        listing_id: key,
+    if (!catalogV2UnmappedLogged.has(key)) {
+      catalogV2UnmappedLogged.add(key);
+      console.warn('[catalogosProductService] catalog_v2 lookup failed', {
+        product_id: key,
         sku: product.sku != null ? String(product.sku) : '',
         name: product.name != null ? String(product.name).slice(0, 120) : '',
         resolver_error_code: code,
@@ -375,9 +402,6 @@ async function attachCatalogV2ProductId(product) {
   return product;
 }
 
-/**
- * @param {Array<{ id?: unknown }>|null|undefined} products
- */
 async function attachCatalogV2ProductIds(products) {
   for (const p of products || []) {
     await attachCatalogV2ProductId(p);
@@ -423,15 +447,15 @@ function rowMatchesFilters(flat, options) {
 async function getProducts(options = {}) {
   const supabase = getSupabaseAdmin();
   const { search, category, brand, material, powder, thickness, size, color, grade, useCase, page = 1, limit = 100 } = options;
-  let q = supabase.schema(COS).from('products').select(PRODUCT_SELECT, { count: 'exact' }).eq('is_active', true);
+  let q = supabase.schema(V2).from('catalog_products').select(V2_PRODUCT_SELECT, { count: 'exact' }).eq('status', 'active');
 
   if (search && String(search).trim()) {
     const t = String(search).trim();
-    q = q.or(`name.ilike.%${t}%,description.ilike.%${t}%,sku.ilike.%${t}%`);
+    q = q.or(`name.ilike.%${t}%,description.ilike.%${t}%,internal_sku.ilike.%${t}%`);
   }
   if (category) {
     const catId = await resolveCategoryIdForProductFilter(supabase, category);
-    if (catId) q = q.eq('category_id', catId);
+    if (catId) q = q.contains('metadata', { category_id: catId });
   }
   if (brand && String(brand).trim()) {
     const { data: br } = await supabase.schema(COS).from('brands').select('id').ilike('name', String(brand).trim()).limit(1).maybeSingle();
@@ -444,25 +468,37 @@ async function getProducts(options = {}) {
   const from = (pageNum - 1) * pageSize;
 
   if (!needsClientFilter) {
-    q = q.range(from, from + pageSize - 1).order('sku', { ascending: true });
+    q = q.range(from, from + pageSize - 1).order('internal_sku', { ascending: true });
     const { data, error, count } = await q;
     if (error) {
       console.error('[CatalogService] getProducts error', error);
       throw error;
     }
-    const products = (data || []).map((p) => rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, null)));
+    const normalized = (data || []).map((p) => normalizeV2ProductRow(p));
+    const brandById = await loadBrandNamesByIds(
+      supabase,
+      normalized.map((n) => n.brand_id),
+    );
+    const products = normalized.map((n) =>
+      rowToProduct(mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null)),
+    );
     await attachCatalogV2ProductIds(products);
     return { products, total: count ?? products.length };
   }
 
-  const { data: allRows, error, count } = await q.order('sku', { ascending: true });
+  const { data: allRows, error, count } = await q.order('internal_sku', { ascending: true });
   if (error) {
     console.error('[CatalogService] getProducts error', error);
     throw error;
   }
+  const normalizedAll = (allRows || []).map((p) => normalizeV2ProductRow(p));
+  const brandById = await loadBrandNamesByIds(
+    supabase,
+    normalizedAll.map((n) => n.brand_id),
+  );
   const matched = [];
-  for (const p of allRows || []) {
-    const flat = mapJoinedRow(p, p.categories, p.brands, p.product_images, null);
+  for (const n of normalizedAll) {
+    const flat = mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null);
     if (!rowMatchesFilters(flat, { material, powder, thickness, size, color, grade, useCase })) continue;
     matched.push(rowToProduct(flat));
   }
@@ -476,7 +512,8 @@ async function getProductById(id) {
   const p = await fetchProductRow(supabase, id);
   if (!p) return null;
   const attrMap = await attributeValueMap(supabase, p.id);
-  const out = rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, attrMap));
+  const brandById = await loadBrandNamesByIds(supabase, [p.brand_id]);
+  const out = rowToProduct(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap));
   return attachCatalogV2ProductId(out);
 }
 
@@ -485,25 +522,29 @@ async function getProductBySkuForWrite(sku) {
   const s = (sku || '').toString().replace(/\s+/g, ' ').trim();
   if (!s) return null;
   const { data, error } = await supabase
-    .schema(COS)
-    .from('products')
-    .select('id, sku, attributes, brands ( name )')
-    .eq('sku', s);
+    .schema(V2)
+    .from('catalog_products')
+    .select('id, internal_sku, metadata, brand_id')
+    .eq('internal_sku', s);
   if (error) throw error;
   if (!data || data.length === 0) return null;
   if (data.length > 1) return { ambiguous: true, rows: data };
   const r = data[0];
-  const attrs = r.attributes || {};
+  const meta = r.metadata && typeof r.metadata === 'object' ? r.metadata : {};
+  const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
+  const attrs = { ...meta, ...facet };
   const cost = attrs.unit_cost != null ? Number(attrs.unit_cost) : attrs.cost != null ? Number(attrs.cost) : null;
   const price = attrs.list_price != null ? Number(attrs.list_price) : null;
+  const brandById = await loadBrandNamesByIds(supabase, [r.brand_id]);
+  const brandName = brandFromMap({ brand_id: r.brand_id }, brandById)?.name || attrs.merch_brand || '';
   return {
     id: r.id,
-    sku: r.sku,
+    sku: r.internal_sku,
     cost,
     price,
     bulk_price: attrs.bulk_price != null ? Number(attrs.bulk_price) : null,
     case_qty: attrs.case_qty ?? null,
-    brand: r.brands?.name || attrs.merch_brand || '',
+    brand: brandName,
   };
 }
 
@@ -511,14 +552,31 @@ async function getProductBySlug(slug, categorySegment) {
   const supabase = getSupabaseAdmin();
   const slugLower = (slug || '').toString().trim().toLowerCase();
   if (!slugLower) return null;
-  const { data: rows, error } = await supabase.schema(COS).from('products').select(PRODUCT_SELECT).or(`slug.eq.${slugLower},slug.is.null`);
+  let { data: rows, error } = await supabase.schema(V2).from('catalog_products').select(V2_PRODUCT_SELECT).eq('slug', slugLower);
   if (error) throw error;
-  let list = (rows || []).filter((r) => (r.slug || slugFromName(r.name)) === slugLower);
+  let list = (rows || []).map(normalizeV2ProductRow);
+  if (list.length === 0) {
+    const { data: candidates, error: cErr } = await supabase
+      .schema(V2)
+      .from('catalog_products')
+      .select(V2_PRODUCT_SELECT)
+      .eq('status', 'active')
+      .limit(800);
+    if (cErr) throw cErr;
+    list = (candidates || [])
+      .map(normalizeV2ProductRow)
+      .filter((r) => String(r.slug || slugFromName(r.name) || '')
+        .toLowerCase() === slugLower);
+  }
+  const brandById = await loadBrandNamesByIds(
+    supabase,
+    list.map((r) => r.brand_id),
+  );
   if (list.length > 1 && categorySegment) {
     const seg = (categorySegment || '').toLowerCase().replace(/\s+/g, '-');
     for (const r of list) {
       const attrMap = await attributeValueMap(supabase, r.id);
-      const flat = mapJoinedRow(r, r.categories, r.brands, r.product_images, attrMap);
+      const flat = mapJoinedRow(r, null, brandFromMap(r, brandById), r.product_images, attrMap);
       const mat = (flat.material || '').toLowerCase().replace(/\s+/g, '-');
       const sub = (flat.subcategory || '').toLowerCase().replace(/\s+/g, '-');
       const cat = (flat.category || '').toLowerCase().replace(/\s+/g, '-');
@@ -532,7 +590,7 @@ async function getProductBySlug(slug, categorySegment) {
   const row = list.length > 0 ? list[0] : null;
   if (!row) return null;
   const attrMap = await attributeValueMap(supabase, row.id);
-  const out = rowToProduct(mapJoinedRow(row, row.categories, row.brands, row.product_images, attrMap));
+  const out = rowToProduct(mapJoinedRow(row, null, brandFromMap(row, brandById), row.product_images, attrMap));
   out.slug = slugLower;
   return attachCatalogV2ProductId(out);
 }
@@ -540,7 +598,7 @@ async function getProductBySlug(slug, categorySegment) {
 async function getProductsForIndustry(useCase) {
   const supabase = getSupabaseAdmin();
   const use = (useCase || '').toLowerCase();
-  let q = supabase.schema(COS).from('products').select(PRODUCT_SELECT);
+  let q = supabase.schema(V2).from('catalog_products').select(V2_PRODUCT_SELECT);
   if (use === 'healthcare') {
     q = q.or('name.ilike.%healthcare%,name.ilike.%medical%,name.ilike.%exam%,name.ilike.%hospital%,description.ilike.%healthcare%,description.ilike.%medical%');
   } else if (use === 'food service' || use === 'foodservice') {
@@ -554,12 +612,17 @@ async function getProductsForIndustry(useCase) {
   } else if (use === 'automotive') {
     q = q.or('name.ilike.%automotive%,name.ilike.%mechanic%,description.ilike.%automotive%');
   }
-  const { data, error } = await q.eq('is_active', true).limit(500);
+  const { data, error } = await q.eq('status', 'active').limit(500);
   if (error) throw error;
+  const normalized = (data || []).map((raw) => normalizeV2ProductRow(raw));
+  const brandById = await loadBrandNamesByIds(
+    supabase,
+    normalized.map((p) => p.brand_id),
+  );
   const out = [];
-  for (const p of data || []) {
+  for (const p of normalized) {
     const attrMap = await attributeValueMap(supabase, p.id);
-    out.push(rowToProduct(mapJoinedRow(p, p.categories, p.brands, p.product_images, attrMap)));
+    out.push(rowToProduct(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap)));
   }
   await attachCatalogV2ProductIds(out);
   return out;
@@ -569,26 +632,44 @@ async function createProduct(payload) {
   const supabase = getSupabaseAdmin();
   const categoryId = await resolveCategoryId(supabase, payload);
   const brandId = await resolveBrandId(supabase, payload.brand);
-  const slug = payload.slug || slugFromName(payload.name);
+  let slug = payload.slug || slugFromName(payload.name);
+  const sku = (payload.sku || '').toString().trim();
+  if (!sku) throw new Error('sku required');
+  const { data: slugClash } = await supabase.schema(V2).from('catalog_products').select('id').eq('slug', slug || 'x').maybeSingle();
+  if (slugClash?.id) slug = `${slug || 'p'}-${Date.now().toString(36)}`;
   const attrsJson = mergeMerchIntoAttributesJson(payload, {});
-  const insert = {
-    sku: (payload.sku || '').toString().trim(),
-    name: payload.name || '',
-    category_id: categoryId,
-    brand_id: brandId,
-    manufacturer_id:
-      payload.manufacturer_id != null && Number.isFinite(Number(payload.manufacturer_id)) && Number(payload.manufacturer_id) > 0
-        ? Number(payload.manufacturer_id)
-        : null,
-    description: payload.description || null,
-    attributes: attrsJson,
-    is_active: payload.in_stock == null || Number(payload.in_stock) !== 0,
-    slug: slug || null,
-    updated_at: new Date().toISOString(),
-  };
-  const { data, error } = await supabase.schema(COS).from('products').insert(insert).select('id').single();
+  const meta = { category_id: categoryId, facet_attributes: attrsJson };
+  const status = payload.in_stock == null || Number(payload.in_stock) !== 0 ? 'active' : 'draft';
+  const { data, error } = await supabase
+    .schema(V2)
+    .from('catalog_products')
+    .insert({
+      product_type_id: V2_DEFAULT_PRODUCT_TYPE_ID,
+      slug: slug || slugFromName(payload.name || sku) || `p-${Date.now().toString(36)}`,
+      internal_sku: sku,
+      name: payload.name || '',
+      description: payload.description || null,
+      brand_id: brandId,
+      manufacturer_id:
+        payload.manufacturer_id != null && Number.isFinite(Number(payload.manufacturer_id)) && Number(payload.manufacturer_id) > 0
+          ? Number(payload.manufacturer_id)
+          : null,
+      status,
+      metadata: meta,
+      updated_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
   if (error) throw error;
   const id = data.id;
+  const { error: vErr } = await supabase.schema(V2).from('catalog_variants').insert({
+    catalog_product_id: id,
+    variant_sku: sku,
+    sort_order: 0,
+    is_active: status === 'active',
+    metadata: {},
+  });
+  if (vErr) throw vErr;
   await syncProductAttributes(supabase, id, categoryId, payload);
   await syncProductImages(supabase, id, payload);
   return getProductById(id);
@@ -603,13 +684,21 @@ async function updateProduct(id, payload) {
       ? await resolveCategoryId(supabase, payload)
       : existing.category_id;
   const brandId = payload.brand !== undefined ? await resolveBrandId(supabase, payload.brand) : existing.brand_id;
-  const attrsJson = mergeMerchIntoAttributesJson(payload, existing.attributes || {});
+  const prevMeta = existing.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
+  const prevFacet = prevMeta.facet_attributes && typeof prevMeta.facet_attributes === 'object' ? prevMeta.facet_attributes : {};
+  const attrsJson = mergeMerchIntoAttributesJson(payload, prevFacet);
+  const meta = { ...prevMeta, category_id: categoryId, facet_attributes: attrsJson };
+  const status =
+    payload.in_stock !== undefined ? (Number(payload.in_stock) !== 0 ? 'active' : 'draft') : existing.is_active ? 'active' : 'draft';
+  let slug = existing.slug;
+  if (payload.slug !== undefined || payload.name !== undefined) {
+    slug = payload.slug != null ? payload.slug : existing.slug || slugFromName(payload.name !== undefined ? payload.name : existing.name);
+  }
   const updates = {
     updated_at: new Date().toISOString(),
-    sku: payload.sku !== undefined ? payload.sku : existing.sku,
+    internal_sku: payload.sku !== undefined ? payload.sku : existing.internal_sku || existing.sku,
     name: payload.name !== undefined ? payload.name : existing.name,
     description: payload.description !== undefined ? payload.description : existing.description,
-    category_id: categoryId,
     brand_id: brandId,
     manufacturer_id:
       payload.manufacturer_id !== undefined
@@ -617,13 +706,11 @@ async function updateProduct(id, payload) {
           ? Number(payload.manufacturer_id)
           : null
         : existing.manufacturer_id ?? null,
-    attributes: attrsJson,
-    is_active: payload.in_stock !== undefined ? Number(payload.in_stock) !== 0 : existing.is_active,
+    metadata: meta,
+    status,
+    slug: slug || undefined,
   };
-  if (payload.slug !== undefined || payload.name !== undefined) {
-    updates.slug = payload.slug != null ? payload.slug : existing.slug || slugFromName(updates.name);
-  }
-  const { error } = await supabase.schema(COS).from('products').update(updates).eq('id', existing.id);
+  const { error } = await supabase.schema(V2).from('catalog_products').update(updates).eq('id', existing.id);
   if (error) throw error;
   await syncProductAttributes(supabase, existing.id, categoryId, payload);
   await syncProductImages(supabase, existing.id, payload);
@@ -644,7 +731,7 @@ async function deleteProduct(id) {
   if (delImg) throw delImg;
   const { error: delAttr } = await supabase.schema(COS).from('product_attributes').delete().eq('product_id', existing.id);
   if (delAttr) throw delAttr;
-  const { error } = await supabase.schema(COS).from('products').delete().eq('id', existing.id);
+  const { error } = await supabase.schema(V2).from('catalog_products').delete().eq('id', existing.id);
   if (error) throw error;
 }
 
@@ -664,14 +751,10 @@ async function deleteProductsByIds(ids) {
 
 async function getCategories() {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .schema(COS)
-    .from('products')
-    .select('categories(name)')
-    .eq('is_active', true);
+  const { data, error } = await supabase.schema(COS).from('categories').select('name').order('name', { ascending: true });
   if (error) throw error;
-  const set = new Set((data || []).map((r) => r.categories?.name).filter(Boolean));
-  return [...set].sort();
+  const names = (data || []).map((r) => r.name).filter(Boolean);
+  return [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
 async function getBrands() {
@@ -686,7 +769,12 @@ async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {
   const supabase = getSupabaseAdmin();
   const skuClean = (sku || '').toString().trim();
   if (!skuClean) return { skipped: true };
-  const { data: existing } = await supabase.schema(COS).from('products').select('id, attributes, category_id').eq('sku', skuClean).maybeSingle();
+  const { data: existing } = await supabase
+    .schema(V2)
+    .from('catalog_products')
+    .select('id, metadata')
+    .eq('internal_sku', skuClean)
+    .maybeSingle();
   const payload = {
     sku: skuClean,
     name: name || skuClean,
@@ -696,9 +784,17 @@ async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {
     images: image_url ? [image_url] : [],
   };
   if (existing?.id) {
-    const attrsJson = mergeMerchIntoAttributesJson(payload, existing.attributes || {});
-    await supabase.schema(COS).from('products').update({ name: payload.name, attributes: attrsJson, updated_at: new Date().toISOString() }).eq('id', existing.id);
-    await syncProductAttributes(supabase, existing.id, existing.category_id, payload);
+    const prevMeta = existing.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
+    const prevFacet = prevMeta.facet_attributes && typeof prevMeta.facet_attributes === 'object' ? prevMeta.facet_attributes : {};
+    const attrsJson = mergeMerchIntoAttributesJson(payload, prevFacet);
+    const meta = { ...prevMeta, facet_attributes: attrsJson };
+    await supabase
+      .schema(V2)
+      .from('catalog_products')
+      .update({ name: payload.name, metadata: meta, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    const catId = prevMeta.category_id || (await resolveDefaultCategoryId(supabase));
+    await syncProductAttributes(supabase, existing.id, catId, payload);
     if (image_url) await syncProductImages(supabase, existing.id, payload);
     return { updated: true, id: existing.id };
   }

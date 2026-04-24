@@ -39,8 +39,13 @@ export async function getProductIdsMatchingSearch(term: string, categorySlug?: s
   const ids = new Set<string>();
 
   const baseProducts = () => {
-    let pq = supabase.from("products").select("id").eq("is_active", true).limit(MAX_IDS_PER_QUERY);
-    if (categoryId) pq = pq.eq("category_id", categoryId);
+    let pq = supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id")
+      .eq("status", "active")
+      .limit(MAX_IDS_PER_QUERY);
+    if (categoryId) pq = pq.contains("metadata", { category_id: categoryId });
     return pq;
   };
 
@@ -50,7 +55,7 @@ export async function getProductIdsMatchingSearch(term: string, categorySlug?: s
 
   const [n1, n2, n3] = await Promise.all([
     baseProducts().ilike("name", pattern),
-    baseProducts().ilike("sku", pattern),
+    baseProducts().ilike("internal_sku", pattern),
     baseProducts().not("description", "is", null).ilike("description", pattern),
   ]);
   merge(n1.data as { id: string }[]);
@@ -64,8 +69,14 @@ export async function getProductIdsMatchingSearch(term: string, categorySlug?: s
     .limit(MAX_BRAND_MATCH);
   const brandIds = (brandRows ?? []).map((b: { id: string }) => b.id).filter(Boolean);
   if (brandIds.length > 0) {
-    let bq = supabase.from("products").select("id").eq("is_active", true).in("brand_id", brandIds).limit(MAX_IDS_PER_QUERY);
-    if (categoryId) bq = bq.eq("category_id", categoryId);
+    let bq = supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id")
+      .eq("status", "active")
+      .in("brand_id", brandIds)
+      .limit(MAX_IDS_PER_QUERY);
+    if (categoryId) bq = bq.contains("metadata", { category_id: categoryId });
     const { data: byBrand } = await bq;
     merge(byBrand as { id: string }[]);
   }

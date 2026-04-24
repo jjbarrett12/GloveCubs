@@ -179,13 +179,15 @@ export async function runMatchingWithAIFallback(
 
 async function loadMasterCandidates(categoryId: string): Promise<MasterProductRow[]> {
   const { getSupabaseCatalogos } = await import("@/lib/db/client");
+  const { v2RowToMasterShape } = await import("@/lib/catalog/v2-master-product");
   const supabase = getSupabaseCatalogos(true);
   const { data } = await supabase
-    .from("products")
-    .select("id, sku, name, category_id, attributes")
-    .eq("category_id", categoryId)
-    .eq("is_active", true);
-  return (data ?? []) as MasterProductRow[];
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, name, metadata")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId });
+  return (data ?? []).map((r) => v2RowToMasterShape(r as { id: string; internal_sku: string | null; name: string; metadata: unknown }));
 }
 
 /**

@@ -6,6 +6,7 @@
 
 import type { NormalizedData, MatchResult } from "./types";
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { v2RowToMasterShape } from "@/lib/catalog/v2-master-product";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -33,13 +34,14 @@ export interface MatchInput {
 export async function loadMasterProducts(categoryId: string): Promise<MasterProductRow[]> {
   const supabase = getSupabaseCatalogos(true);
   const { data, error } = await supabase
-    .from("products")
-    .select("id, sku, name, category_id, attributes")
-    .eq("category_id", categoryId)
-    .eq("is_active", true);
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, name, metadata")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId });
 
   if (error) throw new Error(`Failed to load master products: ${error.message}`);
-  return (data ?? []) as MasterProductRow[];
+  return (data ?? []).map((r) => v2RowToMasterShape(r as { id: string; internal_sku: string | null; name: string; metadata: unknown }));
 }
 
 /**

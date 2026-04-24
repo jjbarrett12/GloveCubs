@@ -315,8 +315,17 @@ export async function getOffersCreatedByBatch(batchId: string, limit = 500): Pro
   if (error) throw new Error(error.message);
   const list = (offers ?? []) as OfferMonitorRow[];
   const productIds = [...new Set(list.map((o) => o.product_id))];
-  const { data: products } = await supabase.from("products").select("id, sku, name").in("id", productIds);
-  const byId = new Map((products ?? []).map((p: { id: string; sku: string; name: string }) => [p.id, { sku: p.sku, name: p.name }]));
+  const { data: products } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, internal_sku, name")
+    .in("id", productIds);
+  const byId = new Map(
+    (products ?? []).map((p: { id: string; internal_sku: string | null; name: string }) => [
+      p.id,
+      { sku: p.internal_sku ?? "", name: p.name },
+    ])
+  );
   list.forEach((o) => {
     const p = byId.get(o.product_id);
     if (p) {

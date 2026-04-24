@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import { scoreAttributes, scoreTitleSimilarity } from "./scoring";
 import type { MasterForScoring } from "./scoring";
 
@@ -24,16 +25,19 @@ export async function findDuplicateCandidates(
 ): Promise<DuplicatePair[]> {
   const supabase = getSupabaseCatalogos(true);
   const { data: products, error } = await supabase
-    .from("products")
-    .select("id, name, category_id, attributes")
-    .eq("category_id", categoryId)
-    .eq("is_active", true);
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id, name, metadata")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId });
 
   if (error || !products?.length) return [];
 
-  const masters: MasterForScoring[] = (products as { id: string; name: string; attributes: Record<string, unknown> }[]).map(
-    (p) => ({ id: p.id, name: p.name, attributes: p.attributes ?? {} })
-  );
+  const masters: MasterForScoring[] = (products as { id: string; name: string; metadata?: unknown }[]).map((p) => ({
+    id: p.id,
+    name: p.name,
+    attributes: flattenV2Metadata(p.metadata),
+  }));
 
   const pairs: DuplicatePair[] = [];
   const seen = new Set<string>();

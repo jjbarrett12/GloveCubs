@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Fails if selected runtime trees reference catalogos listing table.
- * catalogos/ app package is scanned separately in CI when that package is migrated.
+ * Fails if runtime trees reference the legacy catalogos listing products table
+ * (schema(catalogos).from('products'), COS/CATALOGOS_SCHEMA chains, raw catalogos.products, or forbidden .from('products') in allowlisted files).
  */
 const fs = require('fs');
 const path = require('path');
@@ -12,11 +12,35 @@ const SCAN_ROOTS = [
   path.join(ROOT, 'storefront', 'src'),
   path.join(ROOT, 'lib'),
   path.join(ROOT, 'services'),
+  path.join(ROOT, 'catalogos', 'src'),
 ];
 
-const FORBIDDEN = /\.schema\s*\(\s*['"]catalogos['"]\s*\)[\s\S]{0,400}\.from\s*\(\s*['"]products['"]\s*\)/;
-
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', 'coverage']);
+
+/** Absolute paths normalized for comparison (POSIX slashes, lowercased). */
+function normAbsPath(absPath) {
+  return path.resolve(absPath).replace(/\\/g, '/').toLowerCase();
+}
+
+const KNOWN_FROM_PRODUCTS_FILES = new Set([
+  normAbsPath(path.join(ROOT, 'services', 'catalogosProductService.js')),
+]);
+
+const SCHEMA_PRODUCT_CHAIN_RULES = [
+  { name: 'schema("catalogos"|\'catalogos\').from("products")', re: /\.schema\s*\(\s*['"]catalogos['"]\s*\)[\s\S]{0,1200}\.from\s*\(\s*['"]products['"]\s*\)/ },
+  { name: 'schema(`catalogos`).from("products")', re: /\.schema\s*\(\s*`catalogos`\s*\)[\s\S]{0,1200}\.from\s*\(\s*['"]products['"]\s*\)/ },
+  { name: 'schema(COS).from("products")', re: /\.schema\s*\(\s*COS\s*\)[\s\S]{0,1200}\.from\s*\(\s*['"]products['"]\s*\)/ },
+  { name: 'schema(CATALOGOS_SCHEMA).from("products")', re: /\.schema\s*\(\s*CATALOGOS_SCHEMA\s*\)[\s\S]{0,1200}\.from\s*\(\s*['"]products['"]\s*\)/ },
+  {
+    name: 'supabase.schema(<catalogos alias>).from("products")',
+    re: /\.schema\s*\(\s*(?:COS|CATALOGOS_SCHEMA|['"]catalogos['"]|`catalogos`)\s*\)[\s\S]{0,1200}\.from\s*\(\s*['"]products['"]\s*\)/,
+  },
+];
+
+/** SQL / DDL style references only (avoids docstrings that mention the legacy table name). */
+const RAW_SQL_CATALOGOS_PRODUCTS = /\b(from|join|into|update|truncate)\s+catalogos\.products\b/i;
+
+const FROM_PRODUCTS = /\.from\s*\(\s*['"]products['"]\s*\)/;
 
 function* walk(dir) {
   if (!fs.existsSync(dir)) return;
@@ -32,17 +56,49 @@ function* walk(dir) {
   }
 }
 
+function violationsForFile(file, text) {
+  const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+  const out = [];
+  const isUnderMigrations = rel.startsWith('supabase/migrations/');
+
+  for (const { name, re } of SCHEMA_PRODUCT_CHAIN_RULES) {
+    re.lastIndex = 0;
+    if (re.test(text)) out.push(name);
+  }
+
+  if (!isUnderMigrations && RAW_SQL_CATALOGOS_PRODUCTS.test(text)) {
+    out.push('SQL/DML reference to catalogos.products table');
+  }
+
+  const n = normAbsPath(file);
+  if (KNOWN_FROM_PRODUCTS_FILES.has(n)) {
+    FROM_PRODUCTS.lastIndex = 0;
+    if (FROM_PRODUCTS.test(text)) {
+      out.push('services/catalogosProductService.js must use catalog_v2.catalog_products only (no .from(products))');
+    }
+  }
+
+  if (rel.startsWith('catalogos/src/')) {
+    FROM_PRODUCTS.lastIndex = 0;
+    if (FROM_PRODUCTS.test(text)) {
+      out.push('catalogos/src runtime .from(products) — use schema("catalog_v2").from("catalog_products")');
+    }
+  }
+
+  return out;
+}
+
 let failed = false;
 for (const root of SCAN_ROOTS) {
   for (const file of walk(root)) {
     const text = fs.readFileSync(file, 'utf8');
-    FORBIDDEN.lastIndex = 0;
-    if (FORBIDDEN.test(text)) {
-      console.error(`FORBIDDEN catalogos.products chain in ${path.relative(ROOT, file)}`);
+    const v = violationsForFile(file, text);
+    if (v.length) {
       failed = true;
+      console.error(`FORBIDDEN (${v.join(' | ')}) in ${path.relative(ROOT, file)}`);
     }
   }
 }
 
 if (failed) process.exit(1);
-console.log('check-no-catalogos-products: OK (storefront/src, lib, services)');
+console.log('check-no-catalogos-products: OK (storefront/src, lib, services, catalogos/src)');

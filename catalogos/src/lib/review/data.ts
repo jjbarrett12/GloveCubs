@@ -5,6 +5,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { v2RowToMasterShape } from "@/lib/catalog/v2-master-product";
 import type { FamilyGroupMetaV1 } from "@/lib/variant-family";
 import { matchesStagingSearchRow, normalizeSearchQuery } from "./staging-search";
 
@@ -599,12 +600,19 @@ export async function getStagingRows(filters: StagingFilters & { limit?: number 
   const [suppliersRes, batchesRes, mastersRes] = await Promise.all([
     supplierIds.length ? supabase.from("suppliers").select("id, name").in("id", supplierIds) : { data: [] },
     batchIds.length ? supabase.from("import_batches").select("id, started_at").in("id", batchIds) : { data: [] },
-    masterIds.length ? supabase.from("products").select("id, sku, name").in("id", masterIds) : { data: [] },
+    masterIds.length
+      ? supabase.schema("catalog_v2").from("catalog_products").select("id, internal_sku, name, metadata").in("id", masterIds)
+      : { data: [] },
   ]);
 
   const supplierNames = new Map((suppliersRes.data ?? []).map((s: { id: string; name: string }) => [s.id, s.name]));
   const batchStarted = new Map((batchesRes.data ?? []).map((b: { id: string; started_at: string }) => [b.id, b.started_at]));
-  const masterInfo = new Map((mastersRes.data ?? []).map((p: { id: string; sku: string; name: string }) => [p.id, { sku: p.sku, name: p.name }]));
+  const masterInfo = new Map(
+    (mastersRes.data ?? []).map((p: { id: string; internal_sku: string | null; name: string; metadata: unknown }) => {
+      const s = v2RowToMasterShape(p);
+      return [p.id, { sku: s.sku, name: s.name }];
+    })
+  );
 
   result.forEach((r) => {
     r.supplier_name = supplierNames.get(r.supplier_id);
@@ -643,8 +651,16 @@ export async function getStagingById(id: string) {
     r.raw = raw;
   }
   if (r.master_product_id) {
-    const { data: master } = await supabase.from("products").select("id, sku, name, category_id").eq("id", r.master_product_id).single();
-    r.master_product = master;
+    const { data: master } = await supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("id, internal_sku, name, metadata")
+      .eq("id", r.master_product_id)
+      .single();
+    if (master) {
+      const s = v2RowToMasterShape(master as { id: string; internal_sku: string | null; name: string; metadata: unknown });
+      r.master_product = { id: s.id, sku: s.sku, name: s.name, category_id: s.category_id || null };
+    }
   }
   if (r.supplier_id) {
     const { data: sup } = await supabase.from("suppliers").select("id, name").eq("id", r.supplier_id).single();

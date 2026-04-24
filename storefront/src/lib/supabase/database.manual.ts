@@ -122,7 +122,7 @@ export interface OrdersRow {
 
 export interface InventoryRow {
   id: number;
-  /** Legacy live_product_id (public.products.id) when present; API may derive from catalogos.products.live_product_id. */
+  /** Legacy live_product_id (public.products.id) when present; API may derive from legacy listing live_product_id. */
   product_id?: number | null;
   canonical_product_id: string | null;
   quantity_on_hand: number;
