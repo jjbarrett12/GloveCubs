@@ -218,10 +218,18 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
       .select("name, internal_sku")
       .eq("id", masterId)
       .single();
+    const listPriceMinor = Number.isFinite(cost) ? Math.round(cost * 100) : null;
+    if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
+      errors.push(`Staging ${stagingId}: sellable list price missing (invalid cost)`);
+      continue;
+    }
+    const unitCostMinor = Number.isFinite(cost) ? Math.round(cost * 100) : null;
     const sellable = await upsertSellableForCatalogV2Product(masterId, {
       name: (v2n as { name?: string })?.name ?? displayName,
       internalSku: ((v2n as { internal_sku?: string | null })?.internal_sku ?? skuForSellable).trim(),
-      listPriceMinor: Number.isFinite(cost) ? Math.round(cost * 100) : null,
+      listPriceMinor,
+      bulkPriceMinor: null,
+      unitCostMinor,
       isActive: true,
     });
     if (!sellable.ok) {

@@ -6,9 +6,12 @@
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
 const { normalizeCanonicalUuidInput } = require('../lib/resolve-canonical-product-id');
 const { resolveCatalogV2ProductId } = require('../lib/resolve-catalog-v2-product-id');
+const { dollarsToMinor, minorToDollars } = require('../lib/gcOrderNormalize');
+const { pricingDollarsFromSellableRow, MissingSellablePricingError } = require('../lib/sellable-product-pricing');
 
 const COS = 'catalogos';
 const V2 = 'catalog_v2';
+const GC = 'gc_commerce';
 const V2_DEFAULT_PRODUCT_TYPE_ID = 'b1111111-1111-4111-8111-111111111111';
 
 const catalogV2UnmappedLogged = new Set();
@@ -94,14 +97,27 @@ function normalizeV2ProductRow(p) {
   };
 }
 
-function rowToProduct(row) {
+const PRICING_ATTR_KEYS = ['list_price', 'bulk_price', 'unit_cost', 'cost', 'retail_price'];
+
+function scrubPricingKeysFromAttributes(attrs) {
+  const a = attrs && typeof attrs === 'object' ? { ...attrs } : {};
+  for (const k of PRICING_ATTR_KEYS) delete a[k];
+  return a;
+}
+
+/**
+ * @param {object} row - mapJoinedRow / flat v2 listing shape
+ * @param {object} sellableRow - gc_commerce.sellable_products row for this catalog_product_id
+ */
+function rowToProduct(row, sellableRow) {
   if (!row) return null;
   const r = row;
-  const attrs = r.attributes && typeof r.attributes === 'object' ? r.attributes : {};
-  const listPrice = attrs.list_price != null ? Number(attrs.list_price) : attrs.retail_price != null ? Number(attrs.retail_price) : null;
-  const unitCost = attrs.unit_cost != null ? Number(attrs.unit_cost) : attrs.cost != null ? Number(attrs.cost) : null;
-  const bulkPrice = attrs.bulk_price != null ? Number(attrs.bulk_price) : null;
+  const attrs = scrubPricingKeysFromAttributes(r.attributes && typeof r.attributes === 'object' ? r.attributes : {});
   const idStr = r.id != null ? String(r.id) : '';
+  const { price, list_price, bulk_price, cost } = pricingDollarsFromSellableRow({
+    ...sellableRow,
+    catalog_product_id: idStr,
+  });
   return {
     id: idStr,
     sku: r.sku || r.internal_sku || '',
@@ -116,10 +132,10 @@ function rowToProduct(row) {
     color: r.color || '',
     pack_qty: r.pack_qty ?? null,
     case_qty: r.case_qty ?? null,
-    list_price: listPrice,
-    price: listPrice != null ? listPrice : unitCost != null ? Number(unitCost) : 0,
-    bulk_price: bulkPrice,
-    cost: unitCost,
+    list_price,
+    price,
+    bulk_price,
+    cost,
     image_url: r.image_url || '',
     images: Array.isArray(r.images) ? r.images : [],
     in_stock: r.in_stock != null ? r.in_stock : r.is_active === false ? 0 : 1,
@@ -240,11 +256,11 @@ async function loadAttributeDefinitions(supabase, categoryId) {
 
 function mergeMerchIntoAttributesJson(payload, existingAttrs) {
   const base = existingAttrs && typeof existingAttrs === 'object' ? { ...existingAttrs } : {};
+  for (const k of PRICING_ATTR_KEYS) delete base[k];
   const fromPayload = payload.attributes && typeof payload.attributes === 'object' ? { ...payload.attributes } : {};
+  for (const k of PRICING_ATTR_KEYS) delete fromPayload[k];
   const out = { ...base, ...fromPayload };
-  if (payload.price !== undefined) out.list_price = payload.price;
-  if (payload.cost !== undefined) out.unit_cost = payload.cost;
-  if (payload.bulk_price !== undefined) out.bulk_price = payload.bulk_price;
+  for (const k of PRICING_ATTR_KEYS) delete out[k];
   if (payload.pack_qty !== undefined) out.pack_qty = payload.pack_qty;
   if (payload.case_qty !== undefined) out.case_qty = payload.case_qty;
   if (payload.featured !== undefined) out.featured = payload.featured;
@@ -252,6 +268,81 @@ function mergeMerchIntoAttributesJson(payload, existingAttrs) {
   if (payload.source_confidence) out.source_confidence = payload.source_confidence;
   if (payload.brand) out.merch_brand = payload.brand;
   return out;
+}
+
+/**
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {string[]} catalogIds - catalog_v2.catalog_products.id
+ * @returns {Promise<Map<string, object>>}
+ */
+async function fetchActiveSellableMap(supabase, catalogIds) {
+  const ids = [...new Set((catalogIds || []).filter(Boolean).map((id) => String(id)))];
+  const m = new Map();
+  if (ids.length === 0) return m;
+  const { data, error } = await supabase
+    .schema(GC)
+    .from('sellable_products')
+    .select('catalog_product_id, list_price_minor, bulk_price_minor, unit_cost_minor, sku, display_name, is_active')
+    .in('catalog_product_id', ids)
+    .eq('is_active', true);
+  if (error) throw error;
+  for (const r of data || []) {
+    const cid = r.catalog_product_id != null ? String(r.catalog_product_id) : '';
+    if (cid && !m.has(cid)) m.set(cid, r);
+  }
+  return m;
+}
+
+/**
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ */
+async function upsertSellablePricingForCatalogProduct(supabase, params) {
+  const {
+    catalogProductId,
+    sku,
+    displayName,
+    price,
+    bulk_price,
+    cost,
+    isActive = true,
+  } = params;
+  const pid = String(catalogProductId || '').trim();
+  const skuTrim = String(sku || '').trim();
+  if (!pid || !skuTrim) throw new Error('upsertSellablePricingForCatalogProduct requires catalogProductId and sku');
+  if (price == null || price === '' || !Number.isFinite(Number(price))) {
+    throw new Error('upsertSellablePricingForCatalogProduct requires finite price (list, USD)');
+  }
+  const listMinor = dollarsToMinor(Number(price));
+  let bulkMinor = null;
+  if (bulk_price != null && bulk_price !== '' && Number.isFinite(Number(bulk_price))) {
+    bulkMinor = dollarsToMinor(Number(bulk_price));
+  }
+  let costMinor = null;
+  if (cost != null && cost !== '' && Number.isFinite(Number(cost))) {
+    costMinor = dollarsToMinor(Number(cost));
+  }
+  const now = new Date().toISOString();
+  const { error: sellErr } = await supabase.schema(GC).from('sellable_products').upsert(
+    {
+      sku: skuTrim,
+      display_name: String(displayName || skuTrim || 'Product').trim(),
+      catalog_product_id: pid,
+      currency_code: 'USD',
+      list_price_minor: listMinor,
+      bulk_price_minor: bulkMinor,
+      unit_cost_minor: costMinor,
+      is_active: isActive !== false,
+      updated_at: now,
+    },
+    { onConflict: 'sku' },
+  );
+  if (sellErr) throw sellErr;
+}
+
+function rowToProductWithSellableMap(flat, sellableMap) {
+  const idStr = flat.id != null ? String(flat.id) : '';
+  const sp = sellableMap.get(idStr);
+  return rowToProduct(flat, sp);
 }
 
 async function syncProductAttributes(supabase, productId, categoryId, payload) {
@@ -479,8 +570,12 @@ async function getProducts(options = {}) {
       supabase,
       normalized.map((n) => n.brand_id),
     );
+    const sellableMap = await fetchActiveSellableMap(
+      supabase,
+      normalized.map((n) => n.id),
+    );
     const products = normalized.map((n) =>
-      rowToProduct(mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null)),
+      rowToProductWithSellableMap(mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null), sellableMap),
     );
     await attachCatalogV2ProductIds(products);
     return { products, total: count ?? products.length };
@@ -496,11 +591,15 @@ async function getProducts(options = {}) {
     supabase,
     normalizedAll.map((n) => n.brand_id),
   );
+  const sellableMapAll = await fetchActiveSellableMap(
+    supabase,
+    normalizedAll.map((n) => n.id),
+  );
   const matched = [];
   for (const n of normalizedAll) {
     const flat = mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null);
     if (!rowMatchesFilters(flat, { material, powder, thickness, size, color, grade, useCase })) continue;
-    matched.push(rowToProduct(flat));
+    matched.push(rowToProductWithSellableMap(flat, sellableMapAll));
   }
   const slice = matched.slice(from, from + pageSize);
   await attachCatalogV2ProductIds(slice);
@@ -513,7 +612,8 @@ async function getProductById(id) {
   if (!p) return null;
   const attrMap = await attributeValueMap(supabase, p.id);
   const brandById = await loadBrandNamesByIds(supabase, [p.brand_id]);
-  const out = rowToProduct(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap));
+  const sellableMap = await fetchActiveSellableMap(supabase, [p.id]);
+  const out = rowToProductWithSellableMap(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap), sellableMap);
   return attachCatalogV2ProductId(out);
 }
 
@@ -532,9 +632,10 @@ async function getProductBySkuForWrite(sku) {
   const r = data[0];
   const meta = r.metadata && typeof r.metadata === 'object' ? r.metadata : {};
   const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
-  const attrs = { ...meta, ...facet };
-  const cost = attrs.unit_cost != null ? Number(attrs.unit_cost) : attrs.cost != null ? Number(attrs.cost) : null;
-  const price = attrs.list_price != null ? Number(attrs.list_price) : null;
+  const attrs = scrubPricingKeysFromAttributes({ ...meta, ...facet });
+  const sellableMap = await fetchActiveSellableMap(supabase, [r.id]);
+  const sp = sellableMap.get(String(r.id));
+  const { price, bulk_price, cost } = pricingDollarsFromSellableRow({ ...sp, catalog_product_id: String(r.id) });
   const brandById = await loadBrandNamesByIds(supabase, [r.brand_id]);
   const brandName = brandFromMap({ brand_id: r.brand_id }, brandById)?.name || attrs.merch_brand || '';
   return {
@@ -542,7 +643,7 @@ async function getProductBySkuForWrite(sku) {
     sku: r.internal_sku,
     cost,
     price,
-    bulk_price: attrs.bulk_price != null ? Number(attrs.bulk_price) : null,
+    bulk_price,
     case_qty: attrs.case_qty ?? null,
     brand: brandName,
   };
@@ -572,6 +673,10 @@ async function getProductBySlug(slug, categorySegment) {
     supabase,
     list.map((r) => r.brand_id),
   );
+  const sellableSlugMap = await fetchActiveSellableMap(
+    supabase,
+    list.map((r) => r.id),
+  );
   if (list.length > 1 && categorySegment) {
     const seg = (categorySegment || '').toLowerCase().replace(/\s+/g, '-');
     for (const r of list) {
@@ -581,7 +686,7 @@ async function getProductBySlug(slug, categorySegment) {
       const sub = (flat.subcategory || '').toLowerCase().replace(/\s+/g, '-');
       const cat = (flat.category || '').toLowerCase().replace(/\s+/g, '-');
       if (mat === seg || sub === seg || cat === seg) {
-        const out = rowToProduct(flat);
+        const out = rowToProductWithSellableMap(flat, sellableSlugMap);
         out.slug = slugLower;
         return attachCatalogV2ProductId(out);
       }
@@ -590,7 +695,7 @@ async function getProductBySlug(slug, categorySegment) {
   const row = list.length > 0 ? list[0] : null;
   if (!row) return null;
   const attrMap = await attributeValueMap(supabase, row.id);
-  const out = rowToProduct(mapJoinedRow(row, null, brandFromMap(row, brandById), row.product_images, attrMap));
+  const out = rowToProductWithSellableMap(mapJoinedRow(row, null, brandFromMap(row, brandById), row.product_images, attrMap), sellableSlugMap);
   out.slug = slugLower;
   return attachCatalogV2ProductId(out);
 }
@@ -619,10 +724,14 @@ async function getProductsForIndustry(useCase) {
     supabase,
     normalized.map((p) => p.brand_id),
   );
+  const sellableIndustryMap = await fetchActiveSellableMap(
+    supabase,
+    normalized.map((p) => p.id),
+  );
   const out = [];
   for (const p of normalized) {
     const attrMap = await attributeValueMap(supabase, p.id);
-    out.push(rowToProduct(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap)));
+    out.push(rowToProductWithSellableMap(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap), sellableIndustryMap));
   }
   await attachCatalogV2ProductIds(out);
   return out;
@@ -635,6 +744,9 @@ async function createProduct(payload) {
   let slug = payload.slug || slugFromName(payload.name);
   const sku = (payload.sku || '').toString().trim();
   if (!sku) throw new Error('sku required');
+  if (payload.price == null || payload.price === '' || !Number.isFinite(Number(payload.price))) {
+    throw new Error('createProduct requires finite price (USD list) for gc_commerce.sellable_products');
+  }
   const { data: slugClash } = await supabase.schema(V2).from('catalog_products').select('id').eq('slug', slug || 'x').maybeSingle();
   if (slugClash?.id) slug = `${slug || 'p'}-${Date.now().toString(36)}`;
   const attrsJson = mergeMerchIntoAttributesJson(payload, {});
@@ -672,6 +784,15 @@ async function createProduct(payload) {
   if (vErr) throw vErr;
   await syncProductAttributes(supabase, id, categoryId, payload);
   await syncProductImages(supabase, id, payload);
+  await upsertSellablePricingForCatalogProduct(supabase, {
+    catalogProductId: id,
+    sku,
+    displayName: payload.name || sku,
+    price: Number(payload.price),
+    bulk_price: payload.bulk_price,
+    cost: payload.cost,
+    isActive: status === 'active',
+  });
   return getProductById(id);
 }
 
@@ -714,6 +835,48 @@ async function updateProduct(id, payload) {
   if (error) throw error;
   await syncProductAttributes(supabase, existing.id, categoryId, payload);
   await syncProductImages(supabase, existing.id, payload);
+
+  const sellableMapUp = await fetchActiveSellableMap(supabase, [existing.id]);
+  const prevSp = sellableMapUp.get(String(existing.id));
+  let listPrice = payload.price !== undefined ? payload.price : null;
+  if (listPrice == null || listPrice === '' || !Number.isFinite(Number(listPrice))) {
+    if (!prevSp || prevSp.list_price_minor == null) {
+      throw new MissingSellablePricingError(
+        existing.id,
+        'updateProduct requires finite price when no sellable list_price_minor exists',
+      );
+    }
+    listPrice = minorToDollars(prevSp.list_price_minor);
+  }
+  let bulkVal;
+  if (payload.bulk_price !== undefined) {
+    bulkVal =
+      payload.bulk_price == null || payload.bulk_price === '' || !Number.isFinite(Number(payload.bulk_price))
+        ? null
+        : Number(payload.bulk_price);
+  } else if (prevSp && prevSp.bulk_price_minor != null) {
+    bulkVal = minorToDollars(prevSp.bulk_price_minor);
+  } else {
+    bulkVal = null;
+  }
+  let costVal;
+  if (payload.cost !== undefined) {
+    costVal =
+      payload.cost == null || payload.cost === '' || !Number.isFinite(Number(payload.cost)) ? null : Number(payload.cost);
+  } else if (prevSp && prevSp.unit_cost_minor != null) {
+    costVal = minorToDollars(prevSp.unit_cost_minor);
+  } else {
+    costVal = null;
+  }
+  await upsertSellablePricingForCatalogProduct(supabase, {
+    catalogProductId: existing.id,
+    sku: updates.internal_sku,
+    displayName: updates.name,
+    price: Number(listPrice),
+    bulk_price: bulkVal,
+    cost: costVal,
+    isActive: status === 'active',
+  });
   return getProductById(existing.id);
 }
 
@@ -796,10 +959,41 @@ async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {
     const catId = prevMeta.category_id || (await resolveDefaultCategoryId(supabase));
     await syncProductAttributes(supabase, existing.id, catId, payload);
     if (image_url) await syncProductImages(supabase, existing.id, payload);
+    const sellableCsvMap = await fetchActiveSellableMap(supabase, [existing.id]);
+    const sp = sellableCsvMap.get(String(existing.id));
+    if (!sp || sp.list_price_minor == null) {
+      throw new MissingSellablePricingError(existing.id);
+    }
+    const costNum = cost != null ? Number(cost) : NaN;
+    const costMinor =
+      Number.isFinite(costNum) && costNum >= 0 ? dollarsToMinor(costNum) : sp.unit_cost_minor != null ? sp.unit_cost_minor : null;
+    const { data: v2sku, error: v2e } = await supabase
+      .schema(V2)
+      .from('catalog_products')
+      .select('internal_sku, name')
+      .eq('id', existing.id)
+      .maybeSingle();
+    if (v2e) throw v2e;
+    const { error: suErr } = await supabase.schema(GC).from('sellable_products').upsert(
+      {
+        sku: String(v2sku?.internal_sku || skuClean).trim(),
+        display_name: String(v2sku?.name || payload.name || skuClean).trim(),
+        catalog_product_id: String(existing.id),
+        currency_code: 'USD',
+        list_price_minor: sp.list_price_minor,
+        bulk_price_minor: sp.bulk_price_minor,
+        unit_cost_minor: costMinor,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'sku' },
+    );
+    if (suErr) throw suErr;
     return { updated: true, id: existing.id };
   }
-  const created = await createProduct(payload);
-  return { created: true, id: created && created.id };
+  throw new Error(
+    `CSV import cannot create sku=${skuClean} without list price; create the product with a price first or add a price column to the CSV`,
+  );
 }
 
 module.exports = {
@@ -817,6 +1011,7 @@ module.exports = {
   getCategories,
   getBrands,
   rowToProduct,
+  MissingSellablePricingError,
   slugFromName,
   upsertProductFromCsvRow,
   setAttributes,

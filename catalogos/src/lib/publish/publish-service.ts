@@ -256,6 +256,18 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
 
   const listPriceMinor =
     sellPrice != null && Number.isFinite(Number(sellPrice)) ? Math.round(Number(sellPrice) * 100) : null;
+  if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
+    return {
+      success: false,
+      error: "Publish blocked: sellable list price missing (invalid sell price / supplier cost)",
+      productId,
+      slug: slug ?? undefined,
+    };
+  }
+  const unitCostMinor =
+    input.stagedContent.supplier_cost != null && Number.isFinite(Number(input.stagedContent.supplier_cost))
+      ? Math.round(Number(input.stagedContent.supplier_cost) * 100)
+      : null;
 
   const { data: v2row } = await admin
     .schema("catalog_v2")
@@ -268,6 +280,8 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     name: v2n?.name ?? input.stagedContent.canonical_title ?? "Product",
     internalSku: (v2n?.internal_sku || internalSkuForSellable || "sku").trim(),
     listPriceMinor,
+    bulkPriceMinor: null,
+    unitCostMinor,
     isActive: true,
   });
   if (!sellable.ok) {

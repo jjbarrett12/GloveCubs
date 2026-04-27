@@ -79,7 +79,7 @@ function fail(name, detail) {
 }
 
 /**
- * Guest checkout uses product.price from metadata.list_price (see commerce-pricing).
+ * Guest checkout uses product.price from gc_commerce.sellable_products.list_price_minor (via catalogosProductService).
  * Ensures subtotal clears MIN_ORDER_AMOUNT without weakening shipping rules.
  *
  * @param {*} supabase - getSupabaseAdmin() client
@@ -90,30 +90,13 @@ function targetListUsdForMinOrder() {
   return Math.max(minOrder + 1, 250);
 }
 
-/**
- * When DB cannot be updated (grants), step 2 still needs a list price ≥ min order.
- * Wraps the real service: same catalog_v2 id, only augments numeric price fields for checkout math.
- */
-function checkoutProductsServiceWithMinListPrice(base, minListUsd) {
-  return {
-    async getProductById(id) {
-      const p = await base.getProductById(id);
-      if (!p) return null;
-      const cur = Number(p.price);
-      if (Number.isFinite(cur) && cur >= minListUsd) return p;
-      return { ...p, price: minListUsd };
-    },
-  };
-}
-
 async function ensureValidatorV2CheckoutPricing(supabase, v2Id) {
   const targetListUsd = targetListUsdForMinOrder();
-  const minOrder = Number(commerceShipping.getCommerceShippingConfig().minOrderAmount) || 200;
 
   const { data: row, error } = await supabase
     .schema('catalog_v2')
     .from('catalog_products')
-    .select('id, metadata, internal_sku, name')
+    .select('id, internal_sku, name')
     .eq('id', v2Id)
     .single();
   if (error) throw error;
@@ -123,7 +106,8 @@ async function ensureValidatorV2CheckoutPricing(supabase, v2Id) {
     `validator-${String(v2Id).replace(/-/g, '').slice(0, 12)}`;
   const name = (row.name && String(row.name).trim()) || 'Validator catalog_v2 fixture';
   const listMinor = Math.round(targetListUsd * 100);
-  /* Upsert sellable before catalog_products UPDATE so step 3 still sees a row if UPDATE is denied. */
+  const bulkMinor = Math.round(targetListUsd * 0.92 * 100);
+  const now = new Date().toISOString();
   const { error: sErr } = await supabase.schema('gc_commerce').from('sellable_products').upsert(
     {
       sku,
@@ -131,30 +115,15 @@ async function ensureValidatorV2CheckoutPricing(supabase, v2Id) {
       catalog_product_id: v2Id,
       currency_code: 'USD',
       list_price_minor: listMinor,
+      bulk_price_minor: bulkMinor,
+      unit_cost_minor: null,
       is_active: true,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     },
     { onConflict: 'sku' },
   );
   if (sErr) {
-    console.warn('[validate-canonical-commerce-flow] gc_commerce.sellable_products upsert:', sErr.message || sErr);
-  }
-
-  const meta = row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
-  const facet =
-    meta.facet_attributes && typeof meta.facet_attributes === 'object' ? { ...meta.facet_attributes } : {};
-  const existingList = Number(meta.list_price ?? facet.list_price ?? 0);
-  const needsList = !Number.isFinite(existingList) || existingList < minOrder;
-
-  if (needsList) {
-    meta.list_price = targetListUsd;
-    meta.facet_attributes = { ...facet, list_price: targetListUsd };
-    const { error: uErr } = await supabase
-      .schema('catalog_v2')
-      .from('catalog_products')
-      .update({ metadata: meta, updated_at: new Date().toISOString() })
-      .eq('id', v2Id);
-    if (uErr) throw uErr;
+    throw new Error(`[validate-canonical-commerce-flow] gc_commerce.sellable_products upsert: ${sErr.message || JSON.stringify(sErr)}`);
   }
 }
 
@@ -243,29 +212,16 @@ async function main() {
   record('fixture: catalog_v2.catalog_products (active)', true);
   console.log(`  catalog_v2=${v2}`);
 
-  const minList = targetListUsdForMinOrder();
-  let productsServiceForCheckout = productsService;
-  let pricingFixtureMode = 'db';
   try {
     const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
     await ensureValidatorV2CheckoutPricing(getSupabaseAdmin(), v2);
   } catch (e) {
     const msg = e.message || String(e);
-    console.warn('[validate-canonical-commerce-flow] DB pricing fixture skipped:', msg);
-    console.warn(
-      `[validate-canonical-commerce-flow] Using validator-only list price overlay (${minList} USD) for checkout step; canonical ids unchanged.`,
-    );
-    productsServiceForCheckout = checkoutProductsServiceWithMinListPrice(productsService, minList);
-    pricingFixtureMode = 'overlay';
+    record('fixture: sellable_products pricing (min order)', false, `${msg}\n  classification: ${classifyLiveFailure('fixture_pricing', e)}`);
+    printSummary(results);
+    process.exit(1);
   }
-  record(
-    'fixture: checkout pricing (min order)',
-    true,
-    pricingFixtureMode === 'db' ? null : `mode=overlay (DB update not permitted or failed)`,
-  );
-  if (pricingFixtureMode === 'overlay') {
-    console.log('  (checkout step uses overlay; grant UPDATE on catalog_v2.catalog_products to persist list_price in DB)');
-  }
+  record('fixture: sellable_products pricing (min order)', true);
 
   // 1 — Cart line uses catalog_v2 UUID only
   try {
@@ -295,7 +251,7 @@ async function main() {
       user: null,
       companyId: null,
       pricingContext: { companies: [], customer_manufacturer_pricing: [] },
-      productsService: productsServiceForCheckout,
+      productsService,
     });
     if (!money.ok) {
       record('2. Checkout payload uses catalog_v2 id', false, JSON.stringify(money.body));

@@ -358,10 +358,23 @@ async function runPublishVariantGroupAddVariants(params: {
 
     const listPriceMinor =
       cost != null && Number.isFinite(Number(cost)) ? Math.round(Number(cost) * 100) : null;
+    if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
+      return {
+        success: false,
+        familyId: params.familyId,
+        productIds,
+        error: `Publish blocked (variant ${variantSku}): sellable list price missing`,
+        warnings: params.warnings.length ? params.warnings : undefined,
+      };
+    }
+    const unitCostMinor =
+      cost != null && Number.isFinite(Number(cost)) ? Math.round(Number(cost) * 100) : null;
     const sellable = await upsertSellableForCatalogV2Product(productId, {
       name: variantName,
       internalSku: variantSku,
       listPriceMinor,
+      bulkPriceMinor: null,
+      unitCostMinor,
       isActive: true,
     });
     if (!sellable.ok) {

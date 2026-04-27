@@ -17,6 +17,8 @@ export async function upsertSellableForCatalogV2Product(
     name: string;
     internalSku: string;
     listPriceMinor: number | null;
+    bulkPriceMinor?: number | null;
+    unitCostMinor?: number | null;
     isActive: boolean;
   }
 ): Promise<EnsureCatalogV2Result> {
@@ -31,6 +33,8 @@ export async function upsertSellableForCatalogV2Product(
       catalog_product_id: catalogProductId,
       currency_code: "USD",
       list_price_minor: row.listPriceMinor,
+      bulk_price_minor: row.bulkPriceMinor ?? null,
+      unit_cost_minor: row.unitCostMinor ?? null,
       is_active: row.isActive,
       updated_at: now,
     },
