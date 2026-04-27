@@ -10,6 +10,7 @@
 
 import * as XLSX from 'xlsx';
 import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import { buildSupplierOfferUpsertRow } from '../../../../lib/supplier-offer-normalization';
 import { logAuditEvent } from './auth';
 import { logIngestionFailure, logAIExtractionFailure, logTransactionFailure } from '../hardening/telemetry';
 
@@ -1238,7 +1239,7 @@ export async function correctRow(
 }
 
 // ============================================================================
-// COMMIT (single RPC = all-or-nothing; audit log written only on success)
+// COMMIT (TypeScript path: explicit normalizeSupplierOfferPricing via buildSupplierOfferUpsertRow)
 // ============================================================================
 
 export async function commitFeedUpload(
@@ -1277,27 +1278,102 @@ export async function commitFeedUpload(
   
   try {
     const catalogos = getSupabaseCatalogos();
-    const { data, error } = await catalogos.rpc('commit_feed_upload', {
-      p_upload_id: upload_id,
-      p_supplier_id: supplier_id,
-      p_user_id: user_id,
-      p_rows: rows.map((r) => ({ extracted: r.extracted, normalized: r.normalized })),
-    });
-    if (error) throw new Error(error.message);
-    // PostgREST may return RPC result as array or single object; normalize.
-    const raw =
-      Array.isArray(data) && data.length > 0
-        ? data[0]
-        : data && typeof data === "object" && !Array.isArray(data)
-          ? data
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      const extracted = row.extracted as ExtractedProduct;
+      const normalized = row.normalized as NormalizedProduct;
+      const matchedProductId = normalized.matched_product_id;
+      if (!matchedProductId) {
+        skipped += 1;
+        continue;
+      }
+      const vPrice = extracted.price;
+      if (vPrice == null || vPrice < 0 || !Number.isFinite(Number(vPrice))) {
+        skipped += 1;
+        continue;
+      }
+      const costNum = Number(vPrice);
+      const vSku = extracted.sku != null ? String(extracted.sku).trim() : '';
+      const leadRaw = extracted.lead_time_days;
+      const leadTimeDays =
+        leadRaw != null && Number.isFinite(Number(leadRaw)) ? Math.trunc(Number(leadRaw)) : null;
+      const casePack = extracted.case_pack;
+      const unitsPerCase =
+        typeof casePack === 'number' && Number.isFinite(casePack) && casePack > 0
+          ? Math.trunc(casePack)
           : null;
-    const result = raw as { committed?: number; created?: number; updated?: number; skipped?: number } | null;
-    return {
-      committed: result?.committed ?? 0,
-      created: result?.created ?? 0,
-      updated: result?.updated ?? 0,
-      skipped: result?.skipped ?? 0,
-    };
+
+      const { data: existing, error: findErr } = await catalogos
+        .from('supplier_offers')
+        .select('id')
+        .eq('supplier_id', supplier_id)
+        .eq('product_id', matchedProductId)
+        .limit(1)
+        .maybeSingle();
+      if (findErr) throw new Error(findErr.message);
+
+      const defaultSku = `IMPORT-${matchedProductId}`;
+      const supplierSku = vSku.length > 0 ? vSku : defaultSku;
+
+      const pricingInput = {
+        currency_code: 'USD' as const,
+        cost_basis: 'per_case' as const,
+        cost: costNum,
+        units_per_case: unitsPerCase ?? undefined,
+      };
+
+      if (existing?.id) {
+        const patch = buildSupplierOfferUpsertRow(
+          {
+            supplier_sku: supplierSku,
+            cost: costNum,
+            sell_price: costNum,
+            lead_time_days: leadTimeDays,
+            is_active: true,
+            units_per_case: unitsPerCase,
+          },
+          pricingInput
+        );
+        const { error: upErr } = await catalogos
+          .from('supplier_offers')
+          .update({ ...patch, updated_at: new Date().toISOString() })
+          .eq('id', (existing as { id: string }).id);
+        if (upErr) throw new Error(upErr.message);
+        updated += 1;
+      } else {
+        const insertRow = buildSupplierOfferUpsertRow(
+          {
+            supplier_id,
+            product_id: matchedProductId,
+            supplier_sku: supplierSku,
+            cost: costNum,
+            sell_price: costNum,
+            lead_time_days: leadTimeDays,
+            raw_id: null,
+            normalized_id: null,
+            is_active: true,
+            units_per_case: unitsPerCase,
+          },
+          pricingInput
+        );
+        const { error: insErr } = await catalogos.from('supplier_offers').insert(insertRow);
+        if (insErr) throw new Error(insErr.message);
+        created += 1;
+      }
+    }
+
+    const committed = created + updated;
+    await updateUploadStatus(upload_id, 'committed');
+    await logAuditEvent(supplier_id, user_id, 'commit_feed_upload', 'supplier_feed_upload', upload_id, {
+      committed,
+      created,
+      updated,
+      skipped,
+    });
+    return { committed, created, updated, skipped };
   } catch (error) {
     await logTransactionFailure('Feed upload commit failed', {
       operation: 'commit_feed_upload',

@@ -16,6 +16,11 @@ import { DEFAULT_PRODUCT_TYPE_KEY } from "@/lib/product-types";
 import type { PublishInput, PublishResult } from "./types";
 import { finalizePublishSearchSync } from "./canonical-sync-service";
 import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Product } from "./ensure-catalog-v2-link";
+import {
+  buildSupplierOfferUpsertRow,
+  costBasisFromSellUnit,
+  unitsPerCaseFromStagingNormalizedContent,
+} from "../../../../lib/supplier-offer-normalization";
 
 /**
  * Build PublishInput from a normalized row (from getStagingById).
@@ -46,6 +51,8 @@ export function buildPublishInputFromStaged(
   const normalizedCaseCost = content.normalized_case_cost ?? pricing?.normalized_case_cost;
   const cost = Number(normalizedCaseCost ?? content.supplier_cost ?? content.cost ?? 0);
   const sellUnit = pricing?.sell_unit ?? "case";
+  const offerCostBasis = costBasisFromSellUnit(sellUnit);
+  const unitsPerCase = unitsPerCaseFromStagingNormalizedContent(content, attrs);
   const pricingCaseCostUnavailable =
     sellUnit === "case" &&
     (normalizedCaseCost == null || !Number.isFinite(Number(normalizedCaseCost)));
@@ -57,6 +64,8 @@ export function buildPublishInputFromStaged(
       canonical_title: (content.canonical_title ?? content.name) as string,
       supplier_sku: (content.supplier_sku ?? content.sku ?? "") as string,
       supplier_cost: Number.isFinite(cost) ? cost : 0,
+      units_per_case: unitsPerCase ?? null,
+      offer_cost_basis: offerCostBasis,
       brand: (content.brand ?? attrs.brand) as string | undefined,
       description: content.description as string | undefined,
       images: Array.isArray(content.images) ? (content.images as string[]) : undefined,
@@ -239,7 +248,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   }
 
   const sellPrice = input.overrideSellPrice ?? input.stagedContent.supplier_cost;
-  const { error: offerErr } = await supabase.from("supplier_offers").upsert(
+  const offerRow = buildSupplierOfferUpsertRow(
     {
       supplier_id: input.supplierId,
       product_id: productId,
@@ -249,9 +258,18 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
       raw_id: input.rawId,
       normalized_id: input.normalizedId,
       is_active: true,
+      units_per_case: input.stagedContent.units_per_case ?? null,
     },
-    { onConflict: "supplier_id,product_id,supplier_sku" }
+    {
+      currency_code: "USD",
+      cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
+      cost: input.stagedContent.supplier_cost,
+      units_per_case: input.stagedContent.units_per_case,
+    }
   );
+  const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
+    onConflict: "supplier_id,product_id,supplier_sku",
+  });
   if (offerErr) return { success: false, error: `Supplier offer: ${offerErr.message}`, productId, slug: slug ?? undefined };
 
   const listPriceMinor =

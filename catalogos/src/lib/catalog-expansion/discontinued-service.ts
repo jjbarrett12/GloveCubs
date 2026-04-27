@@ -5,6 +5,10 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import {
+  buildSupplierOfferUpsertRow,
+  parseSupplierOfferCostBasis,
+} from "../../../../lib/supplier-offer-normalization";
 
 const DISCONTINUED_REASON = "catalog_sync_confirmed";
 
@@ -117,16 +121,42 @@ export async function applyDiscontinuedToOffers(discontinuedCandidateId: string)
     return { success: true, offersUpdated: 0, offerIds: [] };
   }
 
-  const { error: updateErr } = await supabase
+  const { data: offerRows, error: fetchErr } = await supabase
     .from("supplier_offers")
-    .update({
-      is_active: false,
-      discontinued_at: new Date().toISOString(),
-      discontinued_reason: DISCONTINUED_REASON,
-      updated_at: new Date().toISOString(),
-    })
+    .select("id, cost, sell_price, units_per_case, currency_code, cost_basis")
     .in("id", ids);
+  if (fetchErr) return { success: false, error: fetchErr.message };
 
-  if (updateErr) return { success: false, error: updateErr.message };
+  for (const row of offerRows ?? []) {
+    const r = row as {
+      id: string;
+      cost: number;
+      sell_price: number | null;
+      units_per_case: number | null;
+      currency_code: string;
+      cost_basis: string;
+    };
+    const nextCost = Number(r.cost);
+    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
+    const patch = buildSupplierOfferUpsertRow(
+      {
+        is_active: false,
+        discontinued_at: new Date().toISOString(),
+        discontinued_reason: DISCONTINUED_REASON,
+        updated_at: new Date().toISOString(),
+        cost: nextCost,
+        sell_price: nextSell,
+        units_per_case: r.units_per_case,
+      },
+      {
+        currency_code: String(r.currency_code),
+        cost_basis: parseSupplierOfferCostBasis(r.cost_basis),
+        cost: nextCost,
+        units_per_case: r.units_per_case ?? undefined,
+      }
+    );
+    const { error: updateErr } = await supabase.from("supplier_offers").update(patch).eq("id", r.id);
+    if (updateErr) return { success: false, error: updateErr.message };
+  }
   return { success: true, offersUpdated: ids.length, offerIds: ids };
 }

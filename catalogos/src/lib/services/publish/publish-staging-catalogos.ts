@@ -11,6 +11,11 @@ import {
   upsertSellableForCatalogV2Product,
 } from "@/lib/publish/ensure-catalog-v2-link";
 import { stripPricingKeysForV2ProductMetadata } from "@/lib/ingestion/v2-insert-metadata-sanitize";
+import {
+  buildSupplierOfferUpsertRow,
+  costBasisFromSellUnit,
+  unitsPerCaseFromStagingNormalizedContent,
+} from "../../../../../lib/supplier-offer-normalization";
 
 export interface PublishInput {
   staging_ids: string[];
@@ -157,18 +162,27 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     }
 
     const supplierSku = String(norm.sku ?? row.id).trim();
-    const { error: offerErr } = await catalogos.from("supplier_offers").upsert(
+    const pricing = norm.pricing as { sell_unit?: string } | undefined;
+    const sellUnit = pricing?.sell_unit ?? "case";
+    const offerCostBasis = costBasisFromSellUnit(sellUnit);
+    const unitsPer = unitsPerCaseFromStagingNormalizedContent(norm as Record<string, unknown>, attrs as Record<string, unknown>);
+    const offerRow = buildSupplierOfferUpsertRow(
       {
         supplier_id: row.supplier_id,
         product_id: masterId,
         supplier_sku: supplierSku,
         cost,
+        sell_price: cost,
         raw_id: row.raw_id,
         normalized_id: row.id,
         is_active: true,
+        units_per_case: unitsPer ?? null,
       },
-      { onConflict: "supplier_id,product_id,supplier_sku" }
+      { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
     );
+    const { error: offerErr } = await catalogos.from("supplier_offers").upsert(offerRow, {
+      onConflict: "supplier_id,product_id,supplier_sku",
+    });
 
     if (offerErr) {
       errors.push(`Staging ${stagingId}: offer upsert: ${offerErr.message}`);

@@ -27,6 +27,10 @@ export interface PublishInput {
     canonical_title?: string;
     supplier_sku: string;
     supplier_cost: number;
+    /** Units per case when cost_basis is per_case (from staging normalized_data / attributes, not v2 metadata). */
+    units_per_case?: number | null;
+    /** Derived from staging pricing.sell_unit. */
+    offer_cost_basis?: "per_case" | "per_each" | "per_pair";
     brand?: string;
     description?: string;
     images?: string[];

@@ -3,6 +3,10 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import {
+  buildSupplierOfferUpsertRow,
+  parseSupplierOfferCostBasis,
+} from "../../../../lib/supplier-offer-normalization";
 import type { MatchRunStats } from "./types";
 import type { MatchResult } from "./types";
 import type { DuplicatePair } from "./duplicate-detection";
@@ -184,7 +188,7 @@ export async function mergeDuplicateProducts(
   const supabase = getSupabaseCatalogos(true);
   const { data: offers } = await supabase
     .from("supplier_offers")
-    .select("id, supplier_id, supplier_sku")
+    .select("id, supplier_id, supplier_sku, cost, sell_price, currency_code, cost_basis, units_per_case")
     .eq("product_id", mergeProductId);
 
   if (!offers?.length) {
@@ -199,13 +203,51 @@ export async function mergeDuplicateProducts(
 
   let offersMoved = 0;
   for (const off of offers) {
-    const { error: upErr } = await supabase
-      .from("supplier_offers")
-      .update({ product_id: keepProductId, updated_at: new Date().toISOString() })
-      .eq("id", off.id);
+    const r = off as {
+      id: string;
+      cost: number;
+      sell_price: number | null;
+      currency_code: string;
+      cost_basis: string;
+      units_per_case: number | null;
+    };
+    const nextCost = Number(r.cost);
+    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
+    const movePatch = buildSupplierOfferUpsertRow(
+      {
+        product_id: keepProductId,
+        updated_at: new Date().toISOString(),
+        cost: nextCost,
+        sell_price: nextSell,
+        units_per_case: r.units_per_case,
+      },
+      {
+        currency_code: String(r.currency_code),
+        cost_basis: parseSupplierOfferCostBasis(r.cost_basis),
+        cost: nextCost,
+        units_per_case: r.units_per_case ?? undefined,
+      }
+    );
+    const { error: upErr } = await supabase.from("supplier_offers").update(movePatch).eq("id", r.id);
     if (upErr) {
       if (upErr.code === "23505") {
-        await supabase.from("supplier_offers").update({ is_active: false }).eq("id", off.id);
+        const deactivatePatch = buildSupplierOfferUpsertRow(
+          {
+            is_active: false,
+            updated_at: new Date().toISOString(),
+            cost: nextCost,
+            sell_price: nextSell,
+            units_per_case: r.units_per_case,
+          },
+          {
+            currency_code: String(r.currency_code),
+            cost_basis: parseSupplierOfferCostBasis(r.cost_basis),
+            cost: nextCost,
+            units_per_case: r.units_per_case ?? undefined,
+          }
+        );
+        const { error: deactErr } = await supabase.from("supplier_offers").update(deactivatePatch).eq("id", r.id);
+        if (deactErr) return { success: false, error: deactErr.message };
       } else {
         return { success: false, error: upErr.message };
       }

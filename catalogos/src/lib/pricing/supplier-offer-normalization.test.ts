@@ -4,6 +4,10 @@ import {
   derivePerCaseUnitNormalization,
   ALLOWED_SUPPLIER_OFFER_CURRENCY,
   SUPPLIER_OFFER_COST_BASES,
+  normalizeSupplierOfferPricing,
+  buildSupplierOfferUpsertRow,
+  parseSupplierOfferCostBasis,
+  assertSupplierOfferWritePayloadHasNormalization,
 } from "./supplier-offer-normalization";
 
 describe("supplier-offer-normalization", () => {
@@ -41,5 +45,52 @@ describe("supplier-offer-normalization", () => {
     expect(Object.keys(input).sort()).toEqual(["cost", "units_per_case"]);
     expect(derivePerCaseUnitNormalization(input).normalized_unit_cost_minor).toBe(123);
     expect(SUPPLIER_OFFER_COST_BASES).toEqual(["per_case", "per_each", "per_pair"]);
+  });
+
+  it("normalizeSupplierOfferPricing: per_case with units → medium confidence", () => {
+    const p = normalizeSupplierOfferPricing({
+      currency_code: ALLOWED_SUPPLIER_OFFER_CURRENCY,
+      cost_basis: "per_case",
+      cost: 100,
+      units_per_case: 50,
+    });
+    expect(p.normalization_confidence).toBe("medium");
+    expect(p.pack_qty).toBe(50);
+    expect(p.normalized_unit_cost_minor).toBe(200);
+  });
+
+  it("normalizeSupplierOfferPricing: per_case missing units → low confidence", () => {
+    const p = normalizeSupplierOfferPricing({
+      currency_code: ALLOWED_SUPPLIER_OFFER_CURRENCY,
+      cost_basis: "per_case",
+      cost: 100,
+      units_per_case: null,
+    });
+    expect(p.normalization_confidence).toBe("low");
+    expect(p.normalized_unit_cost_minor).toBeNull();
+  });
+
+  it("normalizeSupplierOfferPricing: rejects non-USD currency", () => {
+    expect(() =>
+      normalizeSupplierOfferPricing({
+        currency_code: "EUR",
+        cost_basis: "per_each",
+        cost: 1,
+      })
+    ).toThrow(/USD/);
+  });
+
+  it("buildSupplierOfferUpsertRow: writer payload includes all normalization keys", () => {
+    const row = buildSupplierOfferUpsertRow(
+      { supplier_id: "a", product_id: "b", supplier_sku: "s", cost: 10, sell_price: 10, is_active: true },
+      { currency_code: "USD", cost_basis: "per_each", cost: 10 }
+    );
+    expect(() => assertSupplierOfferWritePayloadHasNormalization(row)).not.toThrow();
+  });
+
+  it("parseSupplierOfferCostBasis: rejects empty and invalid", () => {
+    expect(() => parseSupplierOfferCostBasis("")).toThrow();
+    expect(() => parseSupplierOfferCostBasis("per_kg")).toThrow();
+    expect(parseSupplierOfferCostBasis("per_case")).toBe("per_case");
   });
 });

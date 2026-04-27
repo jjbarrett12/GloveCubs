@@ -27,6 +27,10 @@ import {
 import { stripFacetExtractionUiState } from "@/lib/extraction/staging-facet-merge";
 import { upsertSellableForCatalogV2Product } from "@/lib/publish/ensure-catalog-v2-link";
 import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
+import {
+  buildSupplierOfferUpsertRow,
+  parseSupplierOfferCostBasis,
+} from "../../../../lib/supplier-offer-normalization";
 
 function slugForNewCatalogProduct(sku: string, name: string): string {
   const base = (name || sku || "product").trim();
@@ -555,19 +559,57 @@ export async function updateSupplierOfferAdmin(
   const supabase = getSupabaseCatalogos(true);
   const { data: existing, error: fetchErr } = await supabase
     .from("supplier_offers")
-    .select("id, product_id, supplier_id, normalized_id")
+    .select(
+      "id, product_id, supplier_id, normalized_id, cost, sell_price, units_per_case, currency_code, cost_basis, lead_time_days, is_active"
+    )
     .eq("id", offerId)
     .single();
   if (fetchErr || !existing) return { success: false, error: fetchErr?.message ?? "Offer not found" };
 
-  const row = existing as { id: string; product_id: string; supplier_id: string; normalized_id: string | null };
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (fields.cost !== undefined) patch.cost = fields.cost;
-  if (fields.sell_price !== undefined) patch.sell_price = fields.sell_price;
-  if (fields.lead_time_days !== undefined) patch.lead_time_days = fields.lead_time_days;
-  if (fields.is_active !== undefined) patch.is_active = fields.is_active;
+  const row = existing as {
+    id: string;
+    product_id: string;
+    supplier_id: string;
+    normalized_id: string | null;
+    cost: number;
+    sell_price: number | null;
+    units_per_case: number | null;
+    currency_code: string;
+    cost_basis: string;
+    lead_time_days: number | null;
+    is_active: boolean;
+  };
 
-  if (Object.keys(patch).length <= 1) return { success: true };
+  const nextCost = fields.cost !== undefined ? fields.cost : Number(row.cost);
+  const nextSell =
+    fields.sell_price !== undefined
+      ? fields.sell_price
+      : row.sell_price != null
+        ? Number(row.sell_price)
+        : nextCost;
+
+  const base: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    cost: nextCost,
+    sell_price: nextSell,
+    units_per_case: row.units_per_case,
+  };
+  if (fields.lead_time_days !== undefined) base.lead_time_days = fields.lead_time_days;
+  if (fields.is_active !== undefined) base.is_active = fields.is_active;
+
+  const hasFieldChange =
+    fields.cost !== undefined ||
+    fields.sell_price !== undefined ||
+    fields.lead_time_days !== undefined ||
+    fields.is_active !== undefined;
+  if (!hasFieldChange) return { success: true };
+
+  const patch = buildSupplierOfferUpsertRow(base, {
+    currency_code: String(row.currency_code),
+    cost_basis: parseSupplierOfferCostBasis(row.cost_basis),
+    cost: nextCost,
+    units_per_case: row.units_per_case ?? undefined,
+  });
 
   const { error } = await supabase.from("supplier_offers").update(patch).eq("id", offerId);
   if (error) return { success: false, error: error.message };
@@ -605,11 +647,41 @@ export async function unpublishLiveProduct(
     .eq("id", productId);
   if (u1) return { success: false, error: u1.message };
 
-  const { error: u2 } = await supabase
+  const { data: offerRows, error: offerFetchErr } = await supabase
     .from("supplier_offers")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .select("id, cost, sell_price, units_per_case, currency_code, cost_basis")
     .eq("product_id", productId);
-  if (u2) return { success: false, error: u2.message };
+  if (offerFetchErr) return { success: false, error: offerFetchErr.message };
+
+  for (const o of offerRows ?? []) {
+    const r = o as {
+      id: string;
+      cost: number;
+      sell_price: number | null;
+      units_per_case: number | null;
+      currency_code: string;
+      cost_basis: string;
+    };
+    const nextCost = Number(r.cost);
+    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
+    const patch = buildSupplierOfferUpsertRow(
+      {
+        is_active: false,
+        updated_at: new Date().toISOString(),
+        cost: nextCost,
+        sell_price: nextSell,
+        units_per_case: r.units_per_case,
+      },
+      {
+        currency_code: String(r.currency_code),
+        cost_basis: parseSupplierOfferCostBasis(r.cost_basis),
+        cost: nextCost,
+        units_per_case: r.units_per_case ?? undefined,
+      }
+    );
+    const { error: u2 } = await supabase.from("supplier_offers").update(patch).eq("id", r.id);
+    if (u2) return { success: false, error: u2.message };
+  }
 
   await logAdminCatalogAudit({
     normalizedId: options?.normalizedId ?? null,

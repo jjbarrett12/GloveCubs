@@ -344,6 +344,9 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
 
       if (p.rulesAccepted && p.rulesMatch.masterProductId) {
         matchedCount++;
+        const caseQty = p.normalized.attributes?.case_qty;
+        const unitsPer =
+          typeof caseQty === "number" && Number.isFinite(caseQty) && caseQty > 0 ? Math.trunc(caseQty) : null;
         const offerCreated = await createSuggestedOffer({
           supplierId,
           masterProductId: p.rulesMatch.masterProductId,
@@ -351,6 +354,9 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
           cost: p.cost,
           rawId: p.rawId,
           normalizedId,
+          currencyCode: "USD",
+          costBasis: "per_case",
+          unitsPerCase: unitsPer,
         });
         byIndex.set(p.rowIndex, {
           rawId: p.rawId,

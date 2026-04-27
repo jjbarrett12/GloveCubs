@@ -17,8 +17,8 @@ import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 // MOCK SETUP
 // ============================================================================
 
-// Mock getSupabaseCatalogos for commit path (P0-2 atomic RPC)
-const mockCatalogosRpc = vi.fn();
+// Mock getSupabaseCatalogos for commit path (explicit supplier_offers upserts)
+const mockCatalogosFrom = vi.fn();
 // Mock supabaseAdmin before importing the module
 vi.mock('../jobs/supabase', () => ({
   supabaseAdmin: {
@@ -39,7 +39,10 @@ vi.mock('../jobs/supabase', () => ({
       single: vi.fn(),
     })),
   },
-  getSupabaseCatalogos: () => ({ rpc: mockCatalogosRpc }),
+  getSupabaseCatalogos: () => ({
+    from: (table: string) => mockCatalogosFrom(table),
+    rpc: vi.fn(),
+  }),
 }));
 
 // Mock auth module
@@ -92,6 +95,7 @@ function createMockChain(finalValue: unknown = null) {
 describe('Supplier Feed Upload - Service Layer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCatalogosFrom.mockImplementation((table: string) => (supabaseAdmin.from as Mock)(table));
   });
 
   afterEach(() => {
@@ -667,10 +671,10 @@ describe('Supplier Feed Upload - Service Layer', () => {
   // ==========================================================================
   describe('commitFeedUpload', () => {
     beforeEach(() => {
-      mockCatalogosRpc.mockReset();
+      mockCatalogosFrom.mockClear();
     });
 
-    it('should create new offers for unmatched products (via RPC)', async () => {
+    it('should create new offers for matched products (TypeScript commit path)', async () => {
       const rows = [
         {
           row_number: 1,
@@ -691,17 +695,26 @@ describe('Supplier Feed Upload - Service Layer', () => {
           status: 'valid',
         },
       ];
-      mockCatalogosRpc.mockResolvedValue({
-        data: { committed: 1, created: 1, updated: 0, skipped: 0 },
-        error: null,
+      mockCatalogosFrom.mockImplementation((table: string) => {
+        if (table === 'supplier_offers') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        return {};
       });
-      let callCount = 0;
       (supabaseAdmin.from as Mock).mockImplementation((table: string) => {
-        callCount++;
-        if (callCount === 1 && table === 'supplier_feed_uploads') {
+        if (table === 'supplier_feed_uploads') {
           return {
             ...createMockChain(),
             single: vi.fn().mockResolvedValue({ data: { id: 'upload-1' }, error: null }),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
           };
         }
         if (table === 'supplier_feed_upload_rows') {
@@ -714,14 +727,10 @@ describe('Supplier Feed Upload - Service Layer', () => {
       });
       const result = await commitFeedUpload('upload-1', 'supplier-1', 'user-1');
       expect(result.created).toBe(1);
-      expect(mockCatalogosRpc).toHaveBeenCalledWith('commit_feed_upload', expect.objectContaining({
-        p_upload_id: 'upload-1',
-        p_supplier_id: 'supplier-1',
-        p_user_id: 'user-1',
-      }));
+      expect(mockCatalogosFrom.mock.calls.some((c) => c[0] === 'supplier_offers')).toBe(true);
     });
 
-    it('should update existing offers instead of creating duplicates (via RPC)', async () => {
+    it('should update existing offers instead of creating duplicates (TS path)', async () => {
       const rows = [
         {
           row_number: 1,
@@ -743,17 +752,28 @@ describe('Supplier Feed Upload - Service Layer', () => {
         },
       ];
       
-      mockCatalogosRpc.mockResolvedValue({
-        data: { committed: 1, created: 0, updated: 1, skipped: 0 },
-        error: null,
+      mockCatalogosFrom.mockImplementation((table: string) => {
+        if (table === 'supplier_offers') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'offer-existing' }, error: null }),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {};
       });
-      let callCount2 = 0;
       (supabaseAdmin.from as Mock).mockImplementation((table: string) => {
-        callCount2++;
-        if (callCount2 === 1 && table === 'supplier_feed_uploads') {
+        if (table === 'supplier_feed_uploads') {
           return {
             ...createMockChain(),
             single: vi.fn().mockResolvedValue({ data: { id: 'upload-1' }, error: null }),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
           };
         }
         if (table === 'supplier_feed_upload_rows') {
@@ -768,7 +788,7 @@ describe('Supplier Feed Upload - Service Layer', () => {
       expect(result.updated).toBe(1);
     });
 
-    it('should skip rows without matched product (via RPC)', async () => {
+    it('should skip rows without matched product', async () => {
       const rows = [
         {
           row_number: 1,
@@ -788,18 +808,14 @@ describe('Supplier Feed Upload - Service Layer', () => {
           status: 'warning',
         },
       ];
-      mockCatalogosRpc.mockResolvedValue({
-        data: { committed: 0, created: 0, updated: 0, skipped: 1 },
-        error: null,
-      });
-      let callCount = 0;
       (supabaseAdmin.from as Mock).mockImplementation((table: string) => {
-        callCount++;
-        // First call is ownership verification
-        if (callCount === 1 && table === 'supplier_feed_uploads') {
+        if (table === 'supplier_feed_uploads') {
           return {
             ...createMockChain(),
             single: vi.fn().mockResolvedValue({ data: { id: 'upload-1' }, error: null }),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
           };
         }
         if (table === 'supplier_feed_upload_rows') {
@@ -810,9 +826,9 @@ describe('Supplier Feed Upload - Service Layer', () => {
         }
         return createMockChain();
       });
-      
+
       const result = await commitFeedUpload('upload-1', 'supplier-1', 'user-1');
-      
+
       expect(result.skipped).toBe(1);
       expect(result.created).toBe(0);
       expect(result.updated).toBe(0);
@@ -848,7 +864,7 @@ describe('Supplier Feed Upload - Service Layer', () => {
       expect(result.skipped).toBe(0);
     });
 
-    it('on RPC failure: sets upload status to failed and rethrows (no partial writes)', async () => {
+    it('on commit failure: sets upload status to failed and rethrows', async () => {
       const rows = [
         {
           row_number: 1,
@@ -865,30 +881,34 @@ describe('Supplier Feed Upload - Service Layer', () => {
           status: 'valid',
         },
       ];
-      mockCatalogosRpc.mockRejectedValue(new Error('DB constraint violation'));
+      mockCatalogosFrom.mockImplementation((table: string) => {
+        if (table === 'supplier_offers') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            insert: vi.fn().mockResolvedValue({ error: { message: 'DB constraint violation' } }),
+          };
+        }
+        return {};
+      });
       let updatePayload: { status?: string } | null = null;
-      let callCount = 0;
       (supabaseAdmin.from as Mock).mockImplementation((table: string) => {
-        callCount++;
-        if (callCount === 1 && table === 'supplier_feed_uploads') {
+        if (table === 'supplier_feed_uploads') {
           return {
             ...createMockChain(),
             single: vi.fn().mockResolvedValue({ data: { id: 'upload-1' }, error: null }),
+            update: vi.fn().mockImplementation((payload: { status?: string }) => {
+              updatePayload = payload;
+              return { eq: vi.fn().mockResolvedValue({ data: null, error: null }) };
+            }),
           };
         }
         if (table === 'supplier_feed_upload_rows') {
           return {
             ...createMockChain(),
             in: vi.fn().mockResolvedValue({ data: rows, error: null }),
-          };
-        }
-        if (callCount === 3 && table === 'supplier_feed_uploads') {
-          return {
-            ...createMockChain(),
-            update: vi.fn().mockImplementation((payload: { status?: string }) => {
-              updatePayload = payload;
-              return { eq: vi.fn().mockResolvedValue({ data: null, error: null }) };
-            }),
           };
         }
         return createMockChain();

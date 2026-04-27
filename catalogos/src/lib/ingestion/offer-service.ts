@@ -9,6 +9,10 @@
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
 import { logOfferUpsertFailure } from "@/lib/observability";
+import {
+  buildSupplierOfferUpsertRow,
+  type SupplierOfferCostBasis,
+} from "../../../../lib/supplier-offer-normalization";
 
 export interface CreateOfferInput {
   supplierId: string;
@@ -18,6 +22,9 @@ export interface CreateOfferInput {
   rawId: string;
   normalizedId: string;
   leadTimeDays?: number | null;
+  currencyCode: string;
+  costBasis: SupplierOfferCostBasis;
+  unitsPerCase?: number | null;
 }
 
 /**
@@ -76,19 +83,30 @@ export async function createSuggestedOffer(input: CreateOfferInput): Promise<boo
     }
   }
 
-  const { error } = await supabase.from("supplier_offers").upsert(
+  const offerRow = buildSupplierOfferUpsertRow(
     {
       supplier_id: input.supplierId,
       product_id: input.masterProductId,
       supplier_sku: input.supplierSku,
       cost: input.cost,
+      sell_price: input.cost,
       lead_time_days: input.leadTimeDays ?? null,
       raw_id: input.rawId,
       normalized_id: input.normalizedId,
       is_active: true,
+      units_per_case: input.unitsPerCase ?? null,
     },
-    { onConflict: "supplier_id,product_id,supplier_sku" }
+    {
+      currency_code: input.currencyCode,
+      cost_basis: input.costBasis,
+      cost: input.cost,
+      units_per_case: input.unitsPerCase,
+    }
   );
+
+  const { error } = await supabase.from("supplier_offers").upsert(offerRow, {
+    onConflict: "supplier_id,product_id,supplier_sku",
+  });
 
   if (error) {
     logOfferUpsertFailure("createSuggestedOffer upsert failed", {

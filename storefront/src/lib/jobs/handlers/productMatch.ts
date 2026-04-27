@@ -13,6 +13,7 @@
  */
 
 import { supabaseAdmin, getSupabaseCatalogos } from '../supabase';
+import { buildSupplierOfferUpsertRow } from '../../../../../lib/supplier-offer-normalization';
 import { flattenCatalogosProductRow } from '../../catalog/canonical-read-model';
 import { logger } from '../logger';
 import { getAgentRule } from '../../agents/config';
@@ -553,28 +554,47 @@ async function createOrUpdateSupplierOffer(
       return false;
     }
 
-    // Calculate per-unit cost if we have pack info
-    const unitsPerCase = product.total_units_per_case || 
+    const unitsPerCaseRaw =
+      product.total_units_per_case ||
       ((product.units_per_box || 1) * (product.boxes_per_case || 1));
-    const rawCost = supplierProduct.cost || (product as any).cost || 0;
-    const perUnitCost = unitsPerCase > 0 ? rawCost / unitsPerCase : rawCost;
+    const rawCost = Number(supplierProduct.cost ?? (product as { cost?: number }).cost ?? 0);
+    if (!Number.isFinite(rawCost)) {
+      logger.warn('Cannot create offer - invalid cost', { supplierProductId, rawCost });
+      return false;
+    }
+    const unitsPer =
+      typeof unitsPerCaseRaw === 'number' && Number.isFinite(unitsPerCaseRaw) && unitsPerCaseRaw > 0
+        ? Math.trunc(unitsPerCaseRaw)
+        : null;
+    const skuRaw = supplierProduct.supplier_sku || product.supplier_sku || product.sku || '';
+    const supplierSku =
+      String(skuRaw).trim().length > 0 ? String(skuRaw).trim() : `MATCH-${canonicalProductId.slice(0, 8)}`;
 
-    // Upsert the supplier offer
-    const { error } = await supabaseAdmin
-      .from('supplier_offers')
-      .upsert({
+    const offerRow = buildSupplierOfferUpsertRow(
+      {
         supplier_id: supplierProduct.supplier_id,
         product_id: canonicalProductId,
-        supplier_sku: supplierProduct.supplier_sku || product.supplier_sku || product.sku || '',
+        supplier_sku: supplierSku,
         cost: rawCost,
-        cost_per_unit: perUnitCost,
-        units_per_case: unitsPerCase,
-        lead_time_days: supplierProduct.lead_time_days,
-        raw_id: null, // Would be set if from raw import
+        sell_price: rawCost,
+        units_per_case: unitsPer,
+        lead_time_days: supplierProduct.lead_time_days ?? null,
+        raw_id: null,
         normalized_id: supplierProductId,
         is_active: true,
         updated_at: new Date().toISOString(),
-      }, { 
+      },
+      { currency_code: 'USD', cost_basis: 'per_case', cost: rawCost, units_per_case: unitsPer ?? undefined }
+    );
+
+    const perUnitCostUsd =
+      offerRow.normalized_unit_cost_minor != null && typeof offerRow.normalized_unit_cost_minor === 'number'
+        ? offerRow.normalized_unit_cost_minor / 100
+        : null;
+
+    const { error } = await getSupabaseCatalogos()
+      .from('supplier_offers')
+      .upsert(offerRow, {
         onConflict: 'supplier_id,product_id,supplier_sku',
         ignoreDuplicates: false,
       });
@@ -591,9 +611,9 @@ async function createOrUpdateSupplierOffer(
     logger.info('Supplier offer created/updated', {
       supplier_id: supplierProduct.supplier_id,
       canonical_product_id: canonicalProductId,
-      supplier_sku: supplierProduct.supplier_sku,
+      supplier_sku: supplierSku,
       cost: rawCost,
-      per_unit_cost: perUnitCost,
+      per_unit_cost: perUnitCostUsd,
     });
 
     // Emit event for downstream processing
@@ -605,7 +625,7 @@ async function createOrUpdateSupplierOffer(
         canonical_product_id: canonicalProductId,
         supplier_id: supplierProduct.supplier_id,
         new_cost: rawCost,
-        per_unit_cost: perUnitCost,
+        per_unit_cost: perUnitCostUsd,
       },
     });
 

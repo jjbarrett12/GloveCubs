@@ -7,6 +7,10 @@
 
 import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
 import { logAuditEvent } from './auth';
+import {
+  buildSupplierOfferUpsertRow,
+  parseSupplierOfferCostBasis,
+} from '../../../../lib/supplier-offer-normalization';
 
 async function mapCatalogProductNamesByIds(productIds: string[]): Promise<Map<string, string>> {
   const ids = Array.from(new Set(productIds.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 500);
@@ -126,13 +130,13 @@ export async function listOffers(
       supplier_id: d.supplier_id,
       product_id: d.product_id,
       product_name: nameByProduct.get(String(d.product_id)),
-      sku: d.sku,
+      sku: d.sku as string,
       price: Number(d.price),
-      case_pack: d.case_pack,
-      box_quantity: d.box_quantity,
-      lead_time_days: d.lead_time_days,
-      moq: d.moq,
-      shipping_notes: d.shipping_notes,
+      case_pack: (d as { units_per_case?: number | null }).units_per_case ?? undefined,
+      box_quantity: undefined,
+      lead_time_days: d.lead_time_days as number | undefined,
+      moq: undefined,
+      shipping_notes: undefined,
       is_active: d.is_active,
       created_at: d.created_at,
       updated_at: d.updated_at,
@@ -165,13 +169,13 @@ export async function getOffer(
     supplier_id: data.supplier_id,
     product_id: data.product_id,
     product_name: nameByProduct.get(String(data.product_id)),
-    sku: data.sku,
+    sku: data.sku as string,
     price: Number(data.price),
-    case_pack: data.case_pack,
-    box_quantity: data.box_quantity,
-    lead_time_days: data.lead_time_days,
-    moq: data.moq,
-    shipping_notes: data.shipping_notes,
+    case_pack: (data as { units_per_case?: number | null }).units_per_case ?? undefined,
+    box_quantity: undefined,
+    lead_time_days: data.lead_time_days as number | undefined,
+    moq: undefined,
+    shipping_notes: undefined,
     is_active: data.is_active,
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -200,35 +204,44 @@ export async function createOffer(
     return { success: false, error: 'Product not found' };
   }
   
+  const catalogos = getSupabaseCatalogos();
   // Check for existing offer
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await catalogos
     .from('supplier_offers')
     .select('id')
     .eq('supplier_id', supplier_id)
     .eq('product_id', input.product_id)
-    .single();
+    .maybeSingle();
     
   if (existing) {
     return { success: false, error: 'Offer already exists for this product. Use update instead.' };
   }
-  
-  // Create offer
-  const { data: offer, error } = await supabaseAdmin
-    .from('supplier_offers')
-    .insert({
+
+  const costNum = Number(input.price);
+  const supplierSku =
+    input.sku != null && String(input.sku).trim().length > 0
+      ? String(input.sku).trim()
+      : `PORTAL-${input.product_id.slice(0, 8)}-${Date.now().toString(36)}`;
+  const unitsPerCase =
+    input.case_pack != null && Number.isFinite(input.case_pack) && input.case_pack > 0
+      ? Math.trunc(input.case_pack)
+      : null;
+
+  const insertRow = buildSupplierOfferUpsertRow(
+    {
       supplier_id,
       product_id: input.product_id,
-      sku: input.sku,
-      price: input.price,
-      case_pack: input.case_pack,
-      box_quantity: input.box_quantity,
-      lead_time_days: input.lead_time_days,
-      moq: input.moq,
-      shipping_notes: input.shipping_notes,
+      supplier_sku: supplierSku,
+      cost: costNum,
+      sell_price: costNum,
+      lead_time_days: input.lead_time_days ?? null,
       is_active: true,
-    })
-    .select()
-    .single();
+      units_per_case: unitsPerCase,
+    },
+    { currency_code: 'USD', cost_basis: 'per_case', cost: costNum, units_per_case: unitsPerCase ?? undefined }
+  );
+
+  const { data: offer, error } = await catalogos.from('supplier_offers').insert(insertRow).select('*').single();
     
   if (error) {
     return { success: false, error: 'Failed to create offer' };
@@ -248,13 +261,13 @@ export async function createOffer(
       supplier_id: offer.supplier_id,
       product_id: offer.product_id,
       product_name: product.name,
-      sku: offer.sku,
-      price: Number(offer.price),
-      case_pack: offer.case_pack,
-      box_quantity: offer.box_quantity,
-      lead_time_days: offer.lead_time_days,
-      moq: offer.moq,
-      shipping_notes: offer.shipping_notes,
+      sku: offer.supplier_sku as string,
+      price: Number(offer.cost),
+      case_pack: (offer as { units_per_case?: number | null }).units_per_case ?? undefined,
+      box_quantity: undefined,
+      lead_time_days: offer.lead_time_days as number | undefined,
+      moq: undefined,
+      shipping_notes: undefined,
       is_active: offer.is_active,
       created_at: offer.created_at,
       updated_at: offer.updated_at,
@@ -273,81 +286,104 @@ export async function updateOffer(
   input: UpdateOfferInput,
   ipAddress?: string
 ): Promise<{ success: boolean; offer?: SupplierOffer; error?: string }> {
-  // Get existing offer
-  const { data: existing } = await supabaseAdmin
+  const catalogos = getSupabaseCatalogos();
+  const { data: existing, error: exErr } = await catalogos
     .from('supplier_offers')
     .select('*')
     .eq('id', offer_id)
     .eq('supplier_id', supplier_id)
     .single();
-    
-  if (!existing) {
+
+  if (exErr || !existing) {
     return { success: false, error: 'Offer not found' };
   }
-  
-  // Build update object
-  const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+
+  const ex = existing as {
+    cost: number;
+    sell_price: number | null;
+    units_per_case: number | null;
+    currency_code: string;
+    cost_basis: string;
+    lead_time_days: number | null;
+    is_active: boolean;
   };
-  
+
   const changes: Record<string, { old: unknown; new: unknown }> = {};
-  
-  if (input.price !== undefined && input.price !== existing.price) {
-    updates.price = input.price;
-    changes.price = { old: existing.price, new: input.price };
+
+  if (input.price !== undefined && Number(input.price) !== Number(ex.cost)) {
+    changes.price = { old: Number(ex.cost), new: input.price };
   }
-  
-  if (input.case_pack !== undefined && input.case_pack !== existing.case_pack) {
-    updates.case_pack = input.case_pack;
-    changes.case_pack = { old: existing.case_pack, new: input.case_pack };
+  if (input.case_pack !== undefined) {
+    const oldPack = ex.units_per_case ?? undefined;
+    if (input.case_pack !== oldPack) {
+      changes.case_pack = { old: oldPack, new: input.case_pack };
+    }
   }
-  
-  if (input.box_quantity !== undefined && input.box_quantity !== existing.box_quantity) {
-    updates.box_quantity = input.box_quantity;
-    changes.box_quantity = { old: existing.box_quantity, new: input.box_quantity };
+  if (input.lead_time_days !== undefined && input.lead_time_days !== ex.lead_time_days) {
+    changes.lead_time_days = { old: ex.lead_time_days, new: input.lead_time_days };
   }
-  
-  if (input.lead_time_days !== undefined && input.lead_time_days !== existing.lead_time_days) {
-    updates.lead_time_days = input.lead_time_days;
-    changes.lead_time_days = { old: existing.lead_time_days, new: input.lead_time_days };
+  if (input.is_active !== undefined && input.is_active !== ex.is_active) {
+    changes.is_active = { old: ex.is_active, new: input.is_active };
   }
-  
-  if (input.moq !== undefined && input.moq !== existing.moq) {
-    updates.moq = input.moq;
-    changes.moq = { old: existing.moq, new: input.moq };
+  if (input.box_quantity !== undefined) {
+    changes.box_quantity = { old: undefined, new: input.box_quantity };
   }
-  
-  if (input.shipping_notes !== undefined && input.shipping_notes !== existing.shipping_notes) {
-    updates.shipping_notes = input.shipping_notes;
-    changes.shipping_notes = { old: existing.shipping_notes, new: input.shipping_notes };
+  if (input.moq !== undefined) {
+    changes.moq = { old: undefined, new: input.moq };
   }
-  
-  if (input.is_active !== undefined && input.is_active !== existing.is_active) {
-    updates.is_active = input.is_active;
-    changes.is_active = { old: existing.is_active, new: input.is_active };
+  if (input.shipping_notes !== undefined) {
+    changes.shipping_notes = { old: undefined, new: input.shipping_notes };
   }
-  
+
   if (Object.keys(changes).length === 0) {
     return { success: false, error: 'No changes to apply' };
   }
-  
-  // Apply update
-  const { data: offer, error } = await supabaseAdmin
+
+  const nextCost = input.price !== undefined ? Number(input.price) : Number(ex.cost);
+  const nextSell =
+    input.price !== undefined
+      ? Number(input.price)
+      : ex.sell_price != null
+        ? Number(ex.sell_price)
+        : nextCost;
+  const nextUnits =
+    input.case_pack !== undefined
+      ? input.case_pack != null && input.case_pack > 0
+        ? Math.trunc(input.case_pack)
+        : null
+      : ex.units_per_case;
+
+  const base: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    cost: nextCost,
+    sell_price: nextSell,
+    units_per_case: nextUnits,
+  };
+  if (input.lead_time_days !== undefined) base.lead_time_days = input.lead_time_days;
+  if (input.is_active !== undefined) base.is_active = input.is_active;
+
+  const patch = buildSupplierOfferUpsertRow(base, {
+    currency_code: String(ex.currency_code),
+    cost_basis: parseSupplierOfferCostBasis(ex.cost_basis),
+    cost: nextCost,
+    units_per_case: nextUnits ?? undefined,
+  });
+
+  const { data: offer, error } = await catalogos
     .from('supplier_offers')
-    .update(updates)
+    .update(patch)
     .eq('id', offer_id)
     .select('*')
     .single();
-    
+
   if (error) {
     return { success: false, error: 'Failed to update offer' };
   }
 
   const nameByProduct = await mapCatalogProductNamesByIds([String(offer.product_id)]);
 
-  // Audit log
   await logAuditEvent(supplier_id, user_id, 'update_offer', 'supplier_offer', offer_id, changes, ipAddress);
-  
+
   return {
     success: true,
     offer: {
@@ -355,13 +391,13 @@ export async function updateOffer(
       supplier_id: offer.supplier_id,
       product_id: offer.product_id,
       product_name: nameByProduct.get(String(offer.product_id)),
-      sku: offer.sku,
-      price: Number(offer.price),
-      case_pack: offer.case_pack,
-      box_quantity: offer.box_quantity,
-      lead_time_days: offer.lead_time_days,
-      moq: offer.moq,
-      shipping_notes: offer.shipping_notes,
+      sku: offer.supplier_sku as string,
+      price: Number(offer.cost),
+      case_pack: (offer as { units_per_case?: number | null }).units_per_case ?? undefined,
+      box_quantity: undefined,
+      lead_time_days: offer.lead_time_days as number | undefined,
+      moq: undefined,
+      shipping_notes: undefined,
       is_active: offer.is_active,
       created_at: offer.created_at,
       updated_at: offer.updated_at,
@@ -494,12 +530,12 @@ export async function bulkUploadOffers(
     }
     
     // Check for existing offer
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await getSupabaseCatalogos()
       .from('supplier_offers')
       .select('id')
       .eq('supplier_id', supplier_id)
       .eq('product_id', productId)
-      .single();
+      .maybeSingle();
       
     if (existing) {
       // Update existing

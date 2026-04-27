@@ -11,6 +11,11 @@ import { setLifecycleStatus } from "@/lib/catalog-expansion/lifecycle";
 import { publishSafe, stageSafe } from "@/lib/catalogos/validation-modes";
 import { finalizePublishSearchSync } from "./canonical-sync-service";
 import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Product } from "./ensure-catalog-v2-link";
+import {
+  buildSupplierOfferUpsertRow,
+  costBasisFromSellUnit,
+  unitsPerCaseFromStagingNormalizedContent,
+} from "../../../../lib/supplier-offer-normalization";
 import type { SearchPublishStatus } from "./types";
 
 export interface PublishVariantGroupInput {
@@ -333,19 +338,30 @@ async function runPublishVariantGroupAddVariants(params: {
     }
 
     const cost = Number(nd.normalized_case_cost ?? nd.supplier_cost ?? nd.cost ?? 0);
-    const { error: offerErr } = await supabase.from("supplier_offers").upsert(
+    const costNum = Number.isFinite(cost) ? cost : 0;
+    const pricingNd = nd.pricing as { sell_unit?: string } | undefined;
+    const offerCostBasis = costBasisFromSellUnit(pricingNd?.sell_unit ?? "case");
+    const unitsPer = unitsPerCaseFromStagingNormalizedContent(
+      nd as Record<string, unknown>,
+      mergedAttrs as Record<string, unknown>
+    );
+    const offerRow = buildSupplierOfferUpsertRow(
       {
         supplier_id: row.supplier_id,
         product_id: productId,
         supplier_sku: variantSku,
-        cost: Number.isFinite(cost) ? cost : 0,
+        cost: costNum,
         sell_price: Number.isFinite(cost) ? cost : null,
         raw_id: row.raw_id,
         normalized_id: row.id,
         is_active: true,
+        units_per_case: unitsPer ?? null,
       },
-      { onConflict: "supplier_id,product_id,supplier_sku" }
+      { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
     );
+    const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
+      onConflict: "supplier_id,product_id,supplier_sku",
+    });
     if (offerErr) {
       return {
         success: false,
