@@ -332,7 +332,8 @@ describe('Supplier Feed Upload - Service Layer', () => {
       it('should warn when active offer already exists for product', async () => {
         const existingOffer = {
           id: 'offer-existing',
-          price: 9.99,
+          cost: 8.5,
+          sell_price: 9.99,
           updated_at: '2026-03-01T00:00:00Z',
         };
         
@@ -365,6 +366,51 @@ describe('Supplier Feed Upload - Service Layer', () => {
         const result = await validateRow('supplier-1', extracted, normalized);
         
         expect(result.warnings.some(w => w.type === 'duplicate')).toBe(true);
+        const dup = result.warnings.find((w) => w.type === 'duplicate');
+        expect(dup?.details).toMatchObject({
+          cost: 8.5,
+          sell_price: 9.99,
+          existing_price: 9.99,
+        });
+      });
+
+      it('duplicate warning uses cost when sell_price is null', async () => {
+        const existingOffer = {
+          id: 'offer-cost-only',
+          cost: 7.25,
+          sell_price: null,
+          updated_at: '2026-03-02T00:00:00Z',
+        };
+        const mockChain = {
+          ...createMockChain(),
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: existingOffer, error: null }),
+        };
+        (supabaseAdmin.from as Mock).mockReturnValue(mockChain);
+
+        const extracted: ExtractedProduct = {
+          product_name: 'Test Product',
+          price: 10.99,
+          confidence: { product_name: 1.0, price: 1.0 },
+        };
+        const normalized: NormalizedProduct = {
+          matched_product_id: 'prod-123',
+          matched_product_name: 'Test Product',
+          match_confidence: 0.9,
+          match_method: 'fuzzy_name',
+          price_normalized: 10.99,
+          price_per_unit: 10.99,
+          pack_size_normalized: 1,
+          unit_normalized: 'each',
+        };
+        const result = await validateRow('supplier-1', extracted, normalized);
+        const dup = result.warnings.find((w) => w.type === 'duplicate');
+        expect(dup?.details).toMatchObject({
+          cost: 7.25,
+          sell_price: null,
+          existing_price: 7.25,
+        });
       });
 
       it('should not warn when no existing offer', async () => {

@@ -995,19 +995,23 @@ async function checkDuplicate(
 ): Promise<{ message: string; details: Record<string, unknown> } | null> {
   const { data: existing } = await supabaseAdmin
     .from('supplier_offers')
-    .select('id, price, updated_at')
+    .select('id, cost, sell_price, updated_at')
     .eq('supplier_id', supplier_id)
     .eq('product_id', product_id)
     .eq('is_active', true)
     .single();
-    
+
   if (existing) {
+    const row = existing as { id: string; cost: number; sell_price: number | null; updated_at: string };
+    const existingListPrice = row.sell_price ?? row.cost;
     return {
       message: 'You already have an active offer for this product - this will update it',
       details: {
-        existing_offer_id: existing.id,
-        existing_price: existing.price,
-        last_updated: existing.updated_at,
+        existing_offer_id: row.id,
+        cost: row.cost,
+        sell_price: row.sell_price,
+        existing_price: existingListPrice,
+        last_updated: row.updated_at,
       },
     };
   }
