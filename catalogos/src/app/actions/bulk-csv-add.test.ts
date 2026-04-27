@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { allocateBulkCsvExternalId } from "./bulk-csv-add";
+import { allocateBulkCsvExternalId } from "@/lib/ingestion/bulk-csv-external-id";
 
 const BATCH = "550e8400-e29b-41d4-a716-446655440000";
 

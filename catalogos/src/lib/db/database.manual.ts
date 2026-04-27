@@ -1,6 +1,6 @@
 /**
  * Permissive Supabase `Database` typing for CatalogOS until `database.from-remote.ts` is generated.
- * `getSupabaseCatalogos()` uses schema `catalogos`; `getSupabase()` uses `public`.
+ * `getSupabaseCatalogos()` uses schema `catalogos`; `getSupabase()` uses `public` and may `.schema("catalog_v2")` for live storefront catalog tables.
  *
  * Do not use `Row` from here in UI — use `@/lib/contracts` query DTOs where added.
  */
@@ -33,6 +33,30 @@ export interface Database {
     Enums: Record<string, never>;
   };
   catalogos: {
+    Tables: {
+      [table_name: string]: GenericRelation;
+    };
+    Views: {
+      [view_name: string]: {
+        Row: Record<string, unknown>;
+      };
+    };
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+  };
+  catalog_v2: {
+    Tables: {
+      [table_name: string]: GenericRelation;
+    };
+    Views: {
+      [view_name: string]: {
+        Row: Record<string, unknown>;
+      };
+    };
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+  };
+  gc_commerce: {
     Tables: {
       [table_name: string]: GenericRelation;
     };

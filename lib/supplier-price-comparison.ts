@@ -89,7 +89,7 @@ function toBigIntMinor(v: number | bigint): bigint {
 function minorPositive(v: number | bigint | null | undefined): boolean {
   if (v === null || v === undefined) return false;
   const b = toBigIntMinor(v);
-  return b > 0n;
+  return b > BigInt(0);
 }
 
 function confidenceAllowed(
@@ -120,11 +120,11 @@ function resolveBaselineField(sellable: SupplierPriceComparisonSellableInput | n
 } {
   if (!sellable) return { field: null, value: null };
   const bulk = tryMinorField(sellable.bulk_price_minor);
-  if (bulk != null && bulk > 0n) {
+  if (bulk != null && bulk > BigInt(0)) {
     return { field: "bulk_price_minor", value: bulk };
   }
   const list = tryMinorField(sellable.list_price_minor);
-  if (list != null && list > 0n) {
+  if (list != null && list > BigInt(0)) {
     return { field: "list_price_minor", value: list };
   }
   return { field: null, value: null };

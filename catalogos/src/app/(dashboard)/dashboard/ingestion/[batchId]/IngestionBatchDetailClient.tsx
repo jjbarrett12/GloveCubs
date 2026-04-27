@@ -29,7 +29,7 @@ import {
   publishNextApprovedPublishChunk,
   updateImportPricingOverride,
 } from "@/app/actions/review";
-import { effectiveImportPricing } from "@/lib/ingestion/import-pricing";
+import { effectiveImportPricing, type ImportAutoPricingWithOverride } from "@/lib/ingestion/import-pricing";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ApproveAllAutoReadyResult } from "@/app/actions/review";
 import { getBulkEligibility } from "./ingestion-bulk-eligibility";
@@ -185,7 +185,7 @@ const BatchTableRow = memo(function BatchTableRow({
     row.ai_confidence != null ? row.ai_confidence : row.match_confidence != null ? row.match_confidence : null;
   const aiStatus = row.ai_match_status ?? "not_needed";
   const ap = nd?.import_auto_pricing;
-  const eff = ap ? effectiveImportPricing(ap) : null;
+  const eff = ap ? effectiveImportPricing(ap as ImportAutoPricingWithOverride) : null;
   const [pricingOpen, setPricingOpen] = useState(false);
   const [listEdit, setListEdit] = useState("");
   const [pricingErr, setPricingErr] = useState<string | null>(null);

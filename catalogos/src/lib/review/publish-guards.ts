@@ -7,7 +7,11 @@ import { getStagingById } from "@/lib/review/data";
 import { buildPublishInputFromStaged } from "@/lib/publish/publish-service";
 import { publishSafe, stageSafe } from "@/lib/catalogos/validation-modes";
 import type { CategorySlug } from "@/lib/catalogos/attribute-dictionary-types";
-import { DEFAULT_PRODUCT_TYPE_KEY, isImplementedProductTypeKey } from "@/lib/product-types";
+import {
+  DEFAULT_PRODUCT_TYPE_KEY,
+  isImplementedProductTypeKey,
+  type ProductTypeKey,
+} from "@/lib/product-types";
 
 /** Blockers grouped for operator UI (subset of full publish pipeline). */
 export interface PublishReadinessBlockerSections {
@@ -55,7 +59,7 @@ const POST_CLICK_NOTES = [
 export async function evaluatePublishReadiness(normalizedId: string): Promise<PublishReadiness> {
   const sections = emptySections();
   const warnings: string[] = [];
-  let categorySlug = DEFAULT_PRODUCT_TYPE_KEY;
+  let categorySlug: ProductTypeKey = DEFAULT_PRODUCT_TYPE_KEY;
   let categoryRequirementsEnforced = true;
 
   const row = await getStagingById(normalizedId);
@@ -104,7 +108,7 @@ export async function evaluatePublishReadiness(normalizedId: string): Promise<Pu
     };
   }
 
-  categorySlug = (input.categorySlug ?? DEFAULT_PRODUCT_TYPE_KEY) as string;
+  categorySlug = (input.categorySlug ?? DEFAULT_PRODUCT_TYPE_KEY) as ProductTypeKey;
   categoryRequirementsEnforced = isImplementedProductTypeKey(categorySlug);
 
   if (!categoryRequirementsEnforced) {
