@@ -11,6 +11,11 @@ import {
   type UpdateQuickAddCoreInput,
 } from "@/app/actions/quick-add";
 import { createNewMasterProduct, publishStagedToLive, getAttributeRequirementsForStaged } from "@/app/actions/review";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
+import {
+  effectiveImportPricing,
+  type ImportAutoPricingWithOverride,
+} from "@/lib/ingestion/import-pricing";
 import type { PublishReadiness } from "@/lib/review/publish-guards";
 import { QuickAddShellForm } from "./QuickAddShellForm";
 import { StagingAttributePanel, type AttributeRequirementsState } from "./StagingAttributePanel";
@@ -216,6 +221,7 @@ function QuickAddInner({
   async function onCreateMaster() {
     if (!id || !detail) return;
     const targetId = id;
+    const nd = (detail.normalized_data ?? {}) as Record<string, unknown>;
     const catSlug = String(nd.category_slug ?? "").trim();
     const cat = categories.find((c) => c.slug === catSlug);
     if (!cat) {
@@ -228,9 +234,37 @@ function QuickAddInner({
       setBanner({ text: "Name and SKU are required.", variant: "error" });
       return;
     }
+    const iap = nd.import_auto_pricing as ImportAutoPricingWithOverride | undefined;
+    if (!iap) {
+      setBanner({
+        text: "Import pricing is required before creating a catalog master. Save case pricing and supplier cost first.",
+        variant: "error",
+      });
+      return;
+    }
+    const eff = effectiveImportPricing(iap);
+    const list_price_minor = Math.round(eff.list_price * 100);
+    if (!Number.isInteger(list_price_minor) || list_price_minor < 0) {
+      setBanner({ text: "Computed list price is invalid; fix import pricing and retry.", variant: "error" });
+      return;
+    }
+    const sc = Number(nd.supplier_cost ?? iap.supplier_cost);
+    const unit_cost_minor =
+      Number.isFinite(sc) && sc >= 0 ? Math.round(sc * 100) : null;
     setActionBusy(true);
     setBanner(null);
-    const r = await createNewMasterProduct(targetId, { sku, name, category_id: cat.id }, { publishToLive: false, publishedBy: "admin" });
+    const r = await createNewMasterProduct(
+      targetId,
+      {
+        sku,
+        name,
+        category_id: cat.id,
+        product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+        list_price_minor,
+        unit_cost_minor,
+      },
+      { publishToLive: false, publishedBy: "admin" }
+    );
     if (activeNormalizedIdRef.current !== targetId) {
       setActionBusy(false);
       return;

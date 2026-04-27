@@ -129,7 +129,8 @@ export async function runMatchingWithAIFallback(
   let aiMatchingUsed = false;
   let matchExplanation: string | null = null;
   let aiMatchResult: AIMatchingOutput | null = null;
-  let masterProductId = rulesMatch.masterProductId;
+  /** Only rules-based matched rows get a master id; AI suggestions never auto-link (needs_review path). */
+  let masterProductId = rulesMatch.matched ? rulesMatch.masterProductId : null;
   let confidence = rulesMatch.confidence;
   let reason = rulesMatch.reason;
 
@@ -154,16 +155,7 @@ export async function runMatchingWithAIFallback(
       aiMatchingUsed = true;
       aiMatchResult = aiResult;
       matchExplanation = aiResult.explanation;
-      const validCandidateIds = new Set(candidates.map((c) => c.id));
-      if (
-        aiResult.suggested_master_product_id &&
-        validCandidateIds.has(aiResult.suggested_master_product_id) &&
-        aiResult.match_confidence > confidence
-      ) {
-        masterProductId = aiResult.suggested_master_product_id;
-        confidence = aiResult.match_confidence;
-        reason = "ai_suggested";
-      }
+      // Do not set masterProductId from AI — operators must review (addAIReviewWarning on flags).
     }
   }
 

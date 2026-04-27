@@ -56,6 +56,8 @@ export interface NormalizedData {
 
 /** Result of matching a normalized row to the master catalog. */
 export interface MatchResult {
+  /** True only when confidence >= threshold and a rule-based path accepted the match. */
+  matched: boolean;
   masterProductId: string | null;
   confidence: number;
   reason: "upc_exact" | "attribute_match" | "fuzzy_title" | "no_match" | "ai_suggested";
@@ -78,7 +80,8 @@ export type AnomalyCode =
   | "suspiciously_high_markup"
   | "duplicate_supplier_sku_in_batch"
   | "conflicting_case_quantities"
-  | "AI_SUGGESTED_NEEDS_REVIEW";
+  | "AI_SUGGESTED_NEEDS_REVIEW"
+  | "match_uncertain_needs_review";
 
 export interface AnomalyFlag {
   code: AnomalyCode;

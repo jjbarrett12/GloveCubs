@@ -20,7 +20,8 @@ export type ReviewFlagCode =
   | "missing_case_conversion_data"
   | "ambiguous_price_basis"
   | "inconsistent_case_quantity"
-  | "invalid_supplier_price";
+  | "invalid_supplier_price"
+  | "match_uncertain_needs_review";
 
 export interface ReviewFlag {
   code: ReviewFlagCode;

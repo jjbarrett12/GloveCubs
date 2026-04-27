@@ -11,6 +11,7 @@ import {
   mergeWithStaged,
   type ReviewResult,
 } from "@/app/actions/review";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
 
 interface ReviewActionModalProps {
   normalizedId: string;
@@ -30,6 +31,7 @@ export function ReviewActionModal({ normalizedId, action, categories = [], initi
   const [newSku, setNewSku] = useState("");
   const [newName, setNewName] = useState(initialName);
   const [categoryId, setCategoryId] = useState("");
+  const [listPriceUsd, setListPriceUsd] = useState("");
   const [publishToLive, setPublishToLive] = useState(true);
   useEffect(() => {
     if (initialMasterProductId) setMasterProductId(initialMasterProductId);
@@ -46,11 +48,29 @@ export function ReviewActionModal({ normalizedId, action, categories = [], initi
       } else if (action === "reject") {
         result = await rejectStaged(normalizedId, notes || undefined);
       } else if (action === "create_master") {
-        result = await createNewMasterProduct(normalizedId, {
-          sku: newSku,
-          name: newName,
-          category_id: categoryId,
-        }, { publishToLive, publishedBy: "admin" });
+        const listNum = Number(String(listPriceUsd).trim());
+        if (!Number.isFinite(listNum) || listNum < 0) {
+          setError("List price (USD) is required and must be non-negative.");
+          setBusy(false);
+          return;
+        }
+        const list_price_minor = Math.round(listNum * 100);
+        if (!Number.isInteger(list_price_minor) || list_price_minor < 0) {
+          setError("Invalid list price.");
+          setBusy(false);
+          return;
+        }
+        result = await createNewMasterProduct(
+          normalizedId,
+          {
+            sku: newSku,
+            name: newName,
+            category_id: categoryId,
+            product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+            list_price_minor,
+          },
+          { publishToLive, publishedBy: "admin" }
+        );
       } else if (action === "merge") {
         result = await mergeWithStaged(normalizedId, masterProductId, { publishToLive, publishedBy: "admin" });
       } else {
@@ -111,6 +131,16 @@ export function ReviewActionModal({ normalizedId, action, categories = [], initi
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Name</label>
                 <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Product name" required />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">List price (USD)</label>
+                <Input
+                  value={listPriceUsd}
+                  onChange={(e) => setListPriceUsd(e.target.value)}
+                  placeholder="e.g. 19.99"
+                  inputMode="decimal"
+                  required
+                />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Category</label>

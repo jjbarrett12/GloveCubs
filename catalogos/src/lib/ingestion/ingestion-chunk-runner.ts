@@ -222,8 +222,7 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
         supplierSku: normalized.sku,
         masterCandidates,
       });
-      const rulesAccepted =
-        rulesMatch.masterProductId != null && rulesMatch.confidence >= LOW_CONFIDENCE_THRESHOLD;
+      const rulesAccepted = rulesMatch.matched;
       const masterProductIdForRow = rulesAccepted ? rulesMatch.masterProductId : null;
 
       const cost = normalized.cost ?? 0;
@@ -256,6 +255,13 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
         supplierSkuInBatchCount: skuCount,
         caseQtyValuesInBatch: caseQtysInBatch,
       });
+      if (!rulesMatch.matched && rulesMatch.confidence > 0) {
+        anomalyFlags.push({
+          code: "match_uncertain_needs_review",
+          message: `No master link: match confidence ${rulesMatch.confidence.toFixed(2)} is below threshold or ambiguous.`,
+          severity: "warning",
+        });
+      }
       if (anomalyFlags.length > 0) anomalyRowCount++;
 
       const payload = buildStagingPayload({
@@ -274,7 +280,7 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
       const aiMatchStatus = rulesAccepted ? "not_needed" : "pending";
       const aiMatchQueueReason = rulesAccepted
         ? null
-        : rulesMatch.masterProductId != null
+        : rulesMatch.confidence > 0
           ? "rules_below_threshold"
           : "no_rules_match";
       const normalizedDataWithMeta = {

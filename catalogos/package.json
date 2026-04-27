@@ -8,7 +8,8 @@
     "start": "next start -p 3010",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:catalog-sellable-guard": "vitest run src/lib/commerce/catalog-v2-sellable-integrity.integration.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import React, { Suspense } from "react";
 import { QuickAddPageClient } from "./QuickAddPageClient";
-import { makePublishReadiness, makeStagingDetail, type StagingDetailRow } from "./quick-add-test-fixtures";
+import { makePublishReadiness, makeStagingDetail, quickAddPricingFields, type StagingDetailRow } from "./quick-add-test-fixtures";
 
 const navState = vi.hoisted(() => ({
   sp: new URLSearchParams(),
@@ -406,12 +406,7 @@ describe("QuickAddPageClient", () => {
     const user = userEvent.setup();
     navState.sp = new URLSearchParams("id=nid-a");
 
-    const ndBase = {
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
-    };
+    const ndBase = { ...quickAddPricingFields({ supplierCost: 10 }), filter_attributes: {} };
     const rowA = makeStagingDetail("nid-a", {
       master_product_id: "m1",
       status: "approved",
@@ -450,7 +445,7 @@ describe("QuickAddPageClient", () => {
       allowedByKey: { brand: ["AcmeBrand", "BetaBrand"] },
     });
 
-    let releaseA: () => void;
+    let releaseA!: () => void;
     const gateA = new Promise<void>((resolve) => {
       releaseA = () => resolve();
     });
@@ -638,22 +633,16 @@ describe("QuickAddPageClient", () => {
     navState.sp = new URLSearchParams("id=nid-a");
 
     const ndA = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "QUICKADD-ROW-A",
       supplier_sku: "SA",
       sku: "SA",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const ndB = {
+      ...quickAddPricingFields({ supplierCost: 11 }),
       name: "QUICKADD-ROW-B",
       supplier_sku: "SB",
       sku: "SB",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 11,
-      pricing: { sell_unit: "case", normalized_case_cost: 11 },
     };
     const rowA = makeStagingDetail("nid-a", {
       master_product_id: "m1",
@@ -684,7 +673,7 @@ describe("QuickAddPageClient", () => {
       }),
     });
 
-    let releaseB: () => void;
+    let releaseB!: () => void;
     const gateB = new Promise<void>((resolve) => {
       releaseB = () => resolve();
     });
@@ -738,22 +727,16 @@ describe("QuickAddPageClient", () => {
     navState.sp = new URLSearchParams("id=nid-a");
 
     const ndA = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "STALE-A-WINS-IF-APPLIED",
       supplier_sku: "SA",
       sku: "SA",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const ndB = {
+      ...quickAddPricingFields({ supplierCost: 11 }),
       name: "STALE-B-CORRECT",
       supplier_sku: "SB",
       sku: "SB",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 11,
-      pricing: { sell_unit: "case", normalized_case_cost: 11 },
     };
     const rowA = makeStagingDetail("nid-a", {
       master_product_id: "m1",
@@ -784,7 +767,7 @@ describe("QuickAddPageClient", () => {
       }),
     });
 
-    let releaseA: () => void;
+    let releaseA!: () => void;
     const gateA = new Promise<void>((resolve) => {
       releaseA = () => resolve();
     });
@@ -837,22 +820,16 @@ describe("QuickAddPageClient", () => {
     navState.sp = new URLSearchParams("id=nid-a");
 
     const ndA = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "ROW-PUB-A",
       supplier_sku: "SA",
       sku: "SA",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const ndB = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "ROW-PUB-B",
       supplier_sku: "SB",
       sku: "SB",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const rowA = makeStagingDetail("nid-a", {
       master_product_id: "m1",
@@ -883,7 +860,7 @@ describe("QuickAddPageClient", () => {
       }),
     });
 
-    let releaseA: () => void;
+    let releaseA!: () => void;
     const gateA = new Promise<void>((resolve) => {
       releaseA = () => resolve();
     });
@@ -941,13 +918,10 @@ describe("QuickAddPageClient", () => {
       master_product_id: null,
       status: "pending",
       normalized_data: {
+        ...quickAddPricingFields({ supplierCost: 10 }),
         name: "ROW-MASTER-A",
         supplier_sku: "SA",
         sku: "SA",
-        category_slug: "disposable_gloves",
-        filter_attributes: {},
-        normalized_case_cost: 10,
-        pricing: { sell_unit: "case", normalized_case_cost: 10 },
       },
       publish_readiness: makePublishReadiness({
         canPublish: false,
@@ -963,13 +937,10 @@ describe("QuickAddPageClient", () => {
       master_product_id: null,
       status: "pending",
       normalized_data: {
+        ...quickAddPricingFields({ supplierCost: 10 }),
         name: "ROW-MASTER-B",
         supplier_sku: "SB",
         sku: "SB",
-        category_slug: "disposable_gloves",
-        filter_attributes: {},
-        normalized_case_cost: 10,
-        pricing: { sell_unit: "case", normalized_case_cost: 10 },
       },
       publish_readiness: makePublishReadiness({
         canPublish: false,
@@ -982,7 +953,7 @@ describe("QuickAddPageClient", () => {
       }),
     });
 
-    let releaseA: () => void;
+    let releaseA!: () => void;
     const gateA = new Promise<void>((resolve) => {
       releaseA = () => resolve();
     });
@@ -1037,22 +1008,16 @@ describe("QuickAddPageClient", () => {
     navState.sp = new URLSearchParams("id=nid-a");
 
     const ndA = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "ROW-BUSY-A",
       supplier_sku: "SA",
       sku: "SA",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const ndB = {
+      ...quickAddPricingFields({ supplierCost: 10 }),
       name: "ROW-BUSY-B",
       supplier_sku: "SB",
       sku: "SB",
-      category_slug: "disposable_gloves",
-      filter_attributes: {},
-      normalized_case_cost: 10,
-      pricing: { sell_unit: "case", normalized_case_cost: 10 },
     };
     const rowA = makeStagingDetail("nid-a", {
       master_product_id: "m1",

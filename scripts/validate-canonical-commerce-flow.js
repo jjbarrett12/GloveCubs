@@ -1,6 +1,9 @@
 /**
  * Live DB checks: catalog_v2-only product id through cart/checkout/order snapshot + inventory + guards.
  * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY. Expose `catalog_v2` (and `catalogos` for non-product tables if needed).
+ *
+ * Optional: RUN_CATALOG_SELLABLE_GUARD=1 — before the checkout chain, fail if any active catalog_v2.catalog_products
+ * row lacks an active gc_commerce.sellable_products row with integer list_price_minor >= 1 (prints id, slug, sku).
  */
 
 'use strict';
@@ -198,6 +201,36 @@ async function main() {
     ];
     for (const s of steps) console.log('SKIP\t' + s);
     process.exit(probe.blockedByExposedSchemaSetting ? 0 : 1);
+  }
+
+  if (process.env.RUN_CATALOG_SELLABLE_GUARD === '1') {
+    const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
+    const {
+      findCatalogV2SellableIntegrityViolations,
+      formatCatalogV2SellableIntegrityReport,
+    } = require('../lib/catalog-v2-sellable-integrity-guard');
+    try {
+      const violations = await findCatalogV2SellableIntegrityViolations(getSupabaseAdmin());
+      const ok = violations.length === 0;
+      record(
+        'integrity: active catalog_v2 ↔ gc_commerce.sellable_products',
+        ok,
+        ok ? null : formatCatalogV2SellableIntegrityReport(violations),
+      );
+      if (!ok) {
+        console.log('');
+        console.log(formatCatalogV2SellableIntegrityReport(violations));
+        printSummary(results);
+        process.exit(1);
+      }
+    } catch (e) {
+      const msg = e.message || String(e);
+      record('integrity: active catalog_v2 ↔ gc_commerce.sellable_products', false, msg);
+      console.log('');
+      console.log(msg);
+      printSummary(results);
+      process.exit(1);
+    }
   }
 
   let v2;

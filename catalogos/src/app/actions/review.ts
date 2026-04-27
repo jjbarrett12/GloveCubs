@@ -25,7 +25,7 @@ import {
   type ImportPricingOverridePatch,
 } from "@/lib/ingestion/import-pricing";
 import { stripFacetExtractionUiState } from "@/lib/extraction/staging-facet-merge";
-import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
+import { upsertSellableForCatalogV2Product } from "@/lib/publish/ensure-catalog-v2-link";
 import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 
 function slugForNewCatalogProduct(sku: string, name: string): string {
@@ -139,23 +139,49 @@ export async function rejectStaged(normalizedId: string, notes?: string): Promis
   return { success: true };
 }
 
+const PRODUCT_TYPE_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function createNewMasterProduct(
   normalizedId: string,
-  payload: { sku: string; name: string; category_id: string; brand_id?: string; description?: string },
+  payload: {
+    sku: string;
+    name: string;
+    category_id: string;
+    brand_id?: string;
+    description?: string;
+    product_type_id: string;
+    list_price_minor: number;
+    bulk_price_minor?: number | null;
+    unit_cost_minor?: number | null;
+  },
   options?: ReviewOptions
 ): Promise<ReviewResult & { masterProductId?: string }> {
   const supabase = getSupabaseCatalogos(true);
-  const slugBase = slugForNewCatalogProduct(payload.sku, payload.name);
+  const pt = String(payload.product_type_id || "").trim();
+  if (!PRODUCT_TYPE_UUID_RE.test(pt)) {
+    return { success: false, error: "product_type_id must be a valid UUID" };
+  }
+  const nameTrim = String(payload.name || "").trim();
+  if (!nameTrim) return { success: false, error: "Product name is required" };
+  const skuTrim = String(payload.sku || "").trim();
+  if (!skuTrim) return { success: false, error: "SKU is required" };
+  const lm = Number(payload.list_price_minor);
+  if (!Number.isInteger(lm) || lm < 0) {
+    return { success: false, error: "list_price_minor must be a non-negative integer (USD cents)" };
+  }
+
+  const slugBase = slugForNewCatalogProduct(skuTrim, nameTrim);
   const { data: slugClash } = await supabase.schema("catalog_v2").from("catalog_products").select("id").eq("slug", slugBase).maybeSingle();
   const finalSlug = slugClash?.id ? `${slugBase}-${Date.now().toString(36)}` : slugBase;
   const { data: product, error: insertErr } = await supabase
     .schema("catalog_v2")
     .from("catalog_products")
     .insert({
-      product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
+      product_type_id: pt,
       slug: finalSlug,
-      internal_sku: payload.sku,
-      name: payload.name,
+      internal_sku: skuTrim,
+      name: nameTrim,
       description: payload.description ?? null,
       brand_id: payload.brand_id ?? null,
       status: "active",
@@ -168,12 +194,29 @@ export async function createNewMasterProduct(
   const masterId = product.id as string;
   const { error: vInsErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
     catalog_product_id: masterId,
-    variant_sku: payload.sku,
+    variant_sku: skuTrim,
     sort_order: 0,
     is_active: true,
     metadata: {},
   });
-  if (vInsErr) return { success: false, error: vInsErr.message };
+  if (vInsErr) {
+    await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", masterId);
+    return { success: false, error: vInsErr.message };
+  }
+
+  const sellable = await upsertSellableForCatalogV2Product(masterId, {
+    name: nameTrim,
+    internalSku: skuTrim,
+    listPriceMinor: lm,
+    bulkPriceMinor: payload.bulk_price_minor ?? null,
+    unitCostMinor: payload.unit_cost_minor ?? null,
+    isActive: true,
+  });
+  if (!sellable.ok) {
+    await supabase.schema("catalog_v2").from("catalog_variants").delete().eq("catalog_product_id", masterId);
+    await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", masterId);
+    return { success: false, error: sellable.message };
+  }
   const nextSync = await nextSearchPublishStatusWhenAcceptingReview(normalizedId);
   const patch: Record<string, unknown> = {
     status: "approved",

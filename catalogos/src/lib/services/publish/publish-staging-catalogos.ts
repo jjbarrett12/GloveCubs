@@ -10,6 +10,7 @@ import {
   CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
   upsertSellableForCatalogV2Product,
 } from "@/lib/publish/ensure-catalog-v2-link";
+import { stripPricingKeysForV2ProductMetadata } from "@/lib/ingestion/v2-insert-metadata-sanitize";
 
 export interface PublishInput {
   staging_ids: string[];
@@ -109,6 +110,10 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
         .maybeSingle();
       if (clash) slug = `${slug}-${Date.now().toString(36)}`;
 
+      const safeMeta = stripPricingKeysForV2ProductMetadata(
+        attrs as Record<string, unknown>,
+        norm as Record<string, unknown>
+      );
       const { data: newMaster, error: masterErr } = await admin
         .schema("catalog_v2")
         .from("catalog_products")
@@ -119,7 +124,7 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
           name,
           description: (norm.description as string) ?? null,
           status: "active",
-          metadata: { ...attrs, ...norm },
+          metadata: safeMeta,
         })
         .select("id")
         .single();

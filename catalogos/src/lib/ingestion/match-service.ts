@@ -1,7 +1,7 @@
 /**
  * Match normalized row to master catalog.
- * Order: UPC exact -> attribute match (brand, material, color, size, thickness, case_qty) -> fuzzy title.
- * Returns confidence and reason; low confidence must go to review queue.
+ * Order: UPC exact -> SKU -> attribute match (brand, material, color, size, thickness, case_qty) -> fuzzy title.
+ * When matched is false, masterProductId is always null (no ambiguous ids for callers).
  */
 
 import type { NormalizedData, MatchResult } from "./types";
@@ -47,10 +47,36 @@ export async function loadMasterProducts(categoryId: string): Promise<MasterProd
 /**
  * Match normalized row to master catalog. Order: UPC exact, then attribute match, then fuzzy title.
  */
+function resultMatched(
+  masterProductId: string | null,
+  confidence: number,
+  reason: MatchResult["reason"]
+): MatchResult {
+  const matched =
+    masterProductId != null &&
+    confidence >= LOW_CONFIDENCE_THRESHOLD &&
+    reason !== "no_match" &&
+    reason !== "ai_suggested";
+  return assertMatchReturn({
+    matched,
+    masterProductId: matched ? masterProductId : null,
+    confidence,
+    reason: matched ? reason : "no_match",
+  });
+}
+
+/** Runtime guard: callers must never see a master id when matched is false. */
+function assertMatchReturn(r: MatchResult): MatchResult {
+  if (!r.matched && r.masterProductId != null) {
+    throw new Error("matchToMaster contract violation: masterProductId must be null when matched is false");
+  }
+  return r;
+}
+
 export async function matchToMaster(input: MatchInput): Promise<MatchResult> {
   const candidates = input.masterCandidates ?? (await loadMasterProducts(input.categoryId));
   if (candidates.length === 0) {
-    return { masterProductId: null, confidence: 0, reason: "no_match" };
+    return assertMatchReturn({ matched: false, masterProductId: null, confidence: 0, reason: "no_match" });
   }
 
   const upc = normalizeUpc(input.normalized.upc);
@@ -60,29 +86,30 @@ export async function matchToMaster(input: MatchInput): Promise<MatchResult> {
       const pu = normalizeUpc(String(a.upc ?? a.gtin ?? ""));
       return pu && pu === upc;
     });
-    if (byUpc) return { masterProductId: byUpc.id, confidence: 0.98, reason: "upc_exact" };
+    if (byUpc) return resultMatched(byUpc.id, 0.98, "upc_exact");
   }
 
   const bySku = input.supplierSku
     ? candidates.find((p) => p.sku.toLowerCase() === input.supplierSku!.toLowerCase())
     : null;
-  if (bySku) return { masterProductId: bySku.id, confidence: 0.85, reason: "attribute_match" };
+  if (bySku) return resultMatched(bySku.id, 0.85, "attribute_match");
 
   const attrScore = matchByAttributes(input.normalized, candidates);
   if (attrScore.masterProductId && attrScore.confidence >= LOW_CONFIDENCE_THRESHOLD) {
-    return { ...attrScore, reason: "attribute_match" };
+    return resultMatched(attrScore.masterProductId, attrScore.confidence, "attribute_match");
   }
 
   const fuzzy = fuzzyTitleMatch(input.normalized.name ?? "", candidates);
   if (fuzzy.masterProductId && fuzzy.confidence >= LOW_CONFIDENCE_THRESHOLD) {
-    return { ...fuzzy, reason: "fuzzy_title" };
+    return resultMatched(fuzzy.masterProductId, fuzzy.confidence, "fuzzy_title");
   }
 
-  return {
-    masterProductId: attrScore.masterProductId ?? fuzzy.masterProductId ?? null,
+  return assertMatchReturn({
+    matched: false,
+    masterProductId: null,
     confidence: Math.max(attrScore.confidence, fuzzy.confidence, 0),
     reason: "no_match",
-  };
+  });
 }
 
 function normalizeUpc(v: string | undefined): string {
