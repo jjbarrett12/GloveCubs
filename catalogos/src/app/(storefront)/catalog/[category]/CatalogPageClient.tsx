@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { trackConversionEvent } from "@/lib/conversion/analytics";
 import { buildCatalogSearchString } from "@/lib/catalog/params";
@@ -16,6 +16,8 @@ import { IndustryQuickSelect } from "@/components/storefront/IndustryQuickSelect
 import { HelpMeChoosePanel } from "@/components/storefront/HelpMeChoosePanel";
 import { CategoryAuthorityBanner } from "@/components/storefront/CategoryAuthorityBanner";
 import { CatalogSearchBar } from "@/components/storefront/CatalogSearchBar";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 interface FacetDef {
   attribute_key: string;
@@ -61,6 +63,7 @@ export function CatalogPageClient({
   enrichedByProductId = {},
 }: CatalogPageClientProps) {
   const basePath = `/catalog/${categorySlug}`;
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const searchQuery = selectedParams.q?.trim() ?? "";
   useEffect(() => {
@@ -73,14 +76,14 @@ export function CatalogPageClient({
   }, [searchQuery, categorySlug, total]);
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
+    <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden lg:flex-row">
       <IndustryQuickSelect
         basePath={basePath}
         selectedParams={selectedParams}
         currentIndustryKey={industryKey}
-        className="lg:col-span-full"
+        className="min-w-0 shrink-0 lg:col-span-full"
       />
-      <aside className="w-full shrink-0 lg:w-64 lg:pr-6">
+      <aside className="hidden w-64 shrink-0 pr-6 lg:block">
         <FilterSidebar
           basePath={basePath}
           facets={facets}
@@ -91,6 +94,12 @@ export function CatalogPageClient({
       </aside>
 
       <div className="min-w-0 flex-1">
+        <div className="mb-3 flex lg:hidden">
+          <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => setFiltersOpen(true)}>
+            Filters
+          </Button>
+        </div>
+
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -99,7 +108,7 @@ export function CatalogPageClient({
             </div>
             <CatalogSearchBar basePath={basePath} selectedParams={selectedParams} />
           </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span>{total} products</span>
             <SortSelect
               basePath={basePath}
@@ -133,6 +142,24 @@ export function CatalogPageClient({
           </>
         )}
       </div>
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="left" className="z-50 w-full max-w-sm overflow-y-auto lg:hidden">
+          <SheetHeader>
+            <SheetTitle>Filters</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            <FilterSidebar
+              basePath={basePath}
+              facets={facets}
+              facetDefinitions={facetDefinitions}
+              selectedParams={selectedParams}
+              priceBounds={priceBounds}
+              onFilterLinkClick={() => setFiltersOpen(false)}
+            />
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -155,7 +182,7 @@ function SortSelect({
         const url = basePath + buildCatalogSearchString(selectedParams, { sort, page: 1 });
         window.location.href = url;
       }}
-      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+      className="h-11 max-w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm sm:h-9"
     >
       {sortOptions.map((s) => (
         <option key={s} value={s}>

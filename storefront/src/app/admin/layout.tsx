@@ -138,7 +138,7 @@ async function Navigation() {
   const counts = await getNavCounts();
 
   return (
-    <nav className="flex items-center gap-1">
+    <nav className="flex min-h-11 flex-nowrap items-center gap-1">
       {NAV_ITEMS.map((item) => {
         let count: number | undefined;
         let urgent = false;
@@ -180,7 +180,7 @@ function NavLink({
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 rounded-md hover:text-gray-900 hover:bg-gray-100 transition-colors"
+      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
     >
       {icon && <span className="text-gray-400">{icon}</span>}
       <span>{children}</span>
@@ -199,44 +199,44 @@ function NavLink({
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-12">
-            <div className="flex items-center gap-6">
-              <Link href="/admin" className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-gray-900 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">GC</span>
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl min-w-0 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-h-12 flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-2">
+            <div className="flex shrink-0 items-center gap-3">
+              <Link href="/admin" className="inline-flex min-h-11 items-center gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-gray-900">
+                  <span className="text-xs font-bold text-white">GC</span>
                 </div>
-                <span className="font-semibold text-gray-900 text-sm hidden sm:inline">
-                  Operations
-                </span>
+                <span className="hidden text-sm font-semibold text-gray-900 sm:inline">Operations</span>
               </Link>
+            </div>
 
+            <div className="min-w-0 flex-1 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] sm:pb-0">
               <Suspense fallback={<NavSkeleton />}>
                 <Navigation />
               </Suspense>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400 hidden md:inline">Internal Admin</span>
+            <div className="hidden shrink-0 items-center gap-3 md:flex">
+              <span className="text-xs text-gray-400">Internal Admin</span>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{children}</main>
+      <main className="mx-auto min-w-0 max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
 }
 
 function NavSkeleton() {
   return (
-    <div className="flex gap-1">
+    <div className="flex min-h-11 flex-nowrap gap-1">
       {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="h-7 w-16 bg-gray-100 rounded-md animate-pulse" />
+        <div key={i} className="h-11 w-20 shrink-0 animate-pulse rounded-md bg-gray-100" />
       ))}
     </div>
   );

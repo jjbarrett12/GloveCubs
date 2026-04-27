@@ -65,7 +65,10 @@ export function QuotePageClient() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-8 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] sm:pb-8"
+    >
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Items ({items.length})</CardTitle>
@@ -74,14 +77,14 @@ export function QuotePageClient() {
           {items.map((item) => (
             <div
               key={item.productId}
-              className="flex flex-wrap items-center gap-4 rounded-lg border border-border p-3"
+              className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:flex-wrap sm:items-center"
             >
               <div className="min-w-0 flex-1">
-                <Link href={`/product/${item.slug}`} className="font-medium text-foreground hover:underline line-clamp-1">
+                <Link href={`/product/${item.slug}`} className="line-clamp-1 font-medium text-foreground hover:underline">
                   {item.name}
                 </Link>
-                <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                  <label className="flex items-center gap-1">
+                <div className="mt-1 flex min-w-0 flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                  <label className="flex shrink-0 items-center gap-1">
                     Qty
                     <input
                       type="number"
@@ -89,7 +92,7 @@ export function QuotePageClient() {
                       max={99999}
                       value={item.quantity}
                       onChange={(e) => updateItem(item.productId, { quantity: parseInt(e.target.value, 10) || 1 })}
-                      className="h-8 w-16 rounded border border-input bg-background px-2 text-center text-sm"
+                      className="h-11 w-16 rounded border border-input bg-background px-2 text-center text-sm sm:h-8"
                     />
                   </label>
                   <input
@@ -97,11 +100,17 @@ export function QuotePageClient() {
                     placeholder="Line notes (optional)"
                     value={item.notes}
                     onChange={(e) => updateItem(item.productId, { notes: e.target.value })}
-                    className="h-8 flex-1 min-w-[120px] rounded border border-input bg-background px-2 text-sm"
+                    className="h-11 min-w-0 w-full rounded border border-input bg-background px-2 text-sm sm:h-8 sm:min-w-[120px] sm:flex-1"
                   />
                 </div>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(item.productId)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11 w-full shrink-0 sm:w-auto"
+                onClick={() => removeItem(item.productId)}
+              >
                 Remove
               </Button>
             </div>
@@ -114,9 +123,9 @@ export function QuotePageClient() {
           <CardTitle className="text-base">Your details</CardTitle>
           <p className="text-sm text-muted-foreground">We’ll use this to send your quote.</p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
+        <CardContent className="min-w-0 space-y-4">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
               <label className="text-sm font-medium mb-1 block">Company name *</label>
               <Input
                 value={companyName}
@@ -125,7 +134,7 @@ export function QuotePageClient() {
                 required
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-sm font-medium mb-1 block">Contact name *</label>
               <Input
                 value={contactName}
@@ -135,8 +144,8 @@ export function QuotePageClient() {
               />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
               <label className="text-sm font-medium mb-1 block">Email *</label>
               <Input
                 type="email"
@@ -146,7 +155,7 @@ export function QuotePageClient() {
                 required
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-sm font-medium mb-1 block">Phone</label>
               <Input
                 type="tel"
@@ -161,7 +170,7 @@ export function QuotePageClient() {
             <select
               value={urgency}
               onChange={(e) => setUrgency(e.target.value)}
-              className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm"
+              className="h-11 w-full max-w-full rounded-md border border-input bg-background px-3 text-sm sm:h-9 sm:max-w-xs"
             >
               <option value="standard">Standard</option>
               <option value="urgent">Urgent</option>
@@ -182,13 +191,13 @@ export function QuotePageClient() {
       </Card>
 
       {error && <p className="text-destructive text-sm">{error}</p>}
-      <div className="flex gap-3">
-        <Button type="submit" disabled={busy}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Button type="submit" className="h-11 w-full sm:h-9 sm:w-auto" disabled={busy}>
           {busy ? "Submitting…" : "Submit quote request"}
         </Button>
-        <Link href="/catalog/disposable_gloves">
-          <Button type="button" variant="outline">Continue shopping</Button>
-        </Link>
+        <Button asChild variant="outline" className="h-11 w-full sm:h-9 sm:w-auto">
+          <Link href="/catalog/disposable_gloves">Continue shopping</Link>
+        </Button>
       </div>
     </form>
   );

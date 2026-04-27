@@ -12,7 +12,7 @@ interface ProductQuoteActionsProps {
 
 export function ProductQuoteActions({ productId, slug, name, unitPrice, sku }: ProductQuoteActionsProps) {
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
+    <div className="mt-4 flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
       <AddToQuoteButton
         productId={productId}
         slug={slug}
@@ -21,6 +21,7 @@ export function ProductQuoteActions({ productId, slug, name, unitPrice, sku }: P
         sku={sku}
         size="lg"
         goToQuote
+        className="h-11 w-full sm:h-10 sm:w-auto"
       >
         Request quote
       </AddToQuoteButton>
@@ -32,6 +33,7 @@ export function ProductQuoteActions({ productId, slug, name, unitPrice, sku }: P
         sku={sku}
         variant="outline"
         size="lg"
+        className="h-11 w-full sm:h-10 sm:w-auto"
       >
         Add to quote list
       </AddToQuoteButton>

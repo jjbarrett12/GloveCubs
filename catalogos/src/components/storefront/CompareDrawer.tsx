@@ -18,7 +18,11 @@ export function CompareDrawer() {
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-30 shadow-md"
+        className="fixed z-30 h-11 min-h-11 shadow-md"
+        style={{
+          bottom: "max(1rem, env(safe-area-inset-bottom, 0px))",
+          right: "max(1rem, env(safe-area-inset-right, 0px))",
+        }}
       >
         Compare ({items.length})
       </Button>

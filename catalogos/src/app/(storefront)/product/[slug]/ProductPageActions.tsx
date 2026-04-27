@@ -53,12 +53,12 @@ export function ProductPageActions({
   const [bulkQuoteOpen, setBulkQuoteOpen] = useState(false);
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-3 flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="min-h-[44px] sm:min-h-9"
+        className="h-11 w-full sm:h-8 sm:w-auto"
         onClick={() => setBulkQuoteOpen(true)}
       >
         Request bulk pricing
@@ -67,7 +67,7 @@ export function ProductPageActions({
         type="button"
         onClick={handleCompare}
         disabled={isInCompare(productId) || !canAdd}
-        className="min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50 sm:min-h-9 sm:py-1.5"
+        className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 sm:h-8 sm:w-auto"
       >
         {isInCompare(productId) ? "In compare list" : "Compare"}
       </button>

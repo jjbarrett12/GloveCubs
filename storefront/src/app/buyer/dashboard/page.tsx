@@ -425,14 +425,28 @@ export default function BuyerDashboardPage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs defaultValue="savings" className="space-y-6">
-          <TabsList className="bg-white border">
-            <TabsTrigger value="savings">Savings</TabsTrigger>
-            <TabsTrigger value="market">Market Intelligence</TabsTrigger>
-            <TabsTrigger value="suppliers">Supplier Trust</TabsTrigger>
-            <TabsTrigger value="risks">Procurement Risk</TabsTrigger>
-            <TabsTrigger value="spend">Spend Analytics</TabsTrigger>
-            <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-          </TabsList>
+          <div className="-mx-4 min-w-0 overflow-x-auto overflow-y-visible px-4 pb-1 sm:mx-0 sm:px-0 overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+            <TabsList className="inline-flex h-auto min-h-11 w-max max-w-none flex-nowrap justify-start gap-1 rounded-md border bg-white p-1">
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="savings">
+                Savings
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="market">
+                Market Intelligence
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="suppliers">
+                Supplier Trust
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="risks">
+                Procurement Risk
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="spend">
+                Spend Analytics
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="opportunities">
+                Opportunities
+              </TabsTrigger>
+            </TabsList>
+          </div>
           
           {/* ============================================================ */}
           {/* SAVINGS TAB */}

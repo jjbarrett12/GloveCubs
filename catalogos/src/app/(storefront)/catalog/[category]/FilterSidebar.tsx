@@ -19,6 +19,8 @@ interface FilterSidebarProps {
   facetDefinitions: FacetDef[];
   selectedParams: StorefrontFilterParams;
   priceBounds: { min: number; max: number };
+  /** e.g. close mobile filter sheet after navigation */
+  onFilterLinkClick?: () => void;
 }
 
 function formatLabel(value: string): string {
@@ -27,7 +29,14 @@ function formatLabel(value: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function FilterSidebar({ basePath, facets, facetDefinitions, selectedParams, priceBounds }: FilterSidebarProps) {
+export function FilterSidebar({
+  basePath,
+  facets,
+  facetDefinitions,
+  selectedParams,
+  priceBounds,
+  onFilterLinkClick,
+}: FilterSidebarProps) {
   const groups = new Map<string | null, FacetDef[]>();
   for (const def of facetDefinitions) {
     const g = def.display_group ?? null;
@@ -77,7 +86,8 @@ export function FilterSidebar({ basePath, facets, facetDefinitions, selectedPara
                         <li key={value}>
                           <Link
                             href={url}
-                            className={`block text-sm ${isSelected ? "font-medium text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={onFilterLinkClick}
+                            className={`flex min-h-11 items-center text-sm ${isSelected ? "font-medium text-primary" : "text-muted-foreground hover:text-foreground"}`}
                           >
                             {formatLabel(value)} ({count})
                           </Link>

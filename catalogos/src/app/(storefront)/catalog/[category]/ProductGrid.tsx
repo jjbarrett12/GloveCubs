@@ -50,7 +50,7 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
 
   return (
     <>
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <ul className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map((item) => {
         const slug = item.slug ?? item.id;
         const imageUrl = resolveProductImageUrl(imageByProductId?.[item.id]);
@@ -84,13 +84,14 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
         };
 
         return (
-          <li key={item.id}>
+          <li key={item.id} className="min-w-0">
             <Link
               href={`/product/${slug}`}
+              className="block min-w-0"
               onClick={() => trackConversionEvent("product_clicked", { product_id: item.id, slug })}
             >
               <Card
-                className={`h-full overflow-hidden transition-shadow hover:shadow-md ${enrichment?.recommendedForIndustry ? "ring-1 ring-primary/30" : ""}`}
+                className={`h-full min-w-0 overflow-hidden transition-shadow hover:shadow-md ${enrichment?.recommendedForIndustry ? "ring-1 ring-primary/30" : ""}`}
               >
                 <div className="relative aspect-square w-full bg-muted">
                   <img
@@ -117,8 +118,8 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
                     ))}
                   </div>
                 </div>
-                <CardContent className="p-3">
-                  <p className="font-medium text-foreground line-clamp-2">{item.name}</p>
+                <CardContent className="min-w-0 p-3">
+                  <p className="line-clamp-2 font-medium text-foreground">{item.name}</p>
                   {item.brand_name && (
                     <p className="mt-0.5 text-xs text-muted-foreground">{item.brand_name}</p>
                   )}
@@ -140,7 +141,7 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
                       </p>
                     )}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                     <AddToQuoteButton
                       productId={item.id}
                       slug={slug}
@@ -149,11 +150,12 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
                       sku={item.sku}
                       variant="outline"
                       size="sm"
+                      className="min-h-11 shrink-0"
                     />
                     <button
                       type="button"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBulkQuoteProduct({ id: item.id, name: item.name }); }}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-muted"
+                      className="min-h-11 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted"
                     >
                       Request bulk pricing
                     </button>
@@ -161,7 +163,7 @@ export function ProductGrid({ items, imageByProductId, enrichedByProductId = {} 
                       type="button"
                       onClick={handleCompareClick}
                       disabled={inCompare || !canAdd}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                      className="min-h-11 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
                     >
                       {inCompare ? "In compare" : "Compare"}
                     </button>

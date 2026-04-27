@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export interface OfferRow {
@@ -21,7 +20,6 @@ interface SupplierOffersDisclosureProps {
 
 /** Collapsed by default — primary PDP story stays the best normalized case price. */
 export function SupplierOffersDisclosure({ offers }: SupplierOffersDisclosureProps) {
-  const panelId = useId();
   if (offers.length === 0) return null;
 
   return (
@@ -42,7 +40,9 @@ export function SupplierOffersDisclosure({ offers }: SupplierOffersDisclosurePro
               </span>
             </span>
           </summary>
-          <div className="mt-4 overflow-x-auto rounded-md border border-border">
+          <div className="mt-4 rounded-md border border-border shadow-[inset_-10px_0_10px_-10px_hsl(var(--border))]">
+            <p className="px-3 pt-2 text-xs text-muted-foreground md:hidden">Scroll sideways for full table.</p>
+            <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full min-w-[320px] text-sm">
               <caption className="sr-only">Supplier offers for this product</caption>
               <thead>
@@ -75,6 +75,7 @@ export function SupplierOffersDisclosure({ offers }: SupplierOffersDisclosurePro
                 +{offers.length - 15} more offer(s)
               </p>
             )}
+            </div>
           </div>
         </details>
       </CardContent>

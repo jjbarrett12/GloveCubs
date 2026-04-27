@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SupplierPortalSubNav } from '@/components/supplier-portal/SupplierPortalSubNav';
 
 // ============================================================================
 // TYPES
@@ -340,12 +341,12 @@ export default function SupplierDashboardPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900">Supplier Intelligence Dashboard</h1>
             <p className="text-sm text-gray-500">{summary?.supplier_name}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
             <Button variant="outline" size="sm" onClick={() => router.push('/supplier-portal/upload')}>
               Upload Feed
             </Button>
@@ -363,27 +364,34 @@ export default function SupplierDashboardPage() {
           </div>
         </div>
         
-        {/* Navigation */}
-        <nav className="max-w-7xl mx-auto px-4 flex gap-6 border-t border-gray-100">
-          <button className="py-3 border-b-2 border-blue-600 text-blue-600 font-medium text-sm">Dashboard</button>
-          <button className="py-3 text-gray-600 hover:text-gray-900 text-sm" onClick={() => router.push('/supplier-portal/offers')}>Offers</button>
-          <button className="py-3 text-gray-600 hover:text-gray-900 text-sm" onClick={() => router.push('/supplier-portal/competitiveness')}>Competitiveness</button>
-          <button className="py-3 text-gray-600 hover:text-gray-900 text-sm" onClick={() => router.push('/supplier-portal/feed-health')}>Feed Health</button>
-          <button className="py-3 text-gray-600 hover:text-gray-900 text-sm" onClick={() => router.push('/supplier-portal/upload')}>Upload</button>
-        </nav>
+        <SupplierPortalSubNav />
       </header>
       
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-white border">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="feed-health">Feed Health</TabsTrigger>
-            <TabsTrigger value="competitiveness">Competitiveness</TabsTrigger>
-            <TabsTrigger value="opportunities">Lost Opportunities</TabsTrigger>
-            <TabsTrigger value="actions">Action Center</TabsTrigger>
-            <TabsTrigger value="uploads">Upload History</TabsTrigger>
-          </TabsList>
+          <div className="-mx-4 min-w-0 overflow-x-auto overflow-y-visible px-4 pb-1 sm:mx-0 sm:px-0 overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+            <TabsList className="inline-flex h-auto min-h-11 w-max max-w-none flex-nowrap justify-start gap-1 rounded-md border bg-white p-1">
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="overview">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="feed-health">
+                Feed Health
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="competitiveness">
+                Competitiveness
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="opportunities">
+                Lost Opportunities
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="actions">
+                Action Center
+              </TabsTrigger>
+              <TabsTrigger className="min-h-11 shrink-0 px-3" value="uploads">
+                Upload History
+              </TabsTrigger>
+            </TabsList>
+          </div>
           
           {/* ============================================================ */}
           {/* OVERVIEW TAB */}

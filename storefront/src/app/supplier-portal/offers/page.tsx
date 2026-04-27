@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { SupplierPortalSubNav } from '@/components/supplier-portal/SupplierPortalSubNav';
 
 // ============================================================================
 // TYPES
@@ -257,30 +258,7 @@ export default function SupplierOffersPage() {
           </Button>
         </div>
         
-        {/* Navigation */}
-        <nav className="max-w-7xl mx-auto px-4 flex gap-6 border-t border-gray-100">
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/dashboard')}
-          >
-            Dashboard
-          </button>
-          <button className="py-3 border-b-2 border-blue-600 text-blue-600 font-medium text-sm">
-            Offers
-          </button>
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/competitiveness')}
-          >
-            Competitiveness
-          </button>
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/feed-health')}
-          >
-            Feed Health
-          </button>
-        </nav>
+        <SupplierPortalSubNav />
       </header>
       
       {/* Content */}

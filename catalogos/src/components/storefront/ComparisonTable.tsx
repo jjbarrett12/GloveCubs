@@ -42,21 +42,25 @@ export function ComparisonTable() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Compare gloves</h2>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <p className="text-xs text-muted-foreground md:hidden">
+        Swipe or scroll horizontally to see all columns.
+      </p>
+      <div className="rounded-lg border border-border shadow-[inset_-12px_0_12px_-12px_hsl(var(--border))]">
+        <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
         <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Attribute</th>
               {items.map((item) => (
-                <th key={item.id} className="max-w-[180px] px-3 py-2 text-left font-medium">
-                  <div className="flex items-center justify-between gap-2">
-                    <Link href={`/product/${item.slug ?? item.id}`} className="line-clamp-2 hover:underline">
+                <th key={item.id} className="max-w-[180px] min-w-0 px-3 py-2 text-left font-medium">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <Link href={`/product/${item.slug ?? item.id}`} className="line-clamp-2 min-w-0 hover:underline">
                       {item.name}
                     </Link>
                     <button
                       type="button"
                       onClick={() => remove(item.id)}
-                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-lg leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
                       aria-label="Remove from comparison"
                     >
                       ×
@@ -94,6 +98,7 @@ export function ComparisonTable() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

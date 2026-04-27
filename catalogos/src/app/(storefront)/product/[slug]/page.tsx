@@ -128,7 +128,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   };
 
   return (
-    <div className="space-y-8 px-1 sm:px-0">
+    <div className="space-y-8 overflow-x-hidden px-1 sm:px-0">
       <Script id="product-jsonld" type="application/ld+json" strategy="afterInteractive">
         {JSON.stringify(jsonLd)}
       </Script>
@@ -186,7 +186,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <VariantDimensionsStrip categorySlug={product.category_slug} attributes={attrs} />
 
           {offersSummary.offer_count > 0 && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <div className="min-w-0 rounded-lg border border-border bg-muted/30 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your price</p>
               <div className="mt-1 flex flex-col gap-1">
                 {pricePerGlove.price_per_glove != null && (
@@ -226,12 +226,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Specifications</CardTitle>
               </CardHeader>
-              <CardContent>
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <CardContent className="min-w-0 overflow-x-auto">
+                <dl className="grid min-w-0 grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                   {attrEntries.map(([key, value]) => (
-                    <div key={key} className="flex justify-between gap-2 border-b border-border/50 pb-2 last:border-0">
-                      <dt className="text-muted-foreground">{formatLabel(key)}</dt>
-                      <dd className="text-right font-medium text-foreground">{formatValue(value)}</dd>
+                    <div
+                      key={key}
+                      className="flex min-w-0 justify-between gap-2 border-b border-border/50 pb-2 last:border-0"
+                    >
+                      <dt className="shrink-0 text-muted-foreground">{formatLabel(key)}</dt>
+                      <dd className="min-w-0 break-words text-right font-medium text-foreground">{formatValue(value)}</dd>
                     </div>
                   ))}
                 </dl>

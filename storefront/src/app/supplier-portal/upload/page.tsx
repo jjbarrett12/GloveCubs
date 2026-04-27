@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SupplierPortalSubNav } from '@/components/supplier-portal/SupplierPortalSubNav';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -493,6 +494,7 @@ export default function SupplierFeedUploadPage() {
             Back to Dashboard
           </Button>
         </div>
+        <SupplierPortalSubNav />
       </header>
       
       {/* Content */}

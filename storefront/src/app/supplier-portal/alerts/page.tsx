@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SupplierPortalSubNav } from '@/components/supplier-portal/SupplierPortalSubNav';
 
 // ============================================================================
 // TYPES
@@ -158,6 +159,7 @@ export default function SupplierAlertsPage() {
             Back to Dashboard
           </Button>
         </div>
+        <SupplierPortalSubNav />
       </header>
       
       {/* Content */}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SupplierPortalSubNav } from '@/components/supplier-portal/SupplierPortalSubNav';
 
 // ============================================================================
 // TYPES
@@ -110,30 +111,7 @@ export default function SupplierFeedHealthPage() {
           </Button>
         </div>
         
-        {/* Navigation */}
-        <nav className="max-w-7xl mx-auto px-4 flex gap-6 border-t border-gray-100">
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/dashboard')}
-          >
-            Dashboard
-          </button>
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/offers')}
-          >
-            Offers
-          </button>
-          <button 
-            className="py-3 text-gray-600 hover:text-gray-900 text-sm"
-            onClick={() => router.push('/supplier-portal/competitiveness')}
-          >
-            Competitiveness
-          </button>
-          <button className="py-3 border-b-2 border-blue-600 text-blue-600 font-medium text-sm">
-            Feed Health
-          </button>
-        </nav>
+        <SupplierPortalSubNav />
       </header>
       
       {/* Content */}
