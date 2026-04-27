@@ -933,12 +933,71 @@ async function getCategories() {
   return [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+/** Non-pricing merch label from v2 metadata (used only when catalogos.brands is unavailable). */
+function merchBrandLabelFromV2Row(row) {
+  if (!row || !row.metadata || typeof row.metadata !== 'object') return '';
+  const meta = row.metadata;
+  const facet = meta.facet_attributes && typeof meta.facet_attributes === 'object' ? meta.facet_attributes : {};
+  return String(facet.merch_brand || meta.merch_brand || '').trim();
+}
+
+/**
+ * Distinct brand labels for products that are listable (active v2 + active sellable with list_price_minor).
+ * Prefers catalogos.brands.name via brand_id; falls back to metadata merch_brand when the brands table
+ * cannot be read (e.g. PostgREST schema exposure). Does not read catalogos.products.
+ */
 async function getBrands() {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.schema(COS).from('brands').select('name').order('name', { ascending: true });
-  if (error) throw error;
-  const names = (data || []).map((r) => r.name).filter(Boolean);
-  return [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
+  const { data: rows, error: v2Err } = await supabase
+    .schema(V2)
+    .from('catalog_products')
+    .select('id, brand_id, metadata')
+    .eq('status', 'active');
+  if (v2Err) throw v2Err;
+  const list = rows || [];
+  const ids = list.map((r) => r.id).filter(Boolean);
+  if (ids.length === 0) return [];
+  const sellableMap = await fetchActiveSellableMap(supabase, ids);
+  const pricedRows = list.filter((r) => {
+    const idStr = r.id != null ? String(r.id) : '';
+    const sp = sellableMap.get(idStr);
+    return sp && sp.list_price_minor != null && Number.isFinite(Number(sp.list_price_minor));
+  });
+  const brandIds = [
+    ...new Set(
+      pricedRows.map((r) => (r.brand_id != null ? String(r.brand_id) : '')).filter((id) => id !== ''),
+    ),
+  ];
+  const names = new Set();
+  const idToName = new Map();
+  if (brandIds.length > 0) {
+    const { data: brandRows, error: bErr } = await supabase.schema(COS).from('brands').select('id, name').in('id', brandIds);
+    if (bErr) {
+      console.error('[getBrands] catalogos.brands lookup failed; using metadata labels where present', {
+        message: bErr.message,
+        code: bErr.code,
+        details: bErr.details,
+        hint: bErr.hint,
+      });
+    } else {
+      for (const b of brandRows || []) {
+        if (b.id != null && b.name != null && String(b.name).trim() !== '') {
+          idToName.set(String(b.id), String(b.name).trim());
+        }
+      }
+    }
+  }
+  for (const r of pricedRows) {
+    const bid = r.brand_id != null ? String(r.brand_id) : '';
+    const fromTable = bid ? idToName.get(bid) : '';
+    if (fromTable) {
+      names.add(fromTable);
+      continue;
+    }
+    const fromMeta = merchBrandLabelFromV2Row(r);
+    if (fromMeta) names.add(fromMeta);
+  }
+  return [...names].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
 async function upsertProductFromCsvRow({ sku, name, brand, cost, image_url }) {

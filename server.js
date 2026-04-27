@@ -110,9 +110,34 @@ const PORT = parseInt(process.env.PORT, 10) || 3004;
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim() || JWT_SECRET_DEFAULT;
 
 function sendCatalogApiError(res, err, logLabel) {
-    console.error(logLabel, err);
+    const pg =
+        err && typeof err === 'object'
+            ? {
+                  message: err.message,
+                  code: err.code,
+                  details: err.details,
+                  hint: err.hint,
+              }
+            : { message: String(err) };
+    console.error(logLabel, pg);
+    if (err && err.stack) console.error(logLabel + ' stack', err.stack);
     const mapped = mapPostgrestOrDatabaseError(err);
     res.status(mapped.status).json(mapped.body);
+}
+
+/** Product listing must not 500 if public.inventory is missing or PostgREST rejects it. */
+async function getInventoryForCatalogRoutes() {
+    try {
+        return await dataService.getInventory();
+    } catch (err) {
+        console.error('[catalog/inventory] getInventory failed; continuing without stock overlay', {
+            message: err && err.message,
+            code: err && err.code,
+            details: err && err.details,
+            hint: err && err.hint,
+        });
+        return [];
+    }
 }
 
 // Fishbowl customer export: file path and schedule (every 30 min)
@@ -1611,7 +1636,7 @@ app.get('/api/products', optionalAuth, async (req, res) => {
     }
 
     // Apply inventory (in-app fishbowl): in_stock and quantity_on_hand from inventory table when present
-    const inventory = await dataService.getInventory();
+    const inventory = await getInventoryForCatalogRoutes();
     products = applyInventoryToProducts(products, inventory);
 
     const access = await getPublicProductApiAccess(req);
@@ -1652,7 +1677,7 @@ app.get('/api/products/:id', optionalAuth, async (req, res) => {
     try {
         let product = await productsService.getProductById(req.params.id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
-        const inventory = await dataService.getInventory();
+        const inventory = await getInventoryForCatalogRoutes();
         const applied = applyInventoryToProducts([{ ...product }], inventory);
         product = applied[0] || product;
         const access = await getPublicProductApiAccess(req);
@@ -1691,7 +1716,7 @@ app.get('/api/products/by-slug', optionalAuth, async (req, res) => {
         if (!slug) return res.status(400).json({ error: 'slug query parameter required' });
         let product = await productsService.getProductBySlug(slug, categorySegment);
         if (!product) return res.status(404).json({ error: 'Product not found' });
-        const inventory = await dataService.getInventory();
+        const inventory = await getInventoryForCatalogRoutes();
         const applied = applyInventoryToProducts([{ ...product }], inventory);
         product = { ...(applied[0] || product), slug: product.slug || productsService.slugFromName(product.name) };
         const access = await getPublicProductApiAccess(req);
