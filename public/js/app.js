@@ -2531,6 +2531,12 @@ function searchProducts() {
 // PRODUCT CARD
 // ============================================
 
+/** JSON literal for inline onclick handlers (catalog_v2 UUID ids must be quoted). */
+function inlineJsProductId(id) {
+    if (id == null || id === '') return '""';
+    return JSON.stringify(String(id));
+}
+
 function renderProductCard(product) {
     if (!product || (product.id == null && !product.sku)) return '';
     try {
@@ -2542,6 +2548,7 @@ function renderProductCard(product) {
         if (!Number.isFinite(displayPrice)) displayPrice = 0;
         const imgUrl = (product.image_url || '').trim();
         const productId = product.id != null ? product.id : (product.sku || '');
+        const productIdLit = inlineJsProductId(productId);
         
         // Apply discount tier if user is approved
         if (isBulkUser && state.user?.discount_tier && typeof getDiscountPercent === 'function') {
@@ -2553,7 +2560,7 @@ function renderProductCard(product) {
     
         const productUrl = getProductUrl(product);
     return `
-        <a href="${(productUrl || '#').replace(/"/g, '&quot;')}" class="product-card" onclick="event.preventDefault(); navigate('product', { id: ${productId} }); return false;" style="display:block; text-decoration:none; color:#111111;">
+        <a href="${(productUrl || '#').replace(/"/g, '&quot;')}" class="product-card" onclick="event.preventDefault(); navigate('product', { id: ${productIdLit} }); return false;" style="display:block; text-decoration:none; color:#111111;">
             ${product.featured ? '<div class="product-badge"><span class="badge badge-featured">Featured</span></div>' : ''}
             <div class="product-image">
                 ${imgUrl ? `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="${(product.name || '').replace(/"/g, '&quot;')} - ${(product.brand || '')} ${(product.material || '')} Gloves - ${(product.sku || '')}" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
@@ -2561,13 +2568,13 @@ function renderProductCard(product) {
                     <i class="fas fa-hand-paper"></i>
                 </div>
                 <div class="product-actions" onclick="event.preventDefault(); event.stopPropagation();">
-                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); quickAddToCart(${productId})" title="Add to Cart">
+                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); quickAddToCart(${productIdLit})" title="Add to Cart">
                         <i class="fas fa-cart-plus"></i>
                     </button>
-                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); event.stopPropagation(); navigate('product', { id: ${productId} });" title="View Details">
+                    <button type="button" class="product-action-btn" onclick="event.preventDefault(); event.stopPropagation(); navigate('product', { id: ${productIdLit} });" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button type="button" class="product-action-btn favorite-btn" onclick="event.preventDefault(); event.stopPropagation(); toggleFavorite(${productId}, this);" title="Add to Favorites">
+                    <button type="button" class="product-action-btn favorite-btn" onclick="event.preventDefault(); event.stopPropagation(); toggleFavorite(${productIdLit}, this);" title="Add to Favorites">
                         <i class="far fa-heart"></i>
                     </button>
                 </div>
@@ -2591,10 +2598,11 @@ function renderProductCard(product) {
     } catch (error) {
         console.error('Error rendering product card:', error, product);
         const pid = product && (product.id != null ? product.id : product.sku);
+        const pidLit = inlineJsProductId(pid);
         const dp = Number(product?.bulk_price) || Number(product?.price) || 0;
         const imgUrlFallback = (product?.image_url || '').trim();
         return `
-        <div class="product-card" onclick="navigate('product', { id: ${pid} })">
+        <div class="product-card" onclick="navigate('product', { id: ${pidLit} })">
             <div class="product-image">
                 ${imgUrlFallback ? `<img src="${String(imgUrlFallback).replace(/"/g, '&quot;')}" alt="" class="product-card-img" style="display:block;" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; var p=this.nextElementSibling; if(p) p.style.display='flex';" />` : ''}
                 <div class="product-image-placeholder" style="${imgUrlFallback ? 'display:none;' : 'display:flex;'}">
@@ -6793,7 +6801,7 @@ async function renderPortalFavoritesPage() {
                                             <div class="favorite-product-card" style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #fff;">
                                                 <div style="position: relative;">
                                                     <img src="${image}" alt="${name}" style="width: 100%; height: 200px; object-fit: cover;">
-                                                    <button onclick="removeFavoriteFromPage(${product.id})" class="btn-remove-favorite" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 1px solid #e5e7eb; color: #ef4444; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                                    <button onclick="removeFavoriteFromPage(${inlineJsProductId(product.id)})" class="btn-remove-favorite" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 1px solid #e5e7eb; color: #ef4444; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                                         <i class="fas fa-heart"></i>
                                                     </button>
                                                 </div>
@@ -6803,8 +6811,8 @@ async function renderPortalFavoritesPage() {
                                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                                         <span style="font-size: 18px; font-weight: 700; color: #FF7A00;">$${price.toFixed(2)}</span>
                                                         <div style="display: flex; gap: 8px;">
-                                                            <button onclick="navigate('product', { id: ${product.id} })" class="btn btn-outline btn-sm">View</button>
-                                                            <button onclick="addFavoriteToCartFromPage(${product.id})" class="btn btn-primary btn-sm"><i class="fas fa-cart-plus"></i> Add</button>
+                                                            <button onclick="navigate('product', { id: ${inlineJsProductId(product.id)} })" class="btn btn-outline btn-sm">View</button>
+                                                            <button onclick="addFavoriteToCartFromPage(${inlineJsProductId(product.id)})" class="btn btn-primary btn-sm"><i class="fas fa-cart-plus"></i> Add</button>
                                                         </div>
                                                     </div>
                                                 </div>
