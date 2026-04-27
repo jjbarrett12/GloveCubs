@@ -910,23 +910,35 @@ export async function validateRow(
   };
 }
 
+function comparableOfferListPrice(row: { cost: unknown; sell_price: unknown }): number | null {
+  const sell = row.sell_price != null ? Number(row.sell_price) : null;
+  if (sell != null && Number.isFinite(sell)) return sell;
+  const cost = Number(row.cost);
+  return Number.isFinite(cost) ? cost : null;
+}
+
 async function checkPriceAnomaly(
   product_id: string,
   price: number
 ): Promise<{ message: string; details: Record<string, unknown> } | null> {
-  // Get market prices for this product
   const { data: offers } = await supabaseAdmin
     .from('supplier_offers')
-    .select('price')
+    .select('cost, sell_price')
     .eq('product_id', product_id)
     .eq('is_active', true);
-    
+
   if (!offers || offers.length === 0) return null;
-  
-  const prices = offers.map(o => Number(o.price));
+
+  const prices = offers
+    .map((o) => comparableOfferListPrice(o as { cost: unknown; sell_price: unknown }))
+    .filter((p): p is number => p != null && p > 0);
+  if (prices.length === 0) return null;
+
   const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+  if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
+
   const deviation = Math.abs(price - avgPrice) / avgPrice;
-  
+
   if (deviation > UPLOAD_CONFIG.price_anomaly_threshold) {
     return {
       message: `Price ${price > avgPrice ? 'significantly higher' : 'significantly lower'} than market average ($${avgPrice.toFixed(2)})`,
@@ -937,7 +949,7 @@ async function checkPriceAnomaly(
       },
     };
   }
-  
+
   return null;
 }
 
@@ -945,28 +957,35 @@ async function checkPackMismatch(
   product_id: string,
   case_pack: number
 ): Promise<{ message: string; details: Record<string, unknown> } | null> {
-  // Get common pack sizes for this product
   const { data: offers } = await supabaseAdmin
     .from('supplier_offers')
-    .select('case_pack')
+    .select('units_per_case')
     .eq('product_id', product_id)
     .eq('is_active', true)
-    .not('case_pack', 'is', null);
-    
+    .not('units_per_case', 'is', null);
+
   if (!offers || offers.length === 0) return null;
-  
-  const commonPacks = new Set(offers.map(o => o.case_pack));
-  
-  if (!commonPacks.has(case_pack)) {
+
+  const commonPacks = new Set(
+    offers
+      .map((o) => Number((o as { units_per_case: unknown }).units_per_case))
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .map((n) => Math.trunc(n))
+  );
+
+  if (commonPacks.size === 0) return null;
+
+  const yourPack = Math.trunc(case_pack);
+  if (!commonPacks.has(yourPack)) {
     return {
-      message: `Pack size ${case_pack} differs from common sizes: ${Array.from(commonPacks).join(', ')}`,
+      message: `Pack size ${yourPack} differs from common sizes: ${Array.from(commonPacks).join(', ')}`,
       details: {
-        your_pack: case_pack,
+        your_pack: yourPack,
         common_packs: Array.from(commonPacks),
       },
     };
   }
-  
+
   return null;
 }
 
