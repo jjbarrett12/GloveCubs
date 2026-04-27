@@ -340,9 +340,16 @@ async function upsertSellablePricingForCatalogProduct(supabase, params) {
 }
 
 function rowToProductWithSellableMap(flat, sellableMap) {
+  if (!flat) return null;
   const idStr = flat.id != null ? String(flat.id) : '';
   const sp = sellableMap.get(idStr);
-  return rowToProduct(flat, sp);
+  if (!sp) return null;
+  try {
+    return rowToProduct(flat, sp);
+  } catch (e) {
+    if (e instanceof MissingSellablePricingError) return null;
+    throw e;
+  }
 }
 
 async function syncProductAttributes(supabase, productId, categoryId, payload) {
@@ -574,9 +581,11 @@ async function getProducts(options = {}) {
       supabase,
       normalized.map((n) => n.id),
     );
-    const products = normalized.map((n) =>
-      rowToProductWithSellableMap(mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null), sellableMap),
-    );
+    const products = normalized
+      .map((n) =>
+        rowToProductWithSellableMap(mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null), sellableMap),
+      )
+      .filter(Boolean);
     await attachCatalogV2ProductIds(products);
     return { products, total: count ?? products.length };
   }
@@ -599,7 +608,8 @@ async function getProducts(options = {}) {
   for (const n of normalizedAll) {
     const flat = mapJoinedRow(n, null, brandFromMap(n, brandById), n.product_images, null);
     if (!rowMatchesFilters(flat, { material, powder, thickness, size, color, grade, useCase })) continue;
-    matched.push(rowToProductWithSellableMap(flat, sellableMapAll));
+    const listed = rowToProductWithSellableMap(flat, sellableMapAll);
+    if (listed) matched.push(listed);
   }
   const slice = matched.slice(from, from + pageSize);
   await attachCatalogV2ProductIds(slice);
@@ -687,6 +697,7 @@ async function getProductBySlug(slug, categorySegment) {
       const cat = (flat.category || '').toLowerCase().replace(/\s+/g, '-');
       if (mat === seg || sub === seg || cat === seg) {
         const out = rowToProductWithSellableMap(flat, sellableSlugMap);
+        if (!out) continue;
         out.slug = slugLower;
         return attachCatalogV2ProductId(out);
       }
@@ -696,6 +707,7 @@ async function getProductBySlug(slug, categorySegment) {
   if (!row) return null;
   const attrMap = await attributeValueMap(supabase, row.id);
   const out = rowToProductWithSellableMap(mapJoinedRow(row, null, brandFromMap(row, brandById), row.product_images, attrMap), sellableSlugMap);
+  if (!out) return null;
   out.slug = slugLower;
   return attachCatalogV2ProductId(out);
 }
@@ -731,7 +743,8 @@ async function getProductsForIndustry(useCase) {
   const out = [];
   for (const p of normalized) {
     const attrMap = await attributeValueMap(supabase, p.id);
-    out.push(rowToProductWithSellableMap(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap), sellableIndustryMap));
+    const listed = rowToProductWithSellableMap(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap), sellableIndustryMap);
+    if (listed) out.push(listed);
   }
   await attachCatalogV2ProductIds(out);
   return out;
