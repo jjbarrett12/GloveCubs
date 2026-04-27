@@ -6180,7 +6180,15 @@ app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found', path: req.path });
     }
-    const mainApiUrl = (process.env.GLOVECUBS_MAIN_API_URL || process.env.DOMAIN || process.env.BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
+    // Prefer the request's own origin so www/apex and reverse-proxy hosts match fetch() (avoid cross-origin /api when DOMAIN is apex-only).
+    const fromRequest = `${req.protocol}://${req.get('host') || 'localhost'}`.replace(/\/$/, '');
+    const mainApiUrl = (
+        process.env.GLOVECUBS_MAIN_API_URL ||
+        fromRequest ||
+        process.env.DOMAIN ||
+        process.env.BASE_URL ||
+        ''
+    ).replace(/\/$/, '');
     try {
         let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
         html = html.replace('<!-- GLOVECUBS_API_URL_INJECT -->', '<meta name="glovecubs-api-url" content="' + mainApiUrl.replace(/"/g, '&quot;') + '">');

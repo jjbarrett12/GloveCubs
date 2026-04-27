@@ -143,8 +143,22 @@ const api = {
     
     initBaseUrl() {
         var m = document.querySelector('meta[name="glovecubs-api-url"]');
-        if (m && m.getAttribute('content')) {
-            this.baseUrl = m.getAttribute('content').trim().replace(/\/$/, '');
+        var raw = m && m.getAttribute('content') ? m.getAttribute('content').trim().replace(/\/$/, '') : '';
+        this.baseUrl = '';
+        if (!raw) return;
+        try {
+            var page = new URL(window.location.href);
+            var abs = raw.indexOf('http') === 0 ? raw : page.origin + (raw.indexOf('/') === 0 ? raw : '/' + raw);
+            var metaU = new URL(abs);
+            var pageHost = page.hostname.replace(/^www\./i, '');
+            var metaHost = metaU.hostname.replace(/^www\./i, '');
+            if (metaU.origin === page.origin || metaHost === pageHost) {
+                this.baseUrl = '';
+                return;
+            }
+            this.baseUrl = raw.indexOf('http') === 0 ? raw : page.origin + (raw.indexOf('/') === 0 ? raw : '/' + raw);
+        } catch (e) {
+            this.baseUrl = raw;
         }
     },
     
@@ -1358,12 +1372,16 @@ async function renderHomePage() {
         ]);
         if (Array.isArray(response)) products = response;
         else if (response && Array.isArray(response.products)) products = response.products;
-        products = (products || []).filter(p => p && (p.id != null || p.sku));
+        else if (response && Array.isArray(response.data)) products = response.data;
+        else if (response && Array.isArray(response.items)) products = response.items;
+        products = (products || []).filter(function (p) {
+            return p && (p.id != null && String(p.id).trim() !== '' || (p.sku != null && String(p.sku).trim() !== ''));
+        });
     } catch (error) {
         console.error('Error loading products:', error);
         loadError = true;
     }
-    const gridEl = document.getElementById('homeProductsGrid');
+    const gridEl = mainContent.querySelector('#homeProductsGrid');
     if (gridEl) {
         if (loadError) {
             gridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.9);"><p style="margin-bottom: 12px;">Unable to load products.</p><button type="button" class="btn btn-outline-dark" onclick="navigate(\'home\')" style="border: 2px solid #FF7A00; color: #FF7A00; background: transparent; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer;">Try again</button></div>';
