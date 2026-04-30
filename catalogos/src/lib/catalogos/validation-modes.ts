@@ -19,7 +19,9 @@ import {
   POWDER_VALUES,
   GRADE_VALUES,
   INDUSTRIES_VALUES,
-  COMPLIANCE_VALUES,
+  CERTIFICATION_VALUES,
+  USES_VALUES,
+  PROTECTION_TAGS_VALUES,
   TEXTURE_VALUES,
   CUFF_STYLE_VALUES,
   HAND_ORIENTATION_VALUES,
@@ -32,7 +34,7 @@ import {
   ARC_RATING_VALUES,
   WARM_COLD_WEATHER_VALUES,
 } from "./attribute-dictionary-types";
-import { validateAttributesByCategory, isMultiSelectAttribute } from "./attribute-validation";
+import { validateAttributesByCategory, isMultiSelectAttribute, normalizeFilterAttributesKeys } from "./attribute-validation";
 
 export interface ParseSafeInput {
   content: { canonical_title?: string; supplier_sku?: string; supplier_cost?: number };
@@ -67,7 +69,9 @@ const ALLOWED_BY_KEY: Record<string, readonly string[]> = {
   powder: POWDER_VALUES as unknown as string[],
   grade: GRADE_VALUES as unknown as string[],
   industries: INDUSTRIES_VALUES as unknown as string[],
-  compliance_certifications: COMPLIANCE_VALUES as unknown as string[],
+  certifications: CERTIFICATION_VALUES as unknown as string[],
+  uses: USES_VALUES as unknown as string[],
+  protection_tags: PROTECTION_TAGS_VALUES as unknown as string[],
   texture: TEXTURE_VALUES as unknown as string[],
   cuff_style: CUFF_STYLE_VALUES as unknown as string[],
   hand_orientation: HAND_ORIENTATION_VALUES as unknown as string[],
@@ -104,7 +108,7 @@ export function parseSafe(input: ParseSafeInput): ParseSafeResult {
     errors.push("filter_attributes must be an object");
   }
 
-  const attrs = (input.filter_attributes ?? {}) as Record<string, unknown>;
+  const attrs = normalizeFilterAttributesKeys((input.filter_attributes ?? {}) as Record<string, unknown>);
   for (const [key, value] of Object.entries(attrs)) {
     if (value === undefined || value === null) continue;
     if (key === "brand") {

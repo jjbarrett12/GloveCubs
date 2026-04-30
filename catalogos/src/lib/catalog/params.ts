@@ -4,7 +4,7 @@
  */
 
 import type { StorefrontFilterParams } from "./types";
-import { getAllFilterableFacetKeys } from "@/lib/product-types";
+import { getAllCatalogFacetKeys } from "@/lib/product-types";
 
 function parseArrayParam(v: string | null): string[] {
   if (!v) return [];
@@ -17,15 +17,36 @@ function parseNum(v: string | null): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** Merge legacy `compliance_certifications` into canonical `certifications` for filters + sync. */
+export function normalizeStorefrontFilterParams(params: StorefrontFilterParams): StorefrontFilterParams {
+  const merged = [
+    ...new Set(
+      [...(params.certifications ?? []), ...(params.compliance_certifications ?? [])]
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+    ),
+  ];
+  return {
+    ...params,
+    certifications: merged.length ? merged : params.certifications,
+    compliance_certifications: undefined,
+  };
+}
+
 export function parseCatalogSearchParams(searchParams: Record<string, string | string[] | undefined>): StorefrontFilterParams {
   const get = (key: string) => {
     const v = searchParams[key];
     return Array.isArray(v) ? v[0] ?? null : (v ?? null);
   };
-  const facetKeys = getAllFilterableFacetKeys();
+  const facetKeys = getAllCatalogFacetKeys();
   const fromFacets = {} as Record<string, string[]>;
   for (const key of facetKeys) {
     fromFacets[key] = parseArrayParam(get(key));
+  }
+  const legacyCompliance = parseArrayParam(get("compliance_certifications"));
+  if (legacyCompliance.length) {
+    const cur = fromFacets.certifications ?? [];
+    fromFacets.certifications = [...new Set([...cur, ...legacyCompliance].map((s) => s.trim()).filter(Boolean))];
   }
   return {
     ...fromFacets,
@@ -45,7 +66,7 @@ export function buildCatalogSearchString(params: Partial<StorefrontFilterParams>
   const p = { ...params, ...overrides };
   const q = new URLSearchParams();
   if (p.category) q.set("category", p.category);
-  const arrayKeys = getAllFilterableFacetKeys() as (keyof StorefrontFilterParams)[];
+  const arrayKeys = getAllCatalogFacetKeys() as (keyof StorefrontFilterParams)[];
   for (const key of arrayKeys) {
     const val = p[key];
     if (Array.isArray(val) && val.length) q.set(key, val.join(","));

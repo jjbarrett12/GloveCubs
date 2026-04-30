@@ -5,7 +5,8 @@
  * for the enhanced supplier intelligence dashboard.
  */
 
-import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import { supabaseAdmin } from '../jobs/supabase';
+import { fetchCatalogProductNamesByIds } from '../catalog/v2-ingestion-catalog';
 
 // ============================================================================
 // TYPES
@@ -405,7 +406,7 @@ export async function getLostOpportunities(
   limit: number = 20
 ): Promise<LostOpportunity[]> {
   const opportunities: LostOpportunity[] = [];
-  
+
   // Get offers with low trust that could rank higher
   const { data: lowTrustOffers } = await supabaseAdmin
     .from('offer_trust_scores')
@@ -413,7 +414,29 @@ export async function getLostOpportunities(
     .eq('supplier_id', supplier_id)
     .in('trust_band', ['low_trust', 'review_sensitive'])
     .gte('calculated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-    
+
+  const { data: staleOffers } = await supabaseAdmin
+    .from('supplier_offers')
+    .select('id, product_id, price, updated_at')
+    .eq('supplier_id', supplier_id)
+    .eq('is_active', true)
+    .lt('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .limit(10);
+
+  const { data: incompleteOffers } = await supabaseAdmin
+    .from('supplier_offers')
+    .select('id, product_id, price, case_pack, box_quantity, lead_time_days, moq')
+    .eq('supplier_id', supplier_id)
+    .eq('is_active', true)
+    .or('case_pack.is.null,box_quantity.is.null,lead_time_days.is.null')
+    .limit(10);
+
+  const lostNameIds = new Set<string>();
+  for (const o of lowTrustOffers?.slice(0, 5) ?? []) lostNameIds.add(String(o.product_id));
+  for (const o of staleOffers?.slice(0, 5) ?? []) lostNameIds.add(String(o.product_id));
+  for (const o of incompleteOffers?.slice(0, 5) ?? []) lostNameIds.add(String(o.product_id));
+  const lostNameById = await fetchCatalogProductNamesByIds(Array.from(lostNameIds));
+
   if (lowTrustOffers) {
     for (const offer of lowTrustOffers.slice(0, 5)) {
       // Get current rank
@@ -426,17 +449,10 @@ export async function getLostOpportunities(
         .limit(1)
         .single();
         
-      // Get product name
-      const { data: product } = await getSupabaseCatalogos()
-        .from('products')
-        .select('name')
-        .eq('id', offer.product_id)
-        .single();
-        
       opportunities.push({
         type: 'low_trust',
         product_id: offer.product_id,
-        product_name: product?.name,
+        product_name: lostNameById.get(String(offer.product_id)),
         offer_id: offer.offer_id,
         current_rank: rec?.recommended_rank || 99,
         potential_rank: Math.max(1, (rec?.recommended_rank || 3) - 2),
@@ -447,26 +463,11 @@ export async function getLostOpportunities(
       });
     }
   }
-  
-  // Get stale offers
-  const { data: staleOffers } = await supabaseAdmin
-    .from('supplier_offers')
-    .select('id, product_id, price, updated_at')
-    .eq('supplier_id', supplier_id)
-    .eq('is_active', true)
-    .lt('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .limit(10);
-    
+
   if (staleOffers) {
     for (const offer of staleOffers.slice(0, 5)) {
       const daysSinceUpdate = Math.floor((Date.now() - new Date(offer.updated_at).getTime()) / (24 * 60 * 60 * 1000));
       
-      const { data: product } = await getSupabaseCatalogos()
-        .from('products')
-        .select('name')
-        .eq('id', offer.product_id)
-        .single();
-        
       const { data: rec } = await supabaseAdmin
         .from('supplier_recommendations')
         .select('recommended_rank')
@@ -479,7 +480,7 @@ export async function getLostOpportunities(
       opportunities.push({
         type: 'stale_offer',
         product_id: offer.product_id,
-        product_name: product?.name,
+        product_name: lostNameById.get(String(offer.product_id)),
         offer_id: offer.id,
         current_rank: rec?.recommended_rank || 99,
         potential_rank: Math.max(1, (rec?.recommended_rank || 4) - 2),
@@ -490,16 +491,7 @@ export async function getLostOpportunities(
       });
     }
   }
-  
-  // Get offers with missing fields
-  const { data: incompleteOffers } = await supabaseAdmin
-    .from('supplier_offers')
-    .select('id, product_id, price, case_pack, box_quantity, lead_time_days, moq')
-    .eq('supplier_id', supplier_id)
-    .eq('is_active', true)
-    .or('case_pack.is.null,box_quantity.is.null,lead_time_days.is.null')
-    .limit(10);
-    
+
   if (incompleteOffers) {
     for (const offer of incompleteOffers.slice(0, 5)) {
       const missingFields: string[] = [];
@@ -508,16 +500,10 @@ export async function getLostOpportunities(
       if (!offer.lead_time_days) missingFields.push('lead_time');
       if (!offer.moq) missingFields.push('moq');
       
-      const { data: product } = await getSupabaseCatalogos()
-        .from('products')
-        .select('name')
-        .eq('id', offer.product_id)
-        .single();
-        
       opportunities.push({
         type: 'missing_fields',
         product_id: offer.product_id,
-        product_name: product?.name,
+        product_name: lostNameById.get(String(offer.product_id)),
         offer_id: offer.id,
         current_rank: 99,
         potential_rank: 3,
@@ -552,10 +538,14 @@ export async function getNearWinOpportunities(
     .gte('calculated_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
     
   if (!closeRankings || closeRankings.length === 0) return [];
-  
+
+  const nearWinNameById = await fetchCatalogProductNamesByIds(
+    Array.from(new Set(closeRankings.map((r) => String(r.product_id))))
+  );
+
   const opportunities: NearWinOpportunity[] = [];
   const processedProducts = new Set<string>();
-  
+
   for (const ranking of closeRankings) {
     if (processedProducts.has(ranking.product_id)) continue;
     processedProducts.add(ranking.product_id);
@@ -609,12 +599,6 @@ export async function getNearWinOpportunities(
       .limit(1)
       .single();
       
-    const { data: product } = await getSupabaseCatalogos()
-      .from('products')
-      .select('name')
-      .eq('id', ranking.product_id)
-      .single();
-      
     const priceGap = ourOffer && rank1Offer 
       ? Number(ourOffer.price) - Number(rank1Offer.price) 
       : 0;
@@ -641,7 +625,7 @@ export async function getNearWinOpportunities(
     
     opportunities.push({
       product_id: ranking.product_id,
-      product_name: product?.name,
+      product_name: nearWinNameById.get(String(ranking.product_id)),
       offer_id: ourOffer?.id || '',
       current_rank: ranking.recommended_rank,
       rank_1_supplier_id: rank1.supplier_id,

@@ -5,6 +5,11 @@
  */
 
 import { IMPLEMENTED_PRODUCT_TYPE_KEYS, getFilterableFacets } from "@/lib/product-types";
+import {
+  CERTIFICATION_VALUES,
+  USES_VALUES,
+  PROTECTION_TAGS_VALUES,
+} from "./attribute-dictionary-types";
 
 /** Includes pseudo `all_categories` for UI; persisted products use registry keys only. */
 export const CATEGORY_SLUGS = ["all_categories", ...IMPLEMENTED_PRODUCT_TYPE_KEYS] as const;
@@ -41,6 +46,16 @@ export type IndustryOption = (typeof INDUSTRY_OPTIONS)[number];
 
 export const COMPLIANCE_OPTIONS = ["fda_approved", "astm_tested", "food_safe", "latex_free", "chemo_rated", "en_455", "en_374"] as const;
 export type ComplianceOption = (typeof COMPLIANCE_OPTIONS)[number];
+
+/** Canonical disposable certifications (same value set as `COMPLIANCE_OPTIONS`). */
+export const CERTIFICATION_OPTIONS = CERTIFICATION_VALUES;
+export type CertificationOption = (typeof CERTIFICATION_OPTIONS)[number];
+
+export const USES_OPTIONS = USES_VALUES;
+export type UseOption = (typeof USES_OPTIONS)[number];
+
+export const PROTECTION_TAGS_OPTIONS = PROTECTION_TAGS_VALUES;
+export type ProtectionTagOption = (typeof PROTECTION_TAGS_OPTIONS)[number];
 
 export const TEXTURE_OPTIONS = ["smooth", "fingertip_textured", "fully_textured"] as const;
 export type TextureOption = (typeof TEXTURE_OPTIONS)[number];

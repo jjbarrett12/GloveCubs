@@ -14,7 +14,10 @@
 
 import { supabaseAdmin, getSupabaseCatalogos } from '../supabase';
 import { buildSupplierOfferUpsertRow } from '../../../../../lib/supplier-offer-normalization';
-import { flattenCatalogosProductRow } from '../../catalog/canonical-read-model';
+import {
+  loadV2CatalogMatchCorpus,
+  normalizeMatchKey,
+} from '../../catalog/v2-ingestion-catalog';
 import { logger } from '../logger';
 import { getAgentRule } from '../../agents/config';
 import { emitSystemEvent } from '../../events/emit';
@@ -100,48 +103,23 @@ export async function handleProductMatch(
     incomingProduct.id = productId;
 
     // =========================================================================
-    // LOAD CANONICAL CATALOG
+    // LOAD CANONICAL CATALOG (catalog_v2 + product_attributes + variants)
     // =========================================================================
-    const { data: catalogRaw, error: catalogError } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, sku, name, description, attributes, is_active, categories(slug)')
-      .eq('is_active', true)
-      .limit(1000);
-
-    if (catalogError) {
-      logger.warn('Failed to load catalog', { error: catalogError.message });
+    let catalog: ProductData[] = [];
+    let variantSkuToProductId = new Map<string, string>();
+    let parentSkuToProductId = new Map<string, string>();
+    try {
+      const loaded = await loadV2CatalogMatchCorpus(1000);
+      catalog = loaded.catalog;
+      variantSkuToProductId = loaded.variantSkuToProductId;
+      parentSkuToProductId = loaded.parentSkuToProductId;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.warn('Failed to load catalog_v2 match corpus', { error: msg });
     }
 
-    const catalog: ProductData[] = (catalogRaw || []).map((row) => {
-      const f = flattenCatalogosProductRow(row as Record<string, unknown>);
-      const attrs =
-        row.attributes && typeof row.attributes === 'object' && !Array.isArray(row.attributes)
-          ? (row.attributes as Record<string, unknown>)
-          : {};
-      return {
-        id: f.id as string,
-        sku: f.sku as string,
-        name: (f.name as string) || '',
-        canonical_title: (f.title as string) || String(f.name),
-        material: f.material != null ? String(f.material) : undefined,
-        color: f.color != null ? String(f.color) : undefined,
-        size: f.size != null ? String(f.size) : undefined,
-        grade: attrs.grade as string | undefined,
-        texture: attrs.texture as string | undefined,
-        thickness_mil: attrs.thickness_mil as number | undefined,
-        units_per_box: attrs.units_per_box as number | undefined,
-        boxes_per_case: attrs.boxes_per_case as number | undefined,
-        total_units_per_case: attrs.total_units_per_case as number | undefined,
-        powder_free: attrs.powder_free as boolean | undefined,
-        latex_free: attrs.latex_free as boolean | undefined,
-        exam_grade: attrs.exam_grade as boolean | undefined,
-        medical_grade: attrs.medical_grade as boolean | undefined,
-        food_safe: attrs.food_safe as boolean | undefined,
-      };
-    });
-
     // =========================================================================
-    // CALL LEGACY MATCHING LOGIC
+    // CALL LEGACY MATCHING LOGIC (+ variant_sku / internal_sku pre-match)
     // =========================================================================
     let matchResult: ProductMatchResult;
 
@@ -158,9 +136,31 @@ export async function handleProductMatch(
         recommended_action: 'create_new_canonical',
       };
     } else {
-      // Find matches using legacy logic
-      matchResult = matchSingleProduct(incomingProduct, catalog);
-      matchResult.incoming_supplier_product_id = productId;
+      const incomingSkuKey = normalizeMatchKey(
+        (incomingProduct.sku as string | undefined) ||
+          (incomingProduct.supplier_sku as string | undefined)
+      );
+      const skuHit =
+        incomingSkuKey &&
+        (variantSkuToProductId.get(incomingSkuKey) ?? parentSkuToProductId.get(incomingSkuKey));
+
+      if (skuHit) {
+        const row = catalog.find((c) => c.id === skuHit);
+        matchResult = {
+          incoming_supplier_product_id: productId,
+          match_result: 'exact_match',
+          canonical_product_id: skuHit,
+          canonical_product_name: row?.name ?? row?.canonical_title,
+          match_confidence: 1,
+          reasoning: 'Exact SKU match against catalog (variant_sku or internal_sku).',
+          matched_fields: ['sku'],
+          conflicting_fields: [],
+          recommended_action: 'link_to_existing',
+        };
+      } else {
+        matchResult = matchSingleProduct(incomingProduct, catalog);
+        matchResult.incoming_supplier_product_id = productId;
+      }
     }
 
     // =========================================================================
@@ -644,7 +644,7 @@ async function createCanonicalProduct(
   void supplierProductId;
   void product;
   logger.warn(
-    'createCanonicalProduct skipped: catalog rows must be created via CatalogOS publish (catalogos.products).'
+    'createCanonicalProduct skipped: catalog rows must be created via CatalogOS publish (catalog_v2.catalog_products).'
   );
   return null;
 }

@@ -2757,7 +2757,7 @@ async function renderProductPage(productId, opts = {}) {
                         <div class="product-detail-brand">${product.brand}</div>
                         <h1>${product.name}${preSelectSize ? ' Size ' + preSelectSize : ''}</h1>
                         <div class="product-detail-sku">SKU: ${product.sku}</div>
-                        ${sizes.length > 0 ? `<div id="productVariantSkuDisplay" class="product-detail-sku" style="margin-top:4px; color:#FF7A00; font-weight:600;" data-base-sku="${(product.sku || '').replace(/"/g, '&quot;')}">Variant SKU(s): <span id="productVariantSkuSize">${product.sku}-${firstSizeDisplay}</span></div>` : ''}
+                        ${sizes.length > 0 ? (function () { var _cap = pdpVariantSkuCaption(product, sizes, preSelectSize, firstSizeDisplay) || ''; _cap = String(_cap).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); return '<div id="productVariantSkuDisplay" class="product-detail-sku" style="margin-top:4px; color:#FF7A00; font-weight:600;">Purchase item SKU: <span id="productVariantSkuSize">' + _cap + '</span></div>'; })() : ''}
                         
                         <div class="product-detail-price">
                             <span class="price-current">$${displayPrice.toFixed(2)}</span>
@@ -3148,6 +3148,33 @@ function canonicalProductIdForCartPayload() {
     return (typeof id === 'string' && id.length > 30) ? id : undefined;
 }
 
+/** Optional API map: { "L": "<uuid>", ... } — when present, add-to-cart sends catalog_variant_id. */
+function catalogVariantIdForCartSize(size) {
+    var p = window.__currentProduct;
+    if (!p || size == null || size === '') return undefined;
+    var m = p.catalog_variant_ids_by_size;
+    if (!m || typeof m !== 'object') return undefined;
+    var k = String(size).trim();
+    if (m[k]) return m[k];
+    var kl = k.toLowerCase();
+    for (var key in m) {
+        if (Object.prototype.hasOwnProperty.call(m, key) && String(key).toLowerCase() === kl) return m[key];
+    }
+    return undefined;
+}
+
+function pdpVariantSkuCaption(product, sizes, preSelectSize, firstSizeDisplay) {
+    var m = product && product.variant_skus_by_size;
+    var sz = preSelectSize || firstSizeDisplay;
+    if (m && typeof m === 'object' && sz) {
+        var v = m[sz] || m[String(sz).toLowerCase()];
+        if (v) return String(v);
+    }
+    if (product && product.variant_sku) return String(product.variant_sku);
+    if (sizes.length > 0) return 'Select size — purchase item SKU is confirmed in your cart.';
+    return String((product && product.sku) || '—');
+}
+
 async function addProductToCart(productId) {
     const quantity = parseInt(document.getElementById('productQuantity')?.value || 1);
     const selectedSizes = window.selectedSizes && Array.isArray(window.selectedSizes) ? window.selectedSizes : [];
@@ -3159,11 +3186,12 @@ async function addProductToCart(productId) {
 
     if (sizesToAdd.length === 0 || (sizesToAdd.length === 1 && sizesToAdd[0] === null)) {
         // Product has no sizes - add single item
+        var vidSingle = (pCur && pCur.default_catalog_variant_id) || null;
         await api.post('/api/cart', Object.assign({
             product_id: productId,
             size: null,
             quantity: quantity
-        }, cid ? { canonical_product_id: cid } : {}));
+        }, cid ? { canonical_product_id: cid } : {}, vidSingle ? { catalog_variant_id: vidSingle } : {}));
         await loadCart();
         if (window.GloveCubsAnalytics) {
             try {
@@ -3176,17 +3204,18 @@ async function addProductToCart(productId) {
     }
 
     for (const size of sizesToAdd) {
+        var vidSz = catalogVariantIdForCartSize(size);
         await api.post('/api/cart', Object.assign({
             product_id: productId,
             size: size,
             quantity: quantity
-        }, cid ? { canonical_product_id: cid } : {}));
+        }, cid ? { canonical_product_id: cid } : {}, vidSz ? { catalog_variant_id: vidSz } : {}));
         if (window.GloveCubsAnalytics) {
             try {
                 GloveCubsAnalytics.addToCart({
                     product_id: productId,
                     quantity: quantity,
-                    sku: baseSku ? baseSku + '-' + size : baseSku,
+                    sku: baseSku || '',
                 });
             } catch (e) { /* */ }
         }
@@ -3670,6 +3699,7 @@ function buildCheckoutCartLinesSnapshot() {
             size: item.size != null && item.size !== '' ? String(item.size) : null,
         };
         if (item.listing_id) row.listing_id = String(item.listing_id);
+        if (item.catalog_variant_id) row.catalog_variant_id = String(item.catalog_variant_id);
         return row;
     });
 }
@@ -5918,6 +5948,7 @@ async function submitReorderModal(mode) {
                 const q = Math.max(1, parseInt(qEl && qEl.value, 10) || 1);
                 const line = { product_id: ln.product_id, quantity: q };
                 if (ln.size != null && ln.size !== '') line.size = ln.size;
+                if (ln.catalog_variant_id) line.catalog_variant_id = String(ln.catalog_variant_id);
                 lines.push(line);
             });
             if (lines.length === 0) {
@@ -11996,7 +12027,7 @@ function renderAdminOrdersTable() {
                 '<button type="button" class="ops-icon-btn" title="Line items" onclick="adminOrdersToggleDetail(' + order.id + ')"><i class="fas fa-list"></i></button></td></tr>' +
                 '<tr class="admin-order-detail" id="adminOrderDetail_' + order.id + '" style="display:none;"><td colspan="10" style="background:var(--cockpit-bg);padding:10px 14px;font-size:11px;border-bottom:1px solid var(--cockpit-border);">' +
                 (order.items || []).map(function(item) {
-                    var variantSku = item.variant_sku || (item.size ? item.sku + '-' + String(item.size).toUpperCase().replace(/\s+/g, '') : item.sku);
+                    var variantSku = (item.variant_sku && String(item.variant_sku).trim()) || (item.sku && String(item.sku)) || '—';
                     return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--cockpit-border);"><span>' + esc(item.name) + ' <span class="mono">' + esc(variantSku) + '</span> ×' + (item.quantity || 0) + '</span><span class="num">$' + ((item.price || 0) * (item.quantity || 0)).toFixed(2) + '</span></div>';
                 }).join('') + (order.user ? '<div style="margin-top:8px;color:var(--cockpit-text-muted);">' + esc(order.user.contact_name || '') + '</div>' : '') +
                 '</td></tr>';

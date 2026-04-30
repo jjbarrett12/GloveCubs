@@ -5,7 +5,8 @@
  * All queries are supplier_id scoped.
  */
 
-import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import { supabaseAdmin } from '../jobs/supabase';
+import { fetchCatalogProductNamesByIds } from '../catalog/v2-ingestion-catalog';
 import { logAuditEvent } from './auth';
 
 // ============================================================================
@@ -215,18 +216,15 @@ export async function getOfferHealth(
     .limit(limit);
     
   if (!offers) return [];
-  
+
+  const nameByProduct = await fetchCatalogProductNamesByIds(
+    offers.map((o) => String(o.product_id))
+  );
+
   // Enrich with product names and market data
   const enriched: OfferHealth[] = [];
-  
+
   for (const offer of offers) {
-    // Get product name
-    const { data: product } = await getSupabaseCatalogos()
-      .from('products')
-      .select('name')
-      .eq('id', offer.product_id)
-      .single();
-      
     // Get market pricing
     const { data: marketPrices } = await supabaseAdmin
       .from('supplier_offers')
@@ -262,7 +260,7 @@ export async function getOfferHealth(
     enriched.push({
       offer_id: offer.offer_id,
       product_id: offer.product_id,
-      product_name: product?.name,
+      product_name: nameByProduct.get(String(offer.product_id)),
       price: Number(offer.price),
       days_since_update: Math.floor(offer.days_since_update),
       freshness_status: offer.freshness_status as 'fresh' | 'aging' | 'stale',
@@ -292,17 +290,14 @@ export async function getCompetitivenessInsights(
     .limit(limit);
     
   if (!competitiveness) return [];
-  
+
+  const competitivenessNameMap = await fetchCatalogProductNamesByIds(
+    competitiveness.map((c) => String(c.product_id))
+  );
+
   const insights: CompetitivenessInsight[] = [];
-  
+
   for (const c of competitiveness) {
-    // Get product name
-    const { data: product } = await getSupabaseCatalogos()
-      .from('products')
-      .select('name')
-      .eq('id', c.product_id)
-      .single();
-      
     // Get price percentile
     const { data: percentileData } = await supabaseAdmin.rpc('get_supplier_price_percentile', {
       p_supplier_id: supplier_id,
@@ -321,7 +316,7 @@ export async function getCompetitivenessInsights(
       
     insights.push({
       product_id: c.product_id,
-      product_name: product?.name,
+      product_name: competitivenessNameMap.get(String(c.product_id)),
       supplier_price: Number(c.supplier_price),
       market_avg: Number(c.market_avg_price),
       market_min: Number(c.market_min_price),

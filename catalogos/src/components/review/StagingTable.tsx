@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { StagingRow } from "@/lib/review/data";
+import { getStagingSizeDisplay, getStagingSourceTitle, getVariantSkuDisplay } from "@/lib/review/staging-review-evidence";
 import { cn } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: string }) {
@@ -74,7 +74,9 @@ export function StagingTable({ rows, onRowClick, selectedIds, onSelectionChange,
               )}
               <th className="text-left p-3 font-medium">Supplier</th>
               <th className="text-left p-3 font-medium">SKU</th>
-              <th className="text-left p-3 font-medium">Raw title</th>
+              <th className="text-left p-3 font-medium">Source title</th>
+              <th className="text-left p-3 font-medium">Variant SKU</th>
+              <th className="text-left p-3 font-medium">Size</th>
               <th className="text-left p-3 font-medium">Normalized</th>
               <th className="text-left p-3 font-medium">Attributes</th>
               <th className="text-left p-3 font-medium">Match</th>
@@ -89,7 +91,10 @@ export function StagingTable({ rows, onRowClick, selectedIds, onSelectionChange,
           <tbody>
             {rows.map((r) => {
               const nd = r.normalized_data ?? {};
-              const rawTitle = ""; // Raw title shown in detail sheet
+              const attrs = (r.attributes ?? {}) as Record<string, unknown>;
+              const sourceTitle = getStagingSourceTitle(nd as Record<string, unknown>);
+              const variantSku = getVariantSkuDisplay(nd as Record<string, unknown>, attrs);
+              const sizeDisplay = getStagingSizeDisplay(r.inferred_size, attrs);
               const anomalyCount = (nd.anomaly_flags as unknown[])?.length ?? 0;
               const blocked = getBlocked?.(r) ?? false;
               return (
@@ -113,7 +118,15 @@ export function StagingTable({ rows, onRowClick, selectedIds, onSelectionChange,
                   )}
                   <td className="p-3 max-w-[120px] truncate" title={r.supplier_name ?? r.supplier_id}>{r.supplier_name ?? r.supplier_id.slice(0, 8)}</td>
                   <td className="p-3 font-mono text-xs">{nd.sku ?? "—"}</td>
-                  <td className="p-3 max-w-[140px] truncate text-muted-foreground" title={rawTitle}>{rawTitle || "—"}</td>
+                  <td className="p-3 max-w-[160px] truncate text-muted-foreground" title={sourceTitle}>
+                    {sourceTitle}
+                  </td>
+                  <td className="p-3 max-w-[120px] truncate font-mono text-xs" title={variantSku}>
+                    {variantSku}
+                  </td>
+                  <td className="p-3 max-w-[72px] truncate text-xs" title={sizeDisplay}>
+                    {sizeDisplay}
+                  </td>
                   <td className="p-3 max-w-[160px] truncate font-medium">{nd.name ?? "—"}</td>
                   <td className="p-3 max-w-[140px]">
                     <span className="text-muted-foreground text-xs">

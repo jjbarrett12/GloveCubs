@@ -281,10 +281,16 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
     for (const vr of variantRows) {
       const normVariant = normalizeToOntology(vr.extracted);
       const imageUrls = (parsed.images ?? []) as string[];
-      const parsedRow = normalizedFamilyToParsedRow(normVariant, { image_urls: imageUrls });
+      const parsedRow = normalizedFamilyToParsedRow(normVariant, {
+        image_urls: imageUrls,
+        parsedPage: parsed as Record<string, unknown>,
+      });
       const rawPayload: Record<string, unknown> = {
         ...extracted,
         source_url: url,
+        ...(Array.isArray(parsed.spec_sheet_urls) && parsed.spec_sheet_urls.length > 0
+          ? { spec_sheet_urls: parsed.spec_sheet_urls }
+          : {}),
       };
       const { error: prodErr } = await supabase.from("url_import_products").insert({
         job_id: jobId,
@@ -303,12 +309,19 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
     if (variantRows.length === 0) {
       const parsedRow = normalizedFamilyToParsedRow(normalized, {
         image_urls: (parsed.images ?? []) as string[],
+        parsedPage: parsed as Record<string, unknown>,
       });
       const { error: prodErr } = await supabase.from("url_import_products").insert({
         job_id: jobId,
         page_id: pageId,
         source_url: url,
-        raw_payload: { ...extracted, source_url: url },
+        raw_payload: {
+          ...extracted,
+          source_url: url,
+          ...(Array.isArray(parsed.spec_sheet_urls) && parsed.spec_sheet_urls.length > 0
+            ? { spec_sheet_urls: parsed.spec_sheet_urls }
+            : {}),
+        },
         normalized_payload: parsedRow,
         extraction_method: extractionMethod,
         confidence,

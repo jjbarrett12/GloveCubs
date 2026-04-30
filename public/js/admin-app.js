@@ -652,7 +652,7 @@
                     ? String(order.shipping_policy_version_id)
                     : '—';
             var lines = (order.items || []).map(function (item) {
-                var variantSku = item.variant_sku || (item.size ? item.sku + '-' + String(item.size).toUpperCase().replace(/\s+/g, '') : item.sku);
+                var variantSku = (item.variant_sku && String(item.variant_sku).trim()) || (item.sku && String(item.sku)) || '—';
                 return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--cockpit-border);"><span>' + esc(item.name) + ' <span class="mono">' + esc(variantSku) + '</span> ×' + (item.quantity || 0) + '</span><span class="num">$' + ((item.price || 0) * (item.quantity || 0)).toFixed(2) + '</span></div>';
             }).join('');
             var contact = order.user ? '<div style="margin-top:8px;color:var(--cockpit-text-muted);">' + esc(order.user.contact_name || '') + '</div>' : '';

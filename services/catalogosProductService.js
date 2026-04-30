@@ -1,6 +1,7 @@
 /**
  * Catalog product service — reads/writes catalog_v2.catalog_products only (no legacy listing table).
- * Facet rows: catalogos.product_attributes keyed by v2 parent id; images: catalogos.product_images or v2 images via embed.
+ * Facet rows: catalogos.product_attributes keyed by v2 parent id (never `size` — use catalog_variants.size_code).
+ * Images: catalogos.product_images or v2 images via embed.
  */
 
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
@@ -8,6 +9,11 @@ const { normalizeCanonicalUuidInput } = require('../lib/resolve-canonical-produc
 const { resolveCatalogV2ProductId } = require('../lib/resolve-catalog-v2-product-id');
 const { dollarsToMinor, minorToDollars } = require('../lib/gcOrderNormalize');
 const { pricingDollarsFromSellableRow, MissingSellablePricingError } = require('../lib/sellable-product-pricing');
+const {
+  pickSellableForListing,
+  pickSellableForCheckoutLine,
+  fetchActiveSellableRowsByCatalogIds,
+} = require('../lib/sellable-variant-resolution');
 
 const COS = 'catalogos';
 const V2 = 'catalog_v2';
@@ -254,6 +260,25 @@ async function loadAttributeDefinitions(supabase, categoryId) {
   return byKey;
 }
 
+/** Size lives on catalog_v2.catalog_variants.size_code only — strip any legacy PA rows. */
+async function deleteProductAttributeSizeRows(supabase, productId) {
+  const { data: defRows, error: defErr } = await supabase
+    .schema(COS)
+    .from('attribute_definitions')
+    .select('id')
+    .eq('attribute_key', 'size');
+  if (defErr) throw defErr;
+  const defIds = (defRows || []).map((r) => r.id).filter(Boolean);
+  if (defIds.length === 0) return;
+  const { error } = await supabase
+    .schema(COS)
+    .from('product_attributes')
+    .delete()
+    .eq('product_id', productId)
+    .in('attribute_definition_id', defIds);
+  if (error) throw error;
+}
+
 function mergeMerchIntoAttributesJson(payload, existingAttrs) {
   const base = existingAttrs && typeof existingAttrs === 'object' ? { ...existingAttrs } : {};
   for (const k of PRICING_ATTR_KEYS) delete base[k];
@@ -276,19 +301,11 @@ function mergeMerchIntoAttributesJson(payload, existingAttrs) {
  * @returns {Promise<Map<string, object>>}
  */
 async function fetchActiveSellableMap(supabase, catalogIds) {
-  const ids = [...new Set((catalogIds || []).filter(Boolean).map((id) => String(id)))];
+  const groups = await fetchActiveSellableRowsByCatalogIds(supabase, catalogIds);
   const m = new Map();
-  if (ids.length === 0) return m;
-  const { data, error } = await supabase
-    .schema(GC)
-    .from('sellable_products')
-    .select('catalog_product_id, list_price_minor, bulk_price_minor, unit_cost_minor, sku, display_name, is_active')
-    .in('catalog_product_id', ids)
-    .eq('is_active', true);
-  if (error) throw error;
-  for (const r of data || []) {
-    const cid = r.catalog_product_id != null ? String(r.catalog_product_id) : '';
-    if (cid && !m.has(cid)) m.set(cid, r);
+  for (const [cid, rows] of groups) {
+    const sp = pickSellableForListing(rows);
+    if (sp) m.set(cid, sp);
   }
   return m;
 }
@@ -357,7 +374,6 @@ async function syncProductAttributes(supabase, productId, categoryId, payload) {
   const pairs = [
     ['material', payload.material],
     ['color', payload.color],
-    ['size', payload.sizes || payload.size],
     ['thickness', payload.thickness],
     ['powder', payload.powder],
     ['grade', payload.grade],
@@ -379,6 +395,7 @@ async function syncProductAttributes(supabase, productId, categoryId, payload) {
     );
     if (error) throw error;
   }
+  await deleteProductAttributeSizeRows(supabase, productId);
 }
 
 async function refreshDerivedAttributes(supabase, productId) {
@@ -395,6 +412,7 @@ async function setAttributes(productId, rows) {
   const defs = await loadAttributeDefinitions(supabase, categoryId);
   for (const row of rows || []) {
     const key = String(row.attribute_key || row.definition_key || '').toLowerCase();
+    if (key === 'size') continue;
     const defId = defs.get(key);
     if (!defId) continue;
     const text = row.value_text != null && String(row.value_text).trim() !== '' ? String(row.value_text).trim() : null;
@@ -414,6 +432,7 @@ async function setAttributes(productId, rows) {
     );
     if (error) throw error;
   }
+  await deleteProductAttributeSizeRows(supabase, productId);
   await refreshDerivedAttributes(supabase, productId);
 }
 
@@ -616,14 +635,34 @@ async function getProducts(options = {}) {
   return { products: slice, total: matched.length || count || 0 };
 }
 
-async function getProductById(id) {
+/**
+ * @param {string} id - catalog_v2 id or internal_sku
+ * @param {{ variant_sku?: string, catalog_variant_id?: string|null }} [options] - when set, list price comes from the matching variant sellable (strict; throws AmbiguousSellableForVariantError)
+ */
+async function getProductById(id, options = {}) {
   const supabase = getSupabaseAdmin();
   const p = await fetchProductRow(supabase, id);
   if (!p) return null;
   const attrMap = await attributeValueMap(supabase, p.id);
   const brandById = await loadBrandNamesByIds(supabase, [p.brand_id]);
-  const sellableMap = await fetchActiveSellableMap(supabase, [p.id]);
-  const out = rowToProductWithSellableMap(mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap), sellableMap);
+  const groups = await fetchActiveSellableRowsByCatalogIds(supabase, [p.id]);
+  const rows = groups.get(String(p.id)) || [];
+  let sp;
+  const vs = options && options.variant_sku != null ? String(options.variant_sku).trim() : '';
+  if (vs) {
+    sp = pickSellableForCheckoutLine(rows, vs);
+  } else {
+    sp = pickSellableForListing(rows);
+  }
+  if (!sp) return null;
+  const flat = mapJoinedRow(p, null, brandFromMap(p, brandById), p.product_images, attrMap);
+  let out;
+  try {
+    out = rowToProduct(flat, sp);
+  } catch (e) {
+    if (e instanceof MissingSellablePricingError) return null;
+    throw e;
+  }
   return attachCatalogV2ProductId(out);
 }
 

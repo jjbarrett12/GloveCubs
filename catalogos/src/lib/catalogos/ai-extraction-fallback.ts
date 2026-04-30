@@ -7,6 +7,7 @@
 import type { RawRow } from "./extraction-types";
 import type { FilterAttributes } from "./normalized-product-types";
 import { filterAttributesSchema } from "./normalized-product-schema";
+import { normalizeFilterAttributesKeys } from "./attribute-validation";
 
 const EXTRACTION_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -42,7 +43,7 @@ export async function runAIExtractionFallback(
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) return null;
 
-  const systemPrompt = `You are a product data specialist for PPE and gloves. Extract structured filter attributes and core fields from supplier product data. Return ONLY valid JSON with keys: filter_attributes (object with material, size, color, and category-specific keys), core_overrides (optional: canonical_title, short_description, long_description, bullets), explanation (string). Use lowercase snake_case for filter values. For category disposable_gloves include: material, size, color, thickness_mil, powder, grade, industries, compliance_certifications, texture, cuff_style, packaging, sterility. For reusable_work_gloves include: material, size, color, cut_level_ansi, puncture_level, abrasion_level, flame_resistant, arc_rating, warm_cold_weather.`;
+  const systemPrompt = `You are a product data specialist for PPE and gloves. Extract structured filter attributes and core fields from supplier product data. Return ONLY valid JSON with keys: filter_attributes (object with material, size, color, and category-specific keys), core_overrides (optional: canonical_title, short_description, long_description, bullets), explanation (string). Use lowercase snake_case for filter values. For category disposable_gloves include: material, size, color, thickness_mil, powder, grade, industries, certifications, uses, protection_tags, texture, cuff_style, packaging, sterility. For reusable_work_gloves include: material, size, color, cut_level_ansi, puncture_level, abrasion_level, flame_resistant, arc_rating, warm_cold_weather.`;
 
   const userPrompt = `Category: ${categorySlug}. Rules-extracted attributes: ${JSON.stringify(rulesAttributes)}. Confidence by key: ${JSON.stringify(confidenceByKey)}. Raw row excerpt: ${JSON.stringify({
     name: rawRow.name,
@@ -79,7 +80,7 @@ export async function runAIExtractionFallback(
         if (v != null && (merged as Record<string, unknown>)[k] == null) (merged as Record<string, unknown>)[k] = v;
       }
     }
-    const validated = filterAttributesSchema.safeParse(merged);
+    const validated = filterAttributesSchema.safeParse(normalizeFilterAttributesKeys(merged as Record<string, unknown>));
     if (!validated.success) return null;
     return {
       filter_attributes: validated.data,

@@ -13,6 +13,9 @@ import type {
   GradeOption,
   IndustryOption,
   ComplianceOption,
+  CertificationOption,
+  UseOption,
+  ProtectionTagOption,
   TextureOption,
   CuffStyleOption,
   HandOrientationOption,
@@ -38,6 +41,10 @@ export interface FilterAttributes {
   powder?: PowderOption | string;
   grade?: GradeOption | string;
   industries?: IndustryOption[] | string[];
+  certifications?: CertificationOption[] | string[];
+  uses?: UseOption[] | string[];
+  protection_tags?: ProtectionTagOption[] | string[];
+  /** @deprecated Use `certifications`. */
   compliance_certifications?: ComplianceOption[] | string[];
   texture?: TextureOption | string;
   cuff_style?: CuffStyleOption | string;

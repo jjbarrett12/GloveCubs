@@ -16,6 +16,7 @@ const assert = require('node:assert/strict');
 const { isSupabaseAdminConfigured } = require('../lib/supabaseAdmin');
 const { computeCheckoutMoneyFromCart } = require('../lib/checkout-compute');
 const { buildGcOrderLinesForInsert } = require('../lib/buildGcOrderLines');
+const { resolveCatalogVariantForCommerceLine } = require('../lib/resolve-cart-catalog-variant');
 const inventory = require('../lib/inventory');
 const { assertCatalogV2ProductIdForCommerce } = require('../lib/catalog-v2-product-guard');
 const productsService = require('../services/catalogosProductService');
@@ -267,61 +268,99 @@ async function main() {
     record('1. Cart v2 identity', false, e.message || e);
   }
 
-  // 2 — Checkout compute payload uses catalog_v2 id on order item rows
+  // 2 — Checkout compute payload uses catalog_v2 id on order item rows (+ resolved variant)
   try {
-    const cartItems = [
-      {
-        product_id: v2,
-        quantity: 1,
-        size: null,
-        canonical_product_id: v2,
-        listing_id: v2,
-      },
-    ];
-    const money = await computeCheckoutMoneyFromCart({
-      cartItems,
-      finalShippingAddress: addr,
-      user: null,
-      companyId: null,
-      pricingContext: { companies: [], customer_manufacturer_pricing: [] },
-      productsService,
+    const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
+    const vr2 = await resolveCatalogVariantForCommerceLine(getSupabaseAdmin(), {
+      product_id: v2,
+      quantity: 1,
+      size: null,
+      canonical_product_id: v2,
+      listing_id: v2,
     });
-    if (!money.ok) {
-      record('2. Checkout payload uses catalog_v2 id', false, JSON.stringify(money.body));
+    if (!vr2.ok) {
+      record('2. Checkout payload uses catalog_v2 id', false, JSON.stringify(vr2));
     } else {
-      const oi = money.value.orderItems[0];
-      const ok = oi && oi.canonical_product_id === v2 && oi.product_id === v2 && oi.listing_id === v2;
-      record(
-        '2. Checkout payload uses catalog_v2 id',
-        ok,
-        ok ? null : `orderItems[0]=${JSON.stringify(oi)}`,
-      );
+      const cartItems = [
+        {
+          product_id: v2,
+          quantity: 1,
+          size: null,
+          canonical_product_id: v2,
+          listing_id: v2,
+          catalog_variant_id: vr2.catalog_variant_id,
+          variant_sku: vr2.variant_sku,
+        },
+      ];
+      const money = await computeCheckoutMoneyFromCart({
+        cartItems,
+        finalShippingAddress: addr,
+        user: null,
+        companyId: null,
+        pricingContext: { companies: [], customer_manufacturer_pricing: [] },
+        productsService,
+      });
+      if (!money.ok) {
+        record('2. Checkout payload uses catalog_v2 id', false, JSON.stringify(money.body));
+      } else {
+        const oi = money.value.orderItems[0];
+        const ok =
+          oi &&
+          oi.canonical_product_id === v2 &&
+          oi.product_id === v2 &&
+          oi.listing_id === v2 &&
+          String(oi.catalog_variant_id) === String(vr2.catalog_variant_id) &&
+          oi.variant_sku === vr2.variant_sku;
+        record(
+          '2. Checkout payload uses catalog_v2 id',
+          ok,
+          ok ? null : `orderItems[0]=${JSON.stringify(oi)}`,
+        );
+      }
     }
   } catch (e) {
     record('2. Checkout payload uses catalog_v2 id', false, e.message || e);
   }
 
-  // 3 — Order line snapshot: product_snapshot.catalog_product_id is v2
+  // 3 — Order line snapshot: catalog_product_id + catalog_variant_id + variant_sku
   const dummyOrderId = crypto.randomUUID();
   try {
     const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
-    const rows = await buildGcOrderLinesForInsert(getSupabaseAdmin(), dummyOrderId, [
-      {
-        listing_id: v2,
-        canonical_product_id: v2,
-        product_id: v2,
-        quantity: 1,
-        unit_price: 9.99,
-        size: null,
-      },
-    ]);
-    const snap = rows[0] && rows[0].product_snapshot;
-    const ok = snap && String(snap.catalog_product_id).toLowerCase() === v2;
-    record(
-      '3. Create order snapshot: catalog_product_id is catalog_v2',
-      ok,
-      ok ? null : `rows=${JSON.stringify(rows)}`,
-    );
+    const supa3 = getSupabaseAdmin();
+    const vr3 = await resolveCatalogVariantForCommerceLine(supa3, {
+      product_id: v2,
+      canonical_product_id: v2,
+      size: null,
+      listing_id: v2,
+    });
+    if (!vr3.ok) {
+      record('3. Create order snapshot: catalog_product_id is catalog_v2', false, JSON.stringify(vr3));
+    } else {
+      const rows = await buildGcOrderLinesForInsert(supa3, dummyOrderId, [
+        {
+          listing_id: v2,
+          canonical_product_id: v2,
+          product_id: v2,
+          quantity: 1,
+          unit_price: 9.99,
+          size: null,
+          catalog_variant_id: vr3.catalog_variant_id,
+          variant_sku: vr3.variant_sku,
+        },
+      ]);
+      const snap = rows[0] && rows[0].product_snapshot;
+      const ok =
+        snap &&
+        String(snap.catalog_product_id).toLowerCase() === v2 &&
+        rows[0].catalog_variant_id &&
+        String(rows[0].catalog_variant_id) === String(vr3.catalog_variant_id) &&
+        String(snap.variant_sku) === String(vr3.variant_sku);
+      record(
+        '3. Create order snapshot: catalog_product_id is catalog_v2',
+        ok,
+        ok ? null : `rows=${JSON.stringify(rows)}`,
+      );
+    }
   } catch (e) {
     record('3. Create order snapshot: catalog_product_id is catalog_v2', false, e.message || e);
   }

@@ -21,6 +21,11 @@
  */
 
 import { supabaseAdmin, getSupabaseCatalogos } from '../supabase';
+import {
+  loadCompetitorCatalogRowsByProductIds,
+  loadCompetitorCatalogRowsBySkus,
+  type CompetitorCatalogRow,
+} from '../../catalog/v2-ingestion-catalog';
 import { logger } from '../logger';
 import { getAgentRule } from '../../agents/config';
 import { emitSystemEvent } from '../../events/emit';
@@ -344,8 +349,6 @@ async function loadProductsToCheck(input: CompetitorPriceCheckPayload): Promise<
   const products: ProductToCheck[] = [];
   const cat = getSupabaseCatalogos();
 
-  type PRow = { id: string; sku: string; name: string; attributes?: Record<string, unknown> | null };
-
   const fetchBestPrices = async (ids: string[]) => {
     if (ids.length === 0) return new Map<string, number>();
     const { data } = await cat.from('product_best_offer_price').select('product_id, best_price').in('product_id', ids);
@@ -354,9 +357,8 @@ async function loadProductsToCheck(input: CompetitorPriceCheckPayload): Promise<
     );
   };
 
-  const mapRows = (rows: PRow[], bestById: Map<string, number>): ProductToCheck[] =>
+  const mapRows = (rows: CompetitorCatalogRow[], bestById: Map<string, number>): ProductToCheck[] =>
     rows.map((p) => {
-      const attrs = (p.attributes ?? {}) as Record<string, unknown>;
       const price = bestById.get(p.id) ?? 0;
       return {
         id: p.id,
@@ -365,18 +367,13 @@ async function loadProductsToCheck(input: CompetitorPriceCheckPayload): Promise<
         current_price: price,
         current_cost: price,
         map_price: undefined,
-        upc: attrs.upc as string | undefined,
-        mpn: attrs.mpn as string | undefined,
+        upc: p.upc,
+        mpn: p.mpn,
       };
     });
 
   if (input.product_ids && input.product_ids.length > 0) {
-    const { data } = await cat
-      .from('products')
-      .select('id, sku, name, attributes')
-      .in('id', input.product_ids)
-      .eq('is_active', true);
-    const rows = (data ?? []) as PRow[];
+    const rows = await loadCompetitorCatalogRowsByProductIds(input.product_ids);
     if (rows.length) {
       const best = await fetchBestPrices(rows.map((p) => p.id));
       products.push(...mapRows(rows, best));
@@ -385,12 +382,7 @@ async function loadProductsToCheck(input: CompetitorPriceCheckPayload): Promise<
   }
 
   if (input.sku_list && input.sku_list.length > 0) {
-    const { data } = await cat
-      .from('products')
-      .select('id, sku, name, attributes')
-      .in('sku', input.sku_list)
-      .eq('is_active', true);
-    const rows = (data ?? []) as PRow[];
+    const rows = await loadCompetitorCatalogRowsBySkus(input.sku_list);
     if (rows.length) {
       const best = await fetchBestPrices(rows.map((p) => p.id));
       for (const row of mapRows(rows, best)) {
@@ -413,8 +405,7 @@ async function loadProductsToCheck(input: CompetitorPriceCheckPayload): Promise<
     );
     const ids = Array.from(best.keys());
     if (ids.length) {
-      const { data } = await cat.from('products').select('id, sku, name, attributes').in('id', ids).eq('is_active', true);
-      const rows = (data ?? []) as PRow[];
+      const rows = await loadCompetitorCatalogRowsByProductIds(ids);
       products.push(...mapRows(rows, best));
     }
   }

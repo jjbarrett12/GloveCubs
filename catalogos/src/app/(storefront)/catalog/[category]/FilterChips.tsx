@@ -4,9 +4,9 @@ import Link from "next/link";
 import { buildCatalogSearchString } from "@/lib/catalog/params";
 import type { StorefrontFilterParams } from "@/lib/catalog/types";
 import { Badge } from "@/components/ui/badge";
-import { getAllFilterableFacetKeys } from "@/lib/product-types";
+import { getAllCatalogFacetKeys } from "@/lib/product-types";
 
-const FILTER_KEYS = getAllFilterableFacetKeys();
+const FILTER_KEYS = getAllCatalogFacetKeys();
 
 interface FilterChipsProps {
   basePath: string;

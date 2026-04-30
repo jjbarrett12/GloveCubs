@@ -82,6 +82,16 @@ describe("normalization utils", () => {
     expect(content.supplier_cost).toBe(85);
   });
 
+  it("extractContentFromRaw passes spec_sheet_urls through", () => {
+    const content = extractContentFromRaw({
+      name: "Glove",
+      sku: "G-1",
+      cost: 1,
+      spec_sheet_urls: ["https://cdn.example.com/spec.pdf", "https://cdn.example.com/msds.pdf"],
+    });
+    expect(content.spec_sheet_urls).toEqual(["https://cdn.example.com/spec.pdf", "https://cdn.example.com/msds.pdf"]);
+  });
+
   it("combinedText merges common fields", () => {
     const row = { name: "Gloves", description: "Nitrile", material: "nitrile" };
     expect(combinedText(row)).toContain("gloves");
@@ -232,7 +242,6 @@ describe("missing-required validation (stage_safe / publish_safe)", () => {
     const attrs = { category: "disposable_gloves" as const, material: "nitrile" };
     const v = stageSafe("disposable_gloves", attrs);
     expect(v.stageable).toBe(true);
-    expect(v.missing_required).toContain("size");
     expect(v.missing_required).toContain("color");
     expect(v.missing_required).toContain("brand");
     expect(v.missing_required).toContain("packaging");
@@ -248,7 +257,7 @@ describe("missing-required validation (stage_safe / publish_safe)", () => {
   });
 
   it("stage_safe and publish_safe pass when required present for work gloves", () => {
-    const attrs = { category: "reusable_work_gloves" as const, size: "l", color: "black", brand: "Acme" };
+    const attrs = { category: "reusable_work_gloves" as const, color: "black", brand: "Acme" };
     const v = stageSafe("reusable_work_gloves", attrs);
     expect(v.stageable).toBe(true);
     expect(v.missing_required).toHaveLength(0);
@@ -325,5 +334,27 @@ describe("staging payload generation", () => {
     expect(payload.normalized_data.canonical_title).toBe("Black latex industrial gloves XL powdered 100 ct");
     expect(payload.normalized_data.filter_attributes.material).toBe("latex");
     expect(payload.attributes).toEqual(payload.normalized_data.filter_attributes);
+  });
+
+  it("preserves spec_sheet_urls on staged normalized_data", () => {
+    const row = {
+      name: "Black latex industrial gloves XL powdered 100 ct",
+      sku: "LAT-XL-100",
+      cost: 12,
+      material: "latex",
+      color: "black",
+      size: "xl",
+      brand: "Acme",
+      box_qty: 100,
+      spec_sheet_urls: ["https://files.example.com/lat-xl-sds.pdf"],
+    };
+    const result = runNormalization(row);
+    const payload = buildStagingPayload({
+      result,
+      batchId: "11111111-1111-1111-1111-111111111111",
+      rawId: "22222222-2222-2222-2222-222222222222",
+      supplierId: "33333333-3333-3333-3333-333333333333",
+    });
+    expect(payload.normalized_data.spec_sheet_urls).toEqual(["https://files.example.com/lat-xl-sds.pdf"]);
   });
 });

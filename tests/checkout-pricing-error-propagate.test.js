@@ -28,6 +28,7 @@ describe('checkout pricing error propagate', () => {
     const { computeCheckoutMoneyFromCart } = require('../lib/checkout-compute');
     const addr = { state: 'NY', city: 'NYC', zip_code: '10001', address_line1: '1 Main', full_name: 'A' };
     const CAT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const VAR = '11111111-1111-4111-8111-111111111111';
     const productsService = {
       async getProductById() {
         throw new MissingSellablePricingError('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
@@ -36,7 +37,16 @@ describe('checkout pricing error propagate', () => {
     await assert.rejects(
       () =>
         computeCheckoutMoneyFromCart({
-          cartItems: [{ product_id: CAT, quantity: 1, size: null, canonical_product_id: CAT }],
+          cartItems: [
+            {
+              product_id: CAT,
+              quantity: 1,
+              size: null,
+              canonical_product_id: CAT,
+              catalog_variant_id: VAR,
+              variant_sku: 'V-X',
+            },
+          ],
           finalShippingAddress: addr,
           user: null,
           companyId: null,

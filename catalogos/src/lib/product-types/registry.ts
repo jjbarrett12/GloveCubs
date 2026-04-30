@@ -64,14 +64,15 @@ const DISPOSABLE_WEAK = ["powdered", "100/box", "100/ct", "mil"] as const;
 
 const DISPOSABLE_FILTER_KEYS = [
   "material",
-  "size",
   "color",
   "brand",
   "thickness_mil",
   "powder",
   "grade",
   "industries",
-  "compliance_certifications",
+  "certifications",
+  "uses",
+  "protection_tags",
   "texture",
   "cuff_style",
   "hand_orientation",
@@ -81,7 +82,6 @@ const DISPOSABLE_FILTER_KEYS = [
 
 const WORK_FILTER_KEYS = [
   "material",
-  "size",
   "color",
   "brand",
   "cut_level_ansi",
@@ -116,7 +116,9 @@ const DISPOSABLE_DICTIONARY_KEYS = [
   "powder",
   "grade",
   "industries",
-  "compliance_certifications",
+  "certifications",
+  "uses",
+  "protection_tags",
   "texture",
   "cuff_style",
   "hand_orientation",
@@ -137,7 +139,19 @@ const WORK_DICTIONARY_KEYS = [
   "warm_cold_weather",
 ] as const;
 
-export const GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS = ["industries", "compliance_certifications"] as const;
+export const GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS = [
+  "industries",
+  "certifications",
+  "uses",
+  "protection_tags",
+] as const;
+
+/** Storefront facets backed by catalog_v2.catalog_variants (not catalogos.product_attributes). */
+export const CATALOG_VARIANT_FACET_KEYS = ["size"] as const;
+
+export function getCatalogVariantFacetKeys(): readonly string[] {
+  return CATALOG_VARIANT_FACET_KEYS;
+}
 
 export const PRODUCT_TYPE_DEFINITIONS: Record<ProductTypeKey, ProductTypeDefinition> = {
   disposable_gloves: {
@@ -149,7 +163,6 @@ export const PRODUCT_TYPE_DEFINITIONS: Record<ProductTypeKey, ProductTypeDefinit
     attributeRequirements: [
       { attributeKey: "category", level: "required" },
       { attributeKey: "material", level: "required" },
-      { attributeKey: "size", level: "required" },
       { attributeKey: "color", level: "required" },
       { attributeKey: "brand", level: "required" },
       { attributeKey: "packaging", level: "required" },
@@ -160,7 +173,9 @@ export const PRODUCT_TYPE_DEFINITIONS: Record<ProductTypeKey, ProductTypeDefinit
       { attributeKey: "cuff_style", level: "strongly_preferred" },
       { attributeKey: "sterility", level: "strongly_preferred" },
       { attributeKey: "industries", level: "strongly_preferred" },
-      { attributeKey: "compliance_certifications", level: "strongly_preferred" },
+      { attributeKey: "certifications", level: "strongly_preferred" },
+      { attributeKey: "uses", level: "strongly_preferred" },
+      { attributeKey: "protection_tags", level: "strongly_preferred" },
     ],
     optionalAttributeKeys: ["hand_orientation"],
     filterableFacets: [...DISPOSABLE_FILTER_KEYS],
@@ -206,7 +221,9 @@ export const PRODUCT_TYPE_DEFINITIONS: Record<ProductTypeKey, ProductTypeDefinit
             { attributeKey: "sterility", widget: "select" },
             { attributeKey: "hand_orientation", widget: "select" },
             { attributeKey: "industries", widget: "multiselect", colSpan: 2 },
-            { attributeKey: "compliance_certifications", widget: "multiselect", colSpan: 2 },
+            { attributeKey: "certifications", widget: "multiselect", colSpan: 2 },
+            { attributeKey: "uses", widget: "multiselect", colSpan: 2 },
+            { attributeKey: "protection_tags", widget: "multiselect", colSpan: 2 },
           ],
         },
       ],
@@ -221,7 +238,6 @@ export const PRODUCT_TYPE_DEFINITIONS: Record<ProductTypeKey, ProductTypeDefinit
     variantDimensions: ["material", "size", "color", "cut_level_ansi"],
     attributeRequirements: [
       { attributeKey: "category", level: "required" },
-      { attributeKey: "size", level: "required" },
       { attributeKey: "color", level: "required" },
       { attributeKey: "brand", level: "required" },
       { attributeKey: "cut_level_ansi", level: "strongly_preferred" },
@@ -334,6 +350,14 @@ export function getAllFilterableFacetKeys(): string[] {
     for (const k of def.filterableFacets) set.add(k);
   }
   return Array.from(set);
+}
+
+/** All facet keys for URL parsing, chips, and facet counts (PA + variant-backed). */
+export function getAllCatalogFacetKeys(): string[] {
+  const out = new Set<string>();
+  for (const k of getAllFilterableFacetKeys()) out.add(k);
+  for (const k of CATALOG_VARIANT_FACET_KEYS) out.add(k);
+  return Array.from(out);
 }
 
 export function getStorefrontNavCategories(): readonly { slug: ProductTypeKey; label: string }[] {

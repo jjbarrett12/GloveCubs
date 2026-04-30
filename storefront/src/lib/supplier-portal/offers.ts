@@ -6,6 +6,11 @@
  */
 
 import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import {
+  fetchCatalogProductNamesByIds,
+  resolveCatalogProductBySku,
+  searchActiveCatalogProducts,
+} from '../catalog/v2-ingestion-catalog';
 import { logAuditEvent } from './auth';
 import {
   buildSupplierOfferUpsertRow,
@@ -13,18 +18,7 @@ import {
 } from '../../../../lib/supplier-offer-normalization';
 
 async function mapCatalogProductNamesByIds(productIds: string[]): Promise<Map<string, string>> {
-  const ids = Array.from(new Set(productIds.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 500);
-  if (ids.length === 0) return new Map();
-  const { data } = await getSupabaseCatalogos()
-    .from('products')
-    .select('id, name')
-    .in('id', ids)
-    .eq('is_active', true);
-  const m = new Map<string, string>();
-  for (const r of data ?? []) {
-    if (r.id != null && r.name != null) m.set(String(r.id), String(r.name));
-  }
-  return m;
+  return fetchCatalogProductNamesByIds(productIds);
 }
 
 // ============================================================================
@@ -192,17 +186,11 @@ export async function createOffer(
   input: CreateOfferInput,
   ipAddress?: string
 ): Promise<{ success: boolean; offer?: SupplierOffer; error?: string }> {
-  // Validate product exists
-  const { data: product } = await getSupabaseCatalogos()
-    .from('products')
-    .select('id, name')
-    .eq('id', input.product_id)
-    .eq('is_active', true)
-    .single();
-    
-  if (!product) {
+  const nameMap = await fetchCatalogProductNamesByIds([input.product_id]);
+  if (!nameMap.has(input.product_id)) {
     return { success: false, error: 'Product not found' };
   }
+  const productNameResolved = nameMap.get(input.product_id)!;
   
   const catalogos = getSupabaseCatalogos();
   // Check for existing offer
@@ -260,7 +248,7 @@ export async function createOffer(
       id: offer.id,
       supplier_id: offer.supplier_id,
       product_id: offer.product_id,
-      product_name: product.name,
+      product_name: productNameResolved,
       sku: offer.supplier_sku as string,
       price: Number(offer.cost),
       case_pack: (offer as { units_per_case?: number | null }).units_per_case ?? undefined,
@@ -515,18 +503,12 @@ export async function bulkUploadOffers(
     // Find product
     let productId = row.product_id;
     if (!productId && row.sku) {
-      const { data: product } = await getSupabaseCatalogos()
-        .from('products')
-        .select('id')
-        .eq('sku', row.sku)
-        .eq('is_active', true)
-        .single();
-        
-      if (!product) {
+      const hit = await resolveCatalogProductBySku(String(row.sku));
+      if (!hit) {
         errors.push({ row: rowNum, error: `Product not found for SKU: ${row.sku}` });
         continue;
       }
-      productId = product.id;
+      productId = hit.id;
     }
     
     // Check for existing offer
@@ -605,14 +587,8 @@ export async function searchProducts(
   sku?: string;
   has_offer: boolean;
 }>> {
-  const { data: products } = await getSupabaseCatalogos()
-    .from('products')
-    .select('id, name, sku')
-    .eq('is_active', true)
-    .or(`name.ilike.%${search}%,sku.ilike.%${search}%`)
-    .limit(limit);
-    
-  if (!products) return [];
+  const products = await searchActiveCatalogProducts(search, limit);
+  if (!products.length) return [];
   
   // Check which have existing offers
   const { data: existingOffers } = await supabaseAdmin

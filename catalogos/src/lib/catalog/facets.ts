@@ -3,15 +3,43 @@
  * Supports dynamic counts based on current filters.
  */
 
-import { getSupabaseCatalogos } from "@/lib/db/client";
+import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
 import { getAttributeDefinitionIdsByKey } from "@/lib/publish/product-attribute-sync";
 import type { StorefrontFilterParams } from "./types";
 import type { FacetCounts } from "./types";
 
 import { getCatalogConstraintProductIds } from "./query";
-import { getAllFilterableFacetKeys } from "@/lib/product-types";
+import { getAllCatalogFacetKeys } from "@/lib/product-types";
 
-const FACET_KEYS = getAllFilterableFacetKeys();
+const FACET_KEYS = getAllCatalogFacetKeys();
+const MAX_VARIANT_ROWS_FOR_SIZE_FACETS = 100_000;
+
+async function aggregateSizeFacetCountsFromVariants(productIds: Set<string> | null): Promise<{ value: string; count: number }[]> {
+  if (productIds !== null && productIds.size === 0) return [];
+  const admin = getSupabase(true);
+  let q = admin
+    .schema("catalog_v2")
+    .from("catalog_variants")
+    .select("catalog_product_id, size_code")
+    .eq("is_active", true)
+    .not("size_code", "is", null)
+    .limit(MAX_VARIANT_ROWS_FOR_SIZE_FACETS);
+  if (productIds !== null && productIds.size > 0) {
+    q = q.in("catalog_product_id", [...productIds]);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const bySize = new Map<string, Set<string>>();
+  for (const row of data ?? []) {
+    const r = row as { catalog_product_id: string; size_code: string | null };
+    const sc = (r.size_code ?? "").trim().toLowerCase();
+    if (!sc) continue;
+    const pid = r.catalog_product_id;
+    if (!bySize.has(sc)) bySize.set(sc, new Set());
+    bySize.get(sc)!.add(pid);
+  }
+  return [...bySize.entries()].map(([value, set]) => ({ value, count: set.size })).sort((a, b) => b.count - a.count);
+}
 
 /**
  * Return facet counts for the current filter state.
@@ -23,6 +51,11 @@ export async function getFacetCounts(params: StorefrontFilterParams): Promise<Fa
   const result: FacetCounts = {};
 
   for (const key of FACET_KEYS) {
+    if (key === "size") {
+      result.size = await aggregateSizeFacetCountsFromVariants(productIds);
+      continue;
+    }
+
     const defIds = await getAttributeDefinitionIdsByKey(key);
     if (defIds.length === 0) continue;
 

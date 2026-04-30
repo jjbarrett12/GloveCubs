@@ -10,6 +10,11 @@
 
 import * as XLSX from 'xlsx';
 import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import {
+  resolveCatalogProductBySku,
+  searchActiveCatalogProducts,
+  findCatalogProductsByMaterialAndVariantSize,
+} from '../catalog/v2-ingestion-catalog';
 import { buildSupplierOfferUpsertRow } from '../../../../lib/supplier-offer-normalization';
 import { logAuditEvent } from './auth';
 import { logIngestionFailure, logAIExtractionFailure, logTransactionFailure } from '../hardening/telemetry';
@@ -718,15 +723,9 @@ export async function normalizeAndMatch(
     unit_normalized: extracted.unit_of_measure || 'each',
   };
   
-  // Try exact SKU match first
+  // Try exact SKU match first (variant_sku, then internal_sku)
   if (extracted.sku) {
-    const { data: skuMatch } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name')
-      .eq('sku', extracted.sku)
-      .eq('is_active', true)
-      .single();
-      
+    const skuMatch = await resolveCatalogProductBySku(String(extracted.sku));
     if (skuMatch) {
       result.matched_product_id = skuMatch.id;
       result.matched_product_name = skuMatch.name;
@@ -734,25 +733,20 @@ export async function normalizeAndMatch(
       result.match_method = 'exact_sku';
     }
   }
-  
-  // Try fuzzy name match if no SKU match
+
+  // Try fuzzy name match if no SKU match (catalog_products.name)
   if (!result.matched_product_id && extracted.product_name) {
-    const { data: nameMatches } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name')
-      .eq('is_active', true)
-      .ilike('name', `%${extracted.product_name.slice(0, 30)}%`)
-      .limit(5);
-      
-    if (nameMatches && nameMatches.length > 0) {
-      // Score each match
-      const scored = nameMatches.map(m => ({
+    const slice = extracted.product_name.slice(0, 80).trim() || extracted.product_name;
+    const nameMatches = await searchActiveCatalogProducts(slice, 8);
+
+    if (nameMatches.length > 0) {
+      const scored = nameMatches.map((m) => ({
         ...m,
         score: calculateNameSimilarity(extracted.product_name!, m.name),
       }));
-      
+
       const best = scored.sort((a, b) => b.score - a.score)[0];
-      
+
       if (best.score >= 0.6) {
         result.matched_product_id = best.id;
         result.matched_product_name = best.name;
@@ -761,18 +755,16 @@ export async function normalizeAndMatch(
       }
     }
   }
-  
-  // Try attribute-based matching
+
+  // Attribute match: product_attributes (material) + catalog_variants.size_code
   if (!result.matched_product_id && extracted.material && extracted.size) {
-    const { data: attrMatches } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name')
-      .eq('is_active', true)
-      .ilike('name', `%${extracted.material}%`)
-      .ilike('name', `%${extracted.size}%`)
-      .limit(5);
-      
-    if (attrMatches && attrMatches.length > 0) {
+    const attrMatches = await findCatalogProductsByMaterialAndVariantSize(
+      extracted.material,
+      extracted.size,
+      5
+    );
+
+    if (attrMatches.length > 0) {
       result.matched_product_id = attrMatches[0].id;
       result.matched_product_name = attrMatches[0].name;
       result.match_confidence = 0.6;

@@ -41,6 +41,8 @@ export interface ParsedProductPage {
   mpn?: string;
   upc?: string;
   images?: string[];
+  /** Absolute URLs to spec sheets, SDS, or technical PDFs (crawl-time only; not parsed as content). */
+  spec_sheet_urls?: string[];
   breadcrumbs?: string[];
   variant_options?: VariantOption[];
   json_ld?: Record<string, unknown>[];

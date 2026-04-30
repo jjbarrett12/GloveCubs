@@ -5,8 +5,11 @@
  * Prevents duplicates and removes stale values.
  */
 
-import { getSupabaseCatalogos } from "@/lib/db/client";
-import { isMultiSelectAttribute } from "@/lib/catalogos/attribute-validation";
+import { getSupabaseCatalogos, isSupabaseConfigured } from "@/lib/db/client";
+import { isMultiSelectAttribute, normalizeFilterAttributesKeys } from "@/lib/catalogos/attribute-validation";
+
+/** Keys stored on catalog_variants (not catalogos.product_attributes). */
+const EXCLUDED_FROM_PRODUCT_ATTRIBUTE_SYNC = new Set(["category", "size"]);
 
 /**
  * Resolve attribute_definition ids for an attribute_key across all categories (for storefront filtering).
@@ -72,13 +75,32 @@ export async function getAttributeDefinitionIds(
  * Single-select: delete all rows for (product_id, attribute_definition_id), insert one row.
  * Multi-select: delete all rows for (product_id, attribute_definition_id), insert one row per value (no duplicates, no stale).
  */
+async function purgeSizeProductAttributeRows(productId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const defIds = await getAttributeDefinitionIdsByKey("size");
+  if (defIds.length === 0) return;
+  const supabase = getSupabaseCatalogos(true);
+  const { error } = await supabase
+    .from("product_attributes")
+    .delete()
+    .eq("product_id", productId)
+    .in("attribute_definition_id", defIds);
+  if (error) throw new Error(`product_attributes purge size: ${error.message}`);
+}
+
 export async function syncProductAttributesFromStaged(
   productId: string,
   categoryId: string,
   filterAttributes: Record<string, unknown>
 ): Promise<{ synced: number; errors: string[] }> {
-  const keys = Object.keys(filterAttributes).filter(
-    (k) => k !== "category" && filterAttributes[k] !== undefined && filterAttributes[k] !== null && filterAttributes[k] !== ""
+  await purgeSizeProductAttributeRows(productId);
+  const canonicalFilterAttributes = normalizeFilterAttributesKeys({ ...filterAttributes });
+  const keys = Object.keys(canonicalFilterAttributes).filter(
+    (k) =>
+      !EXCLUDED_FROM_PRODUCT_ATTRIBUTE_SYNC.has(k) &&
+      canonicalFilterAttributes[k] !== undefined &&
+      canonicalFilterAttributes[k] !== null &&
+      canonicalFilterAttributes[k] !== ""
   );
   if (keys.length === 0) return { synced: 0, errors: [] };
 
@@ -93,7 +115,7 @@ export async function syncProductAttributesFromStaged(
       errors.push(`No attribute_definition for category + ${key}`);
       continue;
     }
-    const raw = filterAttributes[key];
+    const raw = canonicalFilterAttributes[key];
     const isMulti = isMultiSelectAttribute(key);
 
     if (isMulti) {

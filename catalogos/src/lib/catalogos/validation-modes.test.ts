@@ -59,7 +59,6 @@ describe("stage_safe", () => {
   it("returns missing_required when required attributes are absent", () => {
     const r = stageSafe("disposable_gloves", { category: "disposable_gloves" });
     expect(r.missing_required).toContain("material");
-    expect(r.missing_required).toContain("size");
     expect(r.missing_required).toContain("color");
     expect(r.missing_required).toContain("brand");
     expect(r.missing_required).toContain("packaging");
@@ -70,7 +69,6 @@ describe("stage_safe", () => {
   it("returns empty missing_required when all required present for work gloves", () => {
     const r = stageSafe("reusable_work_gloves", {
       category: "reusable_work_gloves",
-      size: "l",
       color: "black",
       brand: "Acme",
     });
@@ -84,14 +82,13 @@ describe("publish_safe", () => {
     const r = publishSafe("disposable_gloves", { category: "disposable_gloves" });
     expect(r.publishable).toBe(false);
     expect(r.error).toMatch(/missing required attributes/);
-    expect(r.error).toMatch(/material|size|color|brand/);
+    expect(r.error).toMatch(/material|color|brand/);
   });
 
   it("returns publishable true when all required present for disposable_gloves", () => {
     const r = publishSafe("disposable_gloves", {
       category: "disposable_gloves",
       material: "nitrile",
-      size: "m",
       color: "blue",
       brand: "Acme",
       packaging: "box_100_ct",
@@ -105,7 +102,6 @@ describe("publish_safe", () => {
   it("returns publishable true when all required present for reusable_work_gloves", () => {
     const r = publishSafe("reusable_work_gloves", {
       category: "reusable_work_gloves",
-      size: "l",
       color: "black",
       brand: "Acme",
     });

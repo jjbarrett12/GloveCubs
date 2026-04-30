@@ -42,6 +42,15 @@ const RAW_SQL_CATALOGOS_PRODUCTS = /\b(from|join|into|update|truncate)\s+catalog
 
 const FROM_PRODUCTS = /\.from\s*\(\s*['"]products['"]\s*\)/;
 
+/** Ingestion / supplier portal / match handlers must not read legacy catalogos.products. */
+const FORBIDDEN_FROM_PRODUCTS_REL = (rel) => {
+  const r = rel.replace(/\\/g, '/');
+  if (r.startsWith('storefront/src/lib/supplier-portal/')) return true;
+  if (r === 'storefront/src/lib/jobs/handlers/productMatch.ts') return true;
+  if (r === 'storefront/src/lib/jobs/handlers/competitorPriceCheck.ts') return true;
+  return false;
+};
+
 function* walk(dir) {
   if (!fs.existsSync(dir)) return;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -82,6 +91,13 @@ function violationsForFile(file, text) {
     FROM_PRODUCTS.lastIndex = 0;
     if (FROM_PRODUCTS.test(text)) {
       out.push('catalogos/src runtime .from(products) — use schema("catalog_v2").from("catalog_products")');
+    }
+  }
+
+  if (FORBIDDEN_FROM_PRODUCTS_REL(rel)) {
+    FROM_PRODUCTS.lastIndex = 0;
+    if (FROM_PRODUCTS.test(text)) {
+      out.push('forbidden .from(products) in supplier portal / productMatch / competitorPriceCheck (use catalog_v2)');
     }
   }
 

@@ -108,6 +108,15 @@ export function extractContentFromRaw(row: Record<string, unknown>): Partial<Nor
   if (typeof img === "string") pushUrl(img);
   else if (Array.isArray(img)) arrStrings(img).forEach(pushUrl);
 
+  const specUrls: string[] = [];
+  const specRaw = row.spec_sheet_urls;
+  const pushSpec = (url: string) => {
+    const u = url.trim();
+    if (u && (u.startsWith("http://") || u.startsWith("https://"))) specUrls.push(u);
+  };
+  if (typeof specRaw === "string") pushSpec(specRaw);
+  else if (Array.isArray(specRaw)) arrStrings(specRaw).forEach(pushSpec);
+
   return {
     canonical_title: title || sku || "Untitled",
     short_description: firstStr(row, "short_description", "desc") || undefined,
@@ -123,6 +132,7 @@ export function extractContentFromRaw(row: Record<string, unknown>): Partial<Nor
     upc: firstStr(row, "upc", "gtin", "ean", "barcode") || undefined,
     supplier_cost: cost,
     images,
+    ...(specUrls.length > 0 ? { spec_sheet_urls: [...new Set(specUrls)] } : {}),
     stock_status: firstStr(row, "stock_status", "availability") || undefined,
     case_qty: num(row.case_qty ?? row.caseqty ?? row.qty_per_case ?? row.pack_qty ?? row.pack_size),
     box_qty: num(row.box_qty ?? row.boxqty ?? row.qty_per_box ?? row.gloves_per_box ?? row.gloves_per_box_per_box ?? row.pack_size),

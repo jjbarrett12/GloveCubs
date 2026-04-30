@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,160 @@ import {
 import { isMultiSelectAttribute } from "@/lib/catalogos/attribute-validation";
 import { SearchPublishStatusBadge } from "@/components/review/SearchPublishStatusBadge";
 import type { PublishReadiness } from "@/lib/review/publish-guards";
+import { deriveReviewDecisionStep } from "@/lib/review/review-decision-step";
 import { classifyPublishErrorMessage, publishFailureStageTitle } from "@/lib/publish/publish-result-stage";
+import {
+  buildStagedProductReviewEvidence,
+  formatConfidencePct,
+  getPackagingMathReview,
+  getStagingSizeDisplay,
+  getVariantSkuDisplay,
+  summarizeEvidenceReview,
+  type StagedReviewSourceHint,
+} from "@/lib/review/staging-review-evidence";
+
+function StagedReviewMatchPrimaryActions({
+  setActionModal,
+}: {
+  setActionModal: (a: "approve" | "reject" | "create_master" | "merge") => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2 pt-1">
+      <Button size="sm" variant="success" onClick={() => setActionModal("approve")}>
+        Approve match
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setActionModal("create_master")}>
+        Create new master
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setActionModal("merge")}>
+        Merge with…
+      </Button>
+      <Button size="sm" variant="destructive" onClick={() => setActionModal("reject")}>
+        Reject
+      </Button>
+    </div>
+  );
+}
+
+function StagedReviewPublishPrimaryActions({
+  normalizedId,
+  detail,
+  publishBusy,
+  setPublishBusy,
+  setPublishMessage,
+  tier1PublishAllowed,
+  refreshDetail,
+  router,
+}: {
+  normalizedId: string | null;
+  detail: Record<string, unknown>;
+  publishBusy: boolean;
+  setPublishBusy: (v: boolean) => void;
+  setPublishMessage: (v: string | null) => void;
+  tier1PublishAllowed: boolean;
+  refreshDetail: () => Promise<void>;
+  router: { refresh: () => void };
+}) {
+  const familyKey = detail.family_group_key;
+  const masterProductId = detail.master_product_id as string | undefined;
+  const updatedAt = (detail.updated_at as string) ?? null;
+
+  return (
+    <div className="flex flex-wrap gap-2 pt-1">
+      <Button
+        size="sm"
+        disabled={publishBusy || !normalizedId || !tier1PublishAllowed}
+        onClick={async () => {
+          if (!normalizedId) return;
+          setPublishBusy(true);
+          setPublishMessage(null);
+          const r = await publishStagedToLive(normalizedId, {
+            publishedBy: "admin",
+            expectedUpdatedAt: updatedAt,
+          });
+          setPublishBusy(false);
+          if (!r.published) {
+            const err = r.publishError ?? r.error ?? "Publish failed";
+            const stage = classifyPublishErrorMessage(err);
+            setPublishMessage(`Publish failed at step: ${publishFailureStageTitle(stage)}. ${err}`.trim());
+          } else {
+            const fullySynced = r.publishComplete !== false && r.searchPublishStatus === "published_synced";
+            setPublishMessage(
+              fullySynced
+                ? "Published and fully synced."
+                : `Publish succeeded for live catalog, but storefront search is not fully synced (status: ${String(r.searchPublishStatus ?? "unknown")}). Confirm the row badge; retry publish if needed.`
+            );
+            await refreshDetail();
+            router.refresh();
+          }
+        }}
+      >
+        {publishBusy ? "Publishing…" : "Publish / sync to live"}
+      </Button>
+      {familyKey ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={publishBusy || !normalizedId || !tier1PublishAllowed}
+          onClick={async () => {
+            if (!normalizedId) return;
+            setPublishBusy(true);
+            setPublishMessage(null);
+            const r = await publishVariantGroupForNormalized(normalizedId, { publishedBy: "admin" });
+            setPublishBusy(false);
+            if (!r.success) {
+              const err = r.publishError ?? r.errors[0] ?? "Variant group publish failed";
+              const stage = classifyPublishErrorMessage(err);
+              setPublishMessage(`Variant group publish failed at step: ${publishFailureStageTitle(stage)}. ${err}`.trim());
+            } else {
+              setPublishMessage(
+                "Variant family publish succeeded. Verify each variant in the catalog and storefront search."
+              );
+              await refreshDetail();
+              router.refresh();
+            }
+          }}
+        >
+          Publish variant family
+        </Button>
+      ) : null}
+      {masterProductId ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-amber-600 border-amber-600/50"
+          disabled={publishBusy}
+          onClick={async () => {
+            if (!window.confirm("Deactivate this live product and all supplier offers for it?")) return;
+            setPublishBusy(true);
+            const r = await unpublishLiveProduct(masterProductId, { normalizedId: normalizedId ?? undefined, reason: "admin_unpublish" });
+            setPublishBusy(false);
+            if (!r.success) setPublishMessage(r.error ?? "Unpublish failed");
+            else {
+              await refreshDetail();
+              router.refresh();
+            }
+          }}
+        >
+          Unpublish live
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewSourceHintBlock({ hint, subLabel }: { hint: StagedReviewSourceHint; subLabel?: string }) {
+  const meta = [hint.confidence != null ? `conf ${formatConfidencePct(hint.confidence)}` : null, hint.method]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="space-y-0.5">
+      {subLabel ? <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">{subLabel}</p> : null}
+      <p className="break-all text-foreground/90">{hint.rawDisplay}</p>
+      {meta ? <p className="text-[10px] text-muted-foreground">{meta}</p> : null}
+    </div>
+  );
+}
 
 function OfferEditRow({
   offer,
@@ -203,6 +357,14 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
 
   const nd = (detail?.normalized_data as Record<string, unknown>) ?? {};
   const raw = (detail?.raw as { raw_payload?: Record<string, unknown> })?.raw_payload ?? {};
+  const evidenceRows = useMemo(() => {
+    if (!detail) return [];
+    const n = (detail.normalized_data as Record<string, unknown>) ?? {};
+    const ra = (detail.raw as { raw_payload?: Record<string, unknown> })?.raw_payload ?? {};
+    return buildStagedProductReviewEvidence(n, (detail.attributes as Record<string, unknown>) ?? {}, ra);
+  }, [detail]);
+  const evidenceSummary = useMemo(() => summarizeEvidenceReview(evidenceRows), [evidenceRows]);
+  const packagingReview = useMemo(() => getPackagingMathReview(nd), [nd]);
   const master = detail?.master_product as { sku?: string; name?: string } | undefined;
   const supplier = detail?.supplier as { name?: string } | undefined;
   const anomalyFlags = (nd.anomaly_flags as { code: string; message: string; severity: string }[]) ?? [];
@@ -215,6 +377,15 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
     status: string;
   }>;
   const bestResolution = resolutionCandidates.find((c) => c.status === "pending") ?? resolutionCandidates[0];
+  const resolutionPending = bestResolution?.status === "pending";
+  const reviewDecision = useMemo(() => {
+    if (!detail) return null;
+    return deriveReviewDecisionStep({
+      masterProductId: detail.master_product_id,
+      resolutionPending,
+      publishReadiness: detail.publish_readiness as PublishReadiness | undefined,
+    });
+  }, [detail, resolutionPending]);
 
   const publishReadiness = detail ? (detail.publish_readiness as PublishReadiness | undefined) : undefined;
 
@@ -265,6 +436,129 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
               <p className="text-muted-foreground text-sm">Failed to load.</p>
             ) : (
               <div className="space-y-5">
+                {String(detail.family_group_key ?? "").trim() !== "" ? (
+                  <div className="rounded-md border border-sky-500/30 bg-sky-500/5 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Staging family</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      Import / staging grouping only — not live storefront variants.
+                    </p>
+                    {(() => {
+                      const attrsTop = (detail.attributes as Record<string, unknown>) ?? {};
+                      const variantSkuStrip = getVariantSkuDisplay(nd, attrsTop);
+                      const sizeStrip = getStagingSizeDisplay(detail.inferred_size, attrsTop);
+                      const gc = detail.grouping_confidence;
+                      const gcNum = typeof gc === "number" && Number.isFinite(gc) ? gc : null;
+                      const parts: string[] = [];
+                      if (sizeStrip === "—") parts.push("Size missing");
+                      if (variantSkuStrip === "—") parts.push("Variant SKU missing");
+                      if (gcNum !== null && gcNum < 0.6) parts.push("Low grouping confidence");
+                      const statusLine =
+                        parts.length > 0 ? parts.join(" · ") : "Staging identifiers present";
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                            <span>
+                              <span className="text-muted-foreground text-xs">Size: </span>
+                              {sizeStrip}
+                            </span>
+                            <span>
+                              <span className="text-muted-foreground text-xs">Variant SKU: </span>
+                              <span className="font-mono">{variantSkuStrip}</span>
+                            </span>
+                            <span>
+                              <span className="text-muted-foreground text-xs">Status: </span>
+                              {statusLine}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate" title={String(detail.family_group_key)}>
+                            Key: {String(detail.family_group_key)}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : null}
+                {reviewDecision ? (
+                  <div className="rounded-md border border-primary/25 bg-muted/30 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Review flow</p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div
+                        className={cn(
+                          "flex items-center gap-1.5 rounded px-2 py-1",
+                          reviewDecision.currentStep === 1 ? "bg-background font-medium text-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {reviewDecision.step1Complete ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />
+                        ) : (
+                          <span
+                            className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-muted-foreground/50 text-[9px]"
+                            aria-hidden
+                          >
+                            1
+                          </span>
+                        )}
+                        <span>Resolve match</span>
+                      </div>
+                      <span className="text-muted-foreground" aria-hidden>
+                        →
+                      </span>
+                      <div
+                        className={cn(
+                          "flex items-center gap-1.5 rounded px-2 py-1",
+                          reviewDecision.currentStep === 2 ? "bg-background font-medium text-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {reviewDecision.currentStep === 2 && reviewDecision.publishTone === "ready" ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />
+                        ) : (
+                          <span
+                            className={cn(
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border text-[9px]",
+                              reviewDecision.currentStep === 2 && reviewDecision.publishTone !== "ready"
+                                ? "border-amber-500/60 text-amber-600 dark:text-amber-400"
+                                : "border-muted-foreground/50"
+                            )}
+                            aria-hidden
+                          >
+                            2
+                          </span>
+                        )}
+                        <span>Publish to live</span>
+                      </div>
+                    </div>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        reviewDecision.currentStep === 2 &&
+                          reviewDecision.publishTone === "blocked" &&
+                          "text-amber-600 dark:text-amber-400",
+                        reviewDecision.currentStep === 2 &&
+                          reviewDecision.publishTone === "warning" &&
+                          "text-amber-600 dark:text-amber-400",
+                        reviewDecision.currentStep === 2 &&
+                          reviewDecision.publishTone === "ready" &&
+                          "text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
+                      {reviewDecision.headline}
+                    </p>
+                    {reviewDecision.currentStep === 1 ? (
+                      <StagedReviewMatchPrimaryActions setActionModal={setActionModal} />
+                    ) : (
+                      <StagedReviewPublishPrimaryActions
+                        normalizedId={normalizedId}
+                        detail={detail as Record<string, unknown>}
+                        publishBusy={publishBusy}
+                        setPublishBusy={setPublishBusy}
+                        setPublishMessage={setPublishMessage}
+                        tier1PublishAllowed={tier1PublishAllowed}
+                        refreshDetail={refreshDetail}
+                        router={router}
+                      />
+                    )}
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Supplier</p>
                   <p className="font-medium">{supplier?.name ?? "—"}</p>
@@ -345,6 +639,96 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                       : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Normalization & import evidence</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Staged values are dictionary-normalized. Norm. confidence comes from <span className="font-mono">confidence_by_key</span> when
+                    present. URL/OpenClaw hints are read-only and never replace normalized confidence.
+                  </p>
+                  {evidenceSummary.total > 0 ? (
+                    <p className="text-xs font-medium text-foreground mb-2">
+                      {evidenceSummary.total} fields reviewed · {evidenceSummary.lowConfidenceCount} low confidence
+                    </p>
+                  ) : null}
+                  <div className="rounded-md border border-border overflow-hidden text-xs">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-muted/40 text-left border-b border-border">
+                          <th className="p-2 font-medium w-[26%]">Field</th>
+                          <th className="p-2 font-medium">Staged value</th>
+                          <th className="p-2 font-medium whitespace-nowrap w-[14%]">Norm. conf.</th>
+                          <th className="p-2 font-medium w-[34%]">Import / URL</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {evidenceRows.map((row) => (
+                          <tr key={row.id} className="border-b border-border/60 last:border-0 align-top">
+                            <td className="p-2 text-muted-foreground">{row.label}</td>
+                            <td className="p-2 font-mono break-all">{row.normalizedDisplay}</td>
+                            <td className="p-2 whitespace-nowrap">{formatConfidencePct(row.normalizedConfidence)}</td>
+                            <td className="p-2 text-muted-foreground">
+                              {!row.sourceHint && !row.ontologyHint ? (
+                                <span className="text-muted-foreground/70">—</span>
+                              ) : (
+                                <div className="space-y-2">
+                                  {row.sourceHint ? <ReviewSourceHintBlock hint={row.sourceHint} subLabel="Raw / crawl" /> : null}
+                                  {row.ontologyHint ? <ReviewSourceHintBlock hint={row.ontologyHint} subLabel="Ontology pass" /> : null}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {Array.isArray(nd.spec_sheet_urls) && (nd.spec_sheet_urls as string[]).length > 0 ? (
+                      <div className="border-t border-border px-2 py-2 bg-muted/20">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                          Linked specs / SDS / PDFs
+                        </p>
+                        <ul className="space-y-1 list-none m-0 p-0">
+                          {(nd.spec_sheet_urls as string[]).map((href) => (
+                            <li key={href}>
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sky-400 hover:underline break-all text-xs font-mono"
+                              >
+                                {href}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-2 rounded-md border px-2 py-2 text-xs",
+                      packagingReview.state === "mismatch" && "border-amber-500/50 bg-amber-500/5",
+                      packagingReview.state === "incomplete" && "border-amber-500/40 bg-amber-500/5",
+                      packagingReview.state === "matches" && "border-border/60 bg-muted/10"
+                    )}
+                  >
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Packaging check</p>
+                    <p className="font-mono text-xs text-foreground">
+                      <span className="text-muted-foreground">Computed: </span>
+                      {packagingReview.boxes ?? "—"} × {packagingReview.glovesPerBox ?? "—"} ={" "}
+                      {packagingReview.computedTotal ?? "—"}
+                      <span className="text-muted-foreground"> · Staged total gloves/case: </span>
+                      {packagingReview.declaredTotal ?? "—"}
+                    </p>
+                    {packagingReview.state === "mismatch" ? (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+                        Staged total does not equal boxes × gloves per box.
+                      </p>
+                    ) : packagingReview.state === "incomplete" ? (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+                        Cannot verify — need valid boxes per case and gloves per box to match staged total.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div>
@@ -527,92 +911,11 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                       {publishMessage}
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      disabled={publishBusy || !normalizedId || !tier1PublishAllowed}
-                      onClick={async () => {
-                        if (!normalizedId) return;
-                        setPublishBusy(true);
-                        setPublishMessage(null);
-                        const r = await publishStagedToLive(normalizedId, {
-                          publishedBy: "admin",
-                          expectedUpdatedAt: (detail.updated_at as string) ?? null,
-                        });
-                        setPublishBusy(false);
-                        if (!r.published) {
-                          const err = r.publishError ?? r.error ?? "Publish failed";
-                          const stage = classifyPublishErrorMessage(err);
-                          setPublishMessage(
-                            `Publish failed at step: ${publishFailureStageTitle(stage)}. ${err}`.trim()
-                          );
-                        } else {
-                          const fullySynced =
-                            r.publishComplete !== false && r.searchPublishStatus === "published_synced";
-                          setPublishMessage(
-                            fullySynced
-                              ? "Published and fully synced."
-                              : `Publish succeeded for live catalog, but storefront search is not fully synced (status: ${String(r.searchPublishStatus ?? "unknown")}). Confirm the row badge; retry publish if needed.`
-                          );
-                          await refreshDetail();
-                          router.refresh();
-                        }
-                      }}
-                    >
-                      {publishBusy ? "Publishing…" : "Publish / sync to live"}
-                    </Button>
-                    {detail.family_group_key ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={publishBusy || !normalizedId || !tier1PublishAllowed}
-                        onClick={async () => {
-                          if (!normalizedId) return;
-                          setPublishBusy(true);
-                          setPublishMessage(null);
-                          const r = await publishVariantGroupForNormalized(normalizedId, { publishedBy: "admin" });
-                          setPublishBusy(false);
-                          if (!r.success) {
-                            const err = r.publishError ?? r.errors[0] ?? "Variant group publish failed";
-                            const stage = classifyPublishErrorMessage(err);
-                            setPublishMessage(
-                              `Variant group publish failed at step: ${publishFailureStageTitle(stage)}. ${err}`.trim()
-                            );
-                          } else {
-                            setPublishMessage(
-                              "Variant family publish succeeded. Verify each variant in the catalog and storefront search."
-                            );
-                            await refreshDetail();
-                            router.refresh();
-                          }
-                        }}
-                      >
-                        Publish variant family
-                      </Button>
-                    ) : null}
-                    {detail.master_product_id ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-amber-600 border-amber-600/50"
-                        disabled={publishBusy}
-                        onClick={async () => {
-                          const mid = detail.master_product_id as string;
-                          if (!window.confirm("Deactivate this live product and all supplier offers for it?")) return;
-                          setPublishBusy(true);
-                          const r = await unpublishLiveProduct(mid, { normalizedId: normalizedId ?? undefined, reason: "admin_unpublish" });
-                          setPublishBusy(false);
-                          if (!r.success) setPublishMessage(r.error ?? "Unpublish failed");
-                          else {
-                            await refreshDetail();
-                            router.refresh();
-                          }
-                        }}
-                      >
-                        Unpublish live
-                      </Button>
-                    ) : null}
-                  </div>
+                  {reviewDecision?.currentStep === 1 ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      Publish actions move to Review flow after match is resolved (step 2).
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-md border border-border p-3 space-y-2">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Edit filter attributes</p>
@@ -784,12 +1087,6 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                     </ul>
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                  <Button size="sm" variant="success" onClick={() => setActionModal("approve")}>Approve match</Button>
-                  <Button size="sm" variant="outline" onClick={() => setActionModal("create_master")}>Create new master</Button>
-                  <Button size="sm" variant="outline" onClick={() => setActionModal("merge")}>Merge with…</Button>
-                  <Button size="sm" variant="destructive" onClick={() => setActionModal("reject")}>Reject</Button>
-                </div>
                 <div className="pt-3 border-t border-border space-y-3">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Quick actions</p>
                   <div className="flex flex-wrap items-center gap-2">

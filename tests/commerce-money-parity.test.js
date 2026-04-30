@@ -29,6 +29,9 @@ const addr = { state: 'NY', city: 'NYC', zip_code: '10001', address_line1: '1 Ma
 const CAT42 = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const CAT2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const CAT1 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const VAR42 = '11111111-1111-4111-8111-111111111111';
+const VAR2 = '22222222-2222-4222-8222-222222222222';
+const VAR1 = '33333333-3333-4333-8333-333333333333';
 
 /** Mirrors GET /api/cart checkout_unit_price resolution. */
 function cartCheckoutUnitPrice(user, companyId, product, pricingContext) {
@@ -66,7 +69,16 @@ describe('commerce-money-parity', () => {
       },
     };
     const money = await computeCheckoutMoneyFromCart({
-      cartItems: [{ product_id: CAT42, quantity: 3, size: null, canonical_product_id: CAT42 }],
+      cartItems: [
+        {
+          product_id: CAT42,
+          quantity: 3,
+          size: null,
+          canonical_product_id: CAT42,
+          catalog_variant_id: VAR42,
+          variant_sku: 'V-CG1',
+        },
+      ],
       finalShippingAddress: addr,
       user,
       companyId,
@@ -119,7 +131,16 @@ describe('commerce-money-parity', () => {
       },
     };
     const money = await computeCheckoutMoneyFromCart({
-      cartItems: [{ product_id: CAT2, quantity: 3, size: null, canonical_product_id: CAT2 }],
+      cartItems: [
+        {
+          product_id: CAT2,
+          quantity: 3,
+          size: null,
+          canonical_product_id: CAT2,
+          catalog_variant_id: VAR2,
+          variant_sku: 'V-D1',
+        },
+      ],
       finalShippingAddress: addr,
       user,
       companyId: 7,
@@ -147,7 +168,16 @@ describe('commerce-money-parity', () => {
       },
     };
     const args = {
-      cartItems: [{ product_id: CAT1, quantity: 4, size: null, canonical_product_id: CAT1 }],
+      cartItems: [
+        {
+          product_id: CAT1,
+          quantity: 4,
+          size: null,
+          canonical_product_id: CAT1,
+          catalog_variant_id: VAR1,
+          variant_sku: 'V-G1',
+        },
+      ],
       finalShippingAddress: addr,
       user: null,
       companyId: null,
@@ -187,7 +217,16 @@ describe('commerce-money-parity', () => {
       },
     };
     const args = {
-      cartItems: [{ product_id: CAT1, quantity: 3, size: null, canonical_product_id: CAT1 }],
+      cartItems: [
+        {
+          product_id: CAT1,
+          quantity: 3,
+          size: null,
+          canonical_product_id: CAT1,
+          catalog_variant_id: VAR1,
+          variant_sku: 'V-G1',
+        },
+      ],
       finalShippingAddress: addr,
       user: null,
       companyId: null,

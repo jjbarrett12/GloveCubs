@@ -13,3 +13,5 @@ data/
 
 # Legacy JSON database - fully migrated to Supabase; do not recreate
 database.json
+.vercel
+.env*.local

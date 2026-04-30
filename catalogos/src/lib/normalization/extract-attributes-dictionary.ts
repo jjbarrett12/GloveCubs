@@ -17,7 +17,9 @@ import {
   POWDER_VALUES,
   GRADE_VALUES,
   INDUSTRIES_VALUES,
-  COMPLIANCE_VALUES,
+  CERTIFICATION_VALUES,
+  USES_VALUES,
+  PROTECTION_TAGS_VALUES,
   TEXTURE_VALUES,
   CUFF_STYLE_VALUES,
   HAND_ORIENTATION_VALUES,
@@ -131,11 +133,25 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
     if (attributes.industries?.length) confidenceByKey.industries = 0.8;
   }
 
-  // Compliance (multi)
-  const comp = extractComplianceFromText(text);
-  if (comp.length) {
-    attributes.compliance_certifications = comp.filter((v): v is (typeof COMPLIANCE_VALUES)[number] => COMPLIANCE_VALUES.includes(v));
-    if (attributes.compliance_certifications?.length) confidenceByKey.compliance_certifications = 0.85;
+  // Certifications (multi; canonical; same value set as legacy compliance_certifications)
+  const cert = extractCertificationsFromText(text);
+  if (cert.length) {
+    attributes.certifications = cert.filter((v): v is (typeof CERTIFICATION_VALUES)[number] => CERTIFICATION_VALUES.includes(v));
+    if (attributes.certifications?.length) confidenceByKey.certifications = 0.85;
+  }
+
+  const useVals = extractUsesFromText(text);
+  if (useVals.length) {
+    attributes.uses = useVals.filter((v): v is (typeof USES_VALUES)[number] => USES_VALUES.includes(v));
+    if (attributes.uses?.length) confidenceByKey.uses = 0.78;
+  }
+
+  const prot = extractProtectionTagsFromText(text);
+  if (prot.length) {
+    attributes.protection_tags = prot.filter((v): v is (typeof PROTECTION_TAGS_VALUES)[number] =>
+      PROTECTION_TAGS_VALUES.includes(v)
+    );
+    if (attributes.protection_tags?.length) confidenceByKey.protection_tags = 0.75;
   }
 
   // Texture
@@ -305,9 +321,9 @@ function extractIndustriesFromText(text: string): (typeof INDUSTRIES_VALUES)[num
   return found;
 }
 
-function extractComplianceFromText(text: string): (typeof COMPLIANCE_VALUES)[number][] {
-  const found: (typeof COMPLIANCE_VALUES)[number][] = [];
-  const map: [RegExp, (typeof COMPLIANCE_VALUES)[number]][] = [
+function extractCertificationsFromText(text: string): (typeof CERTIFICATION_VALUES)[number][] {
+  const found: (typeof CERTIFICATION_VALUES)[number][] = [];
+  const map: [RegExp, (typeof CERTIFICATION_VALUES)[number]][] = [
     [/\bfda\s*approved\b/i, "fda_approved"],
     [/\bastm\b/i, "astm_tested"],
     [/\bfood\s*safe\b|nsf/i, "food_safe"],
@@ -315,6 +331,41 @@ function extractComplianceFromText(text: string): (typeof COMPLIANCE_VALUES)[num
     [/\bchemo\b|chemical/i, "chemo_rated"],
     [/\ben\s*455\b/i, "en_455"],
     [/\ben\s*374\b/i, "en_374"],
+  ];
+  for (const [re, val] of map) {
+    if (re.test(text) && !found.includes(val)) found.push(val);
+  }
+  return found;
+}
+
+function extractUsesFromText(text: string): (typeof USES_VALUES)[number][] {
+  const found: (typeof USES_VALUES)[number][] = [];
+  const map: [RegExp, (typeof USES_VALUES)[number]][] = [
+    [/\b(clean\s*room|cleanroom)\b/i, "cleanroom"],
+    [/\b(laboratory|lab\s+use)\b/i, "laboratory"],
+    [/\b(medical\s*exam|exam\s*glove|procedure)\b/i, "medical_exam"],
+    [/\bpatient\s*care\b/i, "patient_care"],
+    [/\b(food\s*handling|food\s*prep)\b/i, "food_handling"],
+    [/\b(chemical|solvent)\b/i, "chemical_handling"],
+    [/\b(industrial|maintenance|mechanic)\b/i, "industrial_maintenance"],
+    [/\bgeneral\s*purpose\b/i, "general_purpose"],
+  ];
+  for (const [re, val] of map) {
+    if (re.test(text) && !found.includes(val)) found.push(val);
+  }
+  return found;
+}
+
+function extractProtectionTagsFromText(text: string): (typeof PROTECTION_TAGS_VALUES)[number][] {
+  const found: (typeof PROTECTION_TAGS_VALUES)[number][] = [];
+  const map: [RegExp, (typeof PROTECTION_TAGS_VALUES)[number]][] = [
+    [/\bchemical\s*(resistant|resistance)\b/i, "chemical_resistant"],
+    [/\bpuncture\s*(resistant|resistance)\b/i, "puncture_resistant"],
+    [/\b(viral|pathogen)\b/i, "viral_barrier"],
+    [/\bbiohazard\b/i, "biohazard"],
+    [/\b(esd|static\s*control)\b/i, "static_control"],
+    [/\b(grip|micro[- ]?textured)\b/i, "grip_enhanced"],
+    [/\babrasion\b/i, "abrasion_enhanced"],
   ];
   for (const [re, val] of map) {
     if (re.test(text) && !found.includes(val)) found.push(val);

@@ -21,6 +21,46 @@ import {
   costBasisFromSellUnit,
   unitsPerCaseFromStagingNormalizedContent,
 } from "../../../../lib/supplier-offer-normalization";
+import {
+  extractSizeCodeFromFilterAttributes,
+  isGloveCategorySlug,
+  omitSizeFromProductAttributesFilter,
+  upsertCatalogVariantFromGloveIngest,
+  validatePurchaseItemNumber,
+} from "./catalog-variant-ingest";
+
+function firstNonEmptyTrimmedString(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return undefined;
+}
+
+/** Staged UPC/GTIN/EAN/barcode → catalog_variants.gtin (first non-empty wins). */
+function extractStagedVariantGtin(content: Record<string, unknown>, attrs: Record<string, unknown>): string | undefined {
+  return firstNonEmptyTrimmedString(
+    content.upc,
+    content.gtin,
+    content.ean,
+    content.barcode,
+    attrs.upc,
+    attrs.gtin,
+    attrs.ean,
+    attrs.barcode
+  );
+}
+
+/** Staged MPN → catalog_variants.mpn (column is `mpn`; no separate manufacturer_item_number in schema). */
+function extractStagedVariantMpn(content: Record<string, unknown>, attrs: Record<string, unknown>): string | undefined {
+  return firstNonEmptyTrimmedString(
+    content.manufacturer_part_number,
+    content.mpn,
+    attrs.manufacturer_part_number,
+    attrs.mpn
+  );
+}
 
 /**
  * Build PublishInput from a normalized row (from getStagingById).
@@ -56,6 +96,8 @@ export function buildPublishInputFromStaged(
   const pricingCaseCostUnavailable =
     sellUnit === "case" &&
     (normalizedCaseCost == null || !Number.isFinite(Number(normalizedCaseCost)));
+  const stagedGtin = extractStagedVariantGtin(content, attrs);
+  const stagedMpn = extractStagedVariantMpn(content, attrs);
   return {
     normalizedId,
     masterProductId: options.masterProductId ?? (row.master_product_id as string | undefined),
@@ -69,6 +111,8 @@ export function buildPublishInputFromStaged(
       brand: (content.brand ?? attrs.brand) as string | undefined,
       description: content.description as string | undefined,
       images: Array.isArray(content.images) ? (content.images as string[]) : undefined,
+      ...(stagedGtin ? { gtin: stagedGtin } : {}),
+      ...(stagedMpn ? { mpn: stagedMpn } : {}),
     },
     stagedFilterAttributes: attrs,
     categorySlug: (content.category_slug ?? attrs.category ?? DEFAULT_PRODUCT_TYPE_KEY) as string,
@@ -124,13 +168,30 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const supabase = getSupabaseCatalogos(true);
   const admin = getSupabase(true);
   const categorySlug = (input.categorySlug ?? DEFAULT_PRODUCT_TYPE_KEY) as CategorySlug;
-  const publishCheck = publishSafe(categorySlug, input.stagedFilterAttributes ?? {});
+  const stagedAttrs = input.stagedFilterAttributes ?? {};
+  const attrsForProductAttributes = omitSizeFromProductAttributesFilter(stagedAttrs);
+
+  const publishCheck = publishSafe(categorySlug, attrsForProductAttributes);
   if (!publishCheck.publishable) {
     return { success: false, error: publishCheck.error };
   }
-  const stageCheck = stageSafe(categorySlug, input.stagedFilterAttributes ?? {});
+  const stageCheck = stageSafe(categorySlug, attrsForProductAttributes);
   if (stageCheck.missing_strongly_preferred.length > 0) {
     warnings.push(`Strongly preferred attributes missing (non-blocking): ${stageCheck.missing_strongly_preferred.join(", ")}`);
+  }
+
+  let gloveIngestSize: string | null = null;
+  if (isGloveCategorySlug(categorySlug)) {
+    const skuRes = validatePurchaseItemNumber(input.stagedContent.supplier_sku);
+    if (!skuRes.ok) return { success: false, error: skuRes.error };
+    gloveIngestSize = extractSizeCodeFromFilterAttributes(stagedAttrs);
+    if (!gloveIngestSize) {
+      return {
+        success: false,
+        error:
+          "Cannot publish glove row: staged filter_attributes must include a normalized size for catalog_variants (size is not written to product_attributes).",
+      };
+    }
   }
 
   let productId: string;
@@ -173,6 +234,17 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
       })
       .eq("id", productId);
     if (updateErr) return { success: false, error: `catalog_v2.catalog_products update: ${updateErr.message}` };
+
+    if (gloveIngestSize) {
+      const vr = await upsertCatalogVariantFromGloveIngest(admin, {
+        catalogProductId: productId,
+        sizeCode: gloveIngestSize,
+        variantSku: input.stagedContent.supplier_sku,
+        gtin: input.stagedContent.gtin,
+        mpn: input.stagedContent.mpn,
+      });
+      if (!vr.ok) return { success: false, error: vr.error };
+    }
   } else if (input.newProductPayload) {
     const payload = input.newProductPayload;
     const brandId = input.stagedContent.brand ? await getOrCreateBrandId(input.stagedContent.brand) : payload.brand_id ?? null;
@@ -204,12 +276,16 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     productId = (inserted as { id: string }).id;
     internalSkuForSellable = (inserted as { internal_sku: string | null }).internal_sku || payload.sku;
 
+    const variantMetadata = gloveIngestSize ? { size: gloveIngestSize } : {};
     const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
       catalog_product_id: productId,
       variant_sku: payload.sku,
       sort_order: 0,
       is_active: true,
-      metadata: {},
+      metadata: variantMetadata,
+      ...(gloveIngestSize ? { size_code: gloveIngestSize } : {}),
+      ...(input.stagedContent.gtin ? { gtin: input.stagedContent.gtin } : {}),
+      ...(input.stagedContent.mpn ? { mpn: input.stagedContent.mpn } : {}),
     });
     if (vInsErr) return { success: false, error: `catalog_variants insert: ${vInsErr.message}` };
   } else {
@@ -226,7 +302,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const { errors: attrErrors } = await syncProductAttributesFromStaged(
     productId,
     categoryId,
-    input.stagedFilterAttributes
+    attrsForProductAttributes
   );
   if (attrErrors.length > 0) {
     return {

@@ -34,6 +34,10 @@ export interface PublishInput {
     brand?: string;
     description?: string;
     images?: string[];
+    /** Staged UPC/GTIN/EAN/barcode → catalog_variants.gtin; empty/absent preserves existing DB value on re-publish. */
+    gtin?: string;
+    /** Staged MPN / manufacturer_part_number → catalog_variants.mpn; empty/absent preserves existing. */
+    mpn?: string;
   };
   stagedFilterAttributes: Record<string, unknown>;
   categorySlug: string;

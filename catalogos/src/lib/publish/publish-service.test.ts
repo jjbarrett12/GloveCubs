@@ -7,6 +7,7 @@ import { buildPublishInputFromStaged, runPublish } from "./publish-service";
 import { publishSafe } from "@/lib/catalogos/validation-modes";
 import * as productAttributeSync from "./product-attribute-sync";
 import * as productAttributesSnapshot from "./product-attributes-snapshot";
+import * as catalogVariantIngest from "./catalog-variant-ingest";
 import * as dbClient from "@/lib/db/client";
 
 describe("publish service", () => {
@@ -89,6 +90,43 @@ describe("publish service", () => {
       const input = buildPublishInputFromStaged("n2", row, {});
       expect(input!.stagedContent.supplier_cost).toBe(100);
       expect(input!.pricingCaseCostUnavailable).toBeFalsy();
+    });
+
+    it("maps staged UPC/GTIN/EAN and MPN onto PublishInput for variant publish", () => {
+      const row = {
+        supplier_id: "sup-1",
+        raw_id: "raw-1",
+        normalized_data: {
+          canonical_title: "Gloves",
+          supplier_sku: "VAR-1",
+          supplier_cost: 10,
+          category_slug: "disposable_gloves",
+          gtin: " 012345678905 ",
+          manufacturer_part_number: "MPN-ABC",
+        },
+        attributes: { material: "nitrile" },
+      };
+      const input = buildPublishInputFromStaged("n-gtin", row, {});
+      expect(input!.stagedContent.gtin).toBe("012345678905");
+      expect(input!.stagedContent.mpn).toBe("MPN-ABC");
+    });
+
+    it("prefers normalized_data identifiers over duplicate attributes keys", () => {
+      const row = {
+        supplier_id: "sup-1",
+        raw_id: "raw-1",
+        normalized_data: {
+          canonical_title: "Gloves",
+          supplier_sku: "VAR-1",
+          supplier_cost: 10,
+          category_slug: "disposable_gloves",
+          upc: "111111111111",
+        },
+        attributes: { upc: "222222222222", mpn: "ATTR-MPN" },
+      };
+      const input = buildPublishInputFromStaged("n-pref", row, {});
+      expect(input!.stagedContent.gtin).toBe("111111111111");
+      expect(input!.stagedContent.mpn).toBe("ATTR-MPN");
     });
 
     it("sets pricingCaseCostUnavailable when sell unit is case but normalized_case_cost missing", () => {
@@ -248,40 +286,51 @@ describe("publish service", () => {
         grade: "industrial_grade",
       };
 
-      const productsApi = {
-        select: vi.fn((cols: string) => ({
-          eq: vi.fn(() => ({
-            single: vi.fn(async () => {
-              if (String(cols).includes("category_id")) {
-                return { data: { category_id: categoryId }, error: null };
-              }
-              return {
+      vi.spyOn(catalogVariantIngest, "upsertCatalogVariantFromGloveIngest").mockResolvedValue({ ok: true });
+
+      const adminMock = {
+        schema: vi.fn(() => ({
+          from: vi.fn((table: string) => {
+            if (table !== "catalog_products") {
+              throw new Error(`unexpected catalog_v2 table in runPublish mock: ${table}`);
+            }
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({
                 data: {
                   id: masterProductId,
-                  sku: "SKU-1",
+                  internal_sku: "SKU-1",
                   slug: "slug-1",
                   name: "Glove",
                   description: null,
                   brand_id: null,
                 },
                 error: null,
-              };
-            }),
-          })),
-        })),
-        update: vi.fn(() => ({
-          eq: vi.fn(async () => ({ error: null })),
+              }),
+              update: vi.fn().mockReturnValue({
+                eq: vi.fn().mockResolvedValue({ error: null }),
+              }),
+            };
+          }),
         })),
       };
 
-      const supabaseMock = {
+      const catalogosMock = {
         from: vi.fn((table: string) => {
-          if (table === "products") return productsApi;
-          throw new Error(`unexpected table in runPublish mock: ${table}`);
+          if (table === "categories") {
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockReturnThis(),
+              maybeSingle: vi.fn().mockResolvedValue({ data: { id: categoryId }, error: null }),
+            };
+          }
+          throw new Error(`unexpected catalogos table in runPublish mock: ${table}`);
         }),
       };
 
-      vi.spyOn(dbClient, "getSupabaseCatalogos").mockReturnValue(supabaseMock as never);
+      vi.spyOn(dbClient, "getSupabase").mockReturnValue(adminMock as never);
+      vi.spyOn(dbClient, "getSupabaseCatalogos").mockReturnValue(catalogosMock as never);
 
       const result = await runPublish({
         normalizedId: "norm-attr-1",

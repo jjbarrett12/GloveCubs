@@ -3,10 +3,19 @@
  * Full sync is integration-tested with Supabase.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 
 describe("product-attribute-sync", () => {
+  it("repo migration removes all product_attributes rows for attribute_key size", () => {
+    const mig = join(__dirname, "../../../../supabase/migrations/20261028110000_delete_product_attributes_size_rows.sql");
+    const sql = readFileSync(mig, "utf8");
+    expect(sql).toMatch(/DELETE FROM\s+catalogos\.product_attributes/i);
+    expect(sql).toMatch(/attribute_key\s*=\s*'size'/i);
+  });
+
   it("returns synced 0 and no errors when filterAttributes empty or only empty values", async () => {
     const r1 = await syncProductAttributesFromStaged("product-id", "category-id", {});
     expect(r1.synced).toBe(0);

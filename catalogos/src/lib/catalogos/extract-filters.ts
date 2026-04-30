@@ -143,8 +143,8 @@ export function extractIndustries(row: RawRow): { value?: string[]; confidence: 
   return found.length ? { value: found, confidence: 0.8 } : { confidence: 0 };
 }
 
-/** Extract compliance_certifications (disposable) — array. */
-export function extractCompliance(row: RawRow): { value?: string[]; confidence: number } {
+/** Extract certifications (disposable) — array; same signals as legacy compliance. */
+export function extractCertifications(row: RawRow): { value?: string[]; confidence: number } {
   const text = combinedText(row);
   const found: string[] = [];
   const map: [RegExp, string][] = [
@@ -160,6 +160,47 @@ export function extractCompliance(row: RawRow): { value?: string[]; confidence: 
     if (re.test(text) && !found.includes(val)) found.push(val);
   }
   return found.length ? { value: found, confidence: 0.85 } : { confidence: 0 };
+}
+
+/** @deprecated Use `extractCertifications`. */
+export const extractCompliance = extractCertifications;
+
+/** Extract uses (disposable) — array. */
+export function extractUses(row: RawRow): { value?: string[]; confidence: number } {
+  const text = combinedText(row);
+  const found: string[] = [];
+  const map: [RegExp, string][] = [
+    [/\b(clean\s*room|cleanroom)\b/i, "cleanroom"],
+    [/\b(laboratory|lab\s+use)\b/i, "laboratory"],
+    [/\b(medical\s*exam|exam\s*glove|procedure)\b/i, "medical_exam"],
+    [/\bpatient\s*care\b/i, "patient_care"],
+    [/\b(food\s*handling|food\s*prep|food\s*service)\b/i, "food_handling"],
+    [/\b(chemical|solvent)\b/i, "chemical_handling"],
+    [/\b(industrial|maintenance|mechanic)\b/i, "industrial_maintenance"],
+  ];
+  for (const [re, val] of map) {
+    if (re.test(text) && !found.includes(val)) found.push(val);
+  }
+  return found.length ? { value: found, confidence: 0.78 } : { confidence: 0 };
+}
+
+/** Extract protection_tags (disposable) — array. */
+export function extractProtectionTags(row: RawRow): { value?: string[]; confidence: number } {
+  const text = combinedText(row);
+  const found: string[] = [];
+  const map: [RegExp, string][] = [
+    [/\bchemical\s*(resistant|resistance)\b/i, "chemical_resistant"],
+    [/\bpuncture\s*(resistant|resistance)\b/i, "puncture_resistant"],
+    [/\b(viral|pathogen)\b/i, "viral_barrier"],
+    [/\bbiohazard\b/i, "biohazard"],
+    [/\b(esd|static\s*control)\b/i, "static_control"],
+    [/\b(grip|micro[- ]?textured)\b/i, "grip_enhanced"],
+    [/\babrasion\b/i, "abrasion_enhanced"],
+  ];
+  for (const [re, val] of map) {
+    if (re.test(text) && !found.includes(val)) found.push(val);
+  }
+  return found.length ? { value: found, confidence: 0.75 } : { confidence: 0 };
 }
 
 /** Extract texture (disposable). */
@@ -269,8 +310,23 @@ export function extractDisposableGloveFilters(row: RawRow): { attributes: Filter
   const industries = extractIndustries(row);
   if (industries.value?.length) { attributes.industries = industries.value; confidenceByKey.industries = industries.confidence; }
 
-  const compliance = extractCompliance(row);
-  if (compliance.value?.length) { attributes.compliance_certifications = compliance.value; confidenceByKey.compliance_certifications = compliance.confidence; }
+  const certifications = extractCertifications(row);
+  if (certifications.value?.length) {
+    attributes.certifications = certifications.value;
+    confidenceByKey.certifications = certifications.confidence;
+  }
+
+  const uses = extractUses(row);
+  if (uses.value?.length) {
+    attributes.uses = uses.value;
+    confidenceByKey.uses = uses.confidence;
+  }
+
+  const protectionTags = extractProtectionTags(row);
+  if (protectionTags.value?.length) {
+    attributes.protection_tags = protectionTags.value;
+    confidenceByKey.protection_tags = protectionTags.confidence;
+  }
 
   const texture = extractTexture(row);
   if (texture.value) { attributes.texture = texture.value; confidenceByKey.texture = texture.confidence; }

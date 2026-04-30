@@ -12,6 +12,10 @@ export interface StorefrontFilterParams {
   powder?: string[];
   grade?: string[];
   industries?: string[];
+  certifications?: string[];
+  uses?: string[];
+  protection_tags?: string[];
+  /** @deprecated Use `certifications`; merged automatically when parsing URLs. */
   compliance_certifications?: string[];
   texture?: string[];
   cuff_style?: string[];

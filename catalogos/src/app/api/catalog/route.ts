@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listLiveProducts } from "@/lib/catalog/query";
 import { getFacetCounts, getPriceBounds } from "@/lib/catalog/facets";
 import { getCategoryIdBySlug, loadFacetDefinitionsForCategory } from "@/lib/catalogos/dictionary-service";
+import { normalizeStorefrontFilterParams } from "@/lib/catalog/params";
 import type { StorefrontFilterParams } from "@/lib/catalog/types";
 import { DEFAULT_PRODUCT_TYPE_KEY } from "@/lib/product-types";
 
@@ -24,7 +25,7 @@ function parseNum(v: string | null): number | undefined {
 
 function paramsFromRequest(req: NextRequest): StorefrontFilterParams {
   const { searchParams } = new URL(req.url);
-  return {
+  return normalizeStorefrontFilterParams({
     category: searchParams.get("category") ?? undefined,
     material: parseArrayParam(searchParams.get("material")),
     size: parseArrayParam(searchParams.get("size")),
@@ -34,6 +35,9 @@ function paramsFromRequest(req: NextRequest): StorefrontFilterParams {
     powder: parseArrayParam(searchParams.get("powder")),
     grade: parseArrayParam(searchParams.get("grade")),
     industries: parseArrayParam(searchParams.get("industries")),
+    certifications: parseArrayParam(searchParams.get("certifications")),
+    uses: parseArrayParam(searchParams.get("uses")),
+    protection_tags: parseArrayParam(searchParams.get("protection_tags")),
     compliance_certifications: parseArrayParam(searchParams.get("compliance_certifications")),
     texture: parseArrayParam(searchParams.get("texture")),
     cuff_style: parseArrayParam(searchParams.get("cuff_style")),
@@ -52,7 +56,7 @@ function paramsFromRequest(req: NextRequest): StorefrontFilterParams {
     sort: (searchParams.get("sort") as StorefrontFilterParams["sort"]) ?? "newest",
     page: parseNum(searchParams.get("page")) ?? 1,
     limit: parseNum(searchParams.get("limit")) ?? 24,
-  };
+  });
 }
 
 export async function GET(req: NextRequest) {

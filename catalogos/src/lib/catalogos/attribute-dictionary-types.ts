@@ -18,8 +18,18 @@ export type CategorySlug = ProductTypeKey;
 // -----------------------------------------------------------------------------
 export const UNIVERSAL_ATTRIBUTE_KEYS = ["category", "material", "size", "color", "brand", "price_range"] as const;
 export const DISPOSABLE_ATTRIBUTE_KEYS = [
-  "thickness_mil", "powder", "grade", "industries", "compliance_certifications",
-  "texture", "cuff_style", "hand_orientation", "packaging", "sterility",
+  "thickness_mil",
+  "powder",
+  "grade",
+  "industries",
+  "certifications",
+  "uses",
+  "protection_tags",
+  "texture",
+  "cuff_style",
+  "hand_orientation",
+  "packaging",
+  "sterility",
 ] as const;
 export const WORK_GLOVE_ATTRIBUTE_KEYS = [
   "cut_level_ansi", "puncture_level", "abrasion_level", "flame_resistant", "arc_rating", "warm_cold_weather",
@@ -42,6 +52,27 @@ export const POWDER_VALUES = ["powder_free", "powdered"] as const;
 export const GRADE_VALUES = ["medical_exam_grade", "industrial_grade", "food_service_grade"] as const;
 export const INDUSTRIES_VALUES = ["healthcare", "food_service", "food_processing", "janitorial", "sanitation", "laboratories", "pharmaceuticals", "beauty_personal_care", "tattoo_body_art", "automotive", "education"] as const;
 export const COMPLIANCE_VALUES = ["fda_approved", "astm_tested", "food_safe", "latex_free", "chemo_rated", "en_455", "en_374"] as const;
+/** Canonical certification slugs (same allowed set as legacy `compliance_certifications`). */
+export const CERTIFICATION_VALUES = COMPLIANCE_VALUES;
+export const USES_VALUES = [
+  "general_purpose",
+  "medical_exam",
+  "patient_care",
+  "food_handling",
+  "laboratory",
+  "chemical_handling",
+  "industrial_maintenance",
+  "cleanroom",
+] as const;
+export const PROTECTION_TAGS_VALUES = [
+  "chemical_resistant",
+  "puncture_resistant",
+  "viral_barrier",
+  "biohazard",
+  "static_control",
+  "grip_enhanced",
+  "abrasion_enhanced",
+] as const;
 export const TEXTURE_VALUES = ["smooth", "fingertip_textured", "fully_textured"] as const;
 export const CUFF_STYLE_VALUES = ["beaded_cuff", "non_beaded", "extended_cuff"] as const;
 export const HAND_ORIENTATION_VALUES = ["ambidextrous"] as const;
@@ -64,6 +95,9 @@ export type AllowedValueSlug =
   | (typeof GRADE_VALUES)[number]
   | (typeof INDUSTRIES_VALUES)[number]
   | (typeof COMPLIANCE_VALUES)[number]
+  | (typeof CERTIFICATION_VALUES)[number]
+  | (typeof USES_VALUES)[number]
+  | (typeof PROTECTION_TAGS_VALUES)[number]
   | (typeof TEXTURE_VALUES)[number]
   | (typeof CUFF_STYLE_VALUES)[number]
   | (typeof HAND_ORIENTATION_VALUES)[number]
@@ -79,7 +113,7 @@ export type AllowedValueSlug =
 
 // -----------------------------------------------------------------------------
 // Normalized filter attributes (single-select vs multi-select)
-// Single-select: one value. Multi-select: array (industries, compliance_certifications).
+// Single-select: one value. Multi-select: array (industries, certifications, uses, protection_tags).
 // -----------------------------------------------------------------------------
 export interface NormalizedDisposableGloveAttributes {
   category: CategorySlug;
@@ -92,6 +126,10 @@ export interface NormalizedDisposableGloveAttributes {
   powder?: (typeof POWDER_VALUES)[number];
   grade?: (typeof GRADE_VALUES)[number];
   industries?: (typeof INDUSTRIES_VALUES)[number][];
+  certifications?: (typeof CERTIFICATION_VALUES)[number][];
+  uses?: (typeof USES_VALUES)[number][];
+  protection_tags?: (typeof PROTECTION_TAGS_VALUES)[number][];
+  /** @deprecated Use `certifications`; retained for reading legacy payloads only. */
   compliance_certifications?: (typeof COMPLIANCE_VALUES)[number][];
   texture?: (typeof TEXTURE_VALUES)[number];
   cuff_style?: (typeof CUFF_STYLE_VALUES)[number];
@@ -153,6 +191,8 @@ export interface NormalizedProductContent {
   normalized_case_cost?: number | null;
   pricing?: NormalizedPricing;
   images: string[];
+  /** Absolute URLs to spec sheets, SDS, or technical PDFs (import evidence only). */
+  spec_sheet_urls?: string[];
   stock_status?: string;
   case_qty?: number;
   box_qty?: number;

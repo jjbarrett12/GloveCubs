@@ -74,6 +74,7 @@ const {
     resolveLineCatalogProductId,
     resolveCartLineListingProductId,
 } = require('./lib/resolve-canonical-product-id');
+const { resolveCatalogVariantForCommerceLine } = require('./lib/resolve-cart-catalog-variant');
 const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
@@ -343,6 +344,56 @@ async function assertCheckoutCartLinesMatchBody(cartItems, body, res) {
             if (respondCommerceCanonicalError(e, res)) return false;
             throw e;
         }
+        const wantVid = normalizeCanonicalUuidInput(cart_lines[i].catalog_variant_id);
+        if (wantVid) {
+            const expVid = normalizeCanonicalUuidInput(cartItems[i].catalog_variant_id);
+            if (!expVid || wantVid !== expVid) {
+                res.status(400).json({
+                    error:
+                        'cart_lines catalog_variant_id does not match server cart for this line. Expected resolved catalog_v2.catalog_variants.id.',
+                    code: 'CHECKOUT_CART_LINES_MISMATCH',
+                    line_index: i,
+                });
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+async function findExistingCartLineByVariant(supabase, cartItems, catalogV2Id, resolved) {
+    const rid = String(resolved.catalog_variant_id);
+    for (const item of cartItems) {
+        if (String(resolveLineCatalogProductId(item)) !== String(catalogV2Id)) continue;
+        const iVid = normalizeCanonicalUuidInput(item.catalog_variant_id);
+        if (iVid && String(iVid) === rid) return item;
+        if (!iVid) {
+            const r2 = await resolveCatalogVariantForCommerceLine(supabase, item);
+            if (r2.ok && String(r2.catalog_variant_id) === rid) return item;
+        }
+    }
+    return null;
+}
+
+/** Resolve and persist catalog_variant_id + variant_sku on cart rows missing them (legacy JSON). */
+async function ensureCartLinesHaveResolvedVariants(cartKey, cartItems, res) {
+    const supabase = getSupabaseAdmin();
+    let changed = false;
+    for (const item of cartItems) {
+        const hasVid = normalizeCanonicalUuidInput(item.catalog_variant_id);
+        const hasVsku = item.variant_sku != null && String(item.variant_sku).trim() !== '';
+        if (hasVid && hasVsku) continue;
+        const r = await resolveCatalogVariantForCommerceLine(supabase, item);
+        if (!r.ok) {
+            res.status(422).json({ error: r.message, code: r.code });
+            return false;
+        }
+        item.catalog_variant_id = r.catalog_variant_id;
+        item.variant_sku = r.variant_sku;
+        changed = true;
+    }
+    if (changed) {
+        await dataService.setCart(cartKey, cartItems);
     }
     return true;
 }
@@ -360,6 +411,7 @@ async function loadAndValidateCartForCheckout(cartKey, res, contextLabel) {
         if (respondCommerceCanonicalError(e, res)) return null;
         throw e;
     }
+    if (!(await ensureCartLinesHaveResolvedVariants(cartKey, cartItems, res))) return null;
     const missing = [];
     for (const item of cartItems) {
         const listingId = resolveCartLineListingProductId(item);
@@ -2812,10 +2864,26 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
                 quantity: item.quantity,
                 pricingContext: ctx,
             });
-            let variantSku = product?.sku || '';
-            if (item.size && variantSku) {
-                const sizeSuffix = item.size.toUpperCase().replace(/\s+/g, '');
-                variantSku = `${variantSku}-${sizeSuffix}`;
+            let variantSku = String(item.variant_sku || '').trim();
+            let variantErr = null;
+            if (!variantSku) {
+                const vr = await resolveCatalogVariantForCommerceLine(getSupabaseAdmin(), item);
+                if (vr.ok) variantSku = vr.variant_sku;
+                else variantErr = vr.code;
+            }
+            if (variantErr) {
+                enrichedCart.push({
+                    ...item,
+                    name: product?.name || 'Unknown',
+                    price: resolved.listUnitPrice,
+                    bulk_price: resolved.catalogBulkUnitPrice,
+                    checkout_unit_price: resolved.unitPrice,
+                    image_url: product?.image_url || '',
+                    sku: product?.sku || '',
+                    variant_sku: '',
+                    catalog_error: variantErr,
+                });
+                continue;
             }
             enrichedCart.push({
                 ...item,
@@ -2825,7 +2893,7 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
                 checkout_unit_price: resolved.unitPrice,
                 image_url: product?.image_url || '',
                 sku: product?.sku || '',
-                variant_sku: variantSku
+                variant_sku: variantSku,
             });
         }
         res.json(enrichedCart);
@@ -2842,12 +2910,12 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
 
 app.post('/api/cart', optionalAuth, async (req, res) => {
     try {
-        const { product_id, size, quantity, canonical_product_id } = req.body;
+        const { product_id, size, quantity, canonical_product_id, catalog_variant_id } = req.body;
         const qty = Math.max(1, parseInt(quantity, 10) || 1);
         const sessionId = req.headers['x-session-id'] || 'anonymous';
         const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
         const cartItems = await dataService.getCart(cartKey);
-        const lineForCanon = { product_id, size, canonical_product_id };
+        const lineForCanon = { product_id, size, canonical_product_id, catalog_variant_id };
         try {
             await ensureCommerceLinesHaveCanonical([lineForCanon], 'cart_post');
         } catch (e) {
@@ -2858,24 +2926,36 @@ app.post('/api/cart', optionalAuth, async (req, res) => {
         const listingId = normalizeCanonicalUuidInput(lineForCanon.listing_id);
         const product = await productsService.getProductById(listingId || catalogV2Id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
-        const existing = cartItems.find(
-            (item) => String(resolveLineCatalogProductId(item)) === String(catalogV2Id) && item.size === size
-        );
+        const supabaseCart = getSupabaseAdmin();
+        const draftForVariant = {
+            product_id: catalogV2Id,
+            canonical_product_id: catalogV2Id,
+            size: size != null && size !== '' ? String(size) : null,
+            catalog_variant_id: normalizeCanonicalUuidInput(catalog_variant_id) || catalog_variant_id,
+        };
+        const variantRes = await resolveCatalogVariantForCommerceLine(supabaseCart, draftForVariant);
+        if (!variantRes.ok) {
+            return res.status(422).json({ error: variantRes.message, code: variantRes.code });
+        }
+        const existing = await findExistingCartLineByVariant(supabaseCart, cartItems, catalogV2Id, variantRes);
         if (existing) {
             existing.quantity += qty;
             existing.canonical_product_id = catalogV2Id;
             existing.product_id = catalogV2Id;
             existing.listing_id = lineForCanon.listing_id;
+            existing.catalog_variant_id = variantRes.catalog_variant_id;
+            existing.variant_sku = variantRes.variant_sku;
         } else {
-            cartItems.push(
-                cartLineContract.newCartLineFromBody({
-                    product_id: catalogV2Id,
-                    size,
-                    quantity: qty,
-                    canonical_product_id: catalogV2Id,
-                    listing_id: lineForCanon.listing_id,
-                }),
-            );
+            const newLine = cartLineContract.newCartLineFromBody({
+                product_id: catalogV2Id,
+                size,
+                quantity: qty,
+                canonical_product_id: catalogV2Id,
+                listing_id: lineForCanon.listing_id,
+                catalog_variant_id: variantRes.catalog_variant_id,
+                variant_sku: variantRes.variant_sku,
+            });
+            cartItems.push(newLine);
         }
         await dataService.setCart(cartKey, cartItems);
         res.json({ success: true });
@@ -2986,6 +3066,7 @@ app.post('/api/checkout/quote', authenticateToken, async (req, res) => {
                 name: row.name,
                 sku: row.sku,
                 variant_sku: row.variant_sku,
+                catalog_variant_id: row.catalog_variant_id || undefined,
                 size: row.size,
                 quantity: row.quantity,
                 unit_price: row.price,
@@ -3152,15 +3233,19 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             ...buildOrderEconomicsOrderFields({ subtotal, shipping, shipCfg }),
             items: orderItems.map((i) => {
                 const snap = buildLineCostSnapshotFields(i.cost_at_order, i.quantity);
-                return {
+                const row = {
                     product_id: i.product_id,
                     quantity: i.quantity,
                     size: i.size,
                     unit_price: i.price,
                     canonical_product_id: i.canonical_product_id,
+                    catalog_variant_id: i.catalog_variant_id,
+                    variant_sku: i.variant_sku,
                     unit_cost_at_order: snap.unit_cost_at_order,
                     total_cost_at_order: snap.total_cost_at_order,
                 };
+                if (i.listing_id) row.listing_id = i.listing_id;
+                return row;
             }),
         };
         if (idemKey) orderPayload.idempotency_key = idemKey;
@@ -3463,15 +3548,19 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
         ...buildOrderEconomicsOrderFields({ subtotal, shipping, shipCfg: shipCfgPi }),
         items: orderItems.map((i) => {
             const snap = buildLineCostSnapshotFields(i.cost_at_order, i.quantity);
-            return {
+            const row = {
                 product_id: i.product_id,
                 quantity: i.quantity,
                 size: i.size,
                 unit_price: i.price,
                 canonical_product_id: i.canonical_product_id,
+                catalog_variant_id: i.catalog_variant_id,
+                variant_sku: i.variant_sku,
                 unit_cost_at_order: snap.unit_cost_at_order,
                 total_cost_at_order: snap.total_cost_at_order,
             };
+            if (i.listing_id) row.listing_id = i.listing_id;
+            return row;
         }),
     };
     if (marketingAttPi) orderPayload.marketing_attribution = marketingAttPi;
@@ -3692,21 +3781,30 @@ app.post('/api/orders/:id/reorder', authenticateToken, async (req, res) => {
         let n = 0;
         const results = [];
 
+        const supabaseReorder = getSupabaseAdmin();
         for (const { preview, quantity } of resolved.adds) {
-            const existing = cartItems.find(
-                (c) =>
-                    String(c.product_id) === String(preview.product_id) &&
-                    orderReorder.normSize(c.size) === orderReorder.normSize(preview.size)
-            );
-            if (existing) existing.quantity += quantity;
-            else {
+            const catalogV2Id = preview.product_id;
+            const resolvedShape = {
+                catalog_variant_id: preview.catalog_variant_id,
+                variant_sku: preview.variant_sku,
+            };
+            const existing = await findExistingCartLineByVariant(supabaseReorder, cartItems, catalogV2Id, resolvedShape);
+            if (existing) {
+                existing.quantity += quantity;
+                existing.canonical_product_id = catalogV2Id;
+                existing.product_id = catalogV2Id;
+                existing.catalog_variant_id = preview.catalog_variant_id;
+                existing.variant_sku = preview.variant_sku;
+            } else {
                 const line = {
                     id: Date.now() + n,
                     product_id: preview.product_id,
                     size: preview.size || null,
                     quantity,
+                    canonical_product_id: preview.canonical_product_id || preview.product_id,
+                    catalog_variant_id: preview.catalog_variant_id,
+                    variant_sku: preview.variant_sku,
                 };
-                if (preview.canonical_product_id) line.canonical_product_id = preview.canonical_product_id;
                 cartItems.push(line);
                 n += 1;
             }
@@ -4260,21 +4358,31 @@ app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, async (req, res)
         const cartItems = await dataService.getCart(cartKey);
         const enrichedListLines = list.items.map((i) => ({ ...i }));
         await ensureCommerceLinesHaveCanonical(enrichedListLines, 'saved_list_add_to_cart_source');
+        const supabaseSaved = getSupabaseAdmin();
         for (const item of enrichedListLines) {
             const catalogV2Id = resolveLineCatalogProductId(item);
             if (!catalogV2Id) continue;
             const listingId = resolveCartLineListingProductId(item);
             const product = await productsService.getProductById(listingId || catalogV2Id);
             if (!product) continue;
-            const existing = cartItems.find(
-                (c) =>
-                    String(resolveLineCatalogProductId(c)) === String(catalogV2Id) && (c.size || null) === (item.size || null)
-            );
+            const draftList = {
+                product_id: catalogV2Id,
+                canonical_product_id: catalogV2Id,
+                size: item.size != null && item.size !== '' ? String(item.size) : null,
+                catalog_variant_id: normalizeCanonicalUuidInput(item.catalog_variant_id) || item.catalog_variant_id,
+            };
+            const vList = await resolveCatalogVariantForCommerceLine(supabaseSaved, draftList);
+            if (!vList.ok) {
+                return res.status(422).json({ error: vList.message, code: vList.code });
+            }
+            const existing = await findExistingCartLineByVariant(supabaseSaved, cartItems, catalogV2Id, vList);
             if (existing) {
                 existing.quantity += item.quantity;
                 existing.canonical_product_id = catalogV2Id;
                 existing.product_id = catalogV2Id;
                 existing.listing_id = item.listing_id;
+                existing.catalog_variant_id = vList.catalog_variant_id;
+                existing.variant_sku = vList.variant_sku;
             } else {
                 cartItems.push(
                     cartLineContract.newCartLineFromBody(
@@ -4284,6 +4392,8 @@ app.post('/api/saved-lists/:id/add-to-cart', authenticateToken, async (req, res)
                             quantity: item.quantity,
                             canonical_product_id: catalogV2Id,
                             listing_id: item.listing_id,
+                            catalog_variant_id: vList.catalog_variant_id,
+                            variant_sku: vList.variant_sku,
                         },
                         Date.now() + Math.random()
                     )
@@ -4461,26 +4571,61 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
         const cartKey = `user_${req.user.id}`;
         const cartItems = await dataService.getCart(cartKey);
         let added = 0, skipped = 0;
-        for (const row of items) {
+        const supabaseBulk = getSupabaseAdmin();
+        for (let bulkIdx = 0; bulkIdx < items.length; bulkIdx++) {
+            const row = items[bulkIdx];
             const sku = (row.sku || row.SKU || '').toString().trim();
             const qty = Math.max(1, parseInt(row.quantity || row.qty || 1, 10));
-            const size = row.size || null;
+            const size = row.size != null && row.size !== '' ? String(row.size) : null;
+            const rowCatalogVariantId = row.catalog_variant_id != null ? row.catalog_variant_id : null;
             if (!sku) { skipped++; continue; }
             const product = await productsService.getProductById(sku);
             if (!product) { skipped++; continue; }
-            const existing = cartItems.find(
-                (c) => String(c.product_id) === String(product.id) && (c.size || null) === (size || null)
+            const draftLine = cartLineContract.newCartLineFromBody(
+                {
+                    product_id: product.id,
+                    size,
+                    quantity: qty,
+                    canonical_product_id: product.id,
+                    catalog_variant_id: rowCatalogVariantId,
+                },
+                Date.now() + added + bulkIdx
             );
+            try {
+                await ensureCommerceLinesHaveCanonical([draftLine], 'cart_bulk_row');
+            } catch (e) {
+                if (respondCommerceCanonicalError(e, res)) return;
+                throw e;
+            }
+            const catalogV2Id = resolveLineCatalogProductId(draftLine);
+            const vBulk = await resolveCatalogVariantForCommerceLine(supabaseBulk, {
+                product_id: catalogV2Id,
+                canonical_product_id: catalogV2Id,
+                size: draftLine.size,
+                catalog_variant_id: normalizeCanonicalUuidInput(rowCatalogVariantId) || rowCatalogVariantId,
+            });
+            if (!vBulk.ok) {
+                return res.status(422).json({
+                    error: vBulk.message,
+                    code: vBulk.code,
+                    bulk_line_index: bulkIdx,
+                    sku,
+                });
+            }
+            const resolvedShape = { catalog_variant_id: vBulk.catalog_variant_id, variant_sku: vBulk.variant_sku };
+            const existing = await findExistingCartLineByVariant(supabaseBulk, cartItems, catalogV2Id, resolvedShape);
             if (existing) {
                 existing.quantity += qty;
-                existing.canonical_product_id = product.id;
-                existing.product_id = product.id;
+                existing.canonical_product_id = catalogV2Id;
+                existing.product_id = catalogV2Id;
+                existing.catalog_variant_id = vBulk.catalog_variant_id;
+                existing.variant_sku = vBulk.variant_sku;
             } else {
-                const line = cartLineContract.newCartLineFromBody(
-                    { product_id: product.id, size, quantity: qty, canonical_product_id: product.id },
-                    Date.now() + added
-                );
-                cartItems.push(line);
+                draftLine.product_id = catalogV2Id;
+                draftLine.canonical_product_id = catalogV2Id;
+                draftLine.catalog_variant_id = vBulk.catalog_variant_id;
+                draftLine.variant_sku = vBulk.variant_sku;
+                cartItems.push(draftLine);
             }
             added++;
         }

@@ -31,7 +31,8 @@ describe('order-reorder', () => {
     assert.equal(r.ok, false);
   });
 
-  it('buildReorderPreviews: marks missing product unavailable', async () => {
+  const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  (hasSupabase ? it : it.skip)('buildReorderPreviews: marks missing product unavailable', async () => {
     const productsService = {
       async getProductById() {
         return null;

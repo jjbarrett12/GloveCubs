@@ -12,11 +12,13 @@ const DEFAULT_LIMIT = 24;
 const SORT_OPTIONS = ["relevance", "price_asc", "price_desc", "newest", "price_per_glove_asc"] as const;
 /** Max product IDs to consider for price filter/sort when not already constrained by other filters. */
 const MAX_PRODUCT_IDS_FOR_PRICE = 10_000;
+const MAX_VARIANT_ROWS_FOR_SIZE_FILTER = 50_000;
 /** Bound categories/brands list queries. */
 const MAX_CATEGORIES_OR_BRANDS = 500;
 
 import { getAttributeDefinitionIdsByKeys } from "../publish/product-attribute-sync";
-import { getAllFilterableFacetKeys } from "@/lib/product-types";
+import { getAllFilterableFacetKeys, GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS } from "@/lib/product-types";
+import { normalizeStorefrontFilterParams } from "./params";
 import { getProductIdsMatchingSearch, sanitizeSearchTerm } from "./search";
 
 /**
@@ -39,6 +41,44 @@ async function productIdsForFilter(
   return new Set((data ?? []).map((r: { product_id: string }) => r.product_id));
 }
 
+function coalesceSizeParam(raw: string[] | string | undefined): string[] {
+  const arr = Array.isArray(raw) ? raw : raw != null && String(raw).trim() !== "" ? [String(raw)] : [];
+  return [...new Set(arr.map((s) => String(s).trim()).filter(Boolean))];
+}
+
+/** Widen filter tokens so DB rows match regardless of size_code casing (e.g. S vs s). */
+function expandSizeCodesForDbMatch(codes: string[]): string[] {
+  const out = new Set<string>();
+  for (const t of codes) {
+    if (!t) continue;
+    out.add(t);
+    out.add(t.toLowerCase());
+    out.add(t.toUpperCase());
+  }
+  return [...out];
+}
+
+/**
+ * Parent catalog_product ids that have at least one active variant whose size_code matches any of the given values (OR).
+ * Size is not read from product_attributes.
+ */
+export async function productIdsForActiveVariantSizes(sizeParams: string[] | string | undefined): Promise<Set<string>> {
+  const trimmed = coalesceSizeParam(sizeParams);
+  if (trimmed.length === 0) return new Set();
+  const sizeCodes = expandSizeCodesForDbMatch(trimmed);
+  const admin = getSupabase(true);
+  const { data, error } = await admin
+    .schema("catalog_v2")
+    .from("catalog_variants")
+    .select("catalog_product_id")
+    .eq("is_active", true)
+    .not("size_code", "is", null)
+    .in("size_code", sizeCodes)
+    .limit(MAX_VARIANT_ROWS_FOR_SIZE_FILTER);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r: { catalog_product_id: string }) => r.catalog_product_id));
+}
+
 /** Best available offer price: sell_price when set, else cost (for storefront display and filtering). Exported for tests. */
 export function offerPrice(row: { cost: number; sell_price?: number | null }): number {
   return row.sell_price != null && Number.isFinite(row.sell_price) ? row.sell_price : row.cost;
@@ -52,7 +92,7 @@ function intersectIds(a: Set<string> | null, b: Set<string>): Set<string> | null
   return out;
 }
 
-/** Facet filter keys — kept in sync with product type registry (`getAllFilterableFacetKeys`). */
+/** Product-attribute facet keys only (excludes variant-backed facets like `size`). */
 function storefrontFacetFilterKeys(): readonly string[] {
   return getAllFilterableFacetKeys();
 }
@@ -62,27 +102,38 @@ function storefrontFacetFilterKeys(): readonly string[] {
  * Exported for advanced use; prefer `getCatalogConstraintProductIds` for listings + facets.
  */
 export async function getFilteredProductIds(params: StorefrontFilterParams): Promise<Set<string> | null> {
+  const effectiveParams = normalizeStorefrontFilterParams(params);
   const filterKeys = storefrontFacetFilterKeys();
-  const multiKeys = new Set(["industries", "compliance_certifications"]);
+  const multiKeys = new Set(GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS);
   const keysWithValues: Array<{ key: (typeof filterKeys)[number]; values: string[] }> = [];
   for (const key of filterKeys) {
-    const raw = params[key as keyof StorefrontFilterParams];
+    const raw = effectiveParams[key as keyof StorefrontFilterParams];
     const values = Array.isArray(raw) ? raw : raw ? [String(raw)] : [];
     if (values.length > 0) keysWithValues.push({ key, values });
   }
-  if (keysWithValues.length === 0) return null;
 
-  const defIdsByKey = await getAttributeDefinitionIdsByKeys(keysWithValues.map((k) => k.key));
-  const results = await Promise.all(
-    keysWithValues.map(({ key, values }) =>
-      productIdsForFilter(defIdsByKey.get(key) ?? [], values, multiKeys.has(key))
-    )
-  );
   let productIds: Set<string> | null = null;
-  for (const ids of results) {
-    productIds = intersectIds(productIds, ids);
+  if (keysWithValues.length > 0) {
+    const defIdsByKey = await getAttributeDefinitionIdsByKeys(keysWithValues.map((k) => k.key));
+    const results = await Promise.all(
+      keysWithValues.map(({ key, values }) =>
+        productIdsForFilter(defIdsByKey.get(key) ?? [], values, multiKeys.has(key))
+      )
+    );
+    for (const ids of results) {
+      productIds = intersectIds(productIds, ids);
+      if (productIds && productIds.size === 0) return productIds;
+    }
+  }
+
+  const sizeValues = coalesceSizeParam(effectiveParams.size);
+  if (sizeValues.length > 0) {
+    const variantProductIds = await productIdsForActiveVariantSizes(sizeValues);
+    productIds = intersectIds(productIds, variantProductIds);
     if (productIds && productIds.size === 0) return productIds;
   }
+
+  if (keysWithValues.length === 0 && sizeValues.length === 0) return null;
   return productIds;
 }
 
@@ -91,10 +142,11 @@ export async function getFilteredProductIds(params: StorefrontFilterParams): Pro
  * Used for listings, facet counts, and price bounds so all surfaces stay consistent.
  */
 export async function getCatalogConstraintProductIds(params: StorefrontFilterParams): Promise<Set<string> | null> {
-  let ids = await getFilteredProductIds(params);
-  const q = sanitizeSearchTerm(params.q);
+  const normalized = normalizeStorefrontFilterParams(params);
+  let ids = await getFilteredProductIds(normalized);
+  const q = sanitizeSearchTerm(normalized.q);
   if (q) {
-    const searchIds = await getProductIdsMatchingSearch(q, params.category);
+    const searchIds = await getProductIdsMatchingSearch(q, normalized.category);
     ids = intersectIds(ids, searchIds);
   }
   return ids;

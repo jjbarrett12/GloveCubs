@@ -46,6 +46,8 @@ export interface StagingNormalizedData {
   normalized_case_cost?: number | null;
   pricing?: StagingPricing;
   images: string[];
+  /** Linked spec / SDS / technical PDF URLs (crawl or row; not parsed as attributes). */
+  spec_sheet_urls?: string[];
   stock_status?: string;
   case_qty?: number;
   box_qty?: number;
@@ -155,6 +157,7 @@ const stagingNormalizedDataSchema = z.object({
   pricing: stagingPricingSchema.optional(),
   import_auto_pricing: importAutoPricingSchema.optional(),
   images: z.array(z.string()),
+  spec_sheet_urls: z.array(z.string().min(1)).optional(),
   stock_status: z.string().optional(),
   case_qty: z.number().optional(),
   box_qty: z.number().optional(),

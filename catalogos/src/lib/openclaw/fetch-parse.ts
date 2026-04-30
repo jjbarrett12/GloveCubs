@@ -11,6 +11,7 @@ import {
   extractTextContent,
   extractVariantOptions,
   extractImages,
+  extractSpecSheetUrls,
 } from "./parse-html";
 import { OPENCLAW_CONFIG } from "./config";
 import type { FetchedProductPage, ParsedProductPage } from "./types";
@@ -77,6 +78,7 @@ export async function fetchAndParsePage(url: string): Promise<{
   const text = extractTextContent(fetched.html);
   const variantOptions = extractVariantOptions(fetched.html);
   const images = extractImages(fetched.html, url);
+  const specSheetUrls = extractSpecSheetUrls(fetched.html, url);
 
   const productTitle =
     pageTitle ??
@@ -97,6 +99,7 @@ export async function fetchAndParsePage(url: string): Promise<{
     variant_options: variantOptions.length > 0 ? variantOptions : undefined,
     json_ld: jsonLd.length > 0 ? jsonLd : undefined,
     images: images.length > 0 ? images : undefined,
+    spec_sheet_urls: specSheetUrls.length > 0 ? specSheetUrls : undefined,
     raw_html_snippet: text.slice(0, 2000),
   };
 

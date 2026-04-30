@@ -93,10 +93,24 @@ export function validateAttributesByCategory(
 /**
  * Rules for single-select vs multi-select:
  * - single: category, material, size, color, brand, price_range, thickness_mil, powder, grade, texture, cuff_style, hand_orientation, packaging, sterility, cut_level_ansi, puncture_level, abrasion_level, flame_resistant, arc_rating, warm_cold_weather
- * - multi: industries, compliance_certifications
+ * - multi: industries, certifications, uses, protection_tags
  */
 export const MULTI_SELECT_ATTRIBUTE_KEYS = GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS;
 
 export function isMultiSelectAttribute(attributeKey: string): boolean {
   return (GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS as readonly string[]).includes(attributeKey);
+}
+
+/** Merge legacy `compliance_certifications` into `certifications` for validation and PA sync. */
+export function normalizeFilterAttributesKeys(attrs: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...attrs };
+  const legacy = out.compliance_certifications;
+  if (legacy == null || legacy === "") return out;
+  const legacyArr = Array.isArray(legacy) ? legacy : [legacy];
+  const cur = out.certifications;
+  const curArr = Array.isArray(cur) ? cur : cur != null && String(cur).trim() !== "" ? [cur] : [];
+  const merged = [...curArr, ...legacyArr].map((s) => String(s).trim()).filter(Boolean);
+  if (merged.length) out.certifications = [...new Set(merged)];
+  delete out.compliance_certifications;
+  return out;
 }

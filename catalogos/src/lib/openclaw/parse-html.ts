@@ -108,3 +108,37 @@ export function extractImages(html: string, baseUrl: string): string[] {
   }
   return [...new Set(urls)];
 }
+
+const SPEC_SDS_HINT = /(spec|sds|msds|datasheet|tds|technical|data[\s_-]?sheet|safety[\s_-]?data|product[\s_-]?sheet)/i;
+const PDF_PATH = /\.pdf(?:[?#]|$)/i;
+
+function resolveHref(rawHref: string, baseUrl: string): string | null {
+  try {
+    const href = rawHref.trim();
+    if (!href || href.startsWith("javascript:") || href === "#") return null;
+    if (href.startsWith("//")) return "https:" + href;
+    return new URL(href, baseUrl).href;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect absolute http(s) links to spec sheets, SDS, or technical PDFs from anchor hrefs (URLs only; no PDF parsing).
+ */
+export function extractSpecSheetUrls(html: string, baseUrl: string): string[] {
+  const seen = new Set<string>();
+  const re = /<a[^>]+href\s*=\s*["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const abs = resolveHref(m[1] ?? "", baseUrl);
+    if (!abs || (!abs.startsWith("http://") && !abs.startsWith("https://"))) continue;
+    const lower = abs.toLowerCase();
+    const pathPart = lower.split("?")[0] ?? lower;
+    const looksPdf = PDF_PATH.test(pathPart);
+    const looksDoc = SPEC_SDS_HINT.test(lower) || SPEC_SDS_HINT.test(m[1] ?? "");
+    if (!looksPdf && !looksDoc) continue;
+    seen.add(abs);
+  }
+  return [...seen];
+}
