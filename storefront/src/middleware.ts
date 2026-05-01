@@ -6,8 +6,30 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+/** Marketing and auth helper routes: no session checks (admin/internal rules apply separately). */
+function isPublicMarketingPath(pathname: string): boolean {
+  if (pathname === '/') return true;
+  if (pathname === '/industries' || pathname.startsWith('/industries/')) return true;
+  if (pathname === '/find-my-glove' || pathname.startsWith('/find-my-glove/')) return true;
+  if (pathname === '/glove-finder' || pathname.startsWith('/glove-finder/')) return true;
+  if (pathname === '/invoice-savings' || pathname.startsWith('/invoice-savings/')) return true;
+  if (pathname === '/request-pricing' || pathname.startsWith('/request-pricing/')) return true;
+  if (pathname === '/store' || pathname.startsWith('/store/')) return true;
+  if (pathname === '/login' || pathname.startsWith('/login/')) return true;
+  if (pathname === '/unauthorized' || pathname.startsWith('/unauthorized/')) return true;
+  return false;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith('/_next/')) {
+    return NextResponse.next();
+  }
+
+  if (isPublicMarketingPath(pathname)) {
+    return NextResponse.next();
+  }
 
   // Admin routes require authentication
   if (pathname.startsWith('/admin')) {
@@ -63,9 +85,9 @@ export async function middleware(request: NextRequest) {
     }
 
     // Optional: Check for admin role in user metadata
-    const isAdmin = user.user_metadata?.role === 'admin' || 
+    const isAdmin = user.user_metadata?.role === 'admin' ||
                     user.email?.endsWith('@glovecubs.com');
-    
+
     if (!isAdmin) {
       return NextResponse.redirect(new URL('/unauthorized', request.url));
     }
@@ -77,14 +99,14 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/api/internal')) {
     const cronSecret = process.env.CRON_SECRET;
     const workerSecret = process.env.WORKER_SECRET || cronSecret;
-    
+
     // In development, allow without auth
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.next();
     }
 
     const authHeader = request.headers.get('authorization');
-    const isValid = authHeader === `Bearer ${cronSecret}` || 
+    const isValid = authHeader === `Bearer ${cronSecret}` ||
                     authHeader === `Bearer ${workerSecret}`;
 
     if (!isValid) {
@@ -97,7 +119,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
+    '/((?!api/|_next/static|_next/image|favicon.ico).*)',
     '/api/internal/:path*',
   ],
 };
