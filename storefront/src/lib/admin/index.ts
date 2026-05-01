@@ -1,6 +1,7 @@
 /**
- * Admin module exports (URL fetch / extraction helpers for tests and future tooling).
- * URL product import for the catalog runs in CatalogOS only.
+ * Admin Module Exports
+ * 
+ * Services for admin functionality including product import from external URLs.
  */
 
 // URL Fetch (with SSRF protection)
@@ -22,3 +23,16 @@ export {
   type ExtractedProductData,
   type ExtractionResult,
 } from './productExtraction';
+
+// Product Import
+export {
+  importProductFromUrl,
+  approveCandidate,
+  rejectCandidate,
+  getPendingCandidates,
+  getCandidate,
+  type ProductCandidate,
+  type ImportResult,
+  type ApprovalResult,
+  type CandidateStatus,
+} from './productImport';

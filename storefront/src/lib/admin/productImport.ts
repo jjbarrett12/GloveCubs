@@ -10,7 +10,15 @@
  * 6. Persist with full audit trail
  */
 
-import { supabaseAdmin, getSupabaseCatalogos } from '../jobs/supabase';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+
+/** Lazy proxy: avoids calling `getSupabaseAdmin()` at import time (Next build collects routes without env). */
+const supabaseAdmin = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getSupabaseAdmin() as unknown as SupabaseClient)[prop as keyof SupabaseClient];
+  },
+}) as SupabaseClient;
 import { safeFetchHtml, validateUrl, type FetchResult } from './urlFetch';
 import { extractProductFromHtml, type ExtractedProductData, type ExtractionResult } from './productExtraction';
 
@@ -262,10 +270,10 @@ async function findDuplicates(
   
   // UPC match
   if (extracted.upc) {
-    const { data: upcMatches } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name, attributes')
-      .filter('attributes->>upc', 'eq', extracted.upc)
+    const { data: upcMatches } = await supabaseAdmin
+      .from('canonical_products')
+      .select('id, name, upc')
+      .eq('upc', extracted.upc)
       .eq('is_active', true)
       .limit(5);
       
@@ -283,10 +291,10 @@ async function findDuplicates(
   
   // MPN match
   if (extracted.mpn) {
-    const { data: mpnMatches } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name, attributes')
-      .filter('attributes->>mpn', 'ilike', extracted.mpn)
+    const { data: mpnMatches } = await supabaseAdmin
+      .from('canonical_products')
+      .select('id, name, mpn')
+      .ilike('mpn', extracted.mpn)
       .eq('is_active', true)
       .limit(5);
       
@@ -311,8 +319,8 @@ async function findDuplicates(
   // SKU match
   if (extracted.sku || extracted.item_number) {
     const sku = extracted.sku || extracted.item_number;
-    const { data: skuMatches } = await getSupabaseCatalogos()
-      .from('products')
+    const { data: skuMatches } = await supabaseAdmin
+      .from('canonical_products')
       .select('id, name, sku')
       .ilike('sku', sku!)
       .eq('is_active', true)
@@ -344,55 +352,45 @@ async function findDuplicates(
     // Search by name similarity
     const searchTerms = extracted.title.split(/\s+/).slice(0, 5).join(' ');
     
-    const { data: nameMatches } = await getSupabaseCatalogos()
-      .from('products')
-      .select('id, name, attributes')
+    const { data: nameMatches } = await supabaseAdmin
+      .from('canonical_products')
+      .select('id, name, material, size, pack_size')
       .ilike('name', `%${searchTerms.substring(0, 30)}%`)
       .eq('is_active', true)
       .limit(10);
       
     if (nameMatches) {
       for (const match of nameMatches) {
-        const matAttrs =
-          match.attributes &&
-          typeof match.attributes === 'object' &&
-          !Array.isArray(match.attributes)
-            ? (match.attributes as Record<string, unknown>)
-            : {};
-        const mMaterial = matAttrs.material as string | undefined;
-        const mSize = matAttrs.size as string | undefined;
-        const mPack = matAttrs.pack_size as number | string | undefined;
-
         // Calculate attribute-based similarity
         let score = 0;
         const reasons: string[] = [];
         
         // Name similarity
-        const nameSimilarity = calculateNameSimilarity(extracted.title, match.name as string);
+        const nameSimilarity = calculateNameSimilarity(extracted.title, match.name);
         if (nameSimilarity >= 0.5) {
           score += nameSimilarity * 0.4;
           reasons.push(`Name ${Math.round(nameSimilarity * 100)}% similar`);
         }
         
         // Material match
-        if (extracted.material && mMaterial) {
-          if (extracted.material.toLowerCase() === mMaterial.toLowerCase()) {
+        if (extracted.material && match.material) {
+          if (extracted.material.toLowerCase() === match.material.toLowerCase()) {
             score += 0.2;
             reasons.push('Material match');
           }
         }
         
         // Size match
-        if (extracted.size && mSize) {
-          if (extracted.size.toLowerCase() === mSize.toLowerCase()) {
+        if (extracted.size && match.size) {
+          if (extracted.size.toLowerCase() === match.size.toLowerCase()) {
             score += 0.2;
             reasons.push('Size match');
           }
         }
         
         // Pack size match
-        if (extracted.pack_size != null && mPack != null) {
-          if (Number(extracted.pack_size) === Number(mPack)) {
+        if (extracted.pack_size && match.pack_size) {
+          if (extracted.pack_size === match.pack_size) {
             score += 0.2;
             reasons.push('Pack size match');
           }
@@ -472,12 +470,54 @@ export async function approveCandidate(
   const finalData = { ...extractedData, ...options.override_fields };
   
   if (options.action === 'create') {
-    return {
-      success: false,
-      action: 'created',
-      error:
-        'Creating catalog products from URL import is disabled. Use CatalogOS ingest and publish to write catalogos.products.',
-    };
+    // Create new canonical product
+    const { data: newProduct, error: createError } = await supabaseAdmin
+      .from('canonical_products')
+      .insert({
+        name: finalData.title,
+        title: finalData.title,
+        sku: finalData.sku || finalData.item_number,
+        mpn: finalData.mpn,
+        upc: finalData.upc,
+        brand: finalData.brand,
+        manufacturer: finalData.manufacturer,
+        material: finalData.material,
+        size: finalData.size,
+        color: finalData.color,
+        thickness_mil: finalData.thickness_mil,
+        units_per_box: finalData.units_per_box,
+        boxes_per_case: finalData.boxes_per_case,
+        total_units_per_case: finalData.total_units_per_case,
+        powder_free: finalData.powder_free,
+        latex_free: finalData.latex_free,
+        sterile: finalData.sterile,
+        exam_grade: finalData.exam_grade,
+        food_safe: finalData.food_safe,
+        is_active: true,
+        source_url: candidate.source_url,
+        import_confidence: candidate.overall_confidence,
+      })
+      .select()
+      .single();
+      
+    if (createError || !newProduct) {
+      return { success: false, action: 'created', error: `Failed to create product: ${createError?.message}` };
+    }
+    
+    // Update candidate status
+    await supabaseAdmin
+      .from('product_import_candidates')
+      .update({
+        status: 'approved',
+        reviewed_by: adminUserId,
+        reviewed_at: new Date().toISOString(),
+        review_notes: options.notes,
+        created_product_id: newProduct.id,
+      })
+      .eq('id', candidateId);
+      
+    return { success: true, action: 'created', product_id: newProduct.id };
+    
   } else if (options.action === 'merge' && options.merge_into_product_id) {
     // Merge into existing product (just link, don't modify existing)
     await supabaseAdmin

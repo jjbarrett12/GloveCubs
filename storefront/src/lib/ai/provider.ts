@@ -1,5 +1,4 @@
 import type { GloveProduct } from "@/lib/gloves/types";
-import type { SellableCatalogItem } from "@/lib/commerce/sellableCatalogForInvoice";
 import {
   gloveFinderResponseSchema,
   type GloveFinderRequest,
@@ -101,10 +100,13 @@ export async function aiExtractInvoice(
   }
 }
 
-function buildInvoiceSavingsMessages(lines: InvoiceLine[], catalog: SellableCatalogItem[]): ChatMessage[] {
+function buildInvoiceSavingsMessages(lines: InvoiceLine[], catalog: GloveProduct[]): ChatMessage[] {
   const catalogList = catalog
     .slice(0, 50)
-    .map((p) => `- ${p.sku} | ${p.displayName} | $${(p.listPriceCents / 100).toFixed(2)}`)
+    .map(
+      (p) =>
+        `- ${p.sku} | ${p.name} | $${(p.price_cents / 100).toFixed(2)} | ${p.material ?? ""} | ${p.glove_type}`
+    )
     .join("\n");
   const linesText = lines
     .map(
@@ -115,7 +117,7 @@ function buildInvoiceSavingsMessages(lines: InvoiceLine[], catalog: SellableCata
   return [
     {
       role: "system",
-      content: `You match invoice line items to our sellable catalog (SKU, display name, list price per unit in USD). Catalog:\n${catalogList}\n\nReturn JSON with: swaps (array of { line_index, current_description, recommended_sku, recommended_name, brand?, estimated_savings?, reason, confidence 0-1 }). Only use recommended_sku values that appear exactly in the catalog above.\n\nAggregate fields (only over lines that appear in swaps; if swaps is empty, all three must be 0):\n- total_current_estimate: for each swap, take that line's invoice total if present, else unit_price * quantity; sum these values.\n- total_recommended_estimate: for each swap, (catalog list unit price for recommended_sku) * that line's quantity; sum.\n- estimated_savings: total_current_estimate minus total_recommended_estimate.`,
+      content: `You match invoice line items to our catalog and suggest cheaper or better alternatives. Catalog (SKU, name, price, material, type):\n${catalogList}\n\nReturn JSON: total_current_estimate (sum of line totals), total_recommended_estimate (sum of your recommended prices), estimated_savings, swaps (array of { line_index, current_description, recommended_sku, recommended_name, brand?, estimated_savings?, reason, confidence 0-1 }). Only include swaps where you found a match.`,
     },
     {
       role: "user",
@@ -126,7 +128,7 @@ function buildInvoiceSavingsMessages(lines: InvoiceLine[], catalog: SellableCata
 
 export async function aiInvoiceSavings(
   lines: InvoiceLine[],
-  catalog: SellableCatalogItem[]
+  catalog: GloveProduct[]
 ): Promise<AiInvoiceSavingsResult> {
   if (PROVIDER !== "openai") return { ok: false, error: "AI_PROVIDER not supported" };
   if (!lines.length) return { ok: false, error: "No lines" };

@@ -4,8 +4,7 @@ import { aiInvoiceSavings } from "@/lib/ai/provider";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { logAiEvent } from "@/lib/ai/telemetry";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { fetchSellableCatalogForInvoice } from "@/lib/commerce/sellableCatalogForInvoice";
-import { validateInvoiceRecommendationIntegrity } from "@/lib/commerce/invoiceRecommendIntegrity";
+import { getActiveProducts } from "@/lib/gloves/queries";
 import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
 
 export const maxDuration = 30;
@@ -32,27 +31,16 @@ export async function POST(request: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Supabase not configured", code: "CATALOG_UNAVAILABLE" },
-      { status: 503 }
+      { error: "Supabase not configured" },
+      { status: 500 }
     );
   }
   const supabase = getSupabaseAdmin();
-
-  let catalog;
+  let catalog: Awaited<ReturnType<typeof getActiveProducts>> = [];
   try {
-    catalog = await fetchSellableCatalogForInvoice(supabase);
+    catalog = await getActiveProducts(supabase);
   } catch {
-    return NextResponse.json(
-      { error: "Catalog unavailable", code: "CATALOG_UNAVAILABLE" },
-      { status: 503 }
-    );
-  }
-
-  if (catalog.length === 0) {
-    return NextResponse.json(
-      { error: "Catalog unavailable", code: "CATALOG_UNAVAILABLE" },
-      { status: 503 }
-    );
+    catalog = [];
   }
 
   const start = Date.now();
@@ -70,23 +58,6 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
-
-    const integrity = validateInvoiceRecommendationIntegrity(parsed.data.lines, catalog, result.data);
-    if (!integrity.ok) {
-      await logAiEvent(supabase, {
-        event_type: "invoice_recommend",
-        model_used: OPENAI_CHAT_MODEL,
-        tokens_estimate: null,
-        success: false,
-        latency_ms: latencyMs,
-        meta: { code: integrity.code, error: integrity.error },
-      }).catch(() => {});
-      return NextResponse.json(
-        { error: integrity.error, code: integrity.code },
-        { status: 422 }
-      );
-    }
-
     await logAiEvent(supabase, {
       event_type: "invoice_recommend",
       model_used: OPENAI_CHAT_MODEL,

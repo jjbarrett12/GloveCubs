@@ -62,14 +62,13 @@ Response (200):
 }
 ```
 
-## 2. Invoice extract (upload image only)
+## 2. Invoice extract (upload image/PDF)
 
 ```bash
 curl -X POST http://localhost:3000/api/ai/invoice/extract \
   -F "file=@/path/to/invoice.png"
+# or: -F "invoice=@/path/to/invoice.pdf"
 ```
-
-`application/pdf` is rejected with a clear error until PDF support is implemented.
 
 Response (200):
 ```json
