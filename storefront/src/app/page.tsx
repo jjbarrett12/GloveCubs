@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { INDUSTRIES, INDUSTRY_KEYS } from "@/config/industries";
+import { QuickBulkBuilder } from "@/components/home/QuickBulkBuilder";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
@@ -21,14 +22,21 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
-        <div className="text-center mb-16">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight mb-4">
-            B2B Gloves & PPE by Industry
-          </h1>
-          <p className="text-xl text-white/70 max-w-2xl mx-auto">
-            Choose your industry to see tailored product collections, case pricing, and quick reorder.
-          </p>
-        </div>
+        <section className="mb-16">
+          <div className="grid gap-10 lg:grid-cols-2 lg:gap-12 lg:items-start">
+            <div className="text-center lg:text-left">
+              <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight mb-4">
+                B2B Gloves & PPE by Industry
+              </h1>
+              <p className="text-xl text-white/70 max-w-2xl mx-auto lg:mx-0">
+                Choose your industry to see tailored product collections, case pricing, and quick reorder.
+              </p>
+            </div>
+            <div className="w-full max-w-xl mx-auto lg:mx-0 lg:justify-self-end [&>div]:!mb-0">
+              <QuickBulkBuilder />
+            </div>
+          </div>
+        </section>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {INDUSTRY_KEYS.map((key) => {
