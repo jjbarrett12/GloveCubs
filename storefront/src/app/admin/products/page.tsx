@@ -88,7 +88,13 @@ async function getProducts(searchParams: {
     offerCountMap.set(pid, (offerCountMap.get(pid) || 0) + 1);
   });
 
-  const brandIds = [...new Set(products.map((p) => (p as V2ProductRow).brand_id).filter(Boolean))] as string[];
+  const brandIds = Array.from(
+    new Set(
+      products
+        .map((p) => (p as V2ProductRow).brand_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
   const brandNameById = new Map<string, string>();
   if (brandIds.length > 0) {
     const { data: brands, error: bErr } = await supabase
