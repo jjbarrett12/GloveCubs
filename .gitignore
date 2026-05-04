@@ -1,5 +1,10 @@
+# Dependencies & build output
 **/node_modules/
 **/.next/
+
+# Local tooling (git worktrees / agent paths — never commit)
+.claude/worktrees/
+
 *.db
 .env
 .env.*
