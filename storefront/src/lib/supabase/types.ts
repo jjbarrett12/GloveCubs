@@ -109,6 +109,56 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["ai_events"]["Insert"]>;
       };
+      sales_prospects: {
+        Row: {
+          id: number;
+          company_name: string;
+          contact_name: string | null;
+          email: string | null;
+          phone: string | null;
+          source: string | null;
+          status: string;
+          notes: string | null;
+          converted_company_id: number | null;
+          created_by_admin_user_id: number | null;
+          created_at: string;
+          updated_at: string;
+          last_contacted_at: string | null;
+        };
+        Insert: {
+          company_name: string;
+          contact_name?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          source?: string | null;
+          status?: string;
+          notes?: string | null;
+        };
+        Update: {
+          company_name?: string;
+          contact_name?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          source?: string | null;
+          status?: string;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      contact_messages: {
+        Row: {
+          id: number;
+          payload: Json;
+          created_at: string;
+        };
+        Insert: {
+          payload: Json;
+        };
+        Update: {
+          payload?: Json;
+        };
+        Relationships: [];
+      };
     };
   };
 }

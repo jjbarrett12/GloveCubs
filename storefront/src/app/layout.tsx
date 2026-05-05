@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "GloveCubs | B2B Gloves & PPE",
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

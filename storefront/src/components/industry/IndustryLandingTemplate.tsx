@@ -102,7 +102,8 @@ const B2B_CARDS = [
 ];
 
 export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps) {
-  const storeHref = `/store?industry=${config.key}`;
+  /** Primary storefront listing (same-origin Next route). Query filters may be added later. */
+  const storeHref = "/store";
   const industryName = config.name;
 
   return (
