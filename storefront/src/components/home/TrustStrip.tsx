@@ -7,12 +7,12 @@ const ITEMS = [
 
 export function TrustStrip() {
   return (
-    <section className="py-8">
-      <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <section className="border-y border-white/10 py-12">
+      <ul className="mx-auto grid max-w-7xl gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
         {ITEMS.map((text) => (
           <li
             key={text}
-            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/85 text-center sm:text-left"
+            className="border-l-2 border-[hsl(var(--primary))]/50 py-1 pl-4 text-sm font-medium leading-snug text-white/85"
           >
             {text}
           </li>
