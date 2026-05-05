@@ -72,12 +72,12 @@ export function SiteHeader() {
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <Link href="/" className="flex min-w-0 max-w-full items-center no-underline">
                 <Image
-                  src="/images/logo.png"
-                  alt="Glovecubs"
+                  src="/images/glovecubs-header-logo.jpg"
+                  alt="GloveCubs logo"
                   width={1024}
-                  height={132}
+                  height={410}
                   priority
-                  className="h-auto w-[104px] shrink-0 object-contain object-left sm:w-[120px] lg:w-[136px]"
+                  className="h-auto w-[148px] shrink-0 object-contain object-left sm:w-[168px] lg:w-[184px]"
                 />
               </Link>
 
