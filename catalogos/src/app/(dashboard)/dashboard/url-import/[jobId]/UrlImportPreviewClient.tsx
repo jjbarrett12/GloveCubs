@@ -211,6 +211,7 @@ export function UrlImportPreviewClient({
                 <th className="text-left p-3 font-medium">Color</th>
                 <th className="text-left p-3 font-medium">Thickness</th>
                 <th className="text-left p-3 font-medium min-w-[180px]">Key attributes</th>
+                <th className="text-left p-3 font-medium">Method</th>
                 <th className="text-left p-3 font-medium">Confidence</th>
               </tr>
             </thead>
@@ -260,6 +261,16 @@ export function UrlImportPreviewClient({
                       <span className="line-clamp-2" title={keyAttributesSummary(p)}>
                         {keyAttributesSummary(p)}
                       </span>
+                    </td>
+                    <td className="p-3 align-top text-xs">
+                      <span className="font-mono" title={p.raw_payload?.vision_extraction ? "Vision AI" : ""}>
+                        {p.extraction_method || "—"}
+                      </span>
+                      {p.ai_used ? (
+                        <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase text-muted-foreground">
+                          AI
+                        </span>
+                      ) : null}
                     </td>
                     <td className="p-3 align-top text-xs">{conf}</td>
                   </tr>

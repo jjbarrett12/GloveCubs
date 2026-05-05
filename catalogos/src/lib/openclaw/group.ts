@@ -4,8 +4,7 @@
 
 import type { ParsedProductPage } from "./types";
 import type { NormalizedFamily } from "./normalize";
-import type { VariantRow } from "./types";
-import { normalizeToOntology } from "./normalize";
+import type { VariantRow, ExtractedProductFamily } from "./types";
 import { extractFromParsedPage } from "./extract";
 
 export interface GroupedVariantInput {
@@ -13,6 +12,8 @@ export interface GroupedVariantInput {
   normalized: NormalizedFamily;
   sourceSupplier: string;
   sourceCategoryPath: string;
+  /** When set, rows reuse this extract instead of calling {@link extractFromParsedPage} again (HTML AI merge). */
+  baseExtracted?: ExtractedProductFamily;
 }
 
 function hashKey(parts: (string | number | undefined)[]): string {
@@ -26,7 +27,9 @@ function hashKey(parts: (string | number | undefined)[]): string {
  * Expand one parsed page into one or more variant rows (one per size/color/etc when present).
  */
 export function groupVariants(input: GroupedVariantInput): VariantRow[] {
-  const { parsed, normalized, sourceSupplier, sourceCategoryPath } = input;
+  const { parsed, normalized, sourceSupplier, sourceCategoryPath, baseExtracted } = input;
+  const base =
+    baseExtracted ?? extractFromParsedPage(parsed, sourceSupplier, sourceCategoryPath);
   const variantOptions = parsed.variant_options ?? [];
   const sizeOpts = variantOptions.find((o) => o.dimension === "size")?.values ?? [];
   const colorOpts = variantOptions.find((o) => o.dimension === "color")?.values ?? [];
@@ -45,7 +48,7 @@ export function groupVariants(input: GroupedVariantInput): VariantRow[] {
         family_group_key: baseKey,
         variant_group_key: hashKey([baseKey, normalized.size, normalized.color]),
         variation_dimensions: [],
-        extracted: extractFromParsedPage(parsed, sourceSupplier, sourceCategoryPath),
+        extracted: { ...base },
         variant_index: 0,
       },
     ];
@@ -55,10 +58,9 @@ export function groupVariants(input: GroupedVariantInput): VariantRow[] {
   const sizeList = sizeOpts.length ? sizeOpts : [normalized.size ?? "unknown"];
   const colorList = colorOpts.length ? colorOpts : [normalized.color ?? "unknown"];
   let idx = 0;
-  const baseExtracted = extractFromParsedPage(parsed, sourceSupplier, sourceCategoryPath);
   for (const size of sizeList) {
     for (const color of colorList) {
-      const extracted = { ...baseExtracted } as typeof baseExtracted;
+      const extracted = { ...base } as typeof base;
       if (sizeOpts.length)
         extracted.size = { raw_value: size, normalized_value: size, confidence: 0.9, extraction_method: "variant_json" as const };
       if (colorOpts.length)

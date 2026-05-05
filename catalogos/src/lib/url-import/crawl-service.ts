@@ -2,6 +2,7 @@
  * URL import: controlled crawl, extract, store pages + products, run family inference.
  */
 
+import { createHash } from "node:crypto";
 import { getSupabaseCatalogos } from "@/lib/db/client";
 import { safeFetchHtml } from "@/lib/openclaw/fetch";
 import { fetchAndParsePage } from "@/lib/openclaw/fetch-parse";
@@ -20,6 +21,15 @@ import { normalizedFamilyToParsedRow } from "./to-parsed-row";
 import { computeFamilyInference, FAMILY_GROUPING_CONFIDENCE_THRESHOLD } from "@/lib/variant-family/family-inference";
 import { URL_IMPORT_CONFIG } from "./constants";
 import { emitUrlImportEvent } from "./telemetry";
+import { shouldIngestUrlAsImage } from "./image-ingest-detect";
+import { safeFetchImage } from "./safe-fetch-image";
+import { extractProductFamilyFromVisionImage } from "./vision-product-extract";
+import { enrichHtmlProductFromPage, buildHtmlAiTrimmedContent } from "./html-product-ai-enrich";
+import {
+  mergeExtractedWithAiPatch,
+  shouldCallHtmlAi,
+  shouldSkipHtmlAiAllStrong,
+} from "./merge-extracted-with-ai";
 
 function simpleHash(str: string): string {
   let h = 0;
@@ -133,6 +143,7 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
   let productPagesDetected = 0;
   let productsExtracted = 0;
   let failedPagesCount = 0;
+  let aiExtractionsUsed = 0;
 
   const urlsToCrawl: string[] = [];
   if (j.crawl_mode === "single_product") {
@@ -204,6 +215,161 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
     const url = urlsToCrawl[i];
     await new Promise((r) => setTimeout(r, URL_IMPORT_CONFIG.delay_between_fetches_ms));
 
+    if (await shouldIngestUrlAsImage(url)) {
+      const imgFetch = await safeFetchImage(url);
+      const contentHash =
+        imgFetch.ok && imgFetch.buffer
+          ? createHash("sha256").update(imgFetch.buffer).digest("hex").slice(0, 48)
+          : null;
+      const htmlLen = imgFetch.ok && imgFetch.buffer ? imgFetch.buffer.length : 0;
+
+      const existingPage = await supabase
+        .from("url_import_pages")
+        .select("id, content_hash, status")
+        .eq("job_id", jobId)
+        .eq("url", url)
+        .maybeSingle();
+
+      let pageId: string;
+      if (existingPage.data?.id) {
+        pageId = (existingPage.data as { id: string }).id;
+        const existingHash = (existingPage.data as { content_hash?: string }).content_hash;
+        if (existingHash && contentHash === existingHash) {
+          pagesSkippedUnchanged++;
+          await supabase
+            .from("url_import_pages")
+            .update({ status: "skipped", crawled_at: new Date().toISOString() })
+            .eq("id", pageId);
+          continue;
+        }
+      } else {
+        const { data: inserted, error: insErr } = await supabase
+          .from("url_import_pages")
+          .insert({
+            job_id: jobId,
+            url,
+            page_type: "product",
+            status: "pending",
+            content_hash: contentHash,
+            raw_html_length: htmlLen,
+            discovered_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+        if (insErr) {
+          errors.push(`Page insert ${url}: ${insErr.message}`);
+          failedPagesCount++;
+          continue;
+        }
+        pageId = (inserted as { id: string }).id;
+      }
+
+      if (!imgFetch.ok || !imgFetch.buffer || !imgFetch.content_type) {
+        await supabase
+          .from("url_import_pages")
+          .update({
+            status: "failed",
+            error_message: imgFetch.error ?? "Image fetch failed",
+            crawled_at: new Date().toISOString(),
+          })
+          .eq("id", pageId);
+        failedPagesCount++;
+        continue;
+      }
+
+      const b64 = imgFetch.buffer.toString("base64");
+      const vision = await extractProductFamilyFromVisionImage({
+        sourceUrl: url,
+        imageBase64: b64,
+        mimeType: imgFetch.content_type,
+        sourceHost,
+        imageBuffer: imgFetch.buffer,
+      });
+
+      if (!vision) {
+        warnings.push(
+          "Vision extraction unavailable (configure OPENAI_API_KEY) or model failed for image URL."
+        );
+        await supabase
+          .from("url_import_pages")
+          .update({
+            status: "failed",
+            error_message: "Vision extraction failed or OPENAI_API_KEY not set",
+            crawled_at: new Date().toISOString(),
+          })
+          .eq("id", pageId);
+        failedPagesCount++;
+        continue;
+      }
+
+      const normalized = normalizeToOntology(vision.extracted);
+      const title =
+        [normalized.family_name, normalized.variant_name].find((t) => t && String(t).trim())?.trim() ||
+        "Unknown product";
+      const parsedPageLight: Record<string, unknown> = {
+        url,
+        product_title: title,
+        images: [url],
+        ...(vision.certifications.length
+          ? { spec_table: { Certifications: vision.certifications.join("; ") } }
+          : {}),
+      };
+      const parsedRow = normalizedFamilyToParsedRow(normalized, {
+        image_urls: [url],
+        parsedPage: parsedPageLight,
+      });
+      const rawPayload: Record<string, unknown> = {
+        source_url: url,
+        vision_extraction: true,
+        certifications: vision.certifications,
+      };
+
+      const extractionMethod = "vision_ai" as const;
+      const confidence = Math.min(1, Math.max(0, vision.avgConfidence));
+      const { error: prodErr } = await supabase.from("url_import_products").insert({
+        job_id: jobId,
+        page_id: pageId,
+        source_url: url,
+        raw_payload: rawPayload,
+        normalized_payload: parsedRow,
+        extraction_method: extractionMethod,
+        confidence,
+        ai_used: true,
+      });
+      if (prodErr) {
+        const msg = `Product insert: ${prodErr.message}`;
+        errors.push(msg);
+        await supabase
+          .from("url_import_pages")
+          .update({
+            status: "failed",
+            error_message: msg,
+            crawled_at: new Date().toISOString(),
+          })
+          .eq("id", pageId);
+        failedPagesCount++;
+        continue;
+      }
+
+      productsExtracted++;
+      aiExtractionsUsed++;
+
+      await supabase
+        .from("url_import_pages")
+        .update({
+          status: "crawled",
+          content_hash: contentHash,
+          raw_html_length: htmlLen,
+          extracted_snapshot: { title, image: true, vision_ai: true },
+          crawled_at: new Date().toISOString(),
+        })
+        .eq("id", pageId);
+
+      pagesCrawled++;
+      productPagesDetected++;
+      continue;
+    }
+
     const { fetched, parsed } = await fetchAndParsePage(url);
     const html = fetched.html ?? "";
     const contentHash =
@@ -265,18 +431,59 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
     }
 
     const categoryPath = "";
-    const extracted = extractFromParsedPage(parsed as ParsedProductPage, sourceHost, categoryPath);
-    const normalized = normalizeToOntology(extracted);
+    const extractedBase = extractFromParsedPage(parsed as ParsedProductPage, sourceHost, categoryPath);
+    let mergedExtracted = extractedBase;
+    let htmlAiProvenance: Record<string, unknown> | undefined;
+    let htmlAiApplied = false;
+    const hasOpenAiKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+    if (
+      hasOpenAiKey &&
+      shouldCallHtmlAi(extractedBase) &&
+      !shouldSkipHtmlAiAllStrong(extractedBase)
+    ) {
+      const pp = parsed as ParsedProductPage;
+      const aiResult = await enrichHtmlProductFromPage({
+        sourceUrl: url,
+        title: pp.product_title ?? pp.page_title ?? "",
+        description: pp.description ?? "",
+        specTable: pp.spec_table ?? {},
+        trimmedContent: buildHtmlAiTrimmedContent(pp),
+      });
+      if (aiResult) {
+        const { merged, appliedFields, provenance } = mergeExtractedWithAiPatch(
+          extractedBase,
+          aiResult.patch,
+          { model: aiResult.model }
+        );
+        if (appliedFields.length > 0) {
+          mergedExtracted = merged;
+          htmlAiApplied = true;
+          htmlAiProvenance = provenance as unknown as Record<string, unknown>;
+        }
+      }
+    }
+
+    const normalized = normalizeToOntology(mergedExtracted);
     const variantInput = {
       parsed: parsed as ParsedProductPage,
       normalized,
       sourceSupplier: sourceHost,
       sourceCategoryPath: categoryPath,
+      baseExtracted: mergedExtracted,
     };
     const variantRows = groupVariants(variantInput);
-    let confidence = 0.8;
-    const extractionMethod = "deterministic" as const;
-    const aiUsed = false;
+    const confidence = htmlAiApplied ? 0.78 : 0.8;
+    const extractionMethod = htmlAiApplied ? ("html_ai_enriched" as const) : ("deterministic" as const);
+    const aiUsed = htmlAiApplied;
+
+    const rawPayloadExtras: Record<string, unknown> = {
+      ...(Array.isArray(parsed.spec_sheet_urls) && parsed.spec_sheet_urls.length > 0
+        ? { spec_sheet_urls: parsed.spec_sheet_urls }
+        : {}),
+      ...(htmlAiApplied && htmlAiProvenance
+        ? { extraction_provenance: { html_ai: htmlAiProvenance } }
+        : {}),
+    };
 
     for (const vr of variantRows) {
       const normVariant = normalizeToOntology(vr.extracted);
@@ -286,11 +493,9 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
         parsedPage: parsed as Record<string, unknown>,
       });
       const rawPayload: Record<string, unknown> = {
-        ...extracted,
+        ...mergedExtracted,
         source_url: url,
-        ...(Array.isArray(parsed.spec_sheet_urls) && parsed.spec_sheet_urls.length > 0
-          ? { spec_sheet_urls: parsed.spec_sheet_urls }
-          : {}),
+        ...rawPayloadExtras,
       };
       const { error: prodErr } = await supabase.from("url_import_products").insert({
         job_id: jobId,
@@ -316,11 +521,9 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
         page_id: pageId,
         source_url: url,
         raw_payload: {
-          ...extracted,
+          ...mergedExtracted,
           source_url: url,
-          ...(Array.isArray(parsed.spec_sheet_urls) && parsed.spec_sheet_urls.length > 0
-            ? { spec_sheet_urls: parsed.spec_sheet_urls }
-            : {}),
+          ...rawPayloadExtras,
         },
         normalized_payload: parsedRow,
         extraction_method: extractionMethod,
@@ -330,6 +533,8 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
       if (prodErr) errors.push(`Product insert: ${prodErr.message}`);
       else productsExtracted++;
     }
+
+    if (htmlAiApplied) aiExtractionsUsed++;
 
     await supabase
       .from("url_import_pages")
@@ -385,7 +590,7 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
       pages_skipped_unchanged: pagesSkippedUnchanged,
       product_pages_detected: productPagesDetected,
       products_extracted: productsExtracted,
-      ai_extractions_used: 0,
+      ai_extractions_used: aiExtractionsUsed,
       family_groups_inferred: familyKeys.size,
       variants_inferred: variantsInferred,
       failed_pages_count: failedPagesCount,

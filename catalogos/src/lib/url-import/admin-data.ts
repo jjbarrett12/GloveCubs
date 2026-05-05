@@ -54,6 +54,7 @@ export interface UrlImportPageRow {
 export interface UrlImportProductRow {
   id: string;
   source_url: string;
+  raw_payload: Record<string, unknown> | null;
   normalized_payload: Record<string, unknown>;
   extraction_method: string;
   confidence: number;
@@ -88,7 +89,9 @@ export async function getUrlImportJobDetail(jobId: string): Promise<UrlImportJob
     .order("discovered_at", { ascending: true });
   const { data: products } = await supabase
     .from("url_import_products")
-    .select("id, source_url, normalized_payload, extraction_method, confidence, ai_used, inferred_base_sku, inferred_size, family_group_key, grouping_confidence")
+    .select(
+      "id, source_url, raw_payload, normalized_payload, extraction_method, confidence, ai_used, inferred_base_sku, inferred_size, family_group_key, grouping_confidence"
+    )
     .eq("job_id", jobId);
 
   const productList = (products ?? []) as UrlImportProductRow[];

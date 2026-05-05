@@ -1,0 +1,50 @@
+/**
+ * Mirrors public/js/app.js — HOME_BRAND_LIST and logo path resolution for homepage carousel + footer tiles.
+ */
+
+export const HOME_BRAND_LIST = [
+  "Hospeco",
+  "Global Glove",
+  "Safeko",
+  "PIP",
+  "Ansell",
+  "SHOWA",
+  "Growl Gloves",
+  "Semper Guard",
+  "Ammex",
+  "Tradex",
+] as const;
+
+const BRAND_TO_LOGO_SLUG: Record<string, string> = {
+  Hospeco: "hospeco",
+  "Global Glove": "global-glove",
+  Safeko: "safeko",
+  PIP: "pip",
+  Ansell: "ansell",
+  SHOWA: "showa",
+  "Growl Gloves": "growl-gloves",
+  "Semper Guard": "semper-guard",
+  Ammex: "ammex",
+  Tradex: "tradex",
+};
+
+const BRAND_LOGO_FILENAME: Record<string, string> = {
+  Hospeco: "Hospeco.jpg",
+  "Global Glove": "Global_Glove.png",
+  Safeko: "Safeko.png",
+  PIP: "pip-global-safety-logo.png",
+  "Growl Gloves": "Growl Gloves.webp",
+  Ansell: "Ansell.png",
+  SHOWA: "SHOWA.png",
+  "Semper Guard": "Semper.png",
+  Ammex: "Ammex.png",
+  Tradex: "Tradex.png",
+};
+
+export function getBrandLogoPath(brand: string): string | null {
+  if (!brand) return null;
+  const exact = BRAND_LOGO_FILENAME[brand];
+  if (exact) return `/images/logos/${exact}`;
+  const slug = BRAND_TO_LOGO_SLUG[brand];
+  return slug ? `/images/logos/${slug}.svg` : null;
+}
