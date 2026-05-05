@@ -1,5 +1,27 @@
 /**
- * Exact Google Maps embed src from public/js/app.js renderHomePage() (homepage map section).
+ * Homepage map embed (Salt Lake City HQ area).
+ *
+ * Default uses Google Maps `output=embed` (no Maps JavaScript API key required).
+ * Override with NEXT_PUBLIC_HOME_MAP_EMBED_URL (full iframe src URL).
+ * Set NEXT_PUBLIC_HOME_MAP_DISABLED=true to show static fallback instead of iframe.
  */
-export const EXPRESS_HOME_MAP_IFRAME_SRC =
-  "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12190.481301693!2d-111.89104748459382!3d40.76077997932681!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8752f5105c4b0b0b%3A0x5c5c5c5c5c5c5c5c!2sSalt%20Lake%20City%2C%20UT%2C%20USA!5e0!3m2!1sen!2sus!4v1706123456789!5m2!1sen!2sus";
+
+/** SLC area — coordinates embed; replace if your HQ pin differs. */
+const DEFAULT_MAPS_EMBED_SRC =
+  "https://maps.google.com/maps?q=40.760779,-111.891048&z=11&hl=en&ie=UTF8&output=embed";
+
+export function isHomeMapEmbedDisabled(): boolean {
+  const v = process.env.NEXT_PUBLIC_HOME_MAP_DISABLED?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+/** Iframe `src` for the homepage service-area map (empty when embed is disabled). */
+export function getHomeMapEmbedSrc(): string {
+  if (isHomeMapEmbedDisabled()) return "";
+  const custom = process.env.NEXT_PUBLIC_HOME_MAP_EMBED_URL?.trim();
+  if (custom && custom !== "false") return custom;
+  return DEFAULT_MAPS_EMBED_SRC;
+}
+
+/** @deprecated use getHomeMapEmbedSrc() */
+export const EXPRESS_HOME_MAP_IFRAME_SRC = DEFAULT_MAPS_EMBED_SRC;

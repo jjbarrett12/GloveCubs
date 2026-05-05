@@ -14,9 +14,9 @@ export function HomeHeroExpress() {
       <div className="relative z-[1] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#FF7A00] to-[#ff9433] px-5 py-2 text-sm font-semibold text-white shadow-md shadow-[#FF7A00]/25">
-              <Star className="h-4 w-4" aria-hidden />
-              1,000+ SKUs Available
+            <div className="relative mb-7 -translate-y-0.5 inline-flex items-center gap-2.5 rounded-2xl border border-[#ff9433]/35 bg-gradient-to-br from-[#1a0a00] via-[#2d1400] to-[#1f0f00] px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow-[0_20px_44px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,122,0,0.22),0_0_56px_rgba(255,122,0,0.2)] ring-1 ring-[#FF7A00]/25 before:pointer-events-none before:absolute before:inset-0 before:rounded-2xl before:bg-gradient-to-t before:from-transparent before:to-white/[0.07]">
+              <Star className="relative z-[1] h-4 w-4 text-[#ffb36a]" aria-hidden />
+              <span className="relative z-[1] text-[15px] text-white drop-shadow-sm">1,000+ SKUs Available</span>
             </div>
             <h1 className="mb-5 text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-[56px] lg:leading-[1.08]">
               Built for Operators Who Buy by the Case

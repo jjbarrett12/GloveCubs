@@ -23,6 +23,12 @@ const INQUIRY_OPTIONS = [
 const USAGE_OPTIONS = [
   { value: "under_1_case", label: "Under 1 case" },
   { value: "cases_1_5", label: "1–5 cases" },
+  { value: "cases_6_10", label: "6–10 cases" },
+  { value: "cases_11_25", label: "11–25 cases" },
+  { value: "cases_26_50", label: "26–50 cases" },
+  { value: "cases_51_100", label: "51–100 cases" },
+  { value: "cases_100_plus", label: "100+ cases" },
+  /** Legacy homepage query values */
   { value: "cases_6_20", label: "6–20 cases" },
   { value: "cases_21_plus", label: "21+ cases" },
   { value: "not_sure", label: "Not sure" },
@@ -53,7 +59,8 @@ function mapApiValidationToFieldErrors(details: {
 function RequestPricingFormInner() {
   const searchParams = useSearchParams();
   const submitLockRef = React.useRef(false);
-  const hydratedFromBuilderRef = React.useRef(false);
+  /** Avoid duplicate hydration under React Strict Mode (remount + same query). */
+  const appliedQueryRef = React.useRef<string | null>(null);
 
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
@@ -74,14 +81,14 @@ function RequestPricingFormInner() {
   const [success, setSuccess] = React.useState(false);
 
   React.useEffect(() => {
-    if (hydratedFromBuilderRef.current) return;
-
     const industry = searchParams.get("industry");
     const type = searchParams.get("type");
     const material = searchParams.get("material");
     const size = searchParams.get("size");
     const volume = searchParams.get("volume");
     const source = searchParams.get("source");
+    const caseRange = searchParams.get("case_range");
+    const product = searchParams.get("product");
 
     const hasBuilderParams =
       source === "homepage_bulk_builder" ||
@@ -89,29 +96,44 @@ function RequestPricingFormInner() {
       type != null ||
       material != null ||
       size != null ||
-      volume != null;
+      volume != null ||
+      caseRange != null ||
+      product != null;
 
     if (!hasBuilderParams) return;
+
+    const qs = searchParams.toString();
+    if (appliedQueryRef.current === qs) return;
+    appliedQueryRef.current = qs;
 
     const industryLabel =
       industry && industry in INDUSTRIES ? INDUSTRIES[industry as IndustryKey].name : industry ?? "—";
 
+    const volumeLine =
+      volume === "cases_100_plus" || caseRange === "100_plus"
+        ? "100+ cases / mo (large volume — quote with rep; no self-serve checkout)"
+        : (volume ?? "—");
+
     const block = `Bulk Order Request:
 Industry: ${industryLabel}
-Type: ${type ?? "—"}
+Type (glove / use): ${type ?? "—"}
 Material: ${material ?? "—"}
 Size: ${size ?? "—"}
-Monthly Volume: ${volume ?? "—"}`;
+Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${product}` : ""}`;
 
-    setMessage((prev) => (prev.trim() ? `${prev.trim()}\n\n${block}` : block));
+    setMessage(block);
     setInquiryType("bulk_order");
 
     const vol = searchParams.get("volume");
     if (vol && USAGE_OPTIONS.some((o) => o.value === vol)) {
       setEstimatedMonthlyUsage(vol as (typeof USAGE_OPTIONS)[number]["value"]);
+    } else if (caseRange === "100_plus") {
+      setEstimatedMonthlyUsage("cases_100_plus");
     }
 
-    hydratedFromBuilderRef.current = true;
+    return () => {
+      appliedQueryRef.current = null;
+    };
   }, [searchParams]);
 
   async function onSubmit(e: React.FormEvent) {

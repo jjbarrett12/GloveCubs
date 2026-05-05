@@ -31,11 +31,13 @@ export function SiteFooter() {
         <div className="grid grid-cols-1 gap-10 border-b border-white/10 pb-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] lg:gap-x-12 lg:gap-y-8">
           <div>
             <div className="mb-[18px]">
-              <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-90">
+              <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-95">
                 <img
                   src="/images/logo.png"
                   alt="Glovecubs"
-                  className="block h-20 w-auto max-w-[280px] object-contain object-left"
+                  width={220}
+                  height={72}
+                  className="block h-16 w-auto max-h-16 max-w-[220px] object-contain object-left brightness-0 invert contrast-[1.08] filter"
                 />
                 <span className="sr-only">Home</span>
               </Link>

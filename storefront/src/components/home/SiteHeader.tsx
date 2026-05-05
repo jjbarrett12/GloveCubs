@@ -37,8 +37,8 @@ export function SiteHeader() {
   return (
     <>
       {/* Utility bar — public/index.html */}
-      <div className="border-b border-white/10 bg-[#141414] py-2.5 text-[13px] font-medium leading-none text-white/90 sm:py-3">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="overflow-x-hidden border-b border-white/10 bg-[#141414] py-2.5 text-[13px] font-medium leading-none text-white/90 sm:py-3">
+        <div className="mx-auto flex min-w-0 max-w-7xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 sm:px-6 lg:px-8">
           <div className="hidden flex-wrap items-center gap-3.5 tracking-wide sm:flex">
             <span>Distributor pricing</span>
             <span className="text-white/40">•</span>
@@ -65,15 +65,17 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-[1000] border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link href="/" className="flex items-center gap-3 no-underline">
+      <header className="sticky top-0 z-[1000] overflow-x-hidden border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
+        <div className="mx-auto max-w-7xl min-w-0 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <Link href="/" className="flex min-w-0 max-w-full items-center gap-2.5 no-underline sm:gap-3">
                 <img
                   src="/images/logo.png"
                   alt="Glovecubs"
-                  className="h-10 max-h-[44px] w-auto max-w-[min(100%,240px)] object-contain object-left transition-transform hover:scale-[1.02] sm:max-w-[300px] sm:h-11"
+                  width={200}
+                  height={40}
+                  className="h-9 w-auto max-h-9 shrink-0 object-contain object-left sm:h-10 sm:max-h-10"
                 />
                 <span className="hidden items-center gap-1.5 rounded-xl bg-[#FF7A00] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white shadow-md sm:inline-flex">
                   <span aria-hidden>✓</span> Authorized Distributor
@@ -100,10 +102,10 @@ export function SiteHeader() {
               </div>
             </div>
 
-            <div className="flex w-full flex-wrap items-center justify-end gap-4 lg:gap-6">
+            <div className="flex min-w-0 w-full flex-wrap items-center justify-end gap-3 sm:gap-4 lg:gap-6">
               <form
                 onSubmit={onSearch}
-                className="order-3 flex min-w-[200px] flex-1 items-center overflow-hidden rounded-lg border-2 border-[#FF7A00] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,122,0,0.2)] lg:order-none lg:max-w-[420px]"
+                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#FF7A00] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,122,0,0.2)] lg:order-none lg:max-w-[420px]"
               >
                 <input
                   value={q}
@@ -147,8 +149,10 @@ export function SiteHeader() {
 
           {/* Secondary nav — public/index.html */}
           <div
-            className={`mt-3 max-h-[calc(100vh-100px)] overflow-y-auto border-t border-neutral-200/90 pt-3 text-center lg:block ${
-              mobileOpen ? "max-lg:block" : "max-lg:hidden"
+            className={`mt-3 border-t border-neutral-200/90 pt-3 text-center lg:block lg:overflow-visible ${
+              mobileOpen
+                ? "max-lg:block max-lg:max-h-[min(70vh,calc(100dvh-9rem))] max-lg:overflow-y-auto max-lg:overflow-x-hidden max-lg:overscroll-y-contain"
+                : "max-lg:hidden max-lg:overflow-hidden"
             }`}
           >
             <nav aria-label="Primary">

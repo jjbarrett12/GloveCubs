@@ -34,12 +34,33 @@ const SIZES = [
 const VOLUMES = [
   { value: "under_1_case", label: "Under 1 case / mo" },
   { value: "cases_1_5", label: "1–5 cases / mo" },
-  { value: "cases_6_20", label: "6–20 cases / mo" },
-  { value: "cases_21_plus", label: "21+ cases / mo" },
+  { value: "cases_6_10", label: "6–10 cases / mo" },
+  { value: "cases_11_25", label: "11–25 cases / mo" },
+  { value: "cases_26_50", label: "26–50 cases / mo" },
+  { value: "cases_51_100", label: "51–100 cases / mo" },
+  { value: "cases_100_plus", label: "100+ cases / mo" },
 ] as const;
 
 const inputClass =
   "flex min-h-12 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-base text-white placeholder:text-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]/40 focus-visible:border-white/30";
+
+function buildRequestPricingParams(args: {
+  industry: IndustryKey | "";
+  gloveType: (typeof GLOVE_TYPES)[number]["value"] | "";
+  material: (typeof MATERIALS)[number]["value"] | "";
+  size: (typeof SIZES)[number]["value"] | "";
+  volume: (typeof VOLUMES)[number]["value"] | "";
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (args.industry) params.set("industry", args.industry);
+  if (args.gloveType) params.set("type", args.gloveType);
+  if (args.material) params.set("material", args.material);
+  if (args.size) params.set("size", args.size);
+  if (args.volume) params.set("volume", args.volume);
+  if (args.volume === "cases_100_plus") params.set("case_range", "100_plus");
+  params.set("source", "homepage_bulk_builder");
+  return params;
+}
 
 export function QuickBulkBuilder() {
   const router = useRouter();
@@ -49,21 +70,42 @@ export function QuickBulkBuilder() {
   const [size, setSize] = React.useState<(typeof SIZES)[number]["value"] | "">("");
   const [volume, setVolume] = React.useState<(typeof VOLUMES)[number]["value"] | "">("");
 
+  function routeToLargeVolumeInquiry(nextVolume: (typeof VOLUMES)[number]["value"]) {
+    const params = buildRequestPricingParams({
+      industry,
+      gloveType,
+      material,
+      size,
+      volume: nextVolume,
+    });
+    router.push(`/request-pricing?${params.toString()}`);
+  }
+
+  function onVolumeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const val = e.target.value as (typeof VOLUMES)[number]["value"] | "";
+    setVolume(val);
+    if (val === "cases_100_plus") {
+      routeToLargeVolumeInquiry("cases_100_plus");
+    }
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const params = new URLSearchParams();
-    if (industry) params.set("industry", industry);
-    if (gloveType) params.set("type", gloveType);
-    if (material) params.set("material", material);
-    if (size) params.set("size", size);
-    if (volume) params.set("volume", volume);
-    params.set("source", "homepage_bulk_builder");
+    if (volume === "cases_100_plus") {
+      routeToLargeVolumeInquiry("cases_100_plus");
+      return;
+    }
+    const params = buildRequestPricingParams({ industry, gloveType, material, size, volume });
     router.push(`/request-pricing?${params.toString()}`);
   }
 
   return (
     <div id="bulk-order" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-      <h2 className="text-lg font-semibold text-white mb-4">Build your bulk order</h2>
+      <h2 className="mb-4 text-lg font-semibold text-white">Build your bulk order</h2>
+      <p className="mb-4 text-sm text-white/65">
+        Quote-first B2B — no checkout. For <span className="font-semibold text-white/90">100+ cases / mo</span> we
+        route you straight to an inquiry so a rep can scope pricing and fulfillment.
+      </p>
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="qb-industry" className="text-sm font-medium text-white/90">
@@ -105,7 +147,7 @@ export function QuickBulkBuilder() {
             ))}
           </select>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label htmlFor="qb-material" className="text-sm font-medium text-white/90">
               Material
@@ -151,12 +193,7 @@ export function QuickBulkBuilder() {
           <label htmlFor="qb-volume" className="text-sm font-medium text-white/90">
             Monthly case volume
           </label>
-          <select
-            id="qb-volume"
-            className={inputClass}
-            value={volume}
-            onChange={(e) => setVolume(e.target.value as (typeof VOLUMES)[number]["value"] | "")}
-          >
+          <select id="qb-volume" className={inputClass} value={volume} onChange={onVolumeChange}>
             <option value="" className="bg-neutral-900">
               Select volume
             </option>
@@ -170,7 +207,7 @@ export function QuickBulkBuilder() {
         <Button
           type="submit"
           size="lg"
-          className="w-full bg-[hsl(var(--primary))] text-white hover:opacity-90 text-base min-h-12"
+          className="min-h-12 w-full bg-[hsl(var(--primary))] text-base text-white hover:opacity-90"
         >
           Get bulk pricing
         </Button>
