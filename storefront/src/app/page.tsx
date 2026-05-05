@@ -13,6 +13,7 @@ import { ServiceAreaPanel } from "@/components/home/ServiceAreaPanel";
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#0a0a0a] font-poppins">
+      {/* Header uses full wordmark PNG in SiteHeader (next/image, /images/logo.png). */}
       <SiteHeader />
       <HomeHeroExpress />
       <HomeTrustLine />

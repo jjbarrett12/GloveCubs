@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Facebook, Twitter, Linkedin, Instagram, Phone, Mail, MapPin, Clock } from "lucide-react";
 import {
@@ -32,12 +33,12 @@ export function SiteFooter() {
           <div>
             <div className="mb-[18px]">
               <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-95">
-                <img
+                <Image
                   src="/images/logo.png"
                   alt="Glovecubs"
-                  width={220}
-                  height={72}
-                  className="block h-16 w-auto max-h-16 max-w-[220px] object-contain object-left brightness-0 invert contrast-[1.08] filter"
+                  width={1024}
+                  height={132}
+                  className="block h-auto w-[140px] max-w-full object-contain object-left brightness-0 invert contrast-[1.08] filter sm:w-[168px]"
                 />
                 <span className="sr-only">Home</span>
               </Link>

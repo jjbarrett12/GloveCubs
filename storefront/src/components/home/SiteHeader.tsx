@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -69,17 +70,15 @@ export function SiteHeader() {
         <div className="mx-auto max-w-7xl min-w-0 px-4 py-3 sm:px-6 lg:px-8">
           <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-              <Link href="/" className="flex min-w-0 max-w-full items-center gap-2.5 no-underline sm:gap-3">
-                <img
+              <Link href="/" className="flex min-w-0 max-w-full items-center no-underline">
+                <Image
                   src="/images/logo.png"
                   alt="Glovecubs"
-                  width={200}
-                  height={40}
-                  className="h-9 w-auto max-h-9 shrink-0 object-contain object-left sm:h-10 sm:max-h-10"
+                  width={1024}
+                  height={132}
+                  priority
+                  className="h-auto w-[104px] shrink-0 object-contain object-left sm:w-[120px] lg:w-[136px]"
                 />
-                <span className="hidden items-center gap-1.5 rounded-xl bg-[#FF7A00] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white shadow-md sm:inline-flex">
-                  <span aria-hidden>✓</span> Authorized Distributor
-                </span>
               </Link>
 
               <div className="flex items-center gap-4 lg:hidden">
