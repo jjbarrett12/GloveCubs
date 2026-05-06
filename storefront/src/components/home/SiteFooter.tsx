@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Facebook, Twitter, Linkedin, Instagram, Phone, Mail, MapPin, Clock } from "lucide-react";
 import {
@@ -8,7 +9,6 @@ import {
   FOOTER_TOP_BRANDS,
 } from "@/config/footerLinks";
 import { getBrandLogoPath } from "@/config/homeBrands";
-import { GloveCubsWordmark } from "@/components/home/GloveCubsWordmark";
 
 const iconForSocial = (label: string) => {
   switch (label) {
@@ -33,8 +33,14 @@ export function SiteFooter() {
           <div>
             <div className="mb-[18px]">
               <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-95">
-                <span className="sr-only">GloveCubs home</span>
-                <GloveCubsWordmark variant="footer" className="max-w-full" />
+                <Image
+                  src="/images/logo.png"
+                  alt="Glovecubs"
+                  width={1024}
+                  height={132}
+                  className="block h-auto w-[140px] max-w-full object-contain object-left brightness-0 invert contrast-[1.08] filter sm:w-[168px]"
+                />
+                <span className="sr-only">Home</span>
               </Link>
             </div>
             <p className="mb-3 max-w-md text-sm leading-relaxed text-white/75">{FOOTER_TAGLINE}</p>

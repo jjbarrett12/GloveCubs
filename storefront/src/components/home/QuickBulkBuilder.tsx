@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { INDUSTRIES, INDUSTRY_KEYS, type IndustryKey } from "@/config/industries";
 
-/** Shared with homepage procurement builder — keep values in sync. */
-export const HOME_BULK_GLOVE_TYPES = [
+const GLOVE_TYPES = [
   { value: "exam_disposable", label: "Exam / disposable" },
   { value: "industrial", label: "Industrial / mechanical" },
   { value: "food_service", label: "Food service" },
@@ -14,7 +13,7 @@ export const HOME_BULK_GLOVE_TYPES = [
   { value: "unsure", label: "Not sure — help me choose" },
 ] as const;
 
-export const HOME_BULK_MATERIALS = [
+const MATERIALS = [
   { value: "nitrile", label: "Nitrile" },
   { value: "latex", label: "Latex" },
   { value: "vinyl", label: "Vinyl" },
@@ -22,7 +21,7 @@ export const HOME_BULK_MATERIALS = [
   { value: "blend", label: "Blend / specialty" },
 ] as const;
 
-export const HOME_BULK_SIZES = [
+const SIZES = [
   { value: "xs", label: "XS" },
   { value: "s", label: "S" },
   { value: "m", label: "M" },
@@ -32,7 +31,7 @@ export const HOME_BULK_SIZES = [
   { value: "mixed", label: "Mixed sizes" },
 ] as const;
 
-export const HOME_BULK_VOLUMES = [
+const VOLUMES = [
   { value: "under_1_case", label: "Under 1 case / mo" },
   { value: "cases_1_5", label: "1–5 cases / mo" },
   { value: "cases_6_10", label: "6–10 cases / mo" },
@@ -47,10 +46,10 @@ const inputClass =
 
 function buildRequestPricingParams(args: {
   industry: IndustryKey | "";
-  gloveType: (typeof HOME_BULK_GLOVE_TYPES)[number]["value"] | "";
-  material: (typeof HOME_BULK_MATERIALS)[number]["value"] | "";
-  size: (typeof HOME_BULK_SIZES)[number]["value"] | "";
-  volume: (typeof HOME_BULK_VOLUMES)[number]["value"] | "";
+  gloveType: (typeof GLOVE_TYPES)[number]["value"] | "";
+  material: (typeof MATERIALS)[number]["value"] | "";
+  size: (typeof SIZES)[number]["value"] | "";
+  volume: (typeof VOLUMES)[number]["value"] | "";
 }): URLSearchParams {
   const params = new URLSearchParams();
   if (args.industry) params.set("industry", args.industry);
@@ -66,12 +65,12 @@ function buildRequestPricingParams(args: {
 export function QuickBulkBuilder() {
   const router = useRouter();
   const [industry, setIndustry] = React.useState<IndustryKey | "">("");
-  const [gloveType, setGloveType] = React.useState<(typeof HOME_BULK_GLOVE_TYPES)[number]["value"] | "">("");
-  const [material, setMaterial] = React.useState<(typeof HOME_BULK_MATERIALS)[number]["value"] | "">("");
-  const [size, setSize] = React.useState<(typeof HOME_BULK_SIZES)[number]["value"] | "">("");
-  const [volume, setVolume] = React.useState<(typeof HOME_BULK_VOLUMES)[number]["value"] | "">("");
+  const [gloveType, setGloveType] = React.useState<(typeof GLOVE_TYPES)[number]["value"] | "">("");
+  const [material, setMaterial] = React.useState<(typeof MATERIALS)[number]["value"] | "">("");
+  const [size, setSize] = React.useState<(typeof SIZES)[number]["value"] | "">("");
+  const [volume, setVolume] = React.useState<(typeof VOLUMES)[number]["value"] | "">("");
 
-  function routeToLargeVolumeInquiry(nextVolume: (typeof HOME_BULK_VOLUMES)[number]["value"]) {
+  function routeToLargeVolumeInquiry(nextVolume: (typeof VOLUMES)[number]["value"]) {
     const params = buildRequestPricingParams({
       industry,
       gloveType,
@@ -83,7 +82,7 @@ export function QuickBulkBuilder() {
   }
 
   function onVolumeChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const val = e.target.value as (typeof HOME_BULK_VOLUMES)[number]["value"] | "";
+    const val = e.target.value as (typeof VOLUMES)[number]["value"] | "";
     setVolume(val);
     if (val === "cases_100_plus") {
       routeToLargeVolumeInquiry("cases_100_plus");
@@ -136,12 +135,12 @@ export function QuickBulkBuilder() {
             id="qb-type"
             className={inputClass}
             value={gloveType}
-            onChange={(e) => setGloveType(e.target.value as (typeof HOME_BULK_GLOVE_TYPES)[number]["value"] | "")}
+            onChange={(e) => setGloveType(e.target.value as (typeof GLOVE_TYPES)[number]["value"] | "")}
           >
             <option value="" className="bg-neutral-900">
               Select type
             </option>
-            {HOME_BULK_GLOVE_TYPES.map((o) => (
+            {GLOVE_TYPES.map((o) => (
               <option key={o.value} value={o.value} className="bg-neutral-900">
                 {o.label}
               </option>
@@ -157,12 +156,12 @@ export function QuickBulkBuilder() {
               id="qb-material"
               className={inputClass}
               value={material}
-              onChange={(e) => setMaterial(e.target.value as (typeof HOME_BULK_MATERIALS)[number]["value"] | "")}
+              onChange={(e) => setMaterial(e.target.value as (typeof MATERIALS)[number]["value"] | "")}
             >
               <option value="" className="bg-neutral-900">
                 Select material
               </option>
-              {HOME_BULK_MATERIALS.map((o) => (
+              {MATERIALS.map((o) => (
                 <option key={o.value} value={o.value} className="bg-neutral-900">
                   {o.label}
                 </option>
@@ -177,12 +176,12 @@ export function QuickBulkBuilder() {
               id="qb-size"
               className={inputClass}
               value={size}
-              onChange={(e) => setSize(e.target.value as (typeof HOME_BULK_SIZES)[number]["value"] | "")}
+              onChange={(e) => setSize(e.target.value as (typeof SIZES)[number]["value"] | "")}
             >
               <option value="" className="bg-neutral-900">
                 Select size
               </option>
-              {HOME_BULK_SIZES.map((o) => (
+              {SIZES.map((o) => (
                 <option key={o.value} value={o.value} className="bg-neutral-900">
                   {o.label}
                 </option>
@@ -198,7 +197,7 @@ export function QuickBulkBuilder() {
             <option value="" className="bg-neutral-900">
               Select volume
             </option>
-            {HOME_BULK_VOLUMES.map((o) => (
+            {VOLUMES.map((o) => (
               <option key={o.value} value={o.value} className="bg-neutral-900">
                 {o.label}
               </option>

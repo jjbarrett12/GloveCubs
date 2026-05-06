@@ -1,72 +1,105 @@
 import Link from "next/link";
-import { Tag, FileText, Truck } from "lucide-react";
-import { HomeSmartProcurementBuilder } from "@/components/home/HomeSmartProcurementBuilder";
-
-const trustItems = [
-  "Distributor pricing",
-  "Net terms available",
-  "Case & pallet orders",
-  "Dedicated rep support",
-  "Fast fulfillment",
-] as const;
+import { Star, Tag, Bot, Bolt, Headphones, FileText, Boxes, UserRound, LineChart } from "lucide-react";
+import { QuickBulkBuilder } from "@/components/home/QuickBulkBuilder";
 
 export function HomeHeroExpress() {
   return (
     <section
-      className="relative overflow-hidden bg-gradient-to-b from-[#111111] via-[#161616] to-[#0d0d0d] px-0 pb-14 pt-8 sm:pb-16 sm:pt-10 lg:pb-20 lg:pt-12"
+      className="relative overflow-hidden bg-gradient-to-b from-[#111111] via-[#1a1a1a] to-[#0d1117] px-0 pb-20 pt-10 sm:pb-24 sm:pt-12 lg:pb-28 lg:pt-14"
       aria-label="Hero"
     >
-      <div className="pointer-events-none absolute -right-24 -top-24 h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle,rgba(255,122,0,0.08)_0%,transparent_70%)]" />
-      <div className="pointer-events-none absolute -bottom-32 -left-32 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(255,122,0,0.04)_0%,transparent_72%)]" />
+      <div className="pointer-events-none absolute -right-24 -top-24 h-[400px] w-[400px] rounded-full bg-[radial-gradient(circle,rgba(255,122,0,0.09)_0%,transparent_72%)]" />
+      <div className="pointer-events-none absolute -bottom-36 -left-36 h-[500px] w-[500px] rounded-full bg-[radial-gradient(circle,rgba(255,122,0,0.05)_0%,transparent_72%)]" />
 
       <div className="relative z-[1] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-12 xl:gap-14">
-          <div className="min-w-0">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/75">
-              <Truck className="h-3.5 w-3.5 text-[#FF7A00]" aria-hidden />
-              Quote-first procurement
-            </p>
-            <h1 className="mb-3 text-3xl font-black leading-[1.12] tracking-tight text-white sm:text-4xl lg:text-[2.5rem] xl:text-[2.75rem]">
-              Built for Teams That Buy Gloves by the Case
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <div>
+            <div
+              className="animate-hero-sku-alert-bob mb-7 inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#FF7A00] to-[#ff9433] px-5 py-2 text-sm font-bold tracking-wide text-white shadow-md shadow-[#FF7A00]/35 ring-1 ring-white/25"
+              role="status"
+              aria-live="polite"
+            >
+              <Star className="h-4 w-4 shrink-0 text-white" aria-hidden />
+              <span>1,000+ SKUs Available</span>
+            </div>
+            <h1 className="mb-5 text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-[56px] lg:leading-[1.08]">
+              Built for Operators Who Buy by the Case
             </h1>
-            <p className="mb-5 max-w-xl text-sm leading-relaxed text-white/75 sm:text-[15px] lg:max-w-none lg:text-base">
-              Restaurants, janitorial companies, healthcare teams, hospitality groups and industrial operators use GloveCubs
-              to simplify purchasing, source by the case and request quote-first pricing from real reps.
+            <p className="mb-7 text-lg font-normal leading-relaxed text-white/90 sm:text-xl">
+              Distributor-level pricing. No contracts. No games.
             </p>
-
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mb-6 flex flex-wrap gap-4">
               <Link
                 href="/request-pricing"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#FF7A00] to-[#e86800] px-6 text-sm font-bold text-white shadow-[0_6px_20px_rgba(255,122,0,0.3)] transition hover:opacity-[0.97] sm:w-auto sm:min-w-[200px]"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#FF7A00] to-[#ff9433] px-8 py-4 text-base font-bold text-white shadow-[0_8px_24px_rgba(255,122,0,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(255,122,0,0.42)]"
               >
-                <Tag className="h-4 w-4 shrink-0" aria-hidden />
-                Request Bulk Pricing
+                <Tag className="h-4 w-4" />
+                Get Distributor Pricing
               </Link>
               <Link
-                href="/invoice-savings"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border-2 border-white/20 bg-white/[0.04] px-6 text-sm font-semibold text-white transition hover:border-[#FF7A00]/50 hover:bg-white/[0.07] sm:w-auto sm:min-w-[200px]"
+                href="/glove-finder"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-[#FF7A00]/75 bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-[#ffb27a] backdrop-blur-[2px] transition hover:-translate-y-0.5 hover:border-[#FF7A00] hover:bg-white/[0.07] hover:text-[#FF7A00] hover:shadow-md"
               >
-                <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                Upload Invoice
+                <Bot className="h-4 w-4 opacity-90" />
+                Try AI Glove Finder
               </Link>
             </div>
-
-            <p className="mb-6 border-l-2 border-[#FF7A00]/50 pl-3 text-[13px] font-medium leading-relaxed text-white/85">
-              {trustItems.join(" · ")}
-            </p>
-            <p className="text-xs text-white/45">
-              <Link href="/#procurement-builder" className="text-[#FF7A00] hover:underline">
-                Start with the procurement builder
+            <div className="mb-8 flex flex-wrap gap-8 text-[15px]">
+              <Link href="/request-pricing" className="flex items-center gap-2 font-semibold text-[#FF7A00] hover:translate-x-1">
+                <Bolt className="h-3.5 w-3.5" />
+                Request an RFQ in 60 seconds →
               </Link>
-              {" · "}
-              <Link href="/store" className="hover:text-white/70">
-                Browse catalog
+              <Link href="/contact" className="flex items-center gap-2 font-medium text-white/70 hover:text-[#FF7A00]">
+                <Headphones className="h-3.5 w-3.5" />
+                Talk to a glove specialist →
               </Link>
-            </p>
+              <Link href="/#bulk-order" className="flex items-center gap-2 font-medium text-white/70 hover:text-[#FF7A00]">
+                <Boxes className="h-3.5 w-3.5" />
+                Start bulk order →
+              </Link>
+            </div>
+            <div className="max-w-[500px] rounded-2xl border-2 border-[#FF7A00]/35 bg-white p-6 shadow-md">
+              <div className="grid grid-cols-3 gap-5 text-center text-sm">
+                <div className="rounded-lg p-3.5 transition hover:bg-[#FF7A00]/10">
+                  <FileText className="mx-auto mb-2 h-6 w-6 text-[#FF7A00]" />
+                  <div className="font-semibold text-neutral-900">Net Terms</div>
+                  <div className="text-neutral-600">Approved accounts</div>
+                </div>
+                <div className="rounded-lg p-3.5 transition hover:bg-[#FF7A00]/10">
+                  <Boxes className="mx-auto mb-2 h-6 w-6 text-[#FF7A00]" />
+                  <div className="font-semibold text-neutral-900">Case &amp; Pallet</div>
+                  <div className="text-neutral-600">Bulk ordering</div>
+                </div>
+                <div className="rounded-lg p-3.5 transition hover:bg-[#FF7A00]/10">
+                  <UserRound className="mx-auto mb-2 h-6 w-6 text-[#FF7A00]" />
+                  <div className="font-semibold text-neutral-900">Dedicated Rep</div>
+                  <div className="text-neutral-600">Repeat ordering</div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="min-w-0 lg:pt-1">
-            <HomeSmartProcurementBuilder />
+          <div className="flex flex-col gap-4">
+            <div className="rounded-[20px] border-[3px] border-[#FF7A00] bg-[#0d0d0d] p-1 shadow-[0_10px_32px_rgba(0,0,0,0.45)]">
+              <QuickBulkBuilder />
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#e86800] to-[#ff9433] p-6 text-white shadow-md">
+              <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                <LineChart className="h-5 w-5" aria-hidden />
+                AI Spend Snapshot
+              </h3>
+              <div className="mb-3.5 space-y-2.5 rounded-lg bg-white/15 px-3 py-3 text-sm leading-relaxed backdrop-blur">
+                <p>&quot;You may be overbuying thickness for this task.&quot;</p>
+                <p>&quot;Switching from Brand A → Brand B could save ~12%.&quot;</p>
+                <p>&quot;Standardize to 2 SKUs to reduce variance.&quot;</p>
+              </div>
+              <Link
+                href="/invoice-savings"
+                className="block w-full rounded-xl bg-white py-3 text-center text-sm font-semibold text-[#FF7A00]"
+              >
+                Upload Invoice for Savings Suggestions
+              </Link>
+            </div>
           </div>
         </div>
       </div>
