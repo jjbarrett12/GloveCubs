@@ -84,14 +84,14 @@ export function SiteHeader() {
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <Link
                 href="/"
-                className="flex min-w-0 max-w-full items-center no-underline"
+                className="flex min-w-0 max-w-full items-center bg-transparent no-underline [forced-color-adjust:none]"
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
-                  src="/images/glovecubs-header-logo.jpg"
+                  src="/images/glovecubs-header-logo.png"
                   alt="GloveCubs logo"
                   width={1024}
-                  height={410}
+                  height={132}
                   priority
                   className="h-auto w-[148px] shrink-0 object-contain object-left sm:w-[168px] lg:w-[184px]"
                 />
