@@ -16,7 +16,10 @@ function siteOrigin(): string | null {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const detail = await fetchStoreProductDetail(params.slug);
   if (!detail) {
-    return { title: "Product | GloveCubs" };
+    return {
+      title: "Product | GloveCubs",
+      robots: { index: false, follow: true },
+    };
   }
   const title = `${detail.name} | GloveCubs`;
   const description =
