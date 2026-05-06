@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 import { INDUSTRIES, INDUSTRY_KEYS, type IndustryKey } from "@/config/industries";
+import { getRequestPricingHrefForIntent, getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
 
 export const metadata = {
   title: "Industries | GloveCubs",
@@ -39,13 +40,13 @@ export default function IndustriesOverviewPage() {
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            href="/store?q=automotive+gloves"
+            href={getStoreHrefForIntent("store.search.automotive")}
             className="inline-flex rounded-lg bg-[#FF7A00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e56e00]"
           >
             Browse automotive-related gloves
           </Link>
           <Link
-            href="/request-pricing?source=industries_automotive"
+            href={getRequestPricingHrefForIntent("rfq.industries.automotive")}
             className="inline-flex rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white/90 hover:border-[#FF7A00]/50"
           >
             Request pricing

@@ -38,17 +38,18 @@ export function facetValueSelected(state: StoreCatalogUrlState, key: string, val
 
 /** Keys to render in sidebar (union of registry + any key that has counts). */
 export function orderedFacetKeysForUi(counts: Record<string, { value: string; count: number }[]>): string[] {
+  /** Procurement-first: spec and use-case before convenience facets. */
   const preferred = [
     "material",
-    "size",
-    "color",
     "thickness_mil",
+    "certifications",
+    "uses",
+    "industries",
+    "protection_tags",
+    "color",
+    "size",
     "powder",
     "grade",
-    "industries",
-    "certifications",
-    "protection_tags",
-    "uses",
   ];
   const keys = new Set(getAllCatalogFacetKeys());
   const withData = preferred.filter((k) => keys.has(k) && (counts[k]?.length ?? 0) > 0);
@@ -70,7 +71,6 @@ export function hiddenFieldsPreservingFilters(
   if (state.price_min != null) out.push({ name: "price_min", value: String(state.price_min) });
   if (state.price_max != null) out.push({ name: "price_max", value: String(state.price_max) });
   if (state.category) out.push({ name: "category", value: state.category });
-  if (state.industry_quick) out.push({ name: "industry_quick", value: state.industry_quick });
   if (state.sort) out.push({ name: "sort", value: state.sort });
   if (state.limit != null && state.limit !== 24) out.push({ name: "limit", value: String(state.limit) });
   if (!resetPage && state.page != null && state.page > 1) {

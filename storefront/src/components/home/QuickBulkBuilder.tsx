@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { INDUSTRIES, INDUSTRY_KEYS, type IndustryKey } from "@/config/industries";
+import { buildRequestPricingHref, type RequestPricingQueryParams } from "@/lib/discovery/request-pricing-url";
 
 const GLOVE_TYPES = [
   { value: "exam_disposable", label: "Exam / disposable" },
@@ -44,22 +45,21 @@ const VOLUMES = [
 const inputClass =
   "flex min-h-12 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-base text-white placeholder:text-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]/40 focus-visible:border-white/30";
 
-function buildRequestPricingParams(args: {
+function bulkOrderToRfqParams(args: {
   industry: IndustryKey | "";
   gloveType: (typeof GLOVE_TYPES)[number]["value"] | "";
   material: (typeof MATERIALS)[number]["value"] | "";
   size: (typeof SIZES)[number]["value"] | "";
   volume: (typeof VOLUMES)[number]["value"] | "";
-}): URLSearchParams {
-  const params = new URLSearchParams();
-  if (args.industry) params.set("industry", args.industry);
-  if (args.gloveType) params.set("type", args.gloveType);
-  if (args.material) params.set("material", args.material);
-  if (args.size) params.set("size", args.size);
-  if (args.volume) params.set("volume", args.volume);
-  if (args.volume === "cases_100_plus") params.set("case_range", "100_plus");
-  params.set("source", "homepage_bulk_builder");
-  return params;
+}): RequestPricingQueryParams {
+  const out: RequestPricingQueryParams = { source: "homepage_bulk_builder" };
+  if (args.industry) out.industry = args.industry;
+  if (args.gloveType) out.type = args.gloveType;
+  if (args.material) out.material = args.material;
+  if (args.size) out.size = args.size;
+  if (args.volume) out.volume = args.volume;
+  if (args.volume === "cases_100_plus") out.case_range = "100_plus";
+  return out;
 }
 
 export function QuickBulkBuilder() {
@@ -71,14 +71,11 @@ export function QuickBulkBuilder() {
   const [volume, setVolume] = React.useState<(typeof VOLUMES)[number]["value"] | "">("");
 
   function routeToLargeVolumeInquiry(nextVolume: (typeof VOLUMES)[number]["value"]) {
-    const params = buildRequestPricingParams({
-      industry,
-      gloveType,
-      material,
-      size,
-      volume: nextVolume,
-    });
-    router.push(`/request-pricing?${params.toString()}`);
+    router.push(
+      buildRequestPricingHref(
+        bulkOrderToRfqParams({ industry, gloveType, material, size, volume: nextVolume })
+      )
+    );
   }
 
   function onVolumeChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -95,8 +92,7 @@ export function QuickBulkBuilder() {
       routeToLargeVolumeInquiry("cases_100_plus");
       return;
     }
-    const params = buildRequestPricingParams({ industry, gloveType, material, size, volume });
-    router.push(`/request-pricing?${params.toString()}`);
+    router.push(buildRequestPricingHref(bulkOrderToRfqParams({ industry, gloveType, material, size, volume })));
   }
 
   return (

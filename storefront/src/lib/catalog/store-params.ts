@@ -73,7 +73,6 @@ export function parseCatalogSearchParams(
     sort: sort as StorefrontFilterParams["sort"],
     page: parseNum(get("page")) ?? 1,
     limit: parseNum(get("limit")) ?? 24,
-    industry_quick: get("industry_quick") ?? undefined,
   } as StorefrontFilterParams;
 }
 
@@ -95,7 +94,6 @@ export function buildCatalogSearchString(
   if (p.sort) q.set("sort", p.sort);
   if (p.page != null && p.page > 1) q.set("page", String(p.page));
   if (p.limit != null && p.limit !== 24) q.set("limit", String(p.limit));
-  if (p.industry_quick) q.set("industry_quick", p.industry_quick);
   const s = q.toString();
   return s ? `?${s}` : "";
 }

@@ -64,13 +64,6 @@ export function StoreFilterChips({
     });
   }
 
-  if (urlState.industry_quick) {
-    chips.push({
-      label: `Industry: ${urlState.industry_quick}`,
-      href: mergeStoreCatalogHref(urlState, { industry_quick: undefined, page: 1 }),
-    });
-  }
-
   if (urlState.sort != null && urlState.sort !== "newest") {
     const labels: Record<string, string> = {
       name_asc: "Sort: Name A–Z",

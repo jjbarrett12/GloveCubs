@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
+import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
 import styles from "./brandCarousel.module.css";
 
 function BrandLogoItem({ name }: { name: string }) {
   const logo = getBrandLogoPath(name);
-  const href = `/store?brand=${encodeURIComponent(name)}`;
+  const href = getStoreHrefForBrandDisplayNameSearch(name);
 
   if (logo) {
     return (

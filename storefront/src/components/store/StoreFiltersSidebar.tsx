@@ -39,7 +39,7 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
           <Input
             name="q"
             defaultValue={urlState.q ?? ""}
-            placeholder="Style, SKU, name…"
+            placeholder="Style, SKU, brand, ANSI, mil…"
             className="h-9 border-white/15 bg-black/40 text-sm text-white placeholder:text-white/40"
             aria-label="Search catalog"
           />

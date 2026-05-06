@@ -18,6 +18,8 @@ import {
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
 import { HEADER_INDUSTRY_NAV_ITEMS } from "@/config/publicNav";
 import { SITE_PHONE_TEL_HREF, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
+import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
+import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
 import { cn } from "@/lib/utils";
 
 const MAIN_SITE_URL = process.env.NEXT_PUBLIC_GLOVECUBS_API?.replace(/\/$/, "") ?? "";
@@ -36,7 +38,7 @@ export function SiteHeader() {
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
     const term = q.trim();
-    if (term) router.push(`/store?q=${encodeURIComponent(term)}`);
+    if (term) router.push(buildStoreCatalogHref({ q: term }));
     else router.push("/store");
     closeMobileNav(setMobileOpen, setMobilePanel);
   }
@@ -88,8 +90,8 @@ export function SiteHeader() {
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
-                  src="/images/glovecubs-header-mark-transparent.png?v=b-white"
-                  alt="GloveCubs logo"
+                  src="/images/glovecubs-header-mark-transparent.png"
+                  alt="GloveCubs"
                   width={1024}
                   height={132}
                   priority
@@ -274,7 +276,7 @@ export function SiteHeader() {
                       return (
                         <li key={b} className="border-t border-neutral-200">
                           <Link
-                            href={`/store?brand=${encodeURIComponent(b)}`}
+                            href={getStoreHrefForBrandDisplayNameSearch(b)}
                             className="flex items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF7A00]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
@@ -305,7 +307,7 @@ export function SiteHeader() {
                         return (
                           <li key={b} className="border-t border-neutral-100 first:border-t-0">
                             <Link
-                              href={`/store?brand=${encodeURIComponent(b)}`}
+                              href={getStoreHrefForBrandDisplayNameSearch(b)}
                               className="flex items-center gap-2 py-2 text-sm font-semibold text-neutral-900 hover:text-[#FF7A00]"
                             >
                               {logo ? (

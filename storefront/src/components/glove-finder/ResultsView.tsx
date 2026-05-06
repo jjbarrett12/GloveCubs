@@ -32,16 +32,6 @@ export interface GloveRecommendation {
   badges?: string[];
 }
 
-function inferBadges(reason: string, name: string): string[] {
-  const text = `${(reason || "").toLowerCase()} ${(name || "").toLowerCase()}`;
-  const out: string[] = [];
-  if (/\b(food|nsf|food-safe)\b/.test(text)) out.push("Food-safe");
-  if (/\b(medical|exam|fda|nitrile)\b/.test(text)) out.push("Medical");
-  if (/\b(cut|ansi|level)\b/.test(text)) out.push("Cut");
-  if (/\b(chemical|solvent|resistant)\b/.test(text)) out.push("Chemical");
-  return out.length ? out : ["General"];
-}
-
 interface ResultCardProps {
   item: GloveRecommendation;
   label: (typeof RESULT_LABELS)[number];
@@ -50,7 +40,8 @@ interface ResultCardProps {
 }
 
 function ResultCard({ item, label, onCompare, isCompareSelected }: ResultCardProps) {
-  const badges = item.badges ?? inferBadges(item.reason, item.name);
+  /** Only show API-provided badges — no heuristic compliance/product claims from AI prose. */
+  const badges = item.badges?.length ? item.badges : ["Unverified match"];
   const priceStr =
     item.price != null
       ? typeof item.price === "number"

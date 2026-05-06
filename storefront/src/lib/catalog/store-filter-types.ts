@@ -35,7 +35,6 @@ export interface StorefrontFilterParams {
   sort?: "relevance" | "price_asc" | "price_desc" | "newest" | "price_per_glove_asc" | "name_asc" | "name_desc";
   page?: number;
   limit?: number;
-  industry_quick?: string;
 }
 
 /** /store URL state — same shape as CatalogOS `StorefrontFilterParams` (including name sorts). */

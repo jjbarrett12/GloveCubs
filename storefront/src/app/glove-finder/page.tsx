@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GLOVE_FINDER_USE_CASES, WIZARD_STEPS, type WizardStepId } from "@/config/gloveFinder";
+import { getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
 import { UseCaseGrid } from "@/components/glove-finder/UseCaseGrid";
 import { WizardLayout } from "@/components/glove-finder/WizardLayout";
 import { ResultsView, type GloveRecommendation } from "@/components/glove-finder/ResultsView";
@@ -169,6 +170,19 @@ export default function GloveFinderPage() {
             recommendations={results.recommendations}
             summary={results.summary}
           />
+          {useCaseId ? (
+            <p className="text-sm text-white/65">
+              <Link
+                href={getStoreHrefForIntent(
+                  GLOVE_FINDER_USE_CASES.find((u) => u.id === useCaseId)?.storeIntentId ?? "store.gf.general"
+                )}
+                className="font-semibold text-[#FF7A00] hover:underline"
+              >
+                Browse related products in the catalog →
+              </Link>{" "}
+              <span className="text-white/45">(text search — verify specs on the product page.)</span>
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-3 border-t border-white/10 pt-6">
             <Button
               size="lg"

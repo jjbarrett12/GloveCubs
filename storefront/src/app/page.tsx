@@ -13,7 +13,7 @@ import { ServiceAreaPanel } from "@/components/home/ServiceAreaPanel";
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#0a0a0a] font-poppins">
-      {/* Header brand mark in SiteHeader (next/image, /images/glovecubs-header-mark-transparent.png, unoptimized). */}
+      {/* Header mark: SiteHeader uses /images/glovecubs-header-mark-transparent.png (light bar); footer uses /images/logo.png on dark bg with invert. */}
       <SiteHeader />
       <HomeHeroExpress />
       <HomeTrustLine />

@@ -128,6 +128,33 @@ export async function getFilteredProductIds(
   return productIds;
 }
 
+/**
+ * Products whose `metadata.category_id` matches a row in `catalogos.categories` by slug.
+ * Used for category-only /store URLs (no `q` required).
+ */
+export async function getProductIdsForCategorySlugOnly(supabase: any, categorySlug: string): Promise<Set<string>> {
+  const slug = (categorySlug ?? "").trim().slice(0, 120);
+  if (!slug) return new Set();
+  const { data: cat } = await supabase
+    .schema("catalogos")
+    .from("categories")
+    .select("id")
+    .eq("slug", slug)
+    .single();
+  const categoryId = cat ? (cat as { id: string }).id : null;
+  if (!categoryId) return new Set();
+
+  const { data, error } = await supabase
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("id")
+    .eq("status", "active")
+    .contains("metadata", { category_id: categoryId })
+    .limit(MAX_IDS_PER_QUERY);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r: { id: string }) => r.id));
+}
+
 export async function getProductIdsMatchingSearch(
   supabase: any,
   term: string,
@@ -221,6 +248,14 @@ export async function getStoreCatalogConstraintProductIds(
 ): Promise<Set<string> | null> {
   const normalized = normalizeStorefrontFilterParams(params);
   let ids = await getFilteredProductIds(supabase, normalized);
+
+  const categorySlug = normalized.category?.trim();
+  if (categorySlug) {
+    const categoryIds = await getProductIdsForCategorySlugOnly(supabase, categorySlug);
+    ids = intersectIds(ids, categoryIds);
+    if (ids && ids.size === 0) return ids;
+  }
+
   const q = sanitizeSearchTerm(normalized.q);
   if (q) {
     const [searchIds, variantSkuIds] = await Promise.all([

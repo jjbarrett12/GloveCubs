@@ -67,8 +67,19 @@ export type StoreCatalogPageResult = {
   brands: StoreBrandOption[];
   facetCounts: StoreFacetCounts;
   facetMeta: StoreFacetMeta;
+  /**
+   * Reserved for internal/diagnostic use only — never render `error` to shoppers.
+   * Use `catalogUnavailable` for user-facing fallback UI.
+   */
   error: string | null;
+  /** Catalog service misconfigured or failed; show commercial fallback (no raw messages). */
+  catalogUnavailable?: boolean;
 };
+
+function logStoreCatalogFailure(context: string, detail: unknown): void {
+  const message = detail instanceof Error ? detail.message : String(detail);
+  console.error(`[store-catalog] ${context}: ${message}`);
+}
 
 type CatalogProduct = {
   id: string;
@@ -344,6 +355,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
   const normalized = normalizeStorefrontFilterParams(params);
 
   if (!isSupabaseConfigured()) {
+    logStoreCatalogFailure("catalog_unavailable", "Supabase is not configured for this environment");
     return {
       products: [],
       total: 0,
@@ -352,7 +364,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
       brands: [],
       facetCounts: {},
       facetMeta: {},
-      error: "Supabase not configured",
+      error: null,
+      catalogUnavailable: true,
     };
   }
 
@@ -362,7 +375,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
   try {
     filteredIds = await getStoreCatalogConstraintProductIds(supabase, normalized);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    logStoreCatalogFailure("constraint_query_failed", e);
     return {
       products: [],
       total: 0,
@@ -371,7 +384,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
       brands: [],
       facetCounts: {},
       facetMeta: {},
-      error: msg,
+      error: null,
+      catalogUnavailable: true,
     };
   }
 
@@ -415,6 +429,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
       }
       const { data: pricePage, error: priceErr } = await priceQuery;
       if (priceErr) {
+        logStoreCatalogFailure("price_sort_query_failed", priceErr.message);
         return {
           products: [],
           total: 0,
@@ -423,7 +438,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
           brands,
           facetCounts,
           facetMeta,
-          error: priceErr.message,
+          error: null,
+          catalogUnavailable: true,
         };
       }
       const priceRows = (pricePage ?? []) as { product_id: string; best_price: number; offer_count: number }[];
@@ -448,6 +464,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
         .eq("status", "active")
         .in("id", pageIds);
       if (listErr) {
+        logStoreCatalogFailure("catalog_products_list_failed", listErr.message);
         return {
           products: [],
           total: 0,
@@ -456,7 +473,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
           brands,
           facetCounts,
           facetMeta,
-          error: listErr.message,
+          error: null,
+          catalogUnavailable: true,
         };
       }
       const list = (productRows ?? []) as CatalogProduct[];
@@ -499,6 +517,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
     };
 
     if (productsError) {
+      logStoreCatalogFailure("catalog_products_page_failed", productsError.message);
       return {
         products: [],
         total: 0,
@@ -507,7 +526,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
         brands,
         facetCounts,
         facetMeta,
-        error: productsError.message,
+        error: null,
+        catalogUnavailable: true,
       };
     }
 
@@ -538,7 +558,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
     const hydrated = await hydrateProductPage(supabase, list, bestPriceByProduct);
     return { ...hydrated, total, page, limit, brands, facetCounts, facetMeta, error: null };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    logStoreCatalogFailure("fetchStoreCatalogPage_failed", e);
     return {
       products: [],
       total: 0,
@@ -547,7 +567,8 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
       brands: [],
       facetCounts: {},
       facetMeta: {},
-      error: msg,
+      error: null,
+      catalogUnavailable: true,
     };
   }
 }
@@ -636,5 +657,5 @@ export async function fetchStoreProducts(): Promise<{ products: StoreProductRow[
     sort: "newest",
     limit: 24,
   });
-  return { products: r.products, error: r.error };
+  return { products: r.products, error: null };
 }

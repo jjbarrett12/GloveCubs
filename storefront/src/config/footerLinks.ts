@@ -3,6 +3,7 @@
  */
 
 import { SITE_PHONE_TEL_HREF, SITE_SALES_EMAIL, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
+import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
 
 export type FooterQuickLink = {
   label: string;
@@ -37,12 +38,12 @@ export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
 ];
 
 export const FOOTER_TOP_BRANDS: FooterTopBrand[] = [
-  { name: "Hospeco", slug: "hospeco", href: "/store?brand=Hospeco" },
-  { name: "Global Glove", slug: "global-glove", href: "/store?brand=Global%20Glove" },
-  { name: "Safeko", slug: "safeko", href: "/store?brand=Safeko" },
-  { name: "PIP", slug: "pip", href: "/store?brand=PIP" },
-  { name: "Growl Gloves", slug: "growl-gloves", href: "/store?brand=Growl%20Gloves" },
-  { name: "Semper Guard", slug: "semper-guard", href: "/store?brand=Semper%20Guard" },
+  { name: "Hospeco", slug: "hospeco", href: getStoreHrefForBrandDisplayNameSearch("Hospeco") },
+  { name: "Global Glove", slug: "global-glove", href: getStoreHrefForBrandDisplayNameSearch("Global Glove") },
+  { name: "Safeko", slug: "safeko", href: getStoreHrefForBrandDisplayNameSearch("Safeko") },
+  { name: "PIP", slug: "pip", href: getStoreHrefForBrandDisplayNameSearch("PIP") },
+  { name: "Growl Gloves", slug: "growl-gloves", href: getStoreHrefForBrandDisplayNameSearch("Growl Gloves") },
+  { name: "Semper Guard", slug: "semper-guard", href: getStoreHrefForBrandDisplayNameSearch("Semper Guard") },
 ];
 
 export const FOOTER_CONTACT_LINKS: FooterContactLink[] = [

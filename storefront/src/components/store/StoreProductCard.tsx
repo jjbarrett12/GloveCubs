@@ -21,7 +21,7 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
   const pdpHref = `/store/p/${encodeURIComponent(product.slug)}`;
 
   return (
-    <Card className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#141414] shadow-sm transition-shadow hover:border-[#FF7A00]/35 hover:shadow-md">
+    <Card className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#141414] shadow-md transition-shadow hover:border-[#FF7A00]/35 hover:shadow-lg">
       <div className="relative shrink-0">
         <div className="relative aspect-square w-full bg-black/40">
           <StoreBadgeStack labels={product.badges} />

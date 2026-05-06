@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { IndustryConfig } from "@/config/industries";
 import { INDUSTRIES, INDUSTRY_KEYS } from "@/config/industries";
+import { getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -102,8 +103,7 @@ const B2B_CARDS = [
 ];
 
 export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps) {
-  /** Primary storefront listing (same-origin Next route). Query filters may be added later. */
-  const storeHref = "/store";
+  const storeHref = getStoreHrefForIntent(`store.landing.${config.key}`);
   const industryName = config.name;
 
   return (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
+import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
 
 export const metadata = {
   title: "Brands | GloveCubs",
@@ -21,7 +22,7 @@ export default function BrandsPage() {
       <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
         {HOME_BRAND_LIST.map((name) => {
           const logo = getBrandLogoPath(name);
-          const href = `/store?brand=${encodeURIComponent(name)}`;
+          const href = getStoreHrefForBrandDisplayNameSearch(name);
           return (
             <li key={name}>
               <Link

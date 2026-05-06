@@ -17,7 +17,7 @@ export function MobileQuoteFab() {
     <Link
       href="/quote-cart"
       className="fixed bottom-24 right-4 z-[45] flex h-12 w-12 items-center justify-center rounded-full border border-[#FF7A00]/45 bg-[#141414]/95 text-[#FF7A00] shadow-lg backdrop-blur-sm md:hidden"
-      aria-label={n > 0 ? `Quote cart, ${n} lines` : "Quote cart"}
+      aria-label={n > 0 ? `Bulk quote cart, ${n} lines — review quote` : "Bulk quote cart — review quote"}
     >
       <ClipboardList className="h-5 w-5" />
       {n > 0 ? (

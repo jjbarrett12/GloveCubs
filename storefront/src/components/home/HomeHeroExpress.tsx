@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Star, Tag, Bot, Bolt, Headphones, FileText, Boxes, UserRound, LineChart } from "lucide-react";
+import { Star, Tag, Bot, Bolt, Headphones, FileText, Boxes, UserRound, LineChart, ShoppingBag, Tags } from "lucide-react";
 import { QuickBulkBuilder } from "@/components/home/QuickBulkBuilder";
 
 export function HomeHeroExpress() {
@@ -12,6 +12,37 @@ export function HomeHeroExpress() {
       <div className="pointer-events-none absolute -bottom-36 -left-36 h-[500px] w-[500px] rounded-full bg-[radial-gradient(circle,rgba(255,122,0,0.05)_0%,transparent_72%)]" />
 
       <div className="relative z-[1] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto mb-10 grid max-w-[1400px] grid-cols-1 gap-4 sm:grid-cols-2">
+          <Link
+            href="/store"
+            className="group rounded-2xl border-2 border-white/10 bg-[#161616] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] transition hover:border-[#FF7A00]/45 hover:shadow-[0_12px_36px_rgba(0,0,0,0.45)]"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FF7A00]/12 text-[#FF7A00] ring-1 ring-[#FF7A00]/25">
+              <ShoppingBag className="h-5 w-5" aria-hidden />
+            </div>
+            <h2 className="mt-4 text-lg font-black tracking-tight text-white sm:text-xl">Shop gloves</h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              Browse the commercial catalog, search by spec, and move fast when list pricing is available—built for operators who already
+              know what they need.
+            </p>
+            <span className="mt-4 inline-flex text-sm font-bold text-[#FF7A00] transition group-hover:translate-x-0.5">Browse products →</span>
+          </Link>
+          <Link
+            href="/request-pricing"
+            className="group rounded-2xl border-2 border-[#FF7A00]/40 bg-gradient-to-br from-[#1a140c] to-[#12100c] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] transition hover:border-[#FF7A00] hover:shadow-[0_12px_36px_rgba(255,122,0,0.12)]"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FF7A00]/20 text-[#FF7A00] ring-1 ring-[#FF7A00]/30">
+              <Tags className="h-5 w-5" aria-hidden />
+            </div>
+            <h2 className="mt-4 text-lg font-black tracking-tight text-white sm:text-xl">Need bulk pricing?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              100+ cases a month, multi-location programs, invoice review, and contract-level sourcing—RFQ in minutes with a specialist
+              follow-up.
+            </p>
+            <span className="mt-4 inline-flex text-sm font-bold text-[#FF7A00] transition group-hover:translate-x-0.5">Request pricing →</span>
+          </Link>
+        </div>
+
         <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
             <div
