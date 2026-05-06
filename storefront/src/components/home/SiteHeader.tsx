@@ -88,7 +88,7 @@ export function SiteHeader() {
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
-                  src="/images/glovecubs-header-mark-transparent.png"
+                  src="/images/glovecubs-header-mark-transparent.png?v=b-white"
                   alt="GloveCubs logo"
                   width={1024}
                   height={132}
