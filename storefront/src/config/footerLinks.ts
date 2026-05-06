@@ -33,7 +33,7 @@ export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
   { label: "Resources", href: "/resources" },
   { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
-  { label: "B2B Program", href: "/request-pricing" },
+  { label: "Bulk pricing / RFQ", href: "/#bulk-order" },
 ];
 
 export const FOOTER_TOP_BRANDS: FooterTopBrand[] = [

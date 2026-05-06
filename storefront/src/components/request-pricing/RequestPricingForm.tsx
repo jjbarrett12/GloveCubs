@@ -92,6 +92,8 @@ function RequestPricingFormInner() {
     const source = searchParams.get("source");
     const caseRange = searchParams.get("case_range");
     const product = searchParams.get("product");
+    const buying = searchParams.get("buying");
+    const requirements = searchParams.get("requirements");
 
     const hasBuilderParams =
       source === "homepage_bulk_builder" ||
@@ -101,7 +103,9 @@ function RequestPricingFormInner() {
       size != null ||
       volume != null ||
       caseRange != null ||
-      product != null;
+      product != null ||
+      (buying != null && buying.trim() !== "") ||
+      (requirements != null && requirements.trim() !== "");
 
     if (!hasBuilderParams) return;
 
@@ -117,12 +121,17 @@ function RequestPricingFormInner() {
         ? "100+ cases / mo (large volume — quote with rep; no self-serve checkout)"
         : (volume ?? "—");
 
+    const buyingLine = (buying && buying.trim()) || (product && product.trim()) || "—";
+    const reqLine = requirements && requirements.trim() ? requirements.trim() : "—";
+
     const block = `Bulk Order Request:
 Industry: ${industryLabel}
+What they're buying: ${buyingLine}
 Type (glove / use): ${type ?? "—"}
 Material: ${material ?? "—"}
 Size: ${size ?? "—"}
-Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${product}` : ""}`;
+Monthly case volume: ${volumeLine}
+Specific requirements: ${reqLine}`;
 
     setMessage(block);
     setInquiryType("bulk_order");
