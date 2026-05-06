@@ -80,9 +80,10 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-[1000] overflow-x-hidden border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
-        <div className="mx-auto max-w-7xl min-w-0 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
+      <header className="sticky top-0 z-[5000] isolate overflow-visible border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
+        <div className="mx-auto max-w-7xl min-w-0 px-4 pt-3 sm:px-6 lg:px-8">
+          <div className="overflow-x-clip pb-3">
+            <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <Link
                 href="/"
@@ -171,10 +172,11 @@ export function SiteHeader() {
               </Link>
             </div>
           </div>
+          </div>
 
-          {/* Secondary nav — public/index.html */}
+          {/* Secondary nav — public/index.html (own row: avoid overflow-x on header clipping mega-menus) */}
           <div
-            className={`mt-3 border-t border-neutral-200/90 pt-3 text-center lg:block lg:overflow-visible ${
+            className={`border-t border-neutral-200/90 px-4 pb-3 pt-3 text-center sm:px-6 lg:block lg:overflow-visible lg:px-8 ${
               mobileOpen
                 ? "max-lg:block max-lg:max-h-[min(70vh,calc(100dvh-9rem))] max-lg:overflow-y-auto max-lg:overflow-x-hidden max-lg:overscroll-y-contain"
                 : "max-lg:hidden max-lg:overflow-hidden"
@@ -215,27 +217,73 @@ export function SiteHeader() {
                       <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
                         <Link
                           href={item.href}
-                          className={mobileNavLinkClass}
+                          className={`${mobileNavLinkClass} flex items-center gap-3`}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
+                          {item.thumb ? (
+                            <img
+                              src={item.thumb}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-md border border-neutral-200/80 bg-neutral-50 object-contain p-0.5"
+                              loading="lazy"
+                            />
+                          ) : null}
                           {item.label}
                         </Link>
                       </li>
                     ))}
                   </ul>
-                  <div className="invisible relative z-[1050] mt-2 hidden rounded-xl border-2 border-[#FF5500] bg-white p-5 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
-                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF5500]">
-                      Shop by industry
-                    </h4>
-                    <ul className="list-none space-y-0 p-0">
-                      {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
-                        <li key={`d-${item.href}`} className="border-t border-neutral-200 first:border-t-0">
-                          <Link href={item.href} className={mobileNavLinkClass}>
-                            {item.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+                  <div
+                    className={cn(
+                      "pointer-events-none invisible absolute left-1/2 top-full z-[5100] mt-1 hidden w-[min(calc(100vw-1.5rem),520px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 translate-y-1 opacity-0 transition duration-150 ease-out lg:block",
+                      "rounded-2xl border border-neutral-200/90 bg-white/95 text-left shadow-2xl ring-1 ring-black/[0.04] backdrop-blur-md",
+                      "group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100",
+                    )}
+                  >
+                    <div className="flex max-h-[min(70vh,520px)] flex-col sm:max-h-none lg:flex-row lg:divide-x lg:divide-neutral-100">
+                      <div className="min-w-0 flex-1 overflow-y-auto overscroll-y-contain p-3 sm:p-4">
+                        <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                          Shop by industry
+                        </h4>
+                        <ul className="list-none space-y-0.5 p-0">
+                          {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
+                            <li key={`d-${item.href}`}>
+                              <Link
+                                href={item.href}
+                                className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2.5"
+                              >
+                                {item.thumb ? (
+                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-neutral-200/80 bg-neutral-50/90 shadow-sm">
+                                    <img
+                                      src={item.thumb}
+                                      alt=""
+                                      className="h-9 w-9 object-contain"
+                                      loading="lazy"
+                                    />
+                                  </span>
+                                ) : null}
+                                <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="hidden shrink-0 flex-col justify-between gap-3 bg-gradient-to-b from-neutral-50 to-white p-4 lg:flex lg:w-[168px]">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-500">Catalog</p>
+                          <p className="mt-1 text-xs leading-snug text-neutral-600">Case-ready lines from authorized distributors.</p>
+                        </div>
+                        <div className="relative overflow-hidden rounded-xl border border-neutral-200/90 bg-white shadow-inner" aria-hidden>
+                          <Image
+                            src="/images/logos/Global_Glove.png"
+                            alt=""
+                            width={200}
+                            height={200}
+                            className="h-auto w-full object-contain p-2"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </li>
                 <li className="group relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
@@ -289,36 +337,51 @@ export function SiteHeader() {
                       );
                     })}
                   </ul>
-                  <div className="invisible relative z-[1050] mt-2 hidden max-h-64 overflow-y-auto rounded-xl border-2 border-[#FF5500] bg-white p-4 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
-                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF5500]">
-                      Shop by brand
-                    </h4>
-                    <ul className="grid list-none grid-cols-1 gap-0 p-0 sm:grid-cols-2">
-                      <li className="border-t border-neutral-100 sm:col-span-2">
-                        <Link
-                          href="/brands"
-                          className="block py-2.5 text-sm font-bold text-[#FF5500] hover:bg-[#fff8f5] hover:text-[#FF5500]"
-                        >
-                          All brands →
-                        </Link>
-                      </li>
-                      {HOME_BRAND_LIST.map((b) => {
-                        const logo = getBrandLogoPath(b);
-                        return (
-                          <li key={b} className="border-t border-neutral-100 first:border-t-0">
-                            <Link
-                              href={getStoreHrefForBrandDisplayNameSearch(b)}
-                              className="flex items-center gap-2 py-2 text-sm font-semibold text-neutral-900 hover:text-[#FF5500]"
-                            >
-                              {logo ? (
-                                <img src={logo} alt="" className="h-7 w-7 shrink-0 object-contain" loading="lazy" />
-                              ) : null}
-                              {b}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                  <div
+                    className={cn(
+                      "pointer-events-none invisible absolute left-1/2 top-full z-[5100] mt-1 hidden w-[min(calc(100vw-1.5rem),580px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 translate-y-1 opacity-0 transition duration-150 ease-out lg:block",
+                      "rounded-2xl border border-neutral-200/90 bg-white/95 text-left shadow-2xl ring-1 ring-black/[0.04] backdrop-blur-md",
+                      "group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100",
+                    )}
+                  >
+                    <div className="max-h-[min(72vh,560px)] overflow-y-auto overscroll-y-contain p-4 sm:p-5">
+                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                        Shop by brand
+                      </h4>
+                      <ul className="grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-1">
+                        <li className="sm:col-span-2">
+                          <Link
+                            href="/brands"
+                            className="flex items-center justify-between rounded-xl border border-[#FF5500]/25 bg-[#FF5500]/10 px-3 py-2.5 text-sm font-bold text-[#FF5500] transition hover:border-[#FF5500]/40 hover:bg-[#FF5500]/15"
+                          >
+                            <span>All brands</span>
+                            <span aria-hidden>→</span>
+                          </Link>
+                        </li>
+                        {HOME_BRAND_LIST.map((b) => {
+                          const logo = getBrandLogoPath(b);
+                          return (
+                            <li key={b}>
+                              <Link
+                                href={getStoreHrefForBrandDisplayNameSearch(b)}
+                                className="flex min-h-[52px] items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:border-neutral-200 hover:bg-neutral-50/90 hover:text-[#FF5500]"
+                              >
+                                {logo ? (
+                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-neutral-200/80 bg-white shadow-sm">
+                                    <img src={logo} alt="" className="h-9 w-9 object-contain" loading="lazy" />
+                                  </span>
+                                ) : (
+                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
+                                    —
+                                  </span>
+                                )}
+                                <span className="min-w-0 flex-1 leading-snug">{b}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   </div>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
