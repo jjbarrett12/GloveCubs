@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
+import { quoteCartLineReactKey } from "@/lib/quote-cart/line-utils";
 
 export default function QuoteCartPage() {
   const { items, hydrated, setQuantity, removeItem, clear } = useQuoteCart();
@@ -45,6 +46,9 @@ export default function QuoteCartPage() {
             slug: i.slug,
             brandName: i.brandName,
             quantity: i.quantity,
+            catalog_variant_id: i.catalog_variant_id ?? null,
+            variant_sku: i.variant_sku ?? null,
+            size_code: i.size_code ?? null,
           })),
         }),
       });
@@ -115,33 +119,48 @@ export default function QuoteCartPage() {
 
         {hydrated && items.length > 0 && (
           <ul className="space-y-4 mb-10">
-            {items.map((i) => (
+            {items.map((i, idx) => {
+              const lineKey = quoteCartLineReactKey(i, idx);
+              return (
               <li
-                key={i.product_id}
+                key={lineKey}
                 className="flex flex-col sm:flex-row sm:items-center gap-3 border border-white/10 rounded-xl p-4 bg-white/5"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium truncate">{i.name}</p>
                   <p className="text-white/50 text-xs truncate">{i.brandName ?? "—"}</p>
+                  {(i.variant_sku || i.size_code) ? (
+                    <p className="text-white/40 text-[11px] mt-1 font-mono truncate">
+                      {[i.size_code ? `Size ${i.size_code}` : null, i.variant_sku ? `SKU ${i.variant_sku}` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <label className="sr-only" htmlFor={`qty-${i.product_id}`}>
+                  <label className="sr-only" htmlFor={`qty-${lineKey}`}>
                     Quantity
                   </label>
                   <Input
-                    id={`qty-${i.product_id}`}
+                    id={`qty-${lineKey}`}
                     type="number"
                     min={1}
                     className="w-20 bg-white/10 border-white/20 text-white"
                     value={i.quantity}
-                    onChange={(e) => setQuantity(i.product_id, Number(e.target.value))}
+                    onChange={(e) => setQuantity(i.product_id, Number(e.target.value), i.catalog_variant_id ?? null)}
                   />
-                  <Button type="button" variant="outline" size="sm" onClick={() => removeItem(i.product_id)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeItem(i.product_id, i.catalog_variant_id ?? null)}
+                  >
                     Remove
                   </Button>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
 

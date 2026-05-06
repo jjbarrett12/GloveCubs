@@ -17,6 +17,9 @@ export function AddToQuoteButton({ product }: { product: StoreProductRow }) {
           name: product.name,
           slug: product.slug,
           brandName: product.brandName,
+          catalog_variant_id: product.catalogVariantId ?? undefined,
+          variant_sku: product.variantSku ?? undefined,
+          size_code: product.sizeCode ?? undefined,
         })
       }
     >

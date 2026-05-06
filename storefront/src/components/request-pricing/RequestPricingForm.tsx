@@ -79,6 +79,9 @@ function RequestPricingFormInner() {
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({});
   const [success, setSuccess] = React.useState(false);
+  /** When true, team email was confirmed sent. When false, DB save succeeded but SMTP path failed or was skipped. */
+  const [emailDelivered, setEmailDelivered] = React.useState<boolean | null>(null);
+  const [successWarning, setSuccessWarning] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const industry = searchParams.get("industry");
@@ -143,6 +146,8 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
     setError(null);
     setFieldErrors({});
     setSuccess(false);
+    setEmailDelivered(null);
+    setSuccessWarning(null);
     setSubmitting(true);
 
     const usageLabel = estimatedMonthlyUsage
@@ -167,7 +172,7 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
           email,
           phone,
           notes,
-          source: inquiryType || "website",
+          source: searchParams.get("source")?.trim() || inquiryType || "website",
           website,
         }),
       });
@@ -177,6 +182,8 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
         success?: boolean;
         ok?: boolean;
         ignored?: boolean;
+        emailDelivered?: boolean;
+        warning?: string;
       };
 
       if (!res.ok) {
@@ -192,11 +199,15 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
       }
 
       if (data.ignored === true && data.ok === true) {
+        setEmailDelivered(true);
+        setSuccessWarning(null);
         setSuccess(true);
         return;
       }
 
       if (data.success === true) {
+        setEmailDelivered(typeof data.emailDelivered === "boolean" ? data.emailDelivered : true);
+        setSuccessWarning(typeof data.warning === "string" && data.warning.trim() ? data.warning.trim() : null);
         setSuccess(true);
         return;
       }
@@ -211,12 +222,32 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
   }
 
   if (success) {
+    const emailOk = emailDelivered !== false;
     return (
       <Card className="rounded-2xl border-white/10 bg-white/5">
         <CardHeader>
-          <CardTitle className="text-white">Inquiry sent</CardTitle>
+          <CardTitle className="text-white">{emailOk ? "Inquiry sent" : "Inquiry received"}</CardTitle>
           <CardDescription className="text-white/70">
-            Thank you. We received your message and will follow up using your contact details.
+            {emailOk ? (
+              <>
+                Thank you. We received your message and will follow up using your contact details. If you asked for
+                pricing, a specialist may reach out to confirm volume and SKUs.
+              </>
+            ) : (
+              <>
+                {successWarning ? (
+                  <span className="block text-sm text-amber-200/90">{successWarning}</span>
+                ) : (
+                  <span className="block">
+                    Your inquiry was saved. We could not confirm an automated email to our team—please use the{" "}
+                    <Link href="/contact" className="text-[#FF7A00] underline-offset-2 hover:underline">
+                      contact page
+                    </Link>{" "}
+                    if you do not hear back shortly.
+                  </span>
+                )}
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>

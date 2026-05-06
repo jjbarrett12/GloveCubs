@@ -91,9 +91,22 @@ export async function POST(request: NextRequest) {
     subject: `[GloveCubs] Request pricing: ${insertRow.company_name}`,
     text,
   });
-  if (!mail.sent) {
-    console.error("[POST /api/leads/request-pricing] admin email not sent", mail.error);
+
+  const emailDelivered = mail.sent === true;
+  if (!emailDelivered) {
+    const reason = mail.error ?? "smtp_not_configured_or_send_failed";
+    console.warn("[POST /api/leads/request-pricing] lead saved but admin email not delivered", reason);
   }
 
-  return NextResponse.json({ success: true, id: inserted.id });
+  return NextResponse.json({
+    success: true,
+    id: inserted.id,
+    emailDelivered,
+    ...(emailDelivered
+      ? {}
+      : {
+          warning:
+            "Your inquiry was saved. We could not send an internal email notification automatically—if you do not hear from us, please call or email using the contact page.",
+        }),
+  });
 }

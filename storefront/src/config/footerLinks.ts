@@ -2,6 +2,8 @@
  * Mirrors public/js/footerLinks.js — link targets mapped to Next.js storefront routes.
  */
 
+import { SITE_PHONE_TEL_HREF, SITE_SALES_EMAIL, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
+
 export type FooterQuickLink = {
   label: string;
   href: string;
@@ -27,8 +29,10 @@ export type FooterSocialLink = {
 
 export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
   { label: "All Products", href: "/store" },
-  { label: "Disposable Gloves", href: "/store" },
-  { label: "Reusable Work Gloves", href: "/store" },
+  { label: "Industries", href: "/industries" },
+  { label: "Resources", href: "/resources" },
+  { label: "FAQ", href: "/faq" },
+  { label: "Contact", href: "/contact" },
   { label: "B2B Program", href: "/request-pricing" },
 ];
 
@@ -42,8 +46,8 @@ export const FOOTER_TOP_BRANDS: FooterTopBrand[] = [
 ];
 
 export const FOOTER_CONTACT_LINKS: FooterContactLink[] = [
-  { type: "phone", label: "1-800-GLOVECUBS", href: "tel:+18004568328" },
-  { type: "email", label: "sales@glovecubs.com", href: "mailto:sales@glovecubs.com" },
+  { type: "phone", label: "1-800-GLOVECUBS", href: SITE_PHONE_TEL_HREF },
+  { type: "email", label: SITE_SALES_EMAIL, href: SITE_SALES_MAILTO_HREF },
   {
     type: "address",
     label: "Salt Lake City, UT",

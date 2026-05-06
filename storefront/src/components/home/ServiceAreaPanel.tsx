@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { getHomeMapEmbedSrc, isHomeMapEmbedDisabled } from "@/config/expressHomeMap";
 
@@ -37,9 +36,14 @@ export function ServiceAreaPanel() {
                 />
                 <p className="mt-3 text-center text-sm text-white/55">
                   Map not loading?{" "}
-                  <Link href={MAPS_LINK_HREF} className="font-medium text-[#FF7A00] underline-offset-2 hover:underline">
+                  <a
+                    href={MAPS_LINK_HREF}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-[#FF7A00] underline-offset-2 hover:underline"
+                  >
                     Open in Google Maps
-                  </Link>
+                  </a>
                 </p>
               </div>
             ) : (
@@ -53,14 +57,14 @@ export function ServiceAreaPanel() {
                   to a Google Maps embed link, or clear <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_HOME_MAP_DISABLED</code>{" "}
                   to use the default embed.
                 </p>
-                <Link
+                <a
                   href={MAPS_LINK_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#FF7A00] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#FF7A00]/25 transition hover:bg-[#e56e00]"
                 >
                   Open map — Salt Lake City, UT
-                </Link>
+                </a>
               </div>
             )}
           </div>

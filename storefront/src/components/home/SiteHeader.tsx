@@ -16,24 +16,36 @@ import {
   FileText,
 } from "lucide-react";
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
+import { HEADER_INDUSTRY_NAV_ITEMS } from "@/config/publicNav";
+import { SITE_PHONE_TEL_HREF, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
+import { cn } from "@/lib/utils";
 
 const MAIN_SITE_URL = process.env.NEXT_PUBLIC_GLOVECUBS_API?.replace(/\/$/, "") ?? "";
+
+function closeMobileNav(setMobileOpen: (v: boolean) => void, setMobilePanel: (v: "industries" | "brands" | null) => void) {
+  setMobileOpen(false);
+  setMobilePanel(null);
+}
 
 export function SiteHeader() {
   const router = useRouter();
   const [q, setQ] = React.useState("");
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [mobilePanel, setMobilePanel] = React.useState<"industries" | "brands" | null>(null);
 
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
     const term = q.trim();
     if (term) router.push(`/store?q=${encodeURIComponent(term)}`);
     else router.push("/store");
-    setMobileOpen(false);
+    closeMobileNav(setMobileOpen, setMobilePanel);
   }
 
   const navLinkClass =
     "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-900 hover:text-[#FF7A00]";
+
+  const mobileNavLinkClass =
+    "block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00] lg:py-3";
 
   return (
     <>
@@ -50,15 +62,15 @@ export function SiteHeader() {
             <span>Dedicated rep</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-4 sm:gap-5">
-            <a href="tel:1-800-GLOVECUBS" className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#FF7A00]">
               <Phone className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Phone
             </a>
-            <a href="mailto:sales@glovecubs.com" className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#FF7A00]">
               <Mail className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Email
             </a>
-            <Link href="/request-pricing" className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <Link href="/contact" className="flex items-center gap-2 hover:text-[#FF7A00]">
               <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Contact
             </Link>
@@ -70,7 +82,11 @@ export function SiteHeader() {
         <div className="mx-auto max-w-7xl min-w-0 px-4 py-3 sm:px-6 lg:px-8">
           <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-              <Link href="/" className="flex min-w-0 max-w-full items-center no-underline">
+              <Link
+                href="/"
+                className="flex min-w-0 max-w-full items-center no-underline"
+                onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+              >
                 <Image
                   src="/images/glovecubs-header-logo.jpg"
                   alt="GloveCubs logo"
@@ -86,6 +102,7 @@ export function SiteHeader() {
                   href="/quote-cart"
                   className="relative flex cursor-pointer items-center text-neutral-800"
                   aria-label="Quote cart"
+                  onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                 >
                   <ShoppingCart className="h-6 w-6" />
                 </Link>
@@ -94,7 +111,10 @@ export function SiteHeader() {
                   className="rounded-md border border-neutral-300 p-2.5 text-neutral-800 shadow-sm"
                   aria-expanded={mobileOpen}
                   aria-label="Menu"
-                  onClick={() => setMobileOpen((o) => !o)}
+                  onClick={() => {
+                    setMobileOpen((o) => !o);
+                    if (mobileOpen) setMobilePanel(null);
+                  }}
                 >
                   {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                 </button>
@@ -113,7 +133,10 @@ export function SiteHeader() {
                   className="min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-sm text-neutral-900 outline-none placeholder:text-neutral-500"
                   aria-label="Search catalog"
                 />
-                <button type="submit" className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF7A00] text-white hover:bg-[#e56e00]">
+                <button
+                  type="submit"
+                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF7A00] text-white hover:bg-[#e56e00]"
+                >
                   <Search className="h-[18px] w-[18px]" />
                 </button>
               </form>
@@ -157,56 +180,125 @@ export function SiteHeader() {
             <nav aria-label="Primary">
               <ul className="flex list-none flex-col gap-0 lg:flex-row lg:flex-wrap lg:items-center lg:justify-center lg:gap-x-10 lg:gap-y-2">
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/store" className={navLinkClass}>
+                  <Link href="/store" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                     Shop Gloves
                   </Link>
                 </li>
                 <li className="group relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <span className={`${navLinkClass} cursor-default justify-center lg:cursor-pointer`}>
+                  <div className="flex w-full items-center justify-between gap-2 lg:hidden">
+                    <span className={navLinkClass}>Industries</span>
+                    <button
+                      type="button"
+                      className="rounded-md border border-neutral-200 p-2 text-neutral-800"
+                      aria-expanded={mobilePanel === "industries"}
+                      aria-label="Toggle industries menu"
+                      onClick={() => setMobilePanel((p) => (p === "industries" ? null : "industries"))}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${mobilePanel === "industries" ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
+                  <span className={`${navLinkClass} hidden cursor-default justify-center lg:flex lg:cursor-pointer`}>
                     Industries <ChevronDown className="h-3 w-3 opacity-80" />
                   </span>
-                  <div className="invisible relative z-[1050] mt-2 rounded-xl border-2 border-[#FF7A00] bg-white p-5 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
+                  <ul
+                    className={cn(
+                      "mt-0 list-none space-y-0 border-l-2 border-[#FF7A00]/35 pl-3 lg:hidden",
+                      mobilePanel === "industries" ? "max-lg:block" : "max-lg:hidden",
+                    )}
+                  >
+                    {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
+                      <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
+                        <Link
+                          href={item.href}
+                          className={mobileNavLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="invisible relative z-[1050] mt-2 hidden rounded-xl border-2 border-[#FF7A00] bg-white p-5 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
                     <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF7A00]">
                       Shop by industry
                     </h4>
                     <ul className="list-none space-y-0 p-0">
-                      <li className="border-t border-neutral-200 first:border-t-0">
-                        <Link href="/industries/healthcare" className="block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00] lg:py-3">
-                          Medical &amp; Healthcare
-                        </Link>
-                      </li>
-                      <li className="border-t border-neutral-200">
-                        <Link href="/industries/janitorial" className="block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00]">
-                          Janitorial
-                        </Link>
-                      </li>
-                      <li className="border-t border-neutral-200">
-                        <Link href="/industries/hospitality" className="block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00]">
-                          Food Service
-                        </Link>
-                      </li>
-                      <li className="border-t border-neutral-200">
-                        <Link href="/industries/industrial" className="block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00]">
-                          Industrial
-                        </Link>
-                      </li>
-                      <li className="border-t border-neutral-200">
-                        <Link href="/store" className="block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00]">
-                          Automotive
-                        </Link>
-                      </li>
+                      {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
+                        <li key={`d-${item.href}`} className="border-t border-neutral-200 first:border-t-0">
+                          <Link href={item.href} className={mobileNavLinkClass}>
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 </li>
                 <li className="group relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <span className={`${navLinkClass} cursor-default justify-center lg:cursor-pointer`}>
+                  <div className="flex w-full items-center justify-between gap-2 lg:hidden">
+                    <span className={navLinkClass}>Brands</span>
+                    <button
+                      type="button"
+                      className="rounded-md border border-neutral-200 p-2 text-neutral-800"
+                      aria-expanded={mobilePanel === "brands"}
+                      aria-label="Toggle brands menu"
+                      onClick={() => setMobilePanel((p) => (p === "brands" ? null : "brands"))}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${mobilePanel === "brands" ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
+                  <span className={`${navLinkClass} hidden cursor-default justify-center lg:flex lg:cursor-pointer`}>
                     Brands <ChevronDown className="h-3 w-3 opacity-80" />
                   </span>
-                  <div className="invisible relative z-[1050] mt-2 max-h-64 overflow-y-auto rounded-xl border-2 border-[#FF7A00] bg-white p-4 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
+                  <ul
+                    className={cn(
+                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#FF7A00]/35 pl-3 lg:hidden",
+                      mobilePanel === "brands" ? "max-lg:block" : "max-lg:hidden",
+                    )}
+                  >
+                    <li className="border-t border-neutral-200 first:border-t-0">
+                      <Link
+                        href="/brands"
+                        className={mobileNavLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        All brands
+                      </Link>
+                    </li>
+                    {HOME_BRAND_LIST.map((b) => {
+                      const logo = getBrandLogoPath(b);
+                      return (
+                        <li key={b} className="border-t border-neutral-200">
+                          <Link
+                            href={`/store?brand=${encodeURIComponent(b)}`}
+                            className="flex items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF7A00]"
+                            onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                          >
+                            {logo ? (
+                              <img src={logo} alt="" className="h-7 w-7 shrink-0 object-contain" loading="lazy" />
+                            ) : null}
+                            {b}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="invisible relative z-[1050] mt-2 hidden max-h-64 overflow-y-auto rounded-xl border-2 border-[#FF7A00] bg-white p-4 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
                     <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF7A00]">
                       Shop by brand
                     </h4>
                     <ul className="grid list-none grid-cols-1 gap-0 p-0 sm:grid-cols-2">
+                      <li className="border-t border-neutral-100 sm:col-span-2">
+                        <Link
+                          href="/brands"
+                          className="block py-2.5 text-sm font-bold text-[#FF7A00] hover:bg-[#fff8f5] hover:text-[#e56e00]"
+                        >
+                          All brands →
+                        </Link>
+                      </li>
                       {HOME_BRAND_LIST.map((b) => {
                         const logo = getBrandLogoPath(b);
                         return (
@@ -227,27 +319,43 @@ export function SiteHeader() {
                   </div>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/glove-finder" className={navLinkClass}>
+                  <Link
+                    href="/glove-finder"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
                     AI Recommender
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/request-pricing" className={navLinkClass}>
+                  <Link
+                    href="/request-pricing"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
                     Bulk / RFQ
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/store" className={navLinkClass}>
+                  <Link
+                    href="/resources"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
                     Resources
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/request-pricing" className={navLinkClass}>
+                  <Link href="/faq" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                     FAQ
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/request-pricing" className={navLinkClass}>
+                  <Link
+                    href="/contact"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
                     Contact
                   </Link>
                 </li>
@@ -255,6 +363,7 @@ export function SiteHeader() {
                   <Link
                     href="/invoice-savings"
                     className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#FF7A00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e56e00] lg:w-auto"
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
                     <FileText className="h-3.5 w-3.5" />
                     Upload Invoice

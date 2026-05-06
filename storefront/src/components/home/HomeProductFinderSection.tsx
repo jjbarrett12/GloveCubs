@@ -112,12 +112,32 @@ export function HomeProductFinderSection() {
             <div className="mt-2 text-sm text-neutral-600">Economy option</div>
           </Link>
           <Link
-            href="/find-my-glove"
+            href="/glove-finder"
             className="rounded-xl border border-[#FF7A00]/80 bg-gradient-to-br from-[#fff8f3] to-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <Filter className="mx-auto mb-3 h-10 w-10 text-[#FF7A00]" strokeWidth={2} />
-            <strong className="text-base font-bold text-neutral-900">Advanced Filters</strong>
-            <div className="mt-2 text-sm text-neutral-600">Search by all specs</div>
+            <strong className="text-base font-bold text-neutral-900">Find my glove</strong>
+            <div className="mt-2 text-sm text-neutral-600">AI recommender + advanced filters</div>
+          </Link>
+        </div>
+        <div className="mt-12 flex flex-col items-center gap-4 border-t border-neutral-200/90 pt-10 text-center sm:flex-row sm:justify-center">
+          <Link
+            href="/store"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF7A00] to-[#ff9433] px-8 py-3.5 text-base font-bold text-white shadow-[0_4px_14px_rgba(255,122,0,0.25)] transition hover:-translate-y-0.5"
+          >
+            Browse full store
+          </Link>
+          <Link
+            href="/request-pricing"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[#FF7A00] bg-white px-8 py-3.5 text-base font-bold text-[#FF7A00] transition hover:-translate-y-0.5 hover:bg-[#fff8f3]"
+          >
+            Request pricing
+          </Link>
+          <Link
+            href="/#bulk-order"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-neutral-300 bg-neutral-50 px-8 py-3.5 text-base font-semibold text-neutral-900 transition hover:-translate-y-0.5 hover:border-[#FF7A00]/50"
+          >
+            Start bulk order
           </Link>
         </div>
       </div>

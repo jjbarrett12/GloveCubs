@@ -9,6 +9,9 @@ const itemSchema = z.object({
   slug: z.string().optional(),
   brandName: z.string().nullable().optional(),
   quantity: z.number().int().positive().max(99999),
+  catalog_variant_id: z.string().uuid().nullish(),
+  variant_sku: z.string().max(200).nullish(),
+  size_code: z.string().max(80).nullish(),
 });
 
 const bodySchema = z.object({
@@ -79,6 +82,9 @@ export async function POST(request: NextRequest) {
         slug: item.slug ?? null,
         brand: item.brandName ?? null,
         catalog_v2_product_id: item.product_id,
+        catalog_v2_variant_id: item.catalog_variant_id ?? null,
+        variant_sku: item.variant_sku ?? null,
+        size_code: item.size_code ?? null,
         quantity: item.quantity,
       };
 
@@ -103,7 +109,17 @@ export async function POST(request: NextRequest) {
 
   const adminTo = getAdminNotificationEmail();
   const linesText = body.items
-    .map((i) => `- ${i.name} × ${i.quantity} (catalog_v2 id: ${i.product_id})`)
+    .map((i) => {
+      const variantBits = [
+        i.catalog_variant_id ? `variant_id: ${i.catalog_variant_id}` : null,
+        i.variant_sku ? `variant_sku: ${i.variant_sku}` : null,
+        i.size_code ? `size: ${i.size_code}` : null,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      const suffix = variantBits ? ` (${variantBits})` : "";
+      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}`;
+    })
     .join("\n");
 
   const mail = await sendSmtpMail({
