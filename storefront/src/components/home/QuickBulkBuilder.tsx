@@ -43,7 +43,7 @@ const VOLUMES = [
 ] as const;
 
 const inputClass =
-  "flex min-h-12 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-base text-white placeholder:text-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]/40 focus-visible:border-white/30";
+  "flex min-h-12 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-base text-neutral-900 shadow-sm placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:border-[#FF5500]";
 
 function bulkOrderToRfqParams(args: {
   industry: IndustryKey | "";
@@ -96,15 +96,18 @@ export function QuickBulkBuilder() {
   }
 
   return (
-    <div id="bulk-order" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-      <h2 className="mb-4 text-lg font-semibold text-white">Build your bulk order</h2>
-      <p className="mb-4 text-sm text-white/65">
-        Quote-first B2B — no checkout. For <span className="font-semibold text-white/90">100+ cases / mo</span> we
+    <div
+      id="bulk-order"
+      className="scroll-mt-24 rounded-2xl border-2 border-[#FF5500] bg-white p-5 shadow-[0_10px_40px_rgba(0,0,0,0.12)] sm:p-6"
+    >
+      <h2 className="mb-4 text-lg font-semibold text-neutral-900">Build your bulk order</h2>
+      <p className="mb-4 text-sm leading-relaxed text-neutral-600">
+        Quote-first B2B — no checkout. For <span className="font-semibold text-neutral-900">100+ cases / mo</span> we
         route you straight to an inquiry so a rep can scope pricing and fulfillment.
       </p>
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
-          <label htmlFor="qb-industry" className="text-sm font-medium text-white/90">
+          <label htmlFor="qb-industry" className="text-sm font-medium text-neutral-800">
             Industry
           </label>
           <select
@@ -113,18 +116,18 @@ export function QuickBulkBuilder() {
             value={industry}
             onChange={(e) => setIndustry(e.target.value as IndustryKey | "")}
           >
-            <option value="" className="bg-neutral-900">
+            <option value="" className="bg-white text-neutral-900">
               Select industry
             </option>
             {INDUSTRY_KEYS.map((key) => (
-              <option key={key} value={key} className="bg-neutral-900">
+              <option key={key} value={key} className="bg-white text-neutral-900">
                 {INDUSTRIES[key].name}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="qb-type" className="text-sm font-medium text-white/90">
+          <label htmlFor="qb-type" className="text-sm font-medium text-neutral-800">
             Glove type
           </label>
           <select
@@ -133,11 +136,11 @@ export function QuickBulkBuilder() {
             value={gloveType}
             onChange={(e) => setGloveType(e.target.value as (typeof GLOVE_TYPES)[number]["value"] | "")}
           >
-            <option value="" className="bg-neutral-900">
+            <option value="" className="bg-white text-neutral-900">
               Select type
             </option>
             {GLOVE_TYPES.map((o) => (
-              <option key={o.value} value={o.value} className="bg-neutral-900">
+              <option key={o.value} value={o.value} className="bg-white text-neutral-900">
                 {o.label}
               </option>
             ))}
@@ -145,7 +148,7 @@ export function QuickBulkBuilder() {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label htmlFor="qb-material" className="text-sm font-medium text-white/90">
+            <label htmlFor="qb-material" className="text-sm font-medium text-neutral-800">
               Material
             </label>
             <select
@@ -154,18 +157,18 @@ export function QuickBulkBuilder() {
               value={material}
               onChange={(e) => setMaterial(e.target.value as (typeof MATERIALS)[number]["value"] | "")}
             >
-              <option value="" className="bg-neutral-900">
+              <option value="" className="bg-white text-neutral-900">
                 Select material
               </option>
               {MATERIALS.map((o) => (
-                <option key={o.value} value={o.value} className="bg-neutral-900">
+                <option key={o.value} value={o.value} className="bg-white text-neutral-900">
                   {o.label}
                 </option>
               ))}
             </select>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="qb-size" className="text-sm font-medium text-white/90">
+            <label htmlFor="qb-size" className="text-sm font-medium text-neutral-800">
               Size
             </label>
             <select
@@ -174,11 +177,11 @@ export function QuickBulkBuilder() {
               value={size}
               onChange={(e) => setSize(e.target.value as (typeof SIZES)[number]["value"] | "")}
             >
-              <option value="" className="bg-neutral-900">
+              <option value="" className="bg-white text-neutral-900">
                 Select size
               </option>
               {SIZES.map((o) => (
-                <option key={o.value} value={o.value} className="bg-neutral-900">
+                <option key={o.value} value={o.value} className="bg-white text-neutral-900">
                   {o.label}
                 </option>
               ))}
@@ -186,15 +189,15 @@ export function QuickBulkBuilder() {
           </div>
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="qb-volume" className="text-sm font-medium text-white/90">
+          <label htmlFor="qb-volume" className="text-sm font-medium text-neutral-800">
             Monthly case volume
           </label>
           <select id="qb-volume" className={inputClass} value={volume} onChange={onVolumeChange}>
-            <option value="" className="bg-neutral-900">
+            <option value="" className="bg-white text-neutral-900">
               Select volume
             </option>
             {VOLUMES.map((o) => (
-              <option key={o.value} value={o.value} className="bg-neutral-900">
+              <option key={o.value} value={o.value} className="bg-white text-neutral-900">
                 {o.label}
               </option>
             ))}

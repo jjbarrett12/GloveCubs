@@ -25,7 +25,7 @@ export function StorePagination({
       {prev ? (
         <Link
           href={prev}
-          className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-[#FF7A00]/50 hover:text-[#FF7A00]"
+          className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-[#FF5500]/50 hover:text-[#FF5500]"
         >
           Previous
         </Link>
@@ -38,7 +38,7 @@ export function StorePagination({
       {next ? (
         <Link
           href={next}
-          className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-[#FF7A00]/50 hover:text-[#FF7A00]"
+          className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-[#FF5500]/50 hover:text-[#FF5500]"
         >
           Next
         </Link>

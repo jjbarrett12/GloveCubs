@@ -25,7 +25,7 @@ export function StickyQuoteTray() {
               {hydrated ? <span className="font-semibold text-white">{totalCount}</span> : "—"}{" "}
               <span className="font-normal">units</span>
             </span>
-            <span className="ml-1 font-bold text-[#FF7A00]">Review quote →</span>
+            <span className="ml-1 font-bold text-[#FF5500]">Review quote →</span>
           </Link>
           <p className="mt-1 text-[10px] leading-snug text-white/40">Most quote reviews within one business day.</p>
           <p className="mt-0.5 text-[10px] text-white/35">Pallet pricing &amp; multi-site programs welcome.</p>

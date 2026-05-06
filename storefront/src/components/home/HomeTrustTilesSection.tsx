@@ -1,12 +1,12 @@
 import { Award, Warehouse, Truck, ClipboardCheck, FileText, UserRound } from "lucide-react";
 
 const TILES = [
-  { icon: Award, label: "Authorized Distributor" },
-  { icon: Warehouse, label: "Consistent Inventory" },
-  { icon: Truck, label: "Fast Fulfillment" },
-  { icon: ClipboardCheck, label: "Spec-Based Recommendations" },
-  { icon: FileText, label: "Net Terms Available" },
-  { icon: UserRound, label: "Dedicated Account Support" },
+  { icon: Award, label: "Authorized distributor" },
+  { icon: Warehouse, label: "Consistent inventory" },
+  { icon: Truck, label: "Fast fulfillment" },
+  { icon: ClipboardCheck, label: "Reviewed sourcing paths" },
+  { icon: FileText, label: "Net terms (approved accounts)" },
+  { icon: UserRound, label: "Dedicated account support" },
 ] as const;
 
 export function HomeTrustTilesSection() {
@@ -17,9 +17,9 @@ export function HomeTrustTilesSection() {
           {TILES.map(({ icon: Icon, label }) => (
             <div
               key={label}
-              className="rounded-xl border border-neutral-400/25 bg-neutral-100 p-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition hover:-translate-y-0.5 hover:border-[#FF7A00]/40 hover:shadow-md"
+              className="rounded-xl border border-neutral-400/25 bg-neutral-100 p-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition hover:-translate-y-0.5 hover:border-[#FF5500]/40 hover:shadow-md"
             >
-              <Icon className="mx-auto mb-3 h-10 w-10 text-[#FF7A00]" strokeWidth={2} aria-hidden />
+              <Icon className="mx-auto mb-3 h-10 w-10 text-[#FF5500]" strokeWidth={2} aria-hidden />
               <div className="text-sm font-semibold leading-snug text-neutral-900">{label}</div>
             </div>
           ))}

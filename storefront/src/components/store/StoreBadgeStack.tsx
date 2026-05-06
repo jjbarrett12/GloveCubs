@@ -9,7 +9,7 @@ export function StoreBadgeStack({ labels }: { labels: string[] }) {
         <Badge
           key={label}
           variant="secondary"
-          className="border border-[#FF7A00]/40 bg-black/55 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-[#ffb27a] backdrop-blur-sm"
+          className="border border-[#FF5500]/40 bg-black/55 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-[#FF5500] backdrop-blur-sm"
         >
           {label}
         </Badge>

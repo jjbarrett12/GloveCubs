@@ -15,7 +15,7 @@ export function PdpStickyMobileCta({ product }: { product: StoreProductRow | nul
         ) : null}
         <Link
           href="/request-pricing"
-          className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-[#FF7A00]/50 px-3 text-xs font-semibold text-white hover:bg-[#FF7A00]/10"
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-[#FF5500]/50 px-3 text-xs font-semibold text-white hover:bg-[#FF5500]/10"
         >
           Request pricing
         </Link>

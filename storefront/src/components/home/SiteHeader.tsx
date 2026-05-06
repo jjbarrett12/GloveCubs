@@ -44,10 +44,10 @@ export function SiteHeader() {
   }
 
   const navLinkClass =
-    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-900 hover:text-[#FF7A00]";
+    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-900 hover:text-[#FF5500]";
 
   const mobileNavLinkClass =
-    "block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF7A00] lg:py-3";
+    "block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF5500] lg:py-3";
 
   return (
     <>
@@ -64,15 +64,15 @@ export function SiteHeader() {
             <span>Dedicated rep</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-4 sm:gap-5">
-            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#FF5500]">
               <Phone className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Phone
             </a>
-            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#FF5500]">
               <Mail className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Email
             </a>
-            <Link href="/contact" className="flex items-center gap-2 hover:text-[#FF7A00]">
+            <Link href="/contact" className="flex items-center gap-2 hover:text-[#FF5500]">
               <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Contact
             </Link>
@@ -90,13 +90,13 @@ export function SiteHeader() {
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
-                  src="/images/glovecubs-header-mark-transparent.png"
+                  src="/images/glovecubs-header-logo.png"
                   alt="GloveCubs"
-                  width={1024}
-                  height={132}
+                  width={1536}
+                  height={1024}
                   priority
                   unoptimized
-                  className="h-auto w-[148px] shrink-0 object-contain object-left sm:w-[168px] lg:w-[184px]"
+                  className="h-[32px] w-auto max-w-[min(220px,72vw)] shrink-0 object-contain object-left sm:h-[36px] lg:h-[38px]"
                 />
               </Link>
 
@@ -127,7 +127,7 @@ export function SiteHeader() {
             <div className="flex min-w-0 w-full flex-wrap items-center justify-end gap-3 sm:gap-4 lg:gap-6">
               <form
                 onSubmit={onSearch}
-                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#FF7A00] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,122,0,0.2)] lg:order-none lg:max-w-[420px]"
+                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#FF5500] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,85,0,0.2)] lg:order-none lg:max-w-[420px]"
               >
                 <input
                   value={q}
@@ -138,7 +138,7 @@ export function SiteHeader() {
                 />
                 <button
                   type="submit"
-                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF7A00] text-white hover:bg-[#e56e00]"
+                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF5500] text-white hover:opacity-90"
                 >
                   <Search className="h-[18px] w-[18px]" />
                 </button>
@@ -146,7 +146,7 @@ export function SiteHeader() {
 
               <Link
                 href="/request-pricing"
-                className="order-1 hidden rounded-md border-2 border-[#FF7A00] bg-transparent px-5 py-2 text-[13px] font-bold text-[#FF7A00] transition hover:-translate-y-px hover:bg-[#FF7A00] hover:text-white hover:shadow-[0_4px_14px_rgba(255,122,0,0.35)] lg:inline-block"
+                className="order-1 hidden rounded-md border-2 border-[#FF5500] bg-transparent px-5 py-2 text-[13px] font-bold text-[#FF5500] transition hover:-translate-y-px hover:bg-[#FF5500] hover:text-white hover:shadow-[0_4px_14px_rgba(255,85,0,0.35)] lg:inline-block"
               >
                 Request Quote
               </Link>
@@ -156,7 +156,7 @@ export function SiteHeader() {
                   href={MAIN_SITE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#FF7A00] lg:inline"
+                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#FF5500] lg:inline"
                 >
                   Sign In
                 </a>
@@ -207,7 +207,7 @@ export function SiteHeader() {
                   </span>
                   <ul
                     className={cn(
-                      "mt-0 list-none space-y-0 border-l-2 border-[#FF7A00]/35 pl-3 lg:hidden",
+                      "mt-0 list-none space-y-0 border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
                       mobilePanel === "industries" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -223,8 +223,8 @@ export function SiteHeader() {
                       </li>
                     ))}
                   </ul>
-                  <div className="invisible relative z-[1050] mt-2 hidden rounded-xl border-2 border-[#FF7A00] bg-white p-5 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
-                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF7A00]">
+                  <div className="invisible relative z-[1050] mt-2 hidden rounded-xl border-2 border-[#FF5500] bg-white p-5 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
+                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF5500]">
                       Shop by industry
                     </h4>
                     <ul className="list-none space-y-0 p-0">
@@ -258,7 +258,7 @@ export function SiteHeader() {
                   </span>
                   <ul
                     className={cn(
-                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#FF7A00]/35 pl-3 lg:hidden",
+                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
                       mobilePanel === "brands" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -277,7 +277,7 @@ export function SiteHeader() {
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF7A00]"
+                            className="flex items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF5500]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
                             {logo ? (
@@ -289,15 +289,15 @@ export function SiteHeader() {
                       );
                     })}
                   </ul>
-                  <div className="invisible relative z-[1050] mt-2 hidden max-h-64 overflow-y-auto rounded-xl border-2 border-[#FF7A00] bg-white p-4 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
-                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF7A00]">
+                  <div className="invisible relative z-[1050] mt-2 hidden max-h-64 overflow-y-auto rounded-xl border-2 border-[#FF5500] bg-white p-4 text-left opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 lg:absolute lg:left-1/2 lg:top-full lg:mt-0 lg:block lg:min-w-[280px] lg:-translate-x-1/2 lg:translate-y-2 lg:group-hover:translate-y-0">
+                    <h4 className="mb-3 border-b-2 border-neutral-200 pb-2.5 text-xs font-bold uppercase tracking-wide text-[#FF5500]">
                       Shop by brand
                     </h4>
                     <ul className="grid list-none grid-cols-1 gap-0 p-0 sm:grid-cols-2">
                       <li className="border-t border-neutral-100 sm:col-span-2">
                         <Link
                           href="/brands"
-                          className="block py-2.5 text-sm font-bold text-[#FF7A00] hover:bg-[#fff8f5] hover:text-[#e56e00]"
+                          className="block py-2.5 text-sm font-bold text-[#FF5500] hover:bg-[#fff8f5] hover:text-[#FF5500]"
                         >
                           All brands →
                         </Link>
@@ -308,7 +308,7 @@ export function SiteHeader() {
                           <li key={b} className="border-t border-neutral-100 first:border-t-0">
                             <Link
                               href={getStoreHrefForBrandDisplayNameSearch(b)}
-                              className="flex items-center gap-2 py-2 text-sm font-semibold text-neutral-900 hover:text-[#FF7A00]"
+                              className="flex items-center gap-2 py-2 text-sm font-semibold text-neutral-900 hover:text-[#FF5500]"
                             >
                               {logo ? (
                                 <img src={logo} alt="" className="h-7 w-7 shrink-0 object-contain" loading="lazy" />
@@ -365,7 +365,7 @@ export function SiteHeader() {
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2 lg:ml-4 lg:border-l lg:border-neutral-200 lg:pl-4">
                   <Link
                     href="/invoice-savings"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#FF7A00] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#e56e00] lg:w-auto"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#FF5500] px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 lg:w-auto"
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
                     <FileText className="h-3.5 w-3.5" />

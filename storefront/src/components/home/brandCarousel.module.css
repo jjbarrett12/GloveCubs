@@ -1,7 +1,7 @@
 /* Extracted from public/css/styles.css — brands strip / revolving logo carousel */
 
 .brandsStrip .brandsCarouselWrap {
-  padding: 0 2in;
+  padding: 0 clamp(0.75rem, 5vw, 2in);
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -10,7 +10,7 @@
   overflow: hidden;
   width: 100%;
   margin: 0;
-  --carousel-fade-width: 2in;
+  --carousel-fade-width: clamp(0.75rem, 5vw, 2in);
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0,
@@ -59,10 +59,10 @@
 
 @media (max-width: 768px) {
   .brandsStrip .brandsCarouselWrap {
-    padding: 0 1.25in;
+    padding: 0 clamp(0.5rem, 4vw, 1.25in);
   }
   .brandsCarouselOuter {
-    --carousel-fade-width: 1.25in;
+    --carousel-fade-width: clamp(0.5rem, 4vw, 1.25in);
   }
 }
 
