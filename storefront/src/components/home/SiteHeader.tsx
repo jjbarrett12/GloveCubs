@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -18,9 +17,19 @@ import {
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
 import { HEADER_INDUSTRY_NAV_ITEMS } from "@/config/publicNav";
 import { SITE_PHONE_TEL_HREF, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
+import { GloveCubsWordmark } from "@/components/home/GloveCubsWordmark";
 import { cn } from "@/lib/utils";
 
 const MAIN_SITE_URL = process.env.NEXT_PUBLIC_GLOVECUBS_API?.replace(/\/$/, "") ?? "";
+
+const HEADER_SEARCH_CHIPS = [
+  "Black nitrile",
+  "Food prep",
+  "Cut resistant",
+  "6 mil nitrile",
+  "Vinyl gloves",
+  "Janitorial gloves",
+] as const;
 
 function closeMobileNav(setMobileOpen: (v: boolean) => void, setMobilePanel: (v: "industries" | "brands" | null) => void) {
   setMobileOpen(false);
@@ -78,23 +87,17 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-[1000] overflow-x-hidden border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
+      <header className="sticky top-0 z-[1000] overflow-x-hidden border-b border-neutral-300/90 bg-white [color-scheme:light] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
         <div className="mx-auto max-w-7xl min-w-0 px-4 py-3 sm:px-6 lg:px-8">
           <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <Link
                 href="/"
-                className="flex min-w-0 max-w-full items-center no-underline"
+                className="relative flex min-w-0 max-w-full items-center gap-0 bg-transparent no-underline [forced-color-adjust:none]"
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
-                <Image
-                  src="/images/glovecubs-header-logo.jpg"
-                  alt="GloveCubs logo"
-                  width={1024}
-                  height={410}
-                  priority
-                  className="h-auto w-[148px] shrink-0 object-contain object-left sm:w-[168px] lg:w-[184px]"
-                />
+                <span className="sr-only">GloveCubs</span>
+                <GloveCubsWordmark variant="header" className="min-w-0 shrink-0" />
               </Link>
 
               <div className="flex items-center gap-4 lg:hidden">
@@ -122,24 +125,38 @@ export function SiteHeader() {
             </div>
 
             <div className="flex min-w-0 w-full flex-wrap items-center justify-end gap-3 sm:gap-4 lg:gap-6">
-              <form
-                onSubmit={onSearch}
-                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#FF7A00] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,122,0,0.2)] lg:order-none lg:max-w-[420px]"
-              >
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search by style, material, AQL, thickness, ANSI, industry…"
-                  className="min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-sm text-neutral-900 outline-none placeholder:text-neutral-500"
-                  aria-label="Search catalog"
-                />
-                <button
-                  type="submit"
-                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF7A00] text-white hover:bg-[#e56e00]"
+              <div className="order-3 flex min-w-0 max-w-full flex-1 basis-full flex-col gap-2 sm:basis-[min(100%,420px)] lg:order-none lg:max-w-[min(100%,480px)]">
+                <form
+                  onSubmit={onSearch}
+                  className="flex min-w-0 w-full items-center overflow-hidden rounded-lg border-2 border-[#FF7A00] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,122,0,0.2)]"
                 >
-                  <Search className="h-[18px] w-[18px]" />
-                </button>
-              </form>
+                  <input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Search by glove type, material, thickness, ANSI level, brand or use case…"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-sm text-neutral-900 outline-none placeholder:text-neutral-500"
+                    aria-label="Search catalog"
+                  />
+                  <button
+                    type="submit"
+                    className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF7A00] text-white hover:bg-[#e56e00]"
+                  >
+                    <Search className="h-[18px] w-[18px]" />
+                  </button>
+                </form>
+                <div className="flex max-w-full flex-wrap gap-1.5" aria-label="Popular searches">
+                  {HEADER_SEARCH_CHIPS.map((term) => (
+                    <Link
+                      key={term}
+                      href={`/store?q=${encodeURIComponent(term)}`}
+                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      className="max-w-full truncate rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold text-neutral-800 transition hover:border-[#FF7A00]/60 hover:bg-[#fff8f5] hover:text-[#FF7A00]"
+                    >
+                      {term}
+                    </Link>
+                  ))}
+                </div>
+              </div>
 
               <Link
                 href="/request-pricing"
@@ -324,7 +341,7 @@ export function SiteHeader() {
                     className={navLinkClass}
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
-                    AI Recommender
+                    Glove Finder
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">

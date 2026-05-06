@@ -95,6 +95,7 @@ function RequestPricingFormInner() {
 
     const hasBuilderParams =
       source === "homepage_bulk_builder" ||
+      source === "homepage_smart_procurement" ||
       industry != null ||
       type != null ||
       material != null ||
