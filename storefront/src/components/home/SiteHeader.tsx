@@ -107,14 +107,14 @@ export function SiteHeader() {
   }
 
   const navLinkClass =
-    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-900 hover:text-[#FF5500]";
+    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-[#FF5500]";
 
   const mobileNavLinkClass =
-    "block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF5500] lg:py-3";
+    "block py-3 text-[15px] font-semibold text-neutral-950 hover:bg-[#fff8f5] hover:text-[#FF5500] lg:py-3";
 
   const megaTriggerClass = cn(
     navLinkClass,
-    "border-0 bg-transparent p-0 text-inherit shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
+    "border-0 bg-transparent p-0 text-neutral-950 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
   );
 
   const industriesMegaOpen = desktopMega === "industries";
@@ -151,7 +151,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-40 overflow-visible border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
+      <header className="sticky top-0 z-40 overflow-visible border-b border-neutral-300/90 bg-white text-neutral-950 shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
         <div className="mx-auto max-w-7xl min-w-0 px-4 pt-1.5 sm:px-6 lg:px-8">
           <div className="overflow-x-clip pb-2">
             <div className="grid min-w-0 grid-cols-1 items-center gap-3 lg:grid-cols-[auto_1fr]">
@@ -356,7 +356,7 @@ export function SiteHeader() {
                             <li key={`d-${item.href}`}>
                               <Link
                                 href={item.href}
-                                className="flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
+                                className="flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
                               >
                                 {item.thumb ? (
                                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-neutral-50/90">
@@ -375,7 +375,7 @@ export function SiteHeader() {
                         </ul>
                       </div>
                       <div className="hidden shrink-0 flex-col justify-between gap-2 border-neutral-100 bg-gradient-to-b from-neutral-50/90 to-white p-3 lg:flex lg:w-[132px] lg:border-l">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-500">From the catalog</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-600">From the catalog</p>
                         <div className="relative overflow-hidden rounded-lg border border-neutral-200/80 bg-white" aria-hidden>
                           <Image
                             src="/images/logos/Global_Glove.png"
@@ -456,7 +456,7 @@ export function SiteHeader() {
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF5500]"
+                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[#FF5500]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
                             {logo ? (
@@ -500,7 +500,7 @@ export function SiteHeader() {
                             <li key={b}>
                               <Link
                                 href={getStoreHrefForBrandDisplayNameSearch(b)}
-                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#FF5500]"
+                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#FF5500]"
                               >
                                 {logo ? (
                                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
