@@ -2,11 +2,35 @@
  * Facet counts — ported from `catalogos/src/lib/catalog/facets.ts`.
  */
 
+import { STORE_INDUSTRY_FACET_ROWS } from "@/config/store-industry-facet";
 import type { StorefrontFilterParams } from "./store-filter-types";
 import type { StoreFacetCounts } from "./store-filter-types";
 import { getAllCatalogFacetKeys } from "./catalog-facet-registry";
 import { getAttributeDefinitionIdsByKey } from "./store-attribute-defs";
 import { getStoreCatalogConstraintProductIds } from "./store-catalog-constraints";
+
+/** Full industry facet list with labels; counts from catalog merged (0 when absent). */
+export function mergeIndustryFacetRows(
+  dynamic: { value: string; count: number; label?: string }[] | undefined
+): { value: string; count: number; label: string }[] {
+  const byValue = new Map<string, number>();
+  for (const r of dynamic ?? []) byValue.set(r.value, r.count);
+  const known = STORE_INDUSTRY_FACET_ROWS.map(({ value, label }) => ({
+    value,
+    label,
+    count: byValue.get(value) ?? 0,
+  }));
+  const knownSet = new Set(STORE_INDUSTRY_FACET_ROWS.map((r) => r.value));
+  const extras = (dynamic ?? [])
+    .filter((r) => !knownSet.has(r.value))
+    .map((r) => ({
+      value: r.value,
+      label: (r.label && r.label.trim()) || r.value.replace(/_/g, " "),
+      count: r.count,
+    }))
+    .sort((a, b) => b.count - a.count);
+  return [...known, ...extras];
+}
 
 const MAX_VARIANT_ROWS_FOR_SIZE_FACETS = 100_000;
 
@@ -81,6 +105,8 @@ export async function getStoreFacetCounts(
       .map(([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count);
   }
+
+  result.industries = mergeIndustryFacetRows(result.industries);
 
   return result;
 }

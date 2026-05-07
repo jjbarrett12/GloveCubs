@@ -50,7 +50,34 @@ export const COLOR_VALUES = ["blue", "purple", "black", "white", "light_blue", "
 export const THICKNESS_MIL_VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] as const;
 export const POWDER_VALUES = ["powder_free", "powdered"] as const;
 export const GRADE_VALUES = ["medical_exam_grade", "industrial_grade", "food_service_grade"] as const;
-export const INDUSTRIES_VALUES = ["healthcare", "food_service", "food_processing", "janitorial", "sanitation", "laboratories", "pharmaceuticals", "beauty_personal_care", "tattoo_body_art", "automotive", "education"] as const;
+export const INDUSTRIES_VALUES = [
+  "agriculture",
+  "automotive",
+  "beauty_personal_care",
+  "chemical_processing",
+  "cold_chain_outdoor",
+  "construction",
+  "dental",
+  "education",
+  "electronics_assembly",
+  "emergency_services",
+  "food_processing",
+  "food_service",
+  "healthcare",
+  "industrial",
+  "janitorial",
+  "landscaping_grounds",
+  "laboratories",
+  "metal_fabrication",
+  "oil_gas_energy",
+  "pharmaceuticals",
+  "retail_grocery",
+  "sanitation",
+  "security_public_safety",
+  "tattoo_body_art",
+  "veterinary",
+  "warehousing_logistics",
+] as const;
 export const COMPLIANCE_VALUES = ["fda_approved", "astm_tested", "food_safe", "latex_free", "chemo_rated", "en_455", "en_374"] as const;
 /** Canonical certification slugs (same allowed set as legacy `compliance_certifications`). */
 export const CERTIFICATION_VALUES = COMPLIANCE_VALUES;

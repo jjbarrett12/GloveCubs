@@ -64,7 +64,7 @@ export const INDUSTRY_OPTIONS: IndustryOption[] = [
     label: "Industrial",
     shortLabel: "Industrial",
     badgeLabel: "Heavy Duty",
-    filterValues: ["industrial", "education"],
+    filterValues: ["industrial"],
   },
   {
     key: "general_use",

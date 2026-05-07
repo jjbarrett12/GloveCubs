@@ -329,7 +329,7 @@ export function SiteHeader() {
                     role="region"
                     aria-label="Industries menu"
                     className={cn(
-                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-1.5rem),480px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 lg:block",
+                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-2rem),1180px)] max-w-[calc(100vw-2rem)] -translate-x-1/2 lg:block",
                       "before:pointer-events-auto before:absolute before:left-0 before:right-0 before:top-[-10px] before:z-[1] before:h-2.5 before:content-['']",
                       "rounded-xl border border-neutral-200/80 bg-white/95 text-left shadow-lg ring-1 ring-black/[0.03] backdrop-blur-sm transition duration-150 ease-out",
                       industriesMegaOpen
@@ -338,36 +338,22 @@ export function SiteHeader() {
                       industriesMegaOpen ? "pointer-events-auto" : "pointer-events-none",
                     )}
                   >
-                    <div className="flex max-h-[min(68vh,480px)] flex-col sm:max-h-none lg:max-h-[min(72vh,520px)] lg:flex-row lg:divide-x lg:divide-neutral-100">
-                      <div className="min-w-0 flex-1 overflow-y-auto overscroll-y-contain p-3 sm:p-4">
-                        <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
-                          Shop by industry
-                        </h4>
-                        <ul className="list-none space-y-0.5 p-0">
-                          {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
-                            <li key={`d-${item.href}`}>
-                              <Link
-                                href={item.href}
-                                className="flex min-h-[44px] items-center rounded-lg px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
-                              >
-                                <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="hidden shrink-0 flex-col justify-between gap-2 border-neutral-100 bg-gradient-to-b from-neutral-50/90 to-white p-3 lg:flex lg:w-[132px] lg:border-l">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-600">From the catalog</p>
-                        <div className="relative overflow-hidden rounded-lg border border-neutral-200/80 bg-white" aria-hidden>
-                          <Image
-                            src="/images/logos/Global_Glove.png"
-                            alt=""
-                            width={160}
-                            height={160}
-                            className="h-auto w-full object-contain p-1.5"
-                          />
-                        </div>
-                      </div>
+                    <div className="p-3 sm:p-4">
+                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                        Shop by industry
+                      </h4>
+                      <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-6">
+                        {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
+                          <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
+                            <Link
+                              href={item.href}
+                              className="flex min-h-[40px] items-center rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:min-h-0 lg:py-1"
+                            >
+                              {item.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 </li>
