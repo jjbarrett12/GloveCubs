@@ -36,3 +36,13 @@ export function getStoreHrefForBrandDisplayNameSearch(brandDisplayName: string):
   if (!q) return "/store";
   return buildStoreCatalogHref({ q });
 }
+
+/**
+ * Store link for brand nav (header/home/footer patterns): search by display name, or
+ * filter by catalog brand UUID via the `brand` facet when `catalogBrandId` is provided.
+ */
+export function getStoreHrefForBrandNav(brandDisplayName: string, catalogBrandId?: string): string {
+  const id = catalogBrandId?.trim();
+  if (id) return buildStoreCatalogHref({ brand: [id] });
+  return getStoreHrefForBrandDisplayNameSearch(brandDisplayName);
+}
