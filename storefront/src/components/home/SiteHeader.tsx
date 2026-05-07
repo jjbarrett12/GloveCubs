@@ -123,7 +123,7 @@ export function SiteHeader() {
   return (
     <>
       {/* Utility bar — public/index.html */}
-      <div className="overflow-x-hidden border-b border-white/10 bg-[#141414] py-2.5 text-[13px] font-medium leading-none text-white/90 sm:py-3">
+      <div className="overflow-x-hidden border-b border-white/10 bg-[#141414] py-2 text-[13px] font-medium leading-none text-white/90 sm:py-2.5">
         <div className="mx-auto flex min-w-0 max-w-7xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 sm:px-6 lg:px-8">
           <div className="hidden flex-wrap items-center gap-3.5 tracking-wide sm:flex">
             <span>Distributor pricing</span>
@@ -152,13 +152,13 @@ export function SiteHeader() {
       </div>
 
       <header className="sticky top-0 z-40 overflow-visible border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
-        <div className="mx-auto max-w-7xl min-w-0 px-4 pt-3 sm:px-6 lg:px-8">
-          <div className="overflow-x-clip pb-3">
-            <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="mx-auto max-w-7xl min-w-0 px-4 pt-1.5 sm:px-6 lg:px-8">
+          <div className="overflow-x-clip pb-2">
+            <div className="grid min-w-0 grid-cols-1 items-center gap-3 lg:grid-cols-[auto_1fr]">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <Link
                 href="/"
-                className="flex min-w-0 max-w-full items-center bg-transparent no-underline [forced-color-adjust:none]"
+                className="flex h-[60px] max-w-[min(660px,90vw)] items-end overflow-hidden bg-transparent no-underline [forced-color-adjust:none] sm:h-[66px] lg:h-[70px]"
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
@@ -168,7 +168,7 @@ export function SiteHeader() {
                   height={1024}
                   priority
                   unoptimized
-                  className="h-[96px] w-auto max-w-[min(660px,90vw)] shrink-0 object-contain object-left sm:h-[108px] lg:h-[114px]"
+                  className="h-[96px] w-auto max-w-none shrink-0 object-contain object-left sm:h-[108px] lg:h-[114px]"
                 />
               </Link>
 
