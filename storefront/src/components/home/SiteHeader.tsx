@@ -168,7 +168,7 @@ export function SiteHeader() {
                   height={1024}
                   priority
                   unoptimized
-                  className="h-[96px] w-auto max-w-none shrink-0 translate-y-2.5 object-contain object-left sm:h-[108px] sm:translate-y-3 lg:h-[114px] lg:translate-y-3"
+                  className="h-[96px] w-auto max-w-none shrink-0 translate-y-5 object-contain object-left sm:h-[108px] sm:translate-y-6 lg:h-[114px] lg:translate-y-7"
                 />
               </Link>
 
