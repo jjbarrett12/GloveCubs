@@ -20,10 +20,10 @@ export function HomeProductFinderSection() {
         <div className="mb-10 grid grid-cols-1 gap-7 md:grid-cols-2">
           <Link
             href="/store"
-            className="block cursor-pointer rounded-xl border-2 border-[#FF5500] bg-gradient-to-br from-white to-[#fff5f0] p-9 shadow-[0_4px_14px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:shadow-md"
+            className="block cursor-pointer rounded-xl border-2 border-[#f06232] bg-gradient-to-br from-white to-[#fff5f0] p-9 shadow-[0_4px_14px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <div className="mb-6 flex items-center gap-5">
-              <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FF5500] to-[#FF5500] text-3xl text-white shadow-md">
+              <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#f06232] to-[#f06232] text-3xl text-white shadow-md">
                 <Hand className="h-9 w-9" strokeWidth={2} aria-hidden />
               </div>
               <div>
@@ -54,10 +54,10 @@ export function HomeProductFinderSection() {
           </Link>
           <Link
             href="/store"
-            className="block cursor-pointer rounded-xl border border-neutral-300/90 bg-white p-9 shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5 hover:border-[#FF5500]/50 hover:shadow-md"
+            className="block cursor-pointer rounded-xl border border-neutral-300/90 bg-white p-9 shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5 hover:border-[#f06232]/50 hover:shadow-md"
           >
             <div className="mb-6 flex items-center gap-5">
-              <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#111111] to-[#1F2933] text-3xl text-[#FF5500] shadow-md">
+              <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#111111] to-[#1F2933] text-3xl text-[#f06232] shadow-md">
                 <HardHat className="h-9 w-9" strokeWidth={2} aria-hidden />
               </div>
               <div>
@@ -90,7 +90,7 @@ export function HomeProductFinderSection() {
         <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4 lg:gap-4">
           <Link
             href="/store"
-            className="rounded-xl bg-gradient-to-br from-[#FF5500] to-[#FF5500] p-7 text-center text-white shadow-[0_4px_14px_rgba(255,85,0,0.25)] transition hover:-translate-y-0.5"
+            className="rounded-xl bg-gradient-to-br from-[#f06232] to-[#f06232] p-7 text-center text-white shadow-[0_4px_14px_rgba(240, 98, 50,0.25)] transition hover:-translate-y-0.5"
           >
             <Shield className="mx-auto mb-3 h-10 w-10 text-white" strokeWidth={2} />
             <strong className="text-base font-bold">Nitrile</strong>
@@ -98,9 +98,9 @@ export function HomeProductFinderSection() {
           </Link>
           <Link
             href="/store"
-            className="rounded-xl border border-neutral-300/90 bg-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5500]/60 hover:shadow-md"
+            className="rounded-xl border border-neutral-300/90 bg-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
           >
-            <Hand className="mx-auto mb-3 h-10 w-10 text-[#FF5500]" strokeWidth={2} />
+            <Hand className="mx-auto mb-3 h-10 w-10 text-[#f06232]" strokeWidth={2} />
             <strong className="text-base font-bold text-neutral-900">Latex</strong>
             <div className="mt-2 text-sm text-neutral-600">Powder-free available</div>
           </Link>
@@ -114,9 +114,9 @@ export function HomeProductFinderSection() {
           </Link>
           <Link
             href="/invoice-savings"
-            className="rounded-xl border border-[#FF5500]/80 bg-gradient-to-br from-[#fff8f3] to-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="rounded-xl border border-[#f06232]/80 bg-gradient-to-br from-[#fff8f3] to-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
-            <FileText className="mx-auto mb-3 h-10 w-10 text-[#FF5500]" strokeWidth={2} />
+            <FileText className="mx-auto mb-3 h-10 w-10 text-[#f06232]" strokeWidth={2} />
             <strong className="text-base font-bold text-neutral-900">Compare from invoice</strong>
             <div className="mt-2 text-sm text-neutral-600">Upload what you buy today—we match to real options</div>
           </Link>
@@ -124,19 +124,19 @@ export function HomeProductFinderSection() {
         <div className="mt-12 flex flex-col items-center gap-4 border-t border-neutral-200/90 pt-10 text-center sm:flex-row sm:justify-center">
           <Link
             href="/store"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF5500] to-[#FF5500] px-8 py-3.5 text-base font-bold text-white shadow-[0_4px_14px_rgba(255,85,0,0.25)] transition hover:-translate-y-0.5"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#f06232] to-[#f06232] px-8 py-3.5 text-base font-bold text-white shadow-[0_4px_14px_rgba(240, 98, 50,0.25)] transition hover:-translate-y-0.5"
           >
             Browse full store
           </Link>
           <Link
             href="/request-pricing"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[#FF5500] bg-white px-8 py-3.5 text-base font-bold text-[#FF5500] transition hover:-translate-y-0.5 hover:bg-[#fff8f3]"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[#f06232] bg-white px-8 py-3.5 text-base font-bold text-[#f06232] transition hover:-translate-y-0.5 hover:bg-[#fff8f3]"
           >
             Request pricing
           </Link>
           <Link
             href="/#bulk-order"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-neutral-300 bg-neutral-50 px-8 py-3.5 text-base font-semibold text-neutral-900 transition hover:-translate-y-0.5 hover:border-[#FF5500]/50"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-neutral-300 bg-neutral-50 px-8 py-3.5 text-base font-semibold text-neutral-900 transition hover:-translate-y-0.5 hover:border-[#f06232]/50"
           >
             Start bulk order
           </Link>

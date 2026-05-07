@@ -50,13 +50,13 @@ export default function FaqPage() {
       <div className="mt-10 flex flex-wrap gap-3">
         <Link
           href="/request-pricing"
-          className="inline-flex rounded-lg bg-[#FF5500] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#FF5500]"
+          className="inline-flex rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#f06232]"
         >
           Request pricing
         </Link>
         <Link
           href="/contact"
-          className="inline-flex rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 hover:border-[#FF5500]/50"
+          className="inline-flex rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 hover:border-[#f06232]/50"
         >
           Contact
         </Link>

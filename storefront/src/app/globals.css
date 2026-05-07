@@ -9,9 +9,11 @@
   --muted-foreground: 215 20% 65%;
   --border: 217 33% 17%;
   --ring: 217 91% 60%;
-  /* Brand orange — matches header wordmark (#FF5500) */
-  --primary: 20 100% 50%;
+  /* Brand orange — sampled from glovecubs-header-logo.png wordmark (#f06232) */
+  --primary: 15 86% 57%;
   --primary-foreground: 0 0% 100%;
+  /* Published / list-style pricing emphasis (store cards, PDP, finder) */
+  --sales: 142 71% 42%;
 }
 
 @layer base {

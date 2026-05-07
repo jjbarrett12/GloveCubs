@@ -17,7 +17,7 @@ export default function ContactPage() {
         <section className="rounded-xl border border-white/10 bg-white/[0.04] p-6">
           <h2 className="text-lg font-semibold text-white">Phone</h2>
           <p className="mt-2 text-sm">
-            <a href={SITE_PHONE_TEL_HREF} className="font-medium text-[#FF5500] hover:underline">
+            <a href={SITE_PHONE_TEL_HREF} className="font-medium text-[#f06232] hover:underline">
               {SITE_PHONE_DISPLAY}
             </a>{" "}
             <span className="text-white/50">(tap to call)</span>
@@ -26,7 +26,7 @@ export default function ContactPage() {
         <section className="rounded-xl border border-white/10 bg-white/[0.04] p-6">
           <h2 className="text-lg font-semibold text-white">Email</h2>
           <p className="mt-2 text-sm">
-            <a href={SITE_SALES_MAILTO_HREF} className="font-medium text-[#FF5500] hover:underline">
+            <a href={SITE_SALES_MAILTO_HREF} className="font-medium text-[#f06232] hover:underline">
               {SITE_SALES_EMAIL}
             </a>
           </p>
@@ -39,7 +39,7 @@ export default function ContactPage() {
           </p>
           <Link
             href="/request-pricing"
-            className="mt-4 inline-flex rounded-lg bg-[#FF5500] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#FF5500]"
+            className="mt-4 inline-flex rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#f06232]"
           >
             Request pricing
           </Link>
@@ -53,13 +53,13 @@ export default function ContactPage() {
           <div className="mt-4 flex flex-wrap gap-3">
             <Link
               href="/glove-finder"
-              className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:border-[#FF5500]/50"
+              className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:border-[#f06232]/50"
             >
               AI Glove Finder
             </Link>
             <Link
               href="/invoice-savings"
-              className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:border-[#FF5500]/50"
+              className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:border-[#f06232]/50"
             >
               Invoice savings
             </Link>

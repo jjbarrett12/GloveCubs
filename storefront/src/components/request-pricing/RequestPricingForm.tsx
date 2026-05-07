@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { INDUSTRIES, type IndustryKey } from "@/config/industries";
+import { STORE_INDUSTRY_FACET_ROWS } from "@/config/store-industry-facet";
+import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
+import {
+  buildInvoiceIntakeRfqPrefillNotes,
+  consumeInvoiceIntakeRfqHandoffIfEligible,
+} from "@/lib/discovery/invoice-intake-rfq-handoff";
 
 const inputClass =
   "flex min-h-10 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:border-white/30 disabled:cursor-not-allowed disabled:opacity-50";
@@ -61,6 +67,8 @@ function RequestPricingFormInner() {
   const submitLockRef = React.useRef(false);
   /** Avoid duplicate hydration under React Strict Mode (remount + same query). */
   const appliedQueryRef = React.useRef<string | null>(null);
+  const prepLineGuideAppliedRef = React.useRef<string | null>(null);
+  const invoiceIntakeGuideAppliedRef = React.useRef<string | null>(null);
 
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
@@ -82,6 +90,7 @@ function RequestPricingFormInner() {
   /** When true, team email was confirmed sent. When false, DB save succeeded but SMTP path failed or was skipped. */
   const [emailDelivered, setEmailDelivered] = React.useState<boolean | null>(null);
   const [successWarning, setSuccessWarning] = React.useState<string | null>(null);
+  const [buyerDisplayRef, setBuyerDisplayRef] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const industry = searchParams.get("industry");
@@ -109,8 +118,13 @@ function RequestPricingFormInner() {
     if (appliedQueryRef.current === qs) return;
     appliedQueryRef.current = qs;
 
+    const industryFacetLabel = industry
+      ? STORE_INDUSTRY_FACET_ROWS.find((r) => r.value === industry)?.label
+      : undefined;
     const industryLabel =
-      industry && industry in INDUSTRIES ? INDUSTRIES[industry as IndustryKey].name : industry ?? "—";
+      industry && industry in INDUSTRIES
+        ? INDUSTRIES[industry as IndustryKey].name
+        : industryFacetLabel ?? industry ?? "—";
 
     const volumeLine =
       volume === "cases_100_plus" || caseRange === "100_plus"
@@ -137,6 +151,39 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
     return () => {
       appliedQueryRef.current = null;
     };
+  }, [searchParams]);
+
+  React.useEffect(() => {
+    const opEnv = searchParams.get("operational_environment");
+    if (opEnv !== "restaurant_prep_line") return;
+    if (searchParams.get("source") === "homepage_bulk_builder") return;
+    const trace = searchParams.get("client_trace");
+    const opp = searchParams.get("procurement_opportunity_id");
+    const qs = `prep-line:${opEnv}:${trace ?? ""}:${opp ?? ""}`;
+    if (prepLineGuideAppliedRef.current === qs) return;
+    prepLineGuideAppliedRef.current = qs;
+    const block = `Restaurant prep line (operational pilot)
+Environment: restaurant_prep_line (catalog: food_safe and/or food_handling)
+Procurement thread: ${opp ?? "—"}
+Client trace: ${trace ?? "—"}
+
+Describe your prep stations, case volumes, and any allergen or color program requirements below.`;
+    setMessage((m) => (m.trim() ? `${m.trim()}\n\n${block}` : block));
+    setInquiryType("request_pricing");
+  }, [searchParams]);
+
+  React.useEffect(() => {
+    if (searchParams.get("source") !== "invoice_intake") return;
+    const trace = searchParams.get("client_trace")?.trim() || null;
+    const opp = searchParams.get("procurement_opportunity_id")?.trim() || null;
+    const qsKey = `invoice-intake:${opp ?? ""}:${trace ?? ""}`;
+    if (invoiceIntakeGuideAppliedRef.current === qsKey) return;
+    invoiceIntakeGuideAppliedRef.current = qsKey;
+
+    const ctx = trace && opp ? consumeInvoiceIntakeRfqHandoffIfEligible(trace, opp) : null;
+    const block = buildInvoiceIntakeRfqPrefillNotes({ clientTrace: trace, opportunityId: opp, ctx });
+    setMessage(block);
+    setInquiryType("request_pricing");
   }, [searchParams]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -174,6 +221,12 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
           notes,
           source: searchParams.get("source")?.trim() || inquiryType || "website",
           website,
+          operational_environment_key:
+            searchParams.get("operational_environment") === "restaurant_prep_line"
+              ? "restaurant_prep_line"
+              : undefined,
+          procurement_opportunity_id: searchParams.get("procurement_opportunity_id")?.trim() || undefined,
+          client_trace_id: searchParams.get("client_trace")?.trim() || undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -184,6 +237,7 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
         ignored?: boolean;
         emailDelivered?: boolean;
         warning?: string;
+        buyer_display_ref?: string | null;
       };
 
       if (!res.ok) {
@@ -201,6 +255,7 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
       if (data.ignored === true && data.ok === true) {
         setEmailDelivered(true);
         setSuccessWarning(null);
+        setBuyerDisplayRef(null);
         setSuccess(true);
         return;
       }
@@ -208,6 +263,11 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
       if (data.success === true) {
         setEmailDelivered(typeof data.emailDelivered === "boolean" ? data.emailDelivered : true);
         setSuccessWarning(typeof data.warning === "string" && data.warning.trim() ? data.warning.trim() : null);
+        const ref =
+          typeof data.buyer_display_ref === "string" && data.buyer_display_ref.trim().startsWith("GC-PREP-")
+            ? data.buyer_display_ref.trim()
+            : null;
+        setBuyerDisplayRef(ref);
         setSuccess(true);
         return;
       }
@@ -240,7 +300,7 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
                 ) : (
                   <span className="block">
                     Your inquiry was saved. We could not confirm an automated email to our team—please use the{" "}
-                    <Link href="/contact" className="text-[#FF7A00] underline-offset-2 hover:underline">
+                    <Link href="/contact" className="text-[#f06232] underline-offset-2 hover:underline">
                       contact page
                     </Link>{" "}
                     if you do not hear back shortly.
@@ -250,7 +310,13 @@ Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${prod
             )}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {buyerDisplayRef ? (
+            <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80">
+              <p>{PrepLineOperationalCopy.continuityRequestRef(buyerDisplayRef)}</p>
+              <p className="mt-2 text-xs text-white/60">{PrepLineOperationalCopy.continuityBusinessDays}</p>
+            </div>
+          ) : null}
           <Button asChild variant="outline">
             <Link href="/">Back to home</Link>
           </Button>

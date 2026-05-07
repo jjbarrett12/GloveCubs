@@ -17,7 +17,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
         <Link
           href={mergeStoreCatalogHref(urlState, { sort: "newest", page: 1 })}
           className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-            sort === "newest" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+            sort === "newest" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
           }`}
         >
           Newest
@@ -25,7 +25,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
         <Link
           href={mergeStoreCatalogHref(urlState, { sort: "name_asc", page: 1 })}
           className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-            sort === "name_asc" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+            sort === "name_asc" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
           }`}
         >
           Name A–Z
@@ -33,7 +33,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
         <Link
           href={mergeStoreCatalogHref(urlState, { sort: "name_desc", page: 1 })}
           className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-            sort === "name_desc" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+            sort === "name_desc" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
           }`}
         >
           Name Z–A
@@ -41,7 +41,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
         <Link
           href={mergeStoreCatalogHref(urlState, { sort: "price_asc", page: 1 })}
           className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-            sort === "price_asc" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+            sort === "price_asc" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
           }`}
         >
           Price ↑
@@ -49,7 +49,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
         <Link
           href={mergeStoreCatalogHref(urlState, { sort: "price_desc", page: 1 })}
           className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-            sort === "price_desc" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+            sort === "price_desc" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
           }`}
         >
           Price ↓
@@ -58,7 +58,7 @@ export function StoreSortBar({ urlState, total }: { urlState: StoreCatalogUrlSta
           <Link
             href={mergeStoreCatalogHref(urlState, { sort: "relevance", page: 1 })}
             className={`rounded-md px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${
-              sort === "relevance" ? "bg-[#FF5500] text-white" : "text-white/70 hover:text-[#FF5500]"
+              sort === "relevance" ? "bg-[#f06232] text-white" : "text-white/70 hover:text-[#f06232]"
             }`}
           >
             Relevance

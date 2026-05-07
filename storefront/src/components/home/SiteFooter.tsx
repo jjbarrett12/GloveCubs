@@ -61,7 +61,7 @@ export function SiteFooter() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={s.label}
-                  className="flex h-11 min-h-11 w-11 min-w-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.07] text-white/90 shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5500]/35 hover:bg-[#FF5500]/18 hover:text-white"
+                  className="flex h-11 min-h-11 w-11 min-w-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.07] text-white/90 shadow-sm transition hover:-translate-y-0.5 hover:border-[#f06232]/35 hover:bg-[#f06232]/18 hover:text-white"
                 >
                   {iconForSocial(s.label)}
                 </a>
@@ -70,7 +70,7 @@ export function SiteFooter() {
           </div>
 
           <div className="min-w-0 sm:min-w-[180px]">
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF5500]">Quick Links</h4>
+            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#f06232]">Quick Links</h4>
             <ul className="flex list-none flex-col gap-1 p-0">
               {FOOTER_QUICK_LINKS.map((link) => (
                 <li key={link.label}>
@@ -86,7 +86,7 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF5500]">Top Brands</h4>
+            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#f06232]">Top Brands</h4>
             <div className="grid grid-cols-2 gap-3">
               {FOOTER_TOP_BRANDS.map((b) => {
                 const logo = getBrandLogoPath(b.name);
@@ -95,7 +95,7 @@ export function SiteFooter() {
                     key={b.slug}
                     href={b.href}
                     title={b.name}
-                    className="flex min-h-[60px] items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] p-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:-translate-y-0.5 hover:border-[#FF5500]/35 hover:bg-white/[0.09]"
+                    className="flex min-h-[60px] items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] p-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:-translate-y-0.5 hover:border-[#f06232]/35 hover:bg-white/[0.09]"
                   >
                     <span className="flex flex-col items-center gap-1">
                       {logo ? (
@@ -110,18 +110,18 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF5500]">Contact Us</h4>
+            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#f06232]">Contact Us</h4>
             <ul className="contact-info flex list-none flex-col gap-0 p-0">
               {FOOTER_CONTACT_LINKS.map((c) => {
                 const icon =
                   c.type === "phone" ? (
-                    <Phone className="h-[13px] w-5 shrink-0 text-[#FF5500]" />
+                    <Phone className="h-[13px] w-5 shrink-0 text-[#f06232]" />
                   ) : c.type === "email" ? (
-                    <Mail className="h-[13px] w-5 shrink-0 text-[#FF5500]" />
+                    <Mail className="h-[13px] w-5 shrink-0 text-[#f06232]" />
                   ) : c.type === "address" ? (
-                    <MapPin className="h-[13px] w-5 shrink-0 text-[#FF5500]" />
+                    <MapPin className="h-[13px] w-5 shrink-0 text-[#f06232]" />
                   ) : (
-                    <Clock className="h-[13px] w-5 shrink-0 text-[#FF5500]" />
+                    <Clock className="h-[13px] w-5 shrink-0 text-[#f06232]" />
                   );
                 return (
                   <li key={c.label} className="flex items-center gap-2.5 py-2 text-sm text-white/75">

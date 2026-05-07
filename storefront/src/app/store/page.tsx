@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { permanentRedirect } from "next/navigation";
 import { fetchStoreCatalogPage } from "@/lib/catalog/store-products";
 import type { StoreCatalogUrlState } from "@/lib/catalog/store-url";
 import { getAllCatalogFacetKeys } from "@/lib/catalog/catalog-facet-registry";
@@ -12,6 +13,7 @@ import { StorePagination } from "@/components/store/StorePagination";
 import { AddVisiblePageToQuote } from "@/components/store/AddVisiblePageToQuote";
 import { SiteHeader } from "@/components/home/SiteHeader";
 import { getRequestPricingHrefForIntent } from "@/lib/discovery/intent-routes";
+import { getCanonicalStoreHrefIfNeeded } from "@/lib/catalog/store-legacy-url";
 
 /** Fresh catalog reads on each request (Supabase). */
 export const dynamic = "force-dynamic";
@@ -83,11 +85,11 @@ function StoreRequestCategoryTiles() {
         <Link
           key={t.intentId}
           href={getRequestPricingHrefForIntent(t.intentId)}
-          className="rounded-xl border border-white/10 bg-[#141414] p-4 shadow-sm transition hover:border-[#FF7A00]/40 hover:shadow-md"
+          className="rounded-xl border border-white/10 bg-[#141414] p-4 shadow-sm transition hover:border-[#f06232]/40 hover:shadow-md"
         >
           <div className="text-[13px] font-bold text-white">{t.label}</div>
           <div className="mt-1 text-[11px] leading-snug text-white/50">{t.description}</div>
-          <div className="mt-2 text-[11px] font-semibold text-[#FF7A00]">Request pricing →</div>
+          <div className="mt-2 text-[11px] font-semibold text-[#f06232]">Request pricing →</div>
         </Link>
       ))}
     </div>
@@ -95,6 +97,9 @@ function StoreRequestCategoryTiles() {
 }
 
 export default async function StorePage({ searchParams }: PageProps) {
+  const canonical = getCanonicalStoreHrefIfNeeded(searchParams);
+  if (canonical) permanentRedirect(canonical);
+
   const urlState = parseStoreCatalogParams(searchParams);
   const { products, total, limit, brands, facetCounts, facetMeta, catalogUnavailable } = await fetchStoreCatalogPage(urlState);
   const hasFilters = storeUrlHasActiveFilters(urlState);
@@ -110,7 +115,7 @@ export default async function StorePage({ searchParams }: PageProps) {
             className="mb-8 rounded-xl border border-white/10 bg-gradient-to-br from-[#141414] to-[#101010] px-5 py-5 sm:px-6 sm:py-6"
             aria-labelledby="store-hero-heading"
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF7A00]">Commercial glove catalog</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Commercial glove catalog</p>
             <h1 id="store-hero-heading" className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">
               Find the right glove fast
             </h1>
@@ -121,13 +126,13 @@ export default async function StorePage({ searchParams }: PageProps) {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <a
                 href="#store-catalog"
-                className="inline-flex items-center justify-center rounded-lg bg-[#FF7A00] px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-[#e56e00]"
+                className="inline-flex items-center justify-center rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-[#f06232]"
               >
                 Browse catalog
               </a>
               <Link
                 href="/request-pricing"
-                className="inline-flex items-center justify-center rounded-lg border border-[#FF7A00]/60 bg-transparent px-4 py-2.5 text-sm font-semibold text-[#ffb27a] transition hover:border-[#FF7A00] hover:bg-[#FF7A00]/10"
+                className="inline-flex items-center justify-center rounded-lg border border-[#f06232]/60 bg-transparent px-4 py-2.5 text-sm font-semibold text-[#f06232] transition hover:border-[#f06232] hover:bg-[#f06232]/10"
               >
                 Request pricing
               </Link>
@@ -151,15 +156,15 @@ export default async function StorePage({ searchParams }: PageProps) {
                 Tell us what you need and we will help source the right products from available inventory and distributor programs.
               </p>
               <div className="mt-3 flex flex-wrap gap-3">
-                <Link href="/request-pricing" className="text-sm font-bold text-[#FF7A00] hover:underline">
+                <Link href="/request-pricing" className="text-sm font-bold text-[#f06232] hover:underline">
                   Request pricing
                 </Link>
                 <span className="text-white/35">·</span>
-                <Link href="/invoice-savings" className="text-sm font-bold text-[#FF7A00] hover:underline">
+                <Link href="/invoice-savings" className="text-sm font-bold text-[#f06232] hover:underline">
                   Upload invoice for review
                 </Link>
                 <span className="text-white/35">·</span>
-                <Link href="/industries" className="text-sm font-semibold text-white/70 hover:text-[#FF7A00]">
+                <Link href="/industries" className="text-sm font-semibold text-white/70 hover:text-[#f06232]">
                   Browse industries
                 </Link>
               </div>
@@ -182,20 +187,20 @@ export default async function StorePage({ searchParams }: PageProps) {
               </p>
               <div className="mt-3 flex flex-wrap gap-3 text-sm">
                 {hasFilters ? (
-                  <Link href="/store" className="font-bold text-[#FF7A00] hover:underline">
+                  <Link href="/store" className="font-bold text-[#f06232] hover:underline">
                     Clear filters
                   </Link>
                 ) : null}
                 {hasFilters ? <span className="text-white/35">·</span> : null}
-                <Link href="/request-pricing" className="font-bold text-[#FF7A00] hover:underline">
+                <Link href="/request-pricing" className="font-bold text-[#f06232] hover:underline">
                   Request pricing
                 </Link>
                 <span className="text-white/35">·</span>
-                <Link href="/invoice-savings" className="font-bold text-[#FF7A00] hover:underline">
+                <Link href="/invoice-savings" className="font-bold text-[#f06232] hover:underline">
                   Upload invoice
                 </Link>
                 <span className="text-white/35">·</span>
-                <Link href="/industries" className="font-semibold text-white/70 hover:text-[#FF7A00]">
+                <Link href="/industries" className="font-semibold text-white/70 hover:text-[#f06232]">
                   Industries
                 </Link>
               </div>

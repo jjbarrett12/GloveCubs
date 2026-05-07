@@ -19,6 +19,7 @@ const config: Config = {
         border: "hsl(var(--border))",
         ring: "hsl(var(--ring))",
         primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
+        sales: { DEFAULT: "hsl(var(--sales))" },
       },
       borderRadius: {
         "2xl": "1rem",

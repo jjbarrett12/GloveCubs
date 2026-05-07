@@ -34,7 +34,7 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
   return (
     <div className={`space-y-4 ${pad}`}>
       <section className="rounded-lg border border-white/10 bg-[#111]/90 p-3">
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">Search</h3>
+        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Search</h3>
         <form action="/store" method="get" className="flex flex-col gap-2">
           <Input
             name="q"
@@ -47,20 +47,20 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
           {hiddenForSearch.map((h) => (
             <input key={h.name} type="hidden" name={h.name} value={h.value} />
           ))}
-          <Button type="submit" size="sm" className="w-full bg-[#FF5500] text-white hover:bg-[#FF5500]">
+          <Button type="submit" size="sm" className="w-full bg-[#f06232] text-white hover:bg-[#f06232]">
             Apply
           </Button>
         </form>
       </section>
 
       <section className="rounded-lg border border-white/10 bg-[#111]/90 p-3">
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">Brand</h3>
+        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Brand</h3>
         <div className="max-h-48 space-y-0 overflow-y-auto overscroll-y-contain pr-1">
           <Link
             href={mergeStoreCatalogHref(urlState, { brand: [], page: 1 })}
             className={`mb-1 block rounded-md px-2 py-1.5 text-[13px] font-medium ${
               !(urlState.brand && urlState.brand.length)
-                ? "bg-[#FF5500]/20 text-[#FF5500]"
+                ? "bg-[#f06232]/20 text-[#f06232]"
                 : "text-white/80 hover:bg-white/5 hover:text-white"
             }`}
             onClick={() => onNavigate?.()}
@@ -74,7 +74,7 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
                 key={b.id}
                 href={facetToggleHref(urlState, "brand", b.id)}
                 className={`mb-0.5 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[13px] ${
-                  selected ? "bg-[#FF5500]/20 font-semibold text-[#FF5500]" : "text-white/80 hover:bg-white/5 hover:text-white"
+                  selected ? "bg-[#f06232]/20 font-semibold text-[#f06232]" : "text-white/80 hover:bg-white/5 hover:text-white"
                 }`}
                 onClick={() => onNavigate?.()}
               >
@@ -95,7 +95,7 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
             open={!dense}
             className="rounded-lg border border-white/10 bg-[#111]/90 [&_summary]:marker:text-white/40"
           >
-            <summary className="cursor-pointer select-none px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-[#FF5500]">
+            <summary className="cursor-pointer select-none px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-[#f06232]">
               {facetSectionTitle(key, facetMeta)}
               <span className="ml-1 font-normal normal-case text-white/40">({rows.length})</span>
             </summary>
@@ -107,7 +107,7 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
                     key={`${key}:${row.value}`}
                     href={facetToggleHref(urlState, key, row.value)}
                     className={`mb-0.5 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[12px] ${
-                      selected ? "bg-[#FF5500]/15 font-medium text-[#FF5500]" : "text-white/75 hover:bg-white/5 hover:text-white"
+                      selected ? "bg-[#f06232]/15 font-medium text-[#f06232]" : "text-white/75 hover:bg-white/5 hover:text-white"
                     }`}
                     onClick={() => onNavigate?.()}
                   >

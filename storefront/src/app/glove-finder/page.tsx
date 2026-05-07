@@ -6,46 +6,99 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GLOVE_FINDER_USE_CASES, WIZARD_STEPS, type WizardStepId } from "@/config/gloveFinder";
 import { getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
+import { buildRequestPricingHref } from "@/lib/discovery/request-pricing-url";
+import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
+import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
 import { UseCaseGrid } from "@/components/glove-finder/UseCaseGrid";
 import { WizardLayout } from "@/components/glove-finder/WizardLayout";
 import { ResultsView, type GloveRecommendation } from "@/components/glove-finder/ResultsView";
+import { PrepLineGuidancePanel } from "@/components/prep-line/PrepLineGuidancePanel";
+import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 
 const TRANSITION = "transition-all duration-200";
 
+/** Phase 2B vertical slice: restaurant prep line only (catalog + spine). */
+const PREP_SLICE_USE_CASES = GLOVE_FINDER_USE_CASES.filter((u) => u.id === "food-service");
+
 export default function GloveFinderPage() {
+  const [clientTraceId] = React.useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : ""
+  );
+  const { addItem } = useQuoteCart();
+
   const [step, setStep] = React.useState<WizardStepId>("use-case");
-  const [useCaseId, setUseCaseId] = React.useState<string | null>(null);
+  const [useCaseId, setUseCaseId] = React.useState<string | null>("food-service");
   const [material, setMaterial] = React.useState("");
   const [quantity, setQuantity] = React.useState("");
   const [constraints, setConstraints] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [opportunityId, setOpportunityId] = React.useState<string | null>(null);
+  const [buyerDisplayRef, setBuyerDisplayRef] = React.useState<string | null>(null);
   const [results, setResults] = React.useState<{
     recommendations: GloveRecommendation[];
     summary?: string;
+    advisoryNotice?: string;
   } | null>(null);
 
-  const useCaseLabel = useCaseId
-    ? GLOVE_FINDER_USE_CASES.find((u) => u.id === useCaseId)?.label
-    : "";
+  React.useEffect(() => {
+    try {
+      sessionStorage.setItem(PREP_LINE_QUOTE_SESSION_KEY, RESTAURANT_PREP_LINE_ENVIRONMENT_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const useCaseLabel =
+    (useCaseId ? PREP_SLICE_USE_CASES.find((u) => u.id === useCaseId)?.label : undefined) ??
+    "Food service & restaurants";
+
+  const requestPricingHref = React.useMemo(() => {
+    return buildRequestPricingHref({
+      operational_environment: RESTAURANT_PREP_LINE_ENVIRONMENT_KEY,
+      procurement_opportunity_id: opportunityId ?? undefined,
+      client_trace: clientTraceId || undefined,
+      source: "glove_finder_prep_line",
+    });
+  }, [opportunityId]);
+
+  function addRecommendationToQuote(item: GloveRecommendation) {
+    if (!item.catalogProductId || !item.slug) return;
+    addItem({
+      product_id: item.catalogProductId,
+      name: item.name,
+      slug: item.slug,
+      brandName: item.brand ?? null,
+      catalog_variant_id: item.catalogVariantId ?? undefined,
+      variant_sku: item.sku ?? undefined,
+      size_code: item.sizeCode ?? undefined,
+    });
+  }
 
   async function handleGetRecommendations() {
     setError(null);
+    if (!useCaseLabel.trim()) {
+      setError("Select a use case first.");
+      return;
+    }
     setLoading(true);
     try {
-      // Use same-origin Next.js API (no proxy to Express)
       const url = "/api/ai/glove-finder";
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          use_case: useCaseLabel || undefined,
-          industry: useCaseLabel || undefined,
-          material_preference: material || undefined,
-          quantity_per_month: quantity || undefined,
+          useCaseLabel: useCaseLabel.trim(),
+          materialPreference: material || undefined,
+          quantityPerMonth: quantity || undefined,
           constraints: constraints || undefined,
+          hazards: [] as string[],
+          latexAllergy: false,
+          clientTraceId: clientTraceId || undefined,
+          operationalEnvironmentKey: RESTAURANT_PREP_LINE_ENVIRONMENT_KEY,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -53,9 +106,12 @@ export default function GloveFinderPage() {
         setError(data.error || "Request failed");
         return;
       }
+      setOpportunityId(typeof data.opportunityId === "string" ? data.opportunityId : null);
+      setBuyerDisplayRef(typeof data.buyerDisplayRef === "string" ? data.buyerDisplayRef : null);
       setResults({
         recommendations: data.recommendations ?? [],
         summary: data.summary,
+        advisoryNotice: data.advisoryNotice,
       });
       setStep("results");
     } catch (e) {
@@ -69,11 +125,7 @@ export default function GloveFinderPage() {
     <>
       {step === "use-case" && (
         <div className={cn("space-y-6", TRANSITION)}>
-          <UseCaseGrid
-            options={GLOVE_FINDER_USE_CASES}
-            selectedId={useCaseId}
-            onSelect={setUseCaseId}
-          />
+          <UseCaseGrid options={PREP_SLICE_USE_CASES} selectedId={useCaseId} onSelect={setUseCaseId} />
           <div className="flex flex-wrap gap-3 pt-2">
             <Button
               size="lg"
@@ -93,9 +145,10 @@ export default function GloveFinderPage() {
 
       {step === "details" && (
         <div className={cn("space-y-6", TRANSITION)}>
+          <PrepLineGuidancePanel />
           <div className="space-y-2">
             <label htmlFor="gf-material" className="text-sm font-medium text-white">
-              Material preference
+              Material preference (optional)
             </label>
             <Input
               id="gf-material"
@@ -145,18 +198,13 @@ export default function GloveFinderPage() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Finding...
+                  {PrepLineOperationalCopy.wizardLoading}
                 </>
               ) : (
-                "Get recommendations"
+                PrepLineOperationalCopy.wizardSubmitCta
               )}
             </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => setStep("use-case")}
-              disabled={loading}
-            >
+            <Button size="lg" variant="outline" onClick={() => setStep("use-case")} disabled={loading}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Button>
@@ -166,34 +214,43 @@ export default function GloveFinderPage() {
 
       {step === "results" && results && (
         <div className={cn("space-y-6", TRANSITION)}>
+          {buyerDisplayRef ? (
+            <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/75">
+              {PrepLineOperationalCopy.continuityRequestRef(buyerDisplayRef)}
+            </p>
+          ) : null}
+          <p className="text-xs text-white/55">{PrepLineOperationalCopy.continuityBusinessDays}</p>
           <ResultsView
             recommendations={results.recommendations}
             summary={results.summary}
+            advisoryNotice={results.advisoryNotice}
+            onAddToQuote={addRecommendationToQuote}
           />
-          {useCaseId ? (
-            <p className="text-sm text-white/65">
-              <Link
-                href={getStoreHrefForIntent(
-                  GLOVE_FINDER_USE_CASES.find((u) => u.id === useCaseId)?.storeIntentId ?? "store.gf.general"
-                )}
-                className="font-semibold text-[#FF7A00] hover:underline"
-              >
-                Browse related products in the catalog →
-              </Link>{" "}
-              <span className="text-white/45">(text search — verify specs on the product page.)</span>
-            </p>
-          ) : null}
+          <p className="text-sm text-white/65">
+            <Link
+              href={getStoreHrefForIntent("store.gf.food-service")}
+              className="font-semibold text-[#f06232] hover:underline"
+            >
+              Browse food-service catalog matches →
+            </Link>{" "}
+            <span className="text-white/45">(text search — verify specs on each PDP.)</span>
+          </p>
           <div className="flex flex-wrap gap-3 border-t border-white/10 pt-6">
+            <Button size="lg" variant="default" asChild>
+              <Link href={requestPricingHref}>Request pricing (prep line)</Link>
+            </Button>
             <Button
               size="lg"
               variant="secondary"
               onClick={() => {
                 setResults(null);
                 setStep("use-case");
-                setUseCaseId(null);
+                setUseCaseId("food-service");
                 setMaterial("");
                 setQuantity("");
                 setConstraints("");
+                setOpportunityId(null);
+                setBuyerDisplayRef(null);
               }}
             >
               Start over
@@ -211,29 +268,24 @@ export default function GloveFinderPage() {
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <header className="border-b border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="text-lg font-semibold text-white hover:text-white/90"
-          >
+          <Link href="/" className="text-lg font-semibold text-white hover:text-white/90">
             GloveCubs
           </Link>
           <nav className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-sm text-white/70 hover:text-white"
-            >
+            <Link href="/" className="text-sm text-white/70 hover:text-white">
               Home
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <main className="mx-auto min-w-0 max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <WizardLayout
           currentStep={step}
-          title="Find My Glove"
-          subtext="Select your use case and preferences for AI-powered product recommendations."
+          title="Restaurant prep line — glove selection (pilot)"
+          subtext={PrepLineOperationalCopy.wizardSubtext}
           showTrustCues={step !== "results"}
+          trustCueVariant="prep_line"
         >
           {stepContent}
         </WizardLayout>

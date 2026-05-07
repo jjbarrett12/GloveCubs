@@ -107,14 +107,14 @@ export function SiteHeader() {
   }
 
   const navLinkClass =
-    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-[#FF5500]";
+    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-[#f06232]";
 
   const mobileNavLinkClass =
-    "block py-3 text-[15px] font-semibold text-neutral-950 hover:bg-[#fff8f5] hover:text-[#FF5500] lg:py-3";
+    "block py-3 text-[15px] font-semibold text-neutral-950 hover:bg-[#fff8f5] hover:text-[#f06232] lg:py-3";
 
   const megaTriggerClass = cn(
     navLinkClass,
-    "border-0 bg-transparent p-0 text-neutral-950 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
+    "border-0 bg-transparent p-0 text-neutral-950 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06232]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
   );
 
   const industriesMegaOpen = desktopMega === "industries";
@@ -135,15 +135,15 @@ export function SiteHeader() {
             <span>Dedicated rep</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-4 sm:gap-5">
-            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#FF5500]">
+            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#f06232]">
               <Phone className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Phone
             </a>
-            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#FF5500]">
+            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#f06232]">
               <Mail className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Email
             </a>
-            <Link href="/contact" className="flex items-center gap-2 hover:text-[#FF5500]">
+            <Link href="/contact" className="flex items-center gap-2 hover:text-[#f06232]">
               <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Contact
             </Link>
@@ -199,7 +199,7 @@ export function SiteHeader() {
             <div className="flex min-w-0 w-full flex-wrap items-center justify-end gap-3 sm:gap-4 lg:gap-6">
               <form
                 onSubmit={onSearch}
-                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#FF5500] bg-white focus-within:shadow-[0_0_0_2px_rgba(255,85,0,0.2)] lg:order-none lg:max-w-[420px]"
+                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#f06232] bg-white focus-within:shadow-[0_0_0_2px_rgba(240, 98, 50,0.2)] lg:order-none lg:max-w-[420px]"
               >
                 <input
                   value={q}
@@ -210,7 +210,7 @@ export function SiteHeader() {
                 />
                 <button
                   type="submit"
-                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#FF5500] text-white hover:opacity-90"
+                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#f06232] text-white hover:opacity-90"
                 >
                   <Search className="h-[18px] w-[18px]" />
                 </button>
@@ -218,7 +218,7 @@ export function SiteHeader() {
 
               <Link
                 href="/request-pricing"
-                className="order-1 hidden rounded-md border-2 border-[#FF5500] bg-transparent px-5 py-2 text-[13px] font-bold text-[#FF5500] transition hover:-translate-y-px hover:bg-[#FF5500] hover:text-white hover:shadow-[0_4px_14px_rgba(255,85,0,0.35)] lg:inline-block"
+                className="order-1 hidden rounded-md border-2 border-[#f06232] bg-transparent px-5 py-2 text-[13px] font-bold text-[#f06232] transition hover:-translate-y-px hover:bg-[#f06232] hover:text-white hover:shadow-[0_4px_14px_rgba(240, 98, 50,0.35)] lg:inline-block"
               >
                 Request Quote
               </Link>
@@ -228,7 +228,7 @@ export function SiteHeader() {
                   href={MAIN_SITE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#FF5500] lg:inline"
+                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
                 >
                   Sign In
                 </a>
@@ -308,7 +308,7 @@ export function SiteHeader() {
                   </button>
                   <ul
                     className={cn(
-                      "mt-0 list-none space-y-0 border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
+                      "mt-0 list-none space-y-0 border-l-2 border-[#f06232]/35 pl-3 lg:hidden",
                       mobilePanel === "industries" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -339,7 +339,7 @@ export function SiteHeader() {
                     )}
                   >
                     <div className="p-3 sm:p-4">
-                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">
                         Shop by industry
                       </h4>
                       <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-6">
@@ -347,7 +347,7 @@ export function SiteHeader() {
                           <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
                             <Link
                               href={item.href}
-                              className="flex min-h-[40px] items-center rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:min-h-0 lg:py-1"
+                              className="flex min-h-[40px] items-center rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#f06232] lg:min-h-0 lg:py-1"
                             >
                               {item.label}
                             </Link>
@@ -405,7 +405,7 @@ export function SiteHeader() {
                   </button>
                   <ul
                     className={cn(
-                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
+                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#f06232]/35 pl-3 lg:hidden",
                       mobilePanel === "brands" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -424,7 +424,7 @@ export function SiteHeader() {
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[#FF5500]"
+                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[#f06232]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
                             {logo ? (
@@ -449,14 +449,14 @@ export function SiteHeader() {
                     )}
                   >
                     <div className="max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain p-3 sm:p-4">
-                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">
                         Shop by brand
                       </h4>
                       <ul className="grid list-none grid-cols-1 gap-0.5 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-0.5">
                         <li className="sm:col-span-2">
                           <Link
                             href="/brands"
-                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[#FF5500]/20 bg-[#FF5500]/8 px-3 py-2 text-sm font-bold text-[#FF5500] transition hover:border-[#FF5500]/35 hover:bg-[#FF5500]/12"
+                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[#f06232]/20 bg-[#f06232]/8 px-3 py-2 text-sm font-bold text-[#f06232] transition hover:border-[#f06232]/35 hover:bg-[#f06232]/12"
                           >
                             <span>All brands</span>
                             <span aria-hidden>→</span>
@@ -468,7 +468,7 @@ export function SiteHeader() {
                             <li key={b}>
                               <Link
                                 href={getStoreHrefForBrandDisplayNameSearch(b)}
-                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#FF5500]"
+                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#f06232]"
                               >
                                 {logo ? (
                                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
@@ -532,7 +532,7 @@ export function SiteHeader() {
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2 lg:ml-4 lg:border-l lg:border-neutral-200 lg:pl-4">
                   <Link
                     href="/invoice-savings"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#FF5500] px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 lg:w-auto"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#f06232] px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 lg:w-auto"
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
                     <FileText className="h-3.5 w-3.5" />

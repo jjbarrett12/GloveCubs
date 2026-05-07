@@ -90,13 +90,13 @@ export function StoreFilterChips({
         <Link
           key={c.href + c.label}
           href={c.href}
-          className="inline-flex items-center gap-1 rounded-full border border-[#FF5500]/40 bg-[#FF5500]/10 px-2.5 py-1 text-xs font-medium text-[#FF5500] hover:border-[#FF5500]/60"
+          className="inline-flex items-center gap-1 rounded-full border border-[#f06232]/40 bg-[#f06232]/10 px-2.5 py-1 text-xs font-medium text-[#f06232] hover:border-[#f06232]/60"
         >
           {c.label}
           <X className="h-3 w-3 opacity-80" aria-hidden />
         </Link>
       ))}
-      <Link href={clearHref} className="text-[11px] font-semibold text-white/50 underline-offset-2 hover:text-[#FF5500] hover:underline">
+      <Link href={clearHref} className="text-[11px] font-semibold text-white/50 underline-offset-2 hover:text-[#f06232] hover:underline">
         Clear all
       </Link>
     </div>

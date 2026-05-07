@@ -15,7 +15,7 @@ export default function BrandsPage() {
       subtitle="Full brand microsites are on the roadmap. Today you can shop every authorized line in the catalog by brand, or ask us to standardize SKUs for your operation."
       mainClassName="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8"
     >
-      <div className="mb-8 rounded-lg border border-[#FF5500]/30 bg-[#FF5500]/10 px-4 py-3 text-sm text-white/85">
+      <div className="mb-8 rounded-lg border border-[#f06232]/30 bg-[#f06232]/10 px-4 py-3 text-sm text-white/85">
         <strong className="text-white">Coming soon:</strong> dedicated brand hubs with spec sheets and program pricing. All
         brands below link to the live store filtered by manufacturer.
       </div>
@@ -27,7 +27,7 @@ export default function BrandsPage() {
             <li key={name}>
               <Link
                 href={href}
-                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 transition hover:border-[#FF5500]/45 hover:bg-white/[0.07]"
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 transition hover:border-[#f06232]/45 hover:bg-white/[0.07]"
               >
                 {logo ? (
                   <img src={logo} alt="" className="h-9 w-9 shrink-0 object-contain" loading="lazy" />
@@ -44,7 +44,7 @@ export default function BrandsPage() {
       </ul>
       <p className="mt-8 text-sm text-white/55">
         Missing a line card?{" "}
-        <Link href="/request-pricing" className="font-medium text-[#FF5500] hover:underline">
+        <Link href="/request-pricing" className="font-medium text-[#f06232] hover:underline">
           Tell us what you buy today
         </Link>{" "}
         and we will match or cross it to an in-stock program.

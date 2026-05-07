@@ -38,7 +38,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
       <main className="py-6 sm:py-8">
         <StorePageShell>
           <nav className="mb-4 text-[11px] text-white/45">
-            <Link href="/store" className="text-[#FF5500]/90 hover:underline">
+            <Link href="/store" className="text-[#f06232]/90 hover:underline">
               Store
             </Link>
             <span className="mx-1.5">/</span>
@@ -73,7 +73,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
 
                 <div className="min-w-0 space-y-3">
                   {detail.brandName ? (
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#FF5500]/90">{detail.brandName}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f06232]/90">{detail.brandName}</p>
                   ) : null}
                   <h1 className="text-xl font-black leading-tight tracking-tight text-white sm:text-2xl">{detail.name}</h1>
                   <dl className="grid gap-1 text-[11px] text-white/55 sm:grid-cols-2">
@@ -108,7 +108,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       {detail.bestPrice != null ? (
-                        <p className="text-sm font-semibold tabular-nums text-emerald-400/95">From {usd.format(detail.bestPrice)}</p>
+                        <p className="text-sm font-semibold tabular-nums text-sales">From {usd.format(detail.bestPrice)}</p>
                       ) : (
                         <p className="text-[12px] font-medium text-white/45">Request pricing</p>
                       )}
@@ -207,7 +207,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                           href={d.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-medium text-[#FF5500] hover:underline"
+                          className="font-medium text-[#f06232] hover:underline"
                         >
                           {d.label}
                         </a>
@@ -251,7 +251,7 @@ function ButtonRequestPricingLink({ className }: { className?: string }) {
   return (
     <Link
       href="/request-pricing"
-      className={`inline-flex h-10 items-center justify-center rounded-md border border-[#FF5500]/50 px-4 text-sm font-medium text-white transition-colors hover:bg-[#FF5500]/10 ${className ?? ""}`}
+      className={`inline-flex h-10 items-center justify-center rounded-md border border-[#f06232]/50 px-4 text-sm font-medium text-white transition-colors hover:bg-[#f06232]/10 ${className ?? ""}`}
     >
       Request pricing
     </Link>

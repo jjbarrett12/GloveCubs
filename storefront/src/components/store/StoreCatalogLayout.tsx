@@ -36,7 +36,7 @@ export function StoreCatalogLayout({ urlState, brands, facetCounts, facetMeta, c
             type="button"
             variant="outline"
             size="sm"
-            className="border-[#FF5500]/50 text-white hover:bg-[#FF5500]/10"
+            className="border-[#f06232]/50 text-white hover:bg-[#f06232]/10"
             onClick={() => setMobileFiltersOpen(true)}
           >
             <SlidersHorizontal className="mr-2 h-4 w-4" />

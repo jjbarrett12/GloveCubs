@@ -22,11 +22,11 @@ export default function IndustriesOverviewPage() {
             <Link
               key={key}
               href={`/industries/${key}`}
-              className="rounded-xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#FF5500]/50 hover:bg-white/[0.07]"
+              className="rounded-xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#f06232]/50 hover:bg-white/[0.07]"
             >
               <h2 className="text-xl font-semibold text-white">{cfg.name}</h2>
               <p className="mt-2 text-sm text-white/65">{cfg.tagline}</p>
-              <span className="mt-4 inline-block text-sm font-semibold text-[#FF5500]">View industry →</span>
+              <span className="mt-4 inline-block text-sm font-semibold text-[#f06232]">View industry →</span>
             </Link>
           );
         })}
@@ -41,13 +41,13 @@ export default function IndustriesOverviewPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href={getStoreHrefForIntent("store.search.automotive")}
-            className="inline-flex rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#FF5500]"
+            className="inline-flex rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#f06232]"
           >
             Browse automotive-related gloves
           </Link>
           <Link
             href={getRequestPricingHrefForIntent("rfq.industries.automotive")}
-            className="inline-flex rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white/90 hover:border-[#FF5500]/50"
+            className="inline-flex rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white/90 hover:border-[#f06232]/50"
           >
             Request pricing
           </Link>

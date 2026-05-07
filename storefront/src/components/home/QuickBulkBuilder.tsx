@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { INDUSTRIES, INDUSTRY_KEYS, type IndustryKey } from "@/config/industries";
+import { INDUSTRIES, INDUSTRY_KEYS } from "@/config/industries";
+import { STORE_INDUSTRY_FACET_ROWS } from "@/config/store-industry-facet";
 import { buildRequestPricingHref, type RequestPricingQueryParams } from "@/lib/discovery/request-pricing-url";
 
 const GLOVE_TYPES = [
@@ -15,9 +16,7 @@ const GLOVE_TYPES = [
 ] as const;
 
 const MATERIALS = [
-  { value: "nitrile", label: "Nitrile" },
   { value: "latex", label: "Latex" },
-  { value: "vinyl", label: "Vinyl" },
   { value: "poly", label: "Poly / hybrid" },
   { value: "blend", label: "Blend / specialty" },
 ] as const;
@@ -36,17 +35,36 @@ const VOLUMES = [
   { value: "under_1_case", label: "Under 1 case / mo" },
   { value: "cases_1_5", label: "1–5 cases / mo" },
   { value: "cases_6_10", label: "6–10 cases / mo" },
+  { value: "cases_6_20", label: "6–20 cases / mo" },
   { value: "cases_11_25", label: "11–25 cases / mo" },
+  { value: "cases_21_plus", label: "21+ cases / mo" },
   { value: "cases_26_50", label: "26–50 cases / mo" },
   { value: "cases_51_100", label: "51–100 cases / mo" },
   { value: "cases_100_plus", label: "100+ cases / mo" },
+  { value: "not_sure", label: "Not sure" },
 ] as const;
 
 const inputClass =
-  "flex min-h-12 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-base text-neutral-900 shadow-sm placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:border-[#FF5500]";
+  "flex min-h-12 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-base text-neutral-900 shadow-sm placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06232]/35 focus-visible:border-[#f06232]";
+
+/** Industry / store facet options: landing keys first, then catalog facets (aligned with header nav). */
+const BULK_INDUSTRY_OPTIONS: { value: string; label: string }[] = (() => {
+  const seen = new Set<string>();
+  const out: { value: string; label: string }[] = [];
+  for (const key of INDUSTRY_KEYS) {
+    seen.add(key);
+    out.push({ value: key, label: INDUSTRIES[key].name });
+  }
+  for (const row of STORE_INDUSTRY_FACET_ROWS) {
+    if (seen.has(row.value)) continue;
+    seen.add(row.value);
+    out.push({ value: row.value, label: row.label });
+  }
+  return out;
+})();
 
 function bulkOrderToRfqParams(args: {
-  industry: IndustryKey | "";
+  industry: string;
   gloveType: (typeof GLOVE_TYPES)[number]["value"] | "";
   material: (typeof MATERIALS)[number]["value"] | "";
   size: (typeof SIZES)[number]["value"] | "";
@@ -64,7 +82,7 @@ function bulkOrderToRfqParams(args: {
 
 export function QuickBulkBuilder() {
   const router = useRouter();
-  const [industry, setIndustry] = React.useState<IndustryKey | "">("");
+  const [industry, setIndustry] = React.useState<string>("");
   const [gloveType, setGloveType] = React.useState<(typeof GLOVE_TYPES)[number]["value"] | "">("");
   const [material, setMaterial] = React.useState<(typeof MATERIALS)[number]["value"] | "">("");
   const [size, setSize] = React.useState<(typeof SIZES)[number]["value"] | "">("");
@@ -98,7 +116,7 @@ export function QuickBulkBuilder() {
   return (
     <div
       id="bulk-order"
-      className="scroll-mt-24 rounded-2xl border-2 border-[#FF5500] bg-white p-5 shadow-[0_10px_40px_rgba(0,0,0,0.12)] sm:p-6"
+      className="scroll-mt-24 rounded-2xl border-2 border-[#f06232] bg-white p-5 shadow-[0_10px_40px_rgba(0,0,0,0.12)] sm:p-6"
     >
       <h2 className="mb-4 text-lg font-semibold text-neutral-900">Build your bulk order</h2>
       <p className="mb-4 text-sm leading-relaxed text-neutral-600">
@@ -114,14 +132,14 @@ export function QuickBulkBuilder() {
             id="qb-industry"
             className={inputClass}
             value={industry}
-            onChange={(e) => setIndustry(e.target.value as IndustryKey | "")}
+            onChange={(e) => setIndustry(e.target.value)}
           >
             <option value="" className="bg-white text-neutral-900">
-              Select industry
+              Select industry / program
             </option>
-            {INDUSTRY_KEYS.map((key) => (
-              <option key={key} value={key} className="bg-white text-neutral-900">
-                {INDUSTRIES[key].name}
+            {BULK_INDUSTRY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} className="bg-white text-neutral-900">
+                {o.label}
               </option>
             ))}
           </select>

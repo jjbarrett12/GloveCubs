@@ -13,7 +13,7 @@ export function ServiceAreaPanel() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1200px]">
           <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-10 shadow-xl sm:p-12">
-            <h3 id="map-heading" className="mb-4 text-center text-[32px] font-bold text-[#FF5500]">
+            <h3 id="map-heading" className="mb-4 text-center text-[32px] font-bold text-[#f06232]">
               Built Here, Servicing Everywhere
             </h3>
             <p className="mb-8 text-center text-base leading-relaxed text-white/90">
@@ -40,7 +40,7 @@ export function ServiceAreaPanel() {
                     href={MAPS_LINK_HREF}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium text-[#FF5500] underline-offset-2 hover:underline"
+                    className="font-medium text-[#f06232] underline-offset-2 hover:underline"
                   >
                     Open in Google Maps
                   </a>
@@ -48,7 +48,7 @@ export function ServiceAreaPanel() {
               </div>
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-white/20 bg-gradient-to-b from-[#1a1a1a] to-[#111] px-6 py-16 text-center shadow-inner">
-                <MapPin className="h-12 w-12 text-[#FF5500]" aria-hidden />
+                <MapPin className="h-12 w-12 text-[#f06232]" aria-hidden />
                 <p className="max-w-md text-base font-medium text-white/90">
                   Map preview is turned off in this environment, or no embed URL is configured.
                 </p>
@@ -61,7 +61,7 @@ export function ServiceAreaPanel() {
                   href={MAPS_LINK_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#FF5500] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#FF5500]/25 transition hover:bg-[#FF5500]"
+                  className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#f06232] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#f06232]/25 transition hover:bg-[#f06232]"
                 >
                   Open map — Salt Lake City, UT
                 </a>

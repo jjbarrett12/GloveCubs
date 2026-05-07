@@ -56,13 +56,13 @@ export default function ResourcesPage() {
         {CARDS.map((c) => (
           <div
             key={c.href}
-            className="flex flex-col rounded-xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#FF5500]/40"
+            className="flex flex-col rounded-xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#f06232]/40"
           >
             <h2 className="text-lg font-semibold text-white">{c.title}</h2>
             <p className="mt-2 flex-1 text-sm text-white/65">{c.body}</p>
             <Link
               href={c.href}
-              className="mt-5 inline-flex w-fit rounded-lg bg-[#FF5500] px-4 py-2 text-sm font-semibold text-white hover:bg-[#FF5500]"
+              className="mt-5 inline-flex w-fit rounded-lg bg-[#f06232] px-4 py-2 text-sm font-semibold text-white hover:bg-[#f06232]"
             >
               {c.cta}
             </Link>
