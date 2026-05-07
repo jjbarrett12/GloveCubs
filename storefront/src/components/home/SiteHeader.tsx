@@ -316,17 +316,9 @@ export function SiteHeader() {
                       <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
                         <Link
                           href={item.href}
-                          className={`${mobileNavLinkClass} flex min-h-[44px] items-center gap-3`}
+                          className={`${mobileNavLinkClass} flex min-h-[44px] items-center`}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
-                          {item.thumb ? (
-                            <img
-                              src={item.thumb}
-                              alt=""
-                              className="h-9 w-9 shrink-0 rounded-md border border-neutral-200/80 bg-neutral-50 object-contain p-0.5"
-                              loading="lazy"
-                            />
-                          ) : null}
                           {item.label}
                         </Link>
                       </li>
@@ -356,18 +348,8 @@ export function SiteHeader() {
                             <li key={`d-${item.href}`}>
                               <Link
                                 href={item.href}
-                                className="flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
+                                className="flex min-h-[44px] items-center rounded-lg px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
                               >
-                                {item.thumb ? (
-                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-neutral-50/90">
-                                    <img
-                                      src={item.thumb}
-                                      alt=""
-                                      className="h-7 w-7 object-contain"
-                                      loading="lazy"
-                                    />
-                                  </span>
-                                ) : null}
                                 <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
                               </Link>
                             </li>
