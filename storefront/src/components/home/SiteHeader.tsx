@@ -24,6 +24,15 @@ import { cn } from "@/lib/utils";
 
 const MAIN_SITE_URL = process.env.NEXT_PUBLIC_GLOVECUBS_API?.replace(/\/$/, "") ?? "";
 
+/**
+ * Stacking (keep below `components/ui/dialog.tsx` overlay z-50; above page content).
+ * - Page / hero: default (0–1).
+ * - Sticky header: z-40.
+ * - Mega-panels: z-10 inside elevated `li` (z-30 when open/hover) so later nav items do not paint over.
+ * - Dialogs / modals: z-50+ (canonical overlay).
+ * - Legacy mobile drawers (e.g. store): z-[1200] — unchanged.
+ */
+
 function closeMobileNav(setMobileOpen: (v: boolean) => void, setMobilePanel: (v: "industries" | "brands" | null) => void) {
   setMobileOpen(false);
   setMobilePanel(null);
@@ -34,6 +43,60 @@ export function SiteHeader() {
   const [q, setQ] = React.useState("");
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobilePanel, setMobilePanel] = React.useState<"industries" | "brands" | null>(null);
+  const [desktopMega, setDesktopMega] = React.useState<"industries" | "brands" | null>(null);
+  const industriesMegaRef = React.useRef<HTMLLIElement | null>(null);
+  const brandsMegaRef = React.useRef<HTMLLIElement | null>(null);
+  /** Browser timer id (`window.setTimeout`); avoid `NodeJS.Timeout` mismatch in Next typecheck. */
+  const megaCloseTimerRef = React.useRef<number | null>(null);
+
+  function cancelMegaCloseTimer() {
+    if (megaCloseTimerRef.current != null) {
+      window.clearTimeout(megaCloseTimerRef.current);
+      megaCloseTimerRef.current = null;
+    }
+  }
+
+  function scheduleMegaClose(li: HTMLLIElement | null) {
+    cancelMegaCloseTimer();
+    const tid = window.setTimeout(() => {
+      if (li?.contains(document.activeElement)) {
+        megaCloseTimerRef.current = null;
+        return;
+      }
+      setDesktopMega(null);
+      megaCloseTimerRef.current = null;
+    }, 140);
+    megaCloseTimerRef.current = tid as unknown as number;
+  }
+
+  React.useEffect(() => {
+    return () => cancelMegaCloseTimer();
+  }, []);
+
+  React.useEffect(() => {
+    if (mobileOpen) setDesktopMega(null);
+  }, [mobileOpen]);
+
+  React.useEffect(() => {
+    if (desktopMega == null) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDesktopMega(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [desktopMega]);
+
+  React.useEffect(() => {
+    if (desktopMega == null) return;
+    function onMouseDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (industriesMegaRef.current?.contains(t)) return;
+      if (brandsMegaRef.current?.contains(t)) return;
+      setDesktopMega(null);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [desktopMega]);
 
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +111,14 @@ export function SiteHeader() {
 
   const mobileNavLinkClass =
     "block py-3 text-[15px] font-semibold text-neutral-900 hover:bg-[#fff8f5] hover:text-[#FF5500] lg:py-3";
+
+  const megaTriggerClass = cn(
+    navLinkClass,
+    "border-0 bg-transparent p-0 text-inherit shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5500]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
+  );
+
+  const industriesMegaOpen = desktopMega === "industries";
+  const brandsMegaOpen = desktopMega === "brands";
 
   return (
     <>
@@ -80,7 +151,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-[5000] isolate overflow-visible border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
+      <header className="sticky top-0 z-40 overflow-visible border-b border-neutral-300/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.04)]">
         <div className="mx-auto max-w-7xl min-w-0 px-4 pt-3 sm:px-6 lg:px-8">
           <div className="overflow-x-clip pb-3">
             <div className="grid min-w-0 grid-cols-1 items-center gap-4 lg:grid-cols-[auto_1fr]">
@@ -189,7 +260,23 @@ export function SiteHeader() {
                     Shop Gloves
                   </Link>
                 </li>
-                <li className="group relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
+                <li
+                  ref={industriesMegaRef}
+                  className={cn(
+                    "relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2",
+                    industriesMegaOpen ? "lg:z-30" : "lg:z-auto lg:hover:z-30",
+                  )}
+                  onMouseEnter={() => {
+                    cancelMegaCloseTimer();
+                    setDesktopMega("industries");
+                  }}
+                  onMouseLeave={() => scheduleMegaClose(industriesMegaRef.current)}
+                  onBlur={(e) => {
+                    const rt = e.relatedTarget as Node | null;
+                    if (rt && (e.currentTarget as HTMLElement).contains(rt)) return;
+                    setDesktopMega((cur) => (cur === "industries" ? null : cur));
+                  }}
+                >
                   <div className="flex w-full items-center justify-between gap-2 lg:hidden">
                     <span className={navLinkClass}>Industries</span>
                     <button
@@ -204,9 +291,21 @@ export function SiteHeader() {
                       />
                     </button>
                   </div>
-                  <span className={`${navLinkClass} hidden cursor-default justify-center lg:flex lg:cursor-pointer`}>
-                    Industries <ChevronDown className="h-3 w-3 opacity-80" />
-                  </span>
+                  <button
+                    type="button"
+                    id="nav-mega-industries-trigger"
+                    aria-haspopup="true"
+                    aria-expanded={industriesMegaOpen}
+                    aria-controls="nav-mega-industries"
+                    className={cn(megaTriggerClass, "hidden w-full justify-center lg:inline-flex")}
+                    onClick={() => setDesktopMega((m) => (m === "industries" ? null : "industries"))}
+                    onFocus={() => {
+                      cancelMegaCloseTimer();
+                      setDesktopMega("industries");
+                    }}
+                  >
+                    Industries <ChevronDown className="h-3 w-3 opacity-80" aria-hidden />
+                  </button>
                   <ul
                     className={cn(
                       "mt-0 list-none space-y-0 border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
@@ -217,7 +316,7 @@ export function SiteHeader() {
                       <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
                         <Link
                           href={item.href}
-                          className={`${mobileNavLinkClass} flex items-center gap-3`}
+                          className={`${mobileNavLinkClass} flex min-h-[44px] items-center gap-3`}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
                           {item.thumb ? (
@@ -234,13 +333,20 @@ export function SiteHeader() {
                     ))}
                   </ul>
                   <div
+                    id="nav-mega-industries"
+                    role="region"
+                    aria-label="Industries menu"
                     className={cn(
-                      "pointer-events-none invisible absolute left-1/2 top-full z-[5100] mt-1 hidden w-[min(calc(100vw-1.5rem),520px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 translate-y-1 opacity-0 transition duration-150 ease-out lg:block",
-                      "rounded-2xl border border-neutral-200/90 bg-white/95 text-left shadow-2xl ring-1 ring-black/[0.04] backdrop-blur-md",
-                      "group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100",
+                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-1.5rem),480px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 lg:block",
+                      "before:pointer-events-auto before:absolute before:left-0 before:right-0 before:top-[-10px] before:z-[1] before:h-2.5 before:content-['']",
+                      "rounded-xl border border-neutral-200/80 bg-white/95 text-left shadow-lg ring-1 ring-black/[0.03] backdrop-blur-sm transition duration-150 ease-out",
+                      industriesMegaOpen
+                        ? "visible translate-y-0 opacity-100"
+                        : "invisible translate-y-px opacity-0",
+                      industriesMegaOpen ? "pointer-events-auto" : "pointer-events-none",
                     )}
                   >
-                    <div className="flex max-h-[min(70vh,520px)] flex-col sm:max-h-none lg:flex-row lg:divide-x lg:divide-neutral-100">
+                    <div className="flex max-h-[min(68vh,480px)] flex-col sm:max-h-none lg:max-h-[min(72vh,520px)] lg:flex-row lg:divide-x lg:divide-neutral-100">
                       <div className="min-w-0 flex-1 overflow-y-auto overscroll-y-contain p-3 sm:p-4">
                         <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
                           Shop by industry
@@ -250,14 +356,14 @@ export function SiteHeader() {
                             <li key={`d-${item.href}`}>
                               <Link
                                 href={item.href}
-                                className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2.5"
+                                className="flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-50 hover:text-[#FF5500] lg:py-2"
                               >
                                 {item.thumb ? (
-                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-neutral-200/80 bg-neutral-50/90 shadow-sm">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-neutral-50/90">
                                     <img
                                       src={item.thumb}
                                       alt=""
-                                      className="h-9 w-9 object-contain"
+                                      className="h-7 w-7 object-contain"
                                       loading="lazy"
                                     />
                                   </span>
@@ -268,25 +374,38 @@ export function SiteHeader() {
                           ))}
                         </ul>
                       </div>
-                      <div className="hidden shrink-0 flex-col justify-between gap-3 bg-gradient-to-b from-neutral-50 to-white p-4 lg:flex lg:w-[168px]">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-500">Catalog</p>
-                          <p className="mt-1 text-xs leading-snug text-neutral-600">Case-ready lines from authorized distributors.</p>
-                        </div>
-                        <div className="relative overflow-hidden rounded-xl border border-neutral-200/90 bg-white shadow-inner" aria-hidden>
+                      <div className="hidden shrink-0 flex-col justify-between gap-2 border-neutral-100 bg-gradient-to-b from-neutral-50/90 to-white p-3 lg:flex lg:w-[132px] lg:border-l">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-500">From the catalog</p>
+                        <div className="relative overflow-hidden rounded-lg border border-neutral-200/80 bg-white" aria-hidden>
                           <Image
                             src="/images/logos/Global_Glove.png"
                             alt=""
-                            width={200}
-                            height={200}
-                            className="h-auto w-full object-contain p-2"
+                            width={160}
+                            height={160}
+                            className="h-auto w-full object-contain p-1.5"
                           />
                         </div>
                       </div>
                     </div>
                   </div>
                 </li>
-                <li className="group relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
+                <li
+                  ref={brandsMegaRef}
+                  className={cn(
+                    "relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2",
+                    brandsMegaOpen ? "lg:z-30" : "lg:z-auto lg:hover:z-30",
+                  )}
+                  onMouseEnter={() => {
+                    cancelMegaCloseTimer();
+                    setDesktopMega("brands");
+                  }}
+                  onMouseLeave={() => scheduleMegaClose(brandsMegaRef.current)}
+                  onBlur={(e) => {
+                    const rt = e.relatedTarget as Node | null;
+                    if (rt && (e.currentTarget as HTMLElement).contains(rt)) return;
+                    setDesktopMega((cur) => (cur === "brands" ? null : cur));
+                  }}
+                >
                   <div className="flex w-full items-center justify-between gap-2 lg:hidden">
                     <span className={navLinkClass}>Brands</span>
                     <button
@@ -301,9 +420,21 @@ export function SiteHeader() {
                       />
                     </button>
                   </div>
-                  <span className={`${navLinkClass} hidden cursor-default justify-center lg:flex lg:cursor-pointer`}>
-                    Brands <ChevronDown className="h-3 w-3 opacity-80" />
-                  </span>
+                  <button
+                    type="button"
+                    id="nav-mega-brands-trigger"
+                    aria-haspopup="true"
+                    aria-expanded={brandsMegaOpen}
+                    aria-controls="nav-mega-brands"
+                    className={cn(megaTriggerClass, "hidden w-full justify-center lg:inline-flex")}
+                    onClick={() => setDesktopMega((m) => (m === "brands" ? null : "brands"))}
+                    onFocus={() => {
+                      cancelMegaCloseTimer();
+                      setDesktopMega("brands");
+                    }}
+                  >
+                    Brands <ChevronDown className="h-3 w-3 opacity-80" aria-hidden />
+                  </button>
                   <ul
                     className={cn(
                       "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#FF5500]/35 pl-3 lg:hidden",
@@ -325,7 +456,7 @@ export function SiteHeader() {
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF5500]"
+                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-900 hover:text-[#FF5500]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
                             {logo ? (
@@ -338,21 +469,26 @@ export function SiteHeader() {
                     })}
                   </ul>
                   <div
+                    id="nav-mega-brands"
+                    role="region"
+                    aria-label="Brands menu"
                     className={cn(
-                      "pointer-events-none invisible absolute left-1/2 top-full z-[5100] mt-1 hidden w-[min(calc(100vw-1.5rem),580px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 translate-y-1 opacity-0 transition duration-150 ease-out lg:block",
-                      "rounded-2xl border border-neutral-200/90 bg-white/95 text-left shadow-2xl ring-1 ring-black/[0.04] backdrop-blur-md",
-                      "group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100",
+                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-1.5rem),520px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 lg:block",
+                      "before:pointer-events-auto before:absolute before:left-0 before:right-0 before:top-[-10px] before:z-[1] before:h-2.5 before:content-['']",
+                      "rounded-xl border border-neutral-200/80 bg-white/95 text-left shadow-lg ring-1 ring-black/[0.03] backdrop-blur-sm transition duration-150 ease-out",
+                      brandsMegaOpen ? "visible translate-y-0 opacity-100" : "invisible translate-y-px opacity-0",
+                      brandsMegaOpen ? "pointer-events-auto" : "pointer-events-none",
                     )}
                   >
-                    <div className="max-h-[min(72vh,560px)] overflow-y-auto overscroll-y-contain p-4 sm:p-5">
-                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
+                    <div className="max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain p-3 sm:p-4">
+                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF5500]">
                         Shop by brand
                       </h4>
-                      <ul className="grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-1">
+                      <ul className="grid list-none grid-cols-1 gap-0.5 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-0.5">
                         <li className="sm:col-span-2">
                           <Link
                             href="/brands"
-                            className="flex items-center justify-between rounded-xl border border-[#FF5500]/25 bg-[#FF5500]/10 px-3 py-2.5 text-sm font-bold text-[#FF5500] transition hover:border-[#FF5500]/40 hover:bg-[#FF5500]/15"
+                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[#FF5500]/20 bg-[#FF5500]/8 px-3 py-2 text-sm font-bold text-[#FF5500] transition hover:border-[#FF5500]/35 hover:bg-[#FF5500]/12"
                           >
                             <span>All brands</span>
                             <span aria-hidden>→</span>
@@ -364,14 +500,14 @@ export function SiteHeader() {
                             <li key={b}>
                               <Link
                                 href={getStoreHrefForBrandDisplayNameSearch(b)}
-                                className="flex min-h-[52px] items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:border-neutral-200 hover:bg-neutral-50/90 hover:text-[#FF5500]"
+                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-900 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#FF5500]"
                               >
                                 {logo ? (
-                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-neutral-200/80 bg-white shadow-sm">
-                                    <img src={logo} alt="" className="h-9 w-9 object-contain" loading="lazy" />
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
+                                    <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
                                   </span>
                                 ) : (
-                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
                                     —
                                   </span>
                                 )}
