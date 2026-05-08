@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, isSmtpConfigured, sendSmtpMail } from "@/lib/email/smtp";
+import { recordQuoteCartSpine } from "@/lib/procurement/spine-writes";
 
 const itemSchema = z.object({
   product_id: z.string().uuid(),
@@ -20,6 +21,8 @@ const bodySchema = z.object({
   company: z.string().trim().max(300).optional().nullable(),
   notes: z.string().trim().max(8000).optional().nullable(),
   items: z.array(itemSchema).min(1),
+  /** Phase 2B: ontology environment when submitting from prep-line flows */
+  operational_environment_key: z.literal("restaurant_prep_line").optional().nullable(),
   /** Honeypot */
   website: z.string().optional().nullable(),
 });
@@ -162,9 +165,31 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let procurement_opportunity_id: string | null = null;
+  let buyer_display_ref: string | null = null;
+  try {
+    const spine = await recordQuoteCartSpine(supabase, {
+      operationalEnvironmentKey: body.operational_environment_key ?? null,
+      quoteRequestId: quoteRequestId,
+      companyName: companyName,
+      contactName: contactName,
+      contactEmail: email,
+      lineItemCount: body.items.length,
+      emailNotificationSent,
+    });
+    if (spine) {
+      procurement_opportunity_id = spine.opportunityId;
+      buyer_display_ref = spine.buyerDisplayRef;
+    }
+  } catch (e) {
+    console.error("[POST /api/quote-request] procurement spine write failed", e);
+  }
+
   return NextResponse.json({
     success: true,
     quote_request_id: quoteRequestId,
     email_notification_sent: emailNotificationSent,
+    procurement_opportunity_id,
+    buyer_display_ref,
   });
 }

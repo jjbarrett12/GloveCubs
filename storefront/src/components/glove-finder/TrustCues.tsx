@@ -2,6 +2,7 @@
 
 import { ShieldCheck, Truck, FileCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 
 const CUES = [
   { icon: ShieldCheck, label: "B2B pricing" },
@@ -9,7 +10,16 @@ const CUES = [
   { icon: FileCheck, label: "1,000+ SKUs" },
 ];
 
-export function TrustCues({ className }: { className?: string }) {
+const PREP_LINE_CUES = [
+  { icon: ShieldCheck, label: PrepLineOperationalCopy.trustCueSpecs },
+  { icon: Truck, label: PrepLineOperationalCopy.trustCueQuote },
+  { icon: FileCheck, label: PrepLineOperationalCopy.trustCueVerify },
+];
+
+export type TrustCueVariant = "default" | "prep_line";
+
+export function TrustCues({ className, variant = "default" }: { className?: string; variant?: TrustCueVariant }) {
+  const cues = variant === "prep_line" ? PREP_LINE_CUES : CUES;
   return (
     <div
       className={cn(
@@ -18,7 +28,7 @@ export function TrustCues({ className }: { className?: string }) {
       )}
       role="list"
     >
-      {CUES.map(({ icon: Icon, label }) => (
+      {cues.map(({ icon: Icon, label }) => (
         <span key={label} className="flex items-center gap-2" role="listitem">
           <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
           {label}

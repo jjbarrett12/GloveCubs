@@ -22,8 +22,6 @@ import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
 import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
 import { cn } from "@/lib/utils";
 
-const MAIN_SITE_URL = process.env.NEXT_PUBLIC_GLOVECUBS_API?.replace(/\/$/, "") ?? "";
-
 /**
  * Stacking (keep below `components/ui/dialog.tsx` overlay z-50; above page content).
  * - Page / hero: default (0–1).
@@ -223,16 +221,12 @@ export function SiteHeader() {
                 Request Quote
               </Link>
 
-              {MAIN_SITE_URL ? (
-                <a
-                  href={MAIN_SITE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
-                >
-                  Sign In
-                </a>
-              ) : null}
+              <Link
+                href="/workspace/procurement"
+                className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
+              >
+                Sign In
+              </Link>
 
               <Link
                 href="/quote-cart"

@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
 const companiesService = require('./companiesService');
+const { resolveActiveCompanyId, setActiveCompanyForUser } = require('../lib/active-company-resolve');
 
 function isAuthUuid(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id || ''));
@@ -62,6 +63,10 @@ function rowToUser(row, authUser, resolvedCompanyId) {
     payment_terms: row.payment_terms || 'credit_card',
     pricing_tier_source: row.pricing_tier_source || 'manual',
     pricing_tier_evaluated_at: row.pricing_tier_evaluated_at ?? null,
+    active_company_id:
+      row.active_company_id != null && row.active_company_id !== ''
+        ? String(row.active_company_id)
+        : null,
   };
 }
 
@@ -214,6 +219,23 @@ async function updateUser(id, payload) {
   for (const k of allowed) {
     if (payload[k] !== undefined) updates[k] = payload[k];
   }
+  if (payload.active_company_id !== undefined) {
+    const v = payload.active_company_id;
+    if (v === null || v === '') {
+      updates.active_company_id = null;
+    } else if (companiesService.isGcCompanyUuid(String(v))) {
+      const setRes = await setActiveCompanyForUser(String(id), String(v).trim(), { supabase });
+      if (!setRes.ok) {
+        const err = new Error(setRes.error);
+        err.statusCode = setRes.code === 'NOT_A_MEMBER' ? 403 : 400;
+        throw err;
+      }
+    } else {
+      const err = new Error('Invalid active_company_id');
+      err.statusCode = 400;
+      throw err;
+    }
+  }
   if (payload.default_company_id !== undefined && payload.default_company_id != null && payload.default_company_id !== '') {
     if (companiesService.isGcCompanyUuid(payload.default_company_id)) {
       await companiesService.addCompanyMember(String(id), String(payload.default_company_id), 'member');
@@ -229,19 +251,11 @@ async function getAllUsers() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
   if (error) throw error;
-  const { data: mems } = await supabase.schema('gc_commerce').from('company_members').select('user_id, company_id');
-  const firstCompanyByUser = new Map();
-  for (const m of mems || []) {
-    const uid = String(m.user_id);
-    if (!firstCompanyByUser.has(uid) && m.company_id != null) {
-      firstCompanyByUser.set(uid, String(m.company_id));
-    }
-  }
   const out = [];
   for (const row of data || []) {
     const { data: authWrap } = await supabase.auth.admin.getUserById(String(row.id));
-    const cid = firstCompanyByUser.get(String(row.id)) ?? null;
-    out.push(rowToUser(row, authWrap?.user || null, cid));
+    const r = await resolveActiveCompanyId(String(row.id), { supabase });
+    out.push(rowToUser(row, authWrap?.user || null, r.companyId));
   }
   return out;
 }

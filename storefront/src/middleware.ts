@@ -3,7 +3,8 @@ import type { NextRequest } from "next/server";
 
 /**
  * Runs only for `/admin/*` and `/api/internal/*` (see `config.matcher`).
- * Public marketing pages and public APIs are never touched by this file.
+ * Public marketing pages, `/workspace/*`, and public storefront `src/app/api/*` are never touched here
+ * (workspace auth is enforced in `src/app/workspace/procurement/layout.tsx`).
  */
 
 function relaxAdminPathGate(): boolean {
@@ -15,6 +16,24 @@ function relaxAdminPathGate(): boolean {
 
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
+
+  if (pathname.startsWith("/workspace/procurement")) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-gc-pathname", pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  if (pathname === "/api/ai/invoice/extract") {
+    console.log(
+      JSON.stringify({
+        category: "invoice_intake",
+        event: "legacy_next_path_rewrite",
+        path: pathname,
+        method: request.method,
+        ts: new Date().toISOString(),
+      })
+    );
+  }
 
   if (pathname.startsWith("/api/internal")) {
     const secret = process.env.INTERNAL_API_SECRET?.trim();
@@ -54,5 +73,11 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/internal/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/internal/:path*",
+    "/api/ai/invoice/extract",
+    "/workspace/procurement",
+    "/workspace/procurement/:path*",
+  ],
 };

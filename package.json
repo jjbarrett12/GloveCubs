@@ -6,10 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "dev:storefront": "npm run dev --prefix storefront",
     "seed": "node seed.js",
     "diagnose:products": "node scripts/diagnose-products.mjs",
     "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
     "test": "node scripts/check-no-catalogos-products.js && node --test \"tests/*.test.js\"",
+    "verify:storefront-redirects": "node --test tests/storefront-public-redirect.test.js",
+    "verify:phase-a-live": "node scripts/verify-phase-a-redirects.cjs",
     "test:auth": "node --test tests/auth.test.js",
     "test:checkout-http": "node tests/checkout-address-api.integration.js",
     "test:parse-url": "node scripts/test-parse-url-asset.mjs",

@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 import { quoteCartLineReactKey } from "@/lib/quote-cart/line-utils";
+import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
+import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
+import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 
 export default function QuoteCartPage() {
   const { items, hydrated, setQuantity, removeItem, clear } = useQuoteCart();
@@ -18,6 +21,7 @@ export default function QuoteCartPage() {
   const [done, setDone] = useState(false);
   /** Mirrors API `email_notification_sent` for smoke testing */
   const [emailNotificationSent, setEmailNotificationSent] = useState<boolean | null>(null);
+  const [buyerDisplayRef, setBuyerDisplayRef] = useState<string | null>(null);
 
   async function submit() {
     setError(null);
@@ -31,7 +35,17 @@ export default function QuoteCartPage() {
     }
 
     setSubmitting(true);
+    setBuyerDisplayRef(null);
     try {
+      let operational_environment_key: "restaurant_prep_line" | undefined;
+      try {
+        if (sessionStorage.getItem(PREP_LINE_QUOTE_SESSION_KEY) === RESTAURANT_PREP_LINE_ENVIRONMENT_KEY) {
+          operational_environment_key = RESTAURANT_PREP_LINE_ENVIRONMENT_KEY;
+        }
+      } catch {
+        // ignore
+      }
+
       const res = await fetch("/api/quote-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -40,6 +54,7 @@ export default function QuoteCartPage() {
           email: email.trim(),
           company: company.trim() || null,
           notes: notes.trim() || null,
+          operational_environment_key,
           items: items.map((i) => ({
             product_id: i.product_id,
             name: i.name,
@@ -60,6 +75,11 @@ export default function QuoteCartPage() {
       setEmailNotificationSent(
         typeof data.email_notification_sent === "boolean" ? data.email_notification_sent : null
       );
+      const ref =
+        typeof data.buyer_display_ref === "string" && data.buyer_display_ref.trim().startsWith("GC-PREP-")
+          ? data.buyer_display_ref.trim()
+          : null;
+      setBuyerDisplayRef(ref);
       clear();
       setDone(true);
       setName("");
@@ -99,6 +119,12 @@ export default function QuoteCartPage() {
             <p className="text-emerald-400/90">
               Thanks — your quote request was submitted. We’ll follow up shortly.
             </p>
+            {buyerDisplayRef ? (
+              <div className="text-xs text-white/75 space-y-1 border-t border-white/10 pt-2 mt-2">
+                <p>{PrepLineOperationalCopy.continuityRequestRef(buyerDisplayRef)}</p>
+                <p className="text-white/55">{PrepLineOperationalCopy.continuityBusinessDays}</p>
+              </div>
+            ) : null}
             {emailNotificationSent === false && (
               <p className="text-amber-200/90 text-xs">
                 Email notification was not sent (check SMTP env). Your request is still saved.

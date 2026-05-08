@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`dark ${poppins.variable}`}>
-      <body className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased">
+      <body className="min-h-screen min-w-0 bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

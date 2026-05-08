@@ -401,6 +401,46 @@ const api = {
     }
 };
 
+/**
+ * Canonical customer procurement intelligence lives on the Next storefront.
+ * When the legacy Express-served SPA still loads these routes, send people to Next (see meta glovecubs-storefront-origin from server).
+ */
+function getCanonicalStorefrontOrigin() {
+    var m = document.querySelector('meta[name="glovecubs-storefront-origin"]');
+    var raw = m && m.getAttribute('content') ? String(m.getAttribute('content')).trim() : '';
+    raw = raw.replace(/\/$/, '');
+    if (raw) return raw;
+    try {
+        var h = (window.location && window.location.hostname) || '';
+        if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3005';
+    } catch (e) {}
+    return 'https://glovecubs.com';
+}
+
+function logLegacySpaMigration(event, fields) {
+    try {
+        console.log(
+            JSON.stringify(
+                Object.assign(
+                    {
+                        category: 'legacy_spa_migration',
+                        event: event,
+                        ts: new Date().toISOString(),
+                    },
+                    fields || {}
+                )
+            )
+        );
+    } catch (e) {}
+}
+
+function openStorefrontPath(path) {
+    var base = getCanonicalStorefrontOrigin();
+    var suffix = path && path.charAt(0) === '/' ? path : '/' + (path || '');
+    logLegacySpaMigration('navigate_to_storefront', { path: suffix, storefront_origin: base });
+    window.location.assign(base + suffix);
+}
+
 // ============================================
 // SEO: Clean URLs & slug helpers
 // ============================================
@@ -977,8 +1017,8 @@ async function renderHomePage() {
                             <button class="btn btn-primary btn-lg" onclick="navigate('b2b')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #FF7A00 0%, rgba(255,122,0,0.85) 100%); border: none; border-radius: 12px; color: #ffffff; box-shadow: 0 8px 25px rgba(255,122,0,0.4); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 12px 35px rgba(255,122,0,0.6)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.4)';">
                                 <i class="fas fa-tag" style="margin-right: 8px;"></i>Get Distributor Pricing
                             </button>
-                            <button class="btn btn-outline btn-lg" onclick="navigate('ai-advisor')" style="padding: 16px 32px; font-size: 16px; font-weight: 700; border: 3px solid #FF7A00; color: #FF7A00; background: rgba(255,122,0,0.1); border-radius: 12px; transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.background='rgba(255,122,0,0.2)'; this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)';" onmouseout="this.style.background='rgba(255,122,0,0.1)'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
-                                <i class="fas fa-robot" style="margin-right: 8px;"></i>Try AI Glove Finder
+                            <button class="btn btn-outline btn-lg" onclick="openStorefrontPath('/glove-finder'); return false;" style="padding: 16px 32px; font-size: 16px; font-weight: 700; border: 3px solid #FF7A00; color: #FF7A00; background: rgba(255,122,0,0.1); border-radius: 12px; transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.background='rgba(255,122,0,0.2)'; this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 25px rgba(255,122,0,0.3)';" onmouseout="this.style.background='rgba(255,122,0,0.1)'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                                <i class="fas fa-robot" style="margin-right: 8px;"></i>Glove Finder (main site)
                             </button>
                         </div>
                         <div style="display: flex; gap: 32px; flex-wrap: wrap; font-size: 15px; margin-bottom: 32px;">
@@ -1119,9 +1159,9 @@ async function renderHomePage() {
                                     <div style="margin-bottom: 10px;"><i class="fas fa-dollar-sign" style="margin-right: 8px;"></i>"Switching from Brand A → Brand B could save ~12%."</div>
                                     <div><i class="fas fa-check-circle" style="margin-right: 8px;"></i>"Standardize to 2 SKUs to reduce variance."</div>
                                 </div>
-                                <button class="btn btn-secondary" onclick="navigate('cost-analysis')" style="width: 100%; background: #ffffff; color: #FF7A00; font-weight: 600; border: none; padding: 12px; border-radius: 10px;">
-                                    Upload Invoice for Savings Suggestions
-                                </button>
+                                <a class="btn btn-secondary" href="/invoice-savings" style="width: 100%; background: #ffffff; color: #FF7A00; font-weight: 600; border: none; padding: 12px; border-radius: 10px; display: block; text-align: center; text-decoration: none; box-sizing: border-box;">
+                                    Upload invoice (file intake)
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -5533,7 +5573,7 @@ async function renderDashboardPage() {
                             <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-addresses'); return false;"><i class="fas fa-map-marker-alt"></i> Addresses</a>
                             <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-rfqs'); return false;"><i class="fas fa-file-alt"></i> Quotes</a>
                             <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-net-terms'); return false;"><i class="fas fa-file-signature"></i> Invoice terms</a>
-                            <a href="#" onclick="toggleDashboardSidebar(); navigate('invoice-savings'); return false;"><i class="fas fa-file-invoice-dollar"></i> Invoice Analysis</a>
+                            <a href="/invoice-savings" onclick="toggleDashboardSidebar();"><i class="fas fa-file-invoice-dollar"></i> Invoice Analysis</a>
                             <a href="#" onclick="toggleDashboardSidebar(); navigate('portal-account'); return false;"><i class="fas fa-user-cog"></i> Account</a>
                             <div style="border-top: 1px solid #e5e7eb; margin: 12px 0;"></div>
                             <a href="#" onclick="toggleDashboardSidebar(); navigate('products'); return false;"><i class="fas fa-shopping-bag"></i> Shop Products</a>
@@ -7524,140 +7564,59 @@ function renderContactPage() {
 }
 
 // ============================================
-// GLOVE FINDER (AI)
+// GLOVE FINDER — legacy SPA route (no Express AI; canonical = Next /glove-finder)
 // ============================================
 
 function renderGloveFinderPage() {
-    setPageMeta('Glove Finder | Glovecubs', 'AI-powered glove recommendations by industry and use case.');
+    logLegacySpaMigration('surface_shown', { surface: 'glove-finder' });
+    setPageMeta('Glove Finder | Glovecubs', 'This experience moved to the main Glovecubs site.');
     const mainContent = document.getElementById('mainContent');
-    const results = state.gloveFinderResults || null;
+    var origin = getCanonicalStorefrontOrigin();
     mainContent.innerHTML = `
-        <section class="container" style="padding: 48px 24px; max-width: 800px; margin: 0 auto;">
-            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #111;">Glove Finder</h1>
-            <p style="color: #6B7280; margin-bottom: 32px;">Answer a few questions and get AI-powered product recommendations.</p>
-            <div id="gloveFinderWizard" style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Industry / Use case</label>
-                    <input type="text" id="gfIndustry" placeholder="e.g. Healthcare, Food Service" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
-                </div>
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Material preference</label>
-                    <input type="text" id="gfMaterial" placeholder="e.g. Nitrile, Vinyl" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
-                </div>
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Quantity per month (optional)</label>
-                    <input type="text" id="gfQuantity" placeholder="e.g. 5000" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
-                </div>
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 6px;">Budget or constraints (optional)</label>
-                    <input type="text" id="gfConstraints" placeholder="e.g. budget-conscious" style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px;">
-                </div>
-                <button type="button" id="gfSubmitBtn" class="btn btn-primary" onclick="submitGloveFinder()" style="padding: 12px 24px;">
-                    <i class="fas fa-search"></i> Get recommendations
-                </button>
+        <section class="container" style="padding: 48px 24px; max-width: 720px; margin: 0 auto;">
+            <div style="background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; color: #92400E; font-size: 14px;">
+                <strong>Updated location.</strong> Glove Finder no longer runs on this legacy page. Use the main site for prep-line intelligence and recommendations (no API calls from this screen).
             </div>
-            <div id="gloveFinderStatus" style="min-height: 24px; margin-bottom: 16px; font-size: 14px;"></div>
-            <div id="gloveFinderResults" style="display: ${results ? 'block' : 'none'}; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px;">
-                ${results ? '<h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px;">Recommendations</h2>' + (results.recommendations || []).map(function(r) {
-                    return '<div style="padding: 12px 0; border-bottom: 1px solid #F3F4F6;"><strong>' + (r.name || '').replace(/</g, '&lt;') + '</strong>' + (r.brand ? ' &middot; ' + (r.brand || '').replace(/</g, '&lt;') : '') + '<p style="margin: 8px 0 0; color: #6B7280; font-size: 14px;">' + (r.reason || '').replace(/</g, '&lt;') + '</p></div>';
-                }).join('') + (results.summary ? '<p style="margin-top: 16px; color: #374151;">' + (results.summary || '').replace(/</g, '&lt;') + '</p>' : '') : ''}
+            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 12px; color: #111;">Glove Finder</h1>
+            <p style="color: #6B7280; margin-bottom: 24px; line-height: 1.6;">Continue on <strong>${origin.replace(/</g, '&lt;')}</strong> for the current glove finder.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                <button type="button" class="btn btn-primary" style="padding: 12px 24px;" onclick="openStorefrontPath('/glove-finder')">
+                    <i class="fas fa-external-link-alt"></i> Open Glove Finder
+                </button>
+                <button type="button" class="btn btn-outline" style="padding: 12px 24px;" onclick="navigate('home')">
+                    <i class="fas fa-home"></i> Back to home
+                </button>
             </div>
         </section>
     `;
 }
 
-async function submitGloveFinder() {
-    const btn = document.getElementById('gfSubmitBtn');
-    const statusEl = document.getElementById('gloveFinderStatus');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding...'; }
-    if (statusEl) statusEl.textContent = '';
-    try {
-        const res = await fetch(api.baseUrl + '/api/ai/glove-finder', {
-            method: 'POST',
-            headers: api.getHeaders(),
-            body: JSON.stringify({
-                industry: (document.getElementById('gfIndustry') && document.getElementById('gfIndustry').value) || undefined,
-                use_case: (document.getElementById('gfIndustry') && document.getElementById('gfIndustry').value) || undefined,
-                material_preference: (document.getElementById('gfMaterial') && document.getElementById('gfMaterial').value) || undefined,
-                quantity_per_month: (document.getElementById('gfQuantity') && document.getElementById('gfQuantity').value) || undefined,
-                constraints: (document.getElementById('gfConstraints') && document.getElementById('gfConstraints').value) || undefined,
-            }),
-        });
-        const data = await res.json().catch(function() { return {}; });
-        if (!res.ok) {
-            var errMsg = (data.error && typeof data.error === 'object' && data.error.message) ? data.error.message : (data.error || 'Request failed');
-            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (typeof errMsg === 'string' ? errMsg : 'Request failed') + '</span>';
-            return;
-        }
-        state.gloveFinderResults = data;
-        renderGloveFinderPage();
-    } catch (err) {
-        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> Get recommendations'; }
-    }
-}
-
 // ============================================
-// INVOICE SAVINGS (AI)
+// INVOICE SAVINGS — legacy SPA route (no paste-text AI; canonical = Next /invoice-savings upload)
 // ============================================
 
 function renderInvoiceSavingsPage() {
-    setPageMeta('Invoice Savings | Glovecubs', 'Upload an invoice to get AI-powered swap recommendations.');
+    logLegacySpaMigration('surface_shown', { surface: 'invoice-savings' });
+    setPageMeta('Invoice Savings | Glovecubs', 'Upload invoices on the main Glovecubs site.');
     const mainContent = document.getElementById('mainContent');
-    const report = state.invoiceSavingsReport || null;
+    var origin = getCanonicalStorefrontOrigin();
     mainContent.innerHTML = `
-        <section class="container" style="padding: 48px 24px; max-width: 900px; margin: 0 auto;">
-            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #111;">Invoice Savings</h1>
-            <p style="color: #6B7280; margin-bottom: 32px;">Paste invoice text to extract line items, then get product swap recommendations.</p>
-            <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Invoice text (paste from PDF or email)</label>
-                <textarea id="invoiceText" rows="8" placeholder="Paste invoice content here..." style="width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px;"></textarea>
-                <button type="button" id="invExtractBtn" class="btn btn-primary" onclick="submitInvoiceExtract()" style="margin-top: 12px; padding: 12px 24px;">
-                    <i class="fas fa-file-alt"></i> Extract &amp; recommend
-                </button>
+        <section class="container" style="padding: 48px 24px; max-width: 720px; margin: 0 auto;">
+            <div style="background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; color: #92400E; font-size: 14px;">
+                <strong>Updated flow.</strong> Paste-text invoice extraction on this legacy host is retired. Invoice intelligence uses <strong>file upload</strong> on the Next storefront only.
             </div>
-            <div id="invoiceStatus" style="min-height: 24px; margin-bottom: 16px; font-size: 14px;"></div>
-            <div id="invoiceReport" style="display: ${report ? 'block' : 'none'}; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px;">
-                ${report ? (report.summary ? '<p style="margin-bottom: 16px;">' + (report.summary || '').replace(/</g, '&lt;') + '</p>' : '') + (report.total_estimated_savings != null ? '<p style="font-weight: 600; margin-bottom: 16px;">Estimated savings: $' + Number(report.total_estimated_savings).toFixed(2) + '</p>' : '') + (report.recommendations || []).map(function(r) {
-                    return '<div style="padding: 12px 0; border-bottom: 1px solid #F3F4F6;"><strong>' + (r.recommended_name || '').replace(/</g, '&lt;') + '</strong>' + (r.reason ? ' &middot; ' + (r.reason || '').replace(/</g, '&lt;') : '') + '</div>';
-                }).join('') : ''}
+            <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 12px; color: #111;">Invoice savings</h1>
+            <p style="color: #6B7280; margin-bottom: 24px; line-height: 1.6;">Continue on <strong>${origin.replace(/</g, '&lt;')}</strong> to upload an invoice (PDF or image).</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                <button type="button" class="btn btn-primary" style="padding: 12px 24px;" onclick="openStorefrontPath('/invoice-savings')">
+                    <i class="fas fa-external-link-alt"></i> Open invoice savings
+                </button>
+                <button type="button" class="btn btn-outline" style="padding: 12px 24px;" onclick="navigate('home')">
+                    <i class="fas fa-home"></i> Back to home
+                </button>
             </div>
         </section>
     `;
-}
-
-async function submitInvoiceExtract() {
-    const btn = document.getElementById('invExtractBtn');
-    const statusEl = document.getElementById('invoiceStatus');
-    const text = (document.getElementById('invoiceText') && document.getElementById('invoiceText').value) || '';
-    if (!text.trim() || text.trim().length < 10) {
-        if (statusEl) statusEl.innerHTML = '<span style="color: #B45309;">Enter at least 10 characters of invoice text.</span>';
-        return;
-    }
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...'; }
-    if (statusEl) statusEl.textContent = '';
-    try {
-        let res = await fetch(api.baseUrl + '/api/ai/invoice/extract', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ text: text }) });
-        let data = await res.json().catch(function() { return {}; });
-        if (!res.ok) {
-            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Extract failed') + '</span>';
-            return;
-        }
-        if (statusEl) statusEl.textContent = 'Getting recommendations...';
-        res = await fetch(api.baseUrl + '/api/ai/invoice/recommend', { method: 'POST', headers: api.getHeaders(), body: JSON.stringify({ extract: data, upload_id: data.upload_id }) });
-        data = await res.json().catch(function() { return {}; });
-        if (!res.ok) {
-            if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (data.error || 'Recommend failed') + '</span>';
-            return;
-        }
-        state.invoiceSavingsReport = data;
-        renderInvoiceSavingsPage();
-    } catch (err) {
-        if (statusEl) statusEl.innerHTML = '<span style="color: #DC2626;">' + (err.message || 'Request failed') + '</span>';
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-alt"></i> Extract &amp; recommend'; }
-    }
 }
 
 function renderAboutPage() {

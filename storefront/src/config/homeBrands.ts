@@ -15,6 +15,12 @@ export const HOME_BRAND_LIST = [
   "Tradex",
 ] as const;
 
+/**
+ * Optional verified `brands.id` (Supabase) keyed by the same display string as {@link HOME_BRAND_LIST}.
+ * Leave empty until ids are confirmed — links fall back to `q` search.
+ */
+export const HOME_BRAND_CATALOG_ID_BY_NAME: Partial<Record<string, string>> = {};
+
 const BRAND_TO_LOGO_SLUG: Record<string, string> = {
   Hospeco: "hospeco",
   "Global Glove": "global-glove",

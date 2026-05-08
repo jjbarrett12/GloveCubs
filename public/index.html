@@ -1,9 +1,15 @@
 <!DOCTYPE html>
+<!--
+  Legacy Express static shell (NON-CANONICAL customer HTML — Phase A).
+  Production: Express MUST set STOREFRONT_PUBLIC_ORIGIN so GET / and listed customer paths return HTTP 308 to the Next storefront.
+  Never link new customer journeys to this document; operators use https://www.glovecubs.com (Next) for marketing + workspace.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- GLOVECUBS_API_URL_INJECT -->
+    <!-- GLOVECUBS_STOREFRONT_ORIGIN_INJECT -->
     <script>
         (function(){
             document.documentElement.setAttribute('data-theme', 'light');
@@ -128,9 +134,9 @@
                         <li><a href="#" onclick="navigate('faq'); return false;">FAQ</a></li>
                         <li><a href="#" onclick="navigate('contact'); return false;">Contact</a></li>
                         <li class="nav-button-item">
-                            <button class="btn-upload-invoice-banner" onclick="navigate('cost-analysis')">
+                            <a class="btn-upload-invoice-banner" href="/invoice-savings" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
                                 <i class="fas fa-file-invoice"></i> Upload Invoice
-                            </button>
+                            </a>
                         </li>
                     </ul>
                 </nav>

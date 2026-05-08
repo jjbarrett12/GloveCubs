@@ -3,6 +3,7 @@
  */
 
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
+const { resolveActiveCompanyId } = require('../lib/active-company-resolve');
 
 const GC = 'gc_commerce';
 
@@ -56,10 +57,10 @@ async function getCompanyById(id) {
   return mapCompanyRow(row);
 }
 
-async function getCompanyIdForUser(user) {
-  if (!user) return null;
-  const ids = await getCompanyIdsForUser(user);
-  return ids.length ? ids[0] : null;
+async function getCompanyIdForUser(user, options = {}) {
+  if (!user || !user.id) return null;
+  const r = await resolveActiveCompanyId(String(user.id), { supabase: options.supabase });
+  return r.companyId;
 }
 
 async function addCompanyMember(userId, companyId, role = 'member') {
@@ -86,16 +87,23 @@ async function addCompanyMember(userId, companyId, role = 'member') {
 async function getCompanyIdsForUser(user) {
   if (!user || !isGcCompanyUuid(user.id)) return [];
   const supabase = getSupabaseAdmin();
-  const ids = new Set();
-  const { data: members } = await supabase
+  const { data: members, error } = await supabase
     .schema(GC)
     .from('company_members')
     .select('company_id')
-    .eq('user_id', user.id);
-  (members || []).forEach((m) => {
-    if (m.company_id != null) ids.add(m.company_id);
-  });
-  return [...ids];
+    .eq('user_id', user.id)
+    .order('company_id', { ascending: true });
+  if (error) throw error;
+  const out = [];
+  const seen = new Set();
+  for (const m of members || []) {
+    const id = m.company_id != null ? String(m.company_id) : '';
+    if (id && isGcCompanyUuid(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
 }
 
 async function getCustomerManufacturerPricing() {

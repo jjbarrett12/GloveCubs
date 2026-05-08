@@ -1,5 +1,4 @@
 import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
-import { getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
 
 export type PublicIndustryNavItem = {
   href: string;
@@ -47,6 +46,4 @@ export const HEADER_INDUSTRY_NAV_ITEMS: PublicIndustryNavItem[] = [
   { href: buildStoreCatalogHref({ industries: ["emergency_services"] }), label: "Fire, EMS & rescue" },
   { href: buildStoreCatalogHref({ industries: ["security_public_safety"] }), label: "Security & public safety" },
   { href: buildStoreCatalogHref({ industries: ["janitorial", "sanitation"] }), label: "PPE packs & facility supply" },
-  { href: getStoreHrefForIntent("store.cat.nitrile-gloves"), label: "Nitrile disposable (category)" },
-  { href: getStoreHrefForIntent("store.cat.vinyl-gloves"), label: "Vinyl disposable (category)" },
 ];

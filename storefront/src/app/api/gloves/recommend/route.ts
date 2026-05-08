@@ -9,8 +9,8 @@ import {
 } from "@/lib/gloves/queries";
 import { scoreGloves, topNWithAlternatives } from "@/lib/gloves/scoring";
 import type { ScoredProduct } from "@/lib/gloves/scoring";
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+import { chatCompletionPlain, getOpenAIClient } from "@/lib/ai/provider";
+import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 
 function formatRulesResponse(
   scored: ScoredProduct[],
@@ -45,6 +45,10 @@ function formatRulesResponse(
   });
 }
 
+/**
+ * Find-my-glove wizard: rules-based `scoreGloves` prefilter, optional LLM rerank via {@link chatCompletionPlain}.
+ * Canonical prep-line / ontology flow lives at **POST /api/ai/glove-finder** (different contract and catalog slice).
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -55,6 +59,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    logPublicFunnel("gloves_wizard_recommend", "post", {
+      path: request.nextUrl.pathname,
+      method: request.method,
+      use_case_key: parsed.data.useCaseKey,
+    });
+
     const { useCaseKey, answers } = parsed.data;
 
     if (!isSupabaseConfigured()) {
@@ -75,12 +86,15 @@ export async function POST(request: NextRequest) {
 
     let result: RecommendResponse;
 
-    if (OPENAI_API_KEY && scored.length > 0) {
+    if (getOpenAIClient() && scored.length > 0) {
       try {
-        const productSummary = scored.slice(0, 50).map(
-          (s) =>
-            `SKU: ${s.product.sku} | ${s.product.name} | ${s.product.glove_type} | ${s.product.material ?? "n/a"} | food_safe:${s.product.food_safe} | medical:${s.product.medical_grade} | cut:${s.product.cut_level ?? "n/a"} | score:${s.total}`
-        ).join("\n");
+        const productSummary = scored
+          .slice(0, 50)
+          .map(
+            (s) =>
+              `SKU: ${s.product.sku} | ${s.product.name} | ${s.product.glove_type} | ${s.product.material ?? "n/a"} | food_safe:${s.product.food_safe} | medical:${s.product.medical_grade} | cut:${s.product.cut_level ?? "n/a"} | score:${s.total}`
+          )
+          .join("\n");
         const prompt = `You are a glove recommendation assistant. Given the use case "${useCaseKey}" and user answers, rank the following gloves and return JSON only.
 User answers: ${JSON.stringify(answers)}
 Products (pre-scored):
@@ -89,32 +103,21 @@ ${productSummary}
 Return exactly this JSON structure (no markdown):
 {"recommendations":[{"sku":"...","score_0_100":0-100,"reason":"...","best_for":"...","tradeoffs":"..."}],"alternatives":[{"type":"cheaper","skus":["sku1"]},{"type":"more_durable","skus":["sku1"]},{"type":"more_protection","skus":["sku1"]}],"clarifying_questions":[],"confidence_0_1":0.0-1.0}`;
 
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2,
-          }),
+        const content = await chatCompletionPlain({
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
         });
-        if (!res.ok) throw new Error(await res.text());
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-        const content = data.choices?.[0]?.message?.content?.trim() ?? "";
         const jsonStr = content.replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
         const aiRaw = JSON.parse(jsonStr) as unknown;
-        const parsed = recommendResponseSchema.safeParse(aiRaw);
-        if (!parsed.success) {
+        const aiParsed = recommendResponseSchema.safeParse(aiRaw);
+        if (!aiParsed.success) {
           result = formatRulesResponse(scored);
         } else {
           result = {
-            recommendations: parsed.data.recommendations,
-            alternatives: parsed.data.alternatives ?? [],
-            clarifying_questions: parsed.data.clarifying_questions ?? [],
-            confidence_0_1: parsed.data.confidence_0_1,
+            recommendations: aiParsed.data.recommendations,
+            alternatives: aiParsed.data.alternatives ?? [],
+            clarifying_questions: aiParsed.data.clarifying_questions ?? [],
+            confidence_0_1: aiParsed.data.confidence_0_1,
             model_used: "openai",
             score_breakdown: undefined,
           } as RecommendResponse;

@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { WIZARD_STEPS, type WizardStepId } from "@/config/gloveFinder";
 import { Check } from "lucide-react";
-import { TrustCues } from "./TrustCues";
+import { TrustCues, type TrustCueVariant } from "./TrustCues";
 
 const TRANSITION = "transition-all duration-200";
 
@@ -14,9 +14,18 @@ interface WizardLayoutProps {
   children: React.ReactNode;
   className?: string;
   showTrustCues?: boolean;
+  trustCueVariant?: TrustCueVariant;
 }
 
-export function WizardLayout({ currentStep, title, subtext, children, className, showTrustCues = true }: WizardLayoutProps) {
+export function WizardLayout({
+  currentStep,
+  title,
+  subtext,
+  children,
+  className,
+  showTrustCues = true,
+  trustCueVariant = "default",
+}: WizardLayoutProps) {
   const currentIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep);
 
   return (
@@ -24,7 +33,7 @@ export function WizardLayout({ currentStep, title, subtext, children, className,
       {/* Left: sticky progress (desktop) */}
       <aside className="shrink-0 lg:w-52 lg:sticky lg:top-6 lg:self-start">
         <nav aria-label="Progress">
-          <ol className="flex flex-row gap-2 lg:flex-col lg:gap-1">
+          <ol className="flex w-full min-w-0 flex-row flex-wrap justify-center gap-2 lg:w-full lg:flex-col lg:flex-nowrap lg:justify-start lg:gap-1">
             {WIZARD_STEPS.map((step, i) => {
               const isComplete = i < currentIndex;
               const isCurrent = step.id === currentStep;
@@ -65,7 +74,7 @@ export function WizardLayout({ currentStep, title, subtext, children, className,
               {title}
             </h1>
             <p className="mt-1 text-sm text-white/60">{subtext}</p>
-            {showTrustCues && <TrustCues className="mt-4" />}
+            {showTrustCues && <TrustCues className="mt-4" variant={trustCueVariant} />}
           </header>
           {children}
         </div>

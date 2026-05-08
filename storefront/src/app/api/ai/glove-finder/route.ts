@@ -1,7 +1,26 @@
+/**
+ * Canonical **prep-line / ontology** glove intelligence on the Next storefront.
+ * Wizard-style recommendations use **POST /api/gloves/recommend** (rules + optional LLM rerank, different request/response contract).
+ * Legacy Express **POST /api/ai/glove-finder** remains for backward compatibility; prefer this route for new callers on the storefront origin.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { GloveFinderRequestSchema, GloveFinderResponseSchema } from "@/lib/ai/schemas";
+import { z } from "zod";
+import {
+  GloveFinderRequestSchema,
+  GloveFinderResponseSchema,
+  type GloveFinderResponse,
+} from "@/lib/ai/schemas";
 import { runJsonResponse } from "@/lib/ai/client";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { fetchStoreProductRowsByIds } from "@/lib/catalog/store-products";
+import type { StoreProductRow } from "@/lib/catalog/store-products";
+import { fetchRestaurantPrepLineCandidateProductIds } from "@/lib/ontology/prep-line-candidates";
+import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
+import { appendGloveFinderAdvisoryEvent, ensureGloveFinderOpportunity } from "@/lib/procurement/spine-writes";
+import { projectPrepLineCardFacts } from "@/lib/prep-line/card-projection";
+import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
+import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -11,15 +30,68 @@ const AI_MAX_CANDIDATES = Math.min(
   100
 );
 
-/** Static mock candidate SKUs when DB is not wired. Replace with getActiveProducts() when Supabase is ready. */
-function getCandidateSkus(): { sku: string; name: string; material: string; thickness_mil: number | null; glove_type: string; price_cents: number }[] {
-  return [
-    { sku: "GC-NIT-6", name: "Nitrile Exam Glove 6mil", material: "Nitrile", thickness_mil: 6, glove_type: "disposable", price_cents: 1299 },
-    { sku: "GC-NIT-8", name: "Nitrile Heavy Duty 8mil", material: "Nitrile", thickness_mil: 8, glove_type: "disposable", price_cents: 1899 },
-    { sku: "GC-VIN-4", name: "Vinyl General Purpose", material: "Vinyl", thickness_mil: 4, glove_type: "disposable", price_cents: 699 },
-    { sku: "GC-LAT-6", name: "Latex Exam Glove", material: "Latex", thickness_mil: 6, glove_type: "disposable", price_cents: 999 },
-    { sku: "GC-NIT-FS", name: "Nitrile Food Safe", material: "Nitrile", thickness_mil: 5, glove_type: "disposable", price_cents: 1499 },
-  ];
+/** OpenAI JSON shape — mapped to {@link GloveFinderResponse} before leaving this route. */
+const gloveFinderOpenAiResponseSchema = z.object({
+  constraints: z.array(z.string()),
+  top_picks: z.array(
+    z.object({
+      sku: z.string(),
+      reason: z.string(),
+      tradeoffs: z.array(z.string()),
+    })
+  ),
+  followup_questions: z.array(z.string()).optional(),
+});
+
+type PickRow = StoreProductRow & { pickToken: string; priceDollars: number | null };
+
+function buildPrepLinePickRows(rows: StoreProductRow[]): PickRow[] {
+  const out: PickRow[] = [];
+  for (const row of rows) {
+    const token = (row.variantSku ?? row.internalSku ?? "").trim();
+    if (!token) continue;
+    out.push({
+      ...row,
+      pickToken: token,
+      priceDollars: row.bestPrice != null && Number.isFinite(row.bestPrice) ? row.bestPrice : null,
+    });
+  }
+  return out;
+}
+
+function mapOpenAiToStorefrontResponse(
+  ai: z.infer<typeof gloveFinderOpenAiResponseSchema>,
+  byPickToken: Map<string, PickRow>
+): GloveFinderResponse {
+  const recommendations = ai.top_picks.map((pick) => {
+    const token = pick.sku.trim();
+    const row = byPickToken.get(token);
+    const price = row?.priceDollars ?? null;
+    return {
+      sku: pick.sku,
+      name: row?.name ?? pick.sku,
+      brand: row?.brandName ?? null,
+      reason: pick.reason,
+      price,
+      catalogProductId: row?.id,
+      slug: row?.slug,
+      catalogVariantId: row?.catalogVariantId ?? null,
+      sizeCode: row?.sizeCode ?? null,
+      catalogFacts: row ? projectPrepLineCardFacts(row) : [],
+    };
+  });
+
+  const summaryParts = [...ai.constraints];
+  for (const p of ai.top_picks) {
+    if (p.tradeoffs?.length) summaryParts.push(`Tradeoffs: ${p.tradeoffs.join("; ")}`);
+  }
+  const summary = summaryParts.length ? summaryParts.join(" · ") : null;
+
+  return GloveFinderResponseSchema.parse({
+    recommendations,
+    summary,
+    followUpQuestions: ai.followup_questions,
+  });
 }
 
 /** GET: health check so you can verify the route is reachable (no OpenAI call). */
@@ -41,6 +113,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    logPublicFunnel("glove_finder_prep_line", "post", {
+      path: request.nextUrl.pathname,
+      method: request.method,
+    });
+
     let body: unknown;
     try {
       body = await request.json();
@@ -58,42 +135,107 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const candidates = getCandidateSkus().slice(0, AI_MAX_CANDIDATES);
-    const candidateList = candidates
-      .map((c) => `- ${c.sku}: ${c.name} (${c.material}, ${c.thickness_mil ?? "?"}mil, $${(c.price_cents / 100).toFixed(2)})`)
+    if (parsed.data.operationalEnvironmentKey !== RESTAURANT_PREP_LINE_ENVIRONMENT_KEY) {
+      return NextResponse.json({ error: "Unsupported operational environment" }, { status: 400 });
+    }
+
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ error: "Catalog unavailable" }, { status: 503 });
+    }
+
+    const supabase = getSupabaseAdmin() as any;
+
+    const productIds = await fetchRestaurantPrepLineCandidateProductIds(supabase);
+    if (productIds.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No catalog products match prep-line evidence (food_safe certification or food_handling use). Enrich catalog attributes before running this flow.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const rows = await fetchStoreProductRowsByIds(productIds.slice(0, AI_MAX_CANDIDATES));
+    const pickRows = buildPrepLinePickRows(rows);
+    if (pickRows.length === 0) {
+      return NextResponse.json(
+        { error: "Catalog candidates missing variant or internal SKU tokens required for advisory matching." },
+        { status: 422 }
+      );
+    }
+
+    const byPickToken = new Map(pickRows.map((r) => [r.pickToken, r]));
+    const candidateList = pickRows
+      .map(
+        (c) =>
+          `- ${c.pickToken}: ${c.name} (brand: ${c.brandName ?? "—"}; material hint: ${c.materialHint ?? "—"}; list price: ${
+            c.priceDollars != null ? c.priceDollars.toFixed(2) : "request pricing"
+          })`
+      )
       .join("\n");
 
+    let gloveThread: { id: string; buyerDisplayRef: string | null } | null = null;
+    if (parsed.data.clientTraceId) {
+      gloveThread = await ensureGloveFinderOpportunity(supabase, {
+        clientTraceId: parsed.data.clientTraceId,
+        operationalEnvironmentKey: RESTAURANT_PREP_LINE_ENVIRONMENT_KEY,
+      });
+      if (!gloveThread) {
+        console.error("[glove-finder] procurement opportunity not created (check procurement_opportunities migration)");
+      }
+    }
+
     const systemPrompt = [
-      "You are an industrial glove expert. Choose the best 3 SKUs from the provided candidate list based on the user's industry, hazards, latex allergy, thickness preference, and budget.",
+      "You assist procurement buyers for restaurant prep-line glove selection. Candidates were pre-filtered from the live catalog using governed attributes: food_safe certification OR food_handling use (union). Do not claim additional certifications or regulatory approvals not printed in the candidate line.",
       "Return ONLY valid JSON with this exact shape: { \"constraints\": string[], \"top_picks\": [ { \"sku\": string, \"reason\": string, \"tradeoffs\": string[] } ], \"followup_questions\"?: string[] }.",
-      "Only use SKUs from the candidate list. Include exactly 3 top_picks when possible.",
+      "The sku field MUST exactly match the token after '- ' at the start of a candidate line (before the first colon). Pick at most 3 picks; fewer only if fewer than 3 candidates exist.",
+      "Write advisory reasons only: dexterity vs durability tradeoffs, frequent change vs extended wear, wet grip uncertainty without supplier wet-grip data — no 'best', no ranked superlatives, no compliance guarantees.",
     ].join(" ");
 
     const userPrompt = [
+      "Operational environment: restaurant prep line (wet grip intermittent, frequent changes, knife-adjacent tasks possible — buyer must verify cut protection needs separately).",
       "Candidates:",
       candidateList,
       "",
       "User:",
-      `Industry: ${parsed.data.industry}`,
+      `Use case label: ${parsed.data.useCaseLabel}`,
+      `Material preference: ${parsed.data.materialPreference ?? "not specified"}`,
+      `Quantity per month: ${parsed.data.quantityPerMonth ?? "not specified"}`,
+      `Constraints: ${parsed.data.constraints ?? "not specified"}`,
       `Hazards: ${parsed.data.hazards.join(", ") || "none"}`,
-      `Latex allergy: ${parsed.data.latexAllergy}`,
-      `Thickness preference: ${parsed.data.thicknessPreference ?? "any"}`,
-      `Budget: ${parsed.data.budgetLevel ?? "any"}`,
-      parsed.data.notes ? `Notes: ${parsed.data.notes}` : "",
+      `Latex allergy: ${parsed.data.latexAllergy ? "yes" : "no"}`,
     ]
       .filter(Boolean)
       .join("\n");
 
-    const result = await runJsonResponse({
+    const aiResult = await runJsonResponse({
       systemPrompt,
       userPrompt,
-      schema: GloveFinderResponseSchema,
+      schema: gloveFinderOpenAiResponseSchema,
     });
-    return NextResponse.json(result);
+
+    const payload = mapOpenAiToStorefrontResponse(aiResult, byPickToken);
+
+    const out = GloveFinderResponseSchema.parse({
+      ...payload,
+      opportunityId: gloveThread?.id ?? undefined,
+      buyerDisplayRef: gloveThread?.buyerDisplayRef ?? undefined,
+      advisoryNotice: PrepLineOperationalCopy.staticAdvisoryNotice,
+    });
+
+    if (gloveThread?.id) {
+      await appendGloveFinderAdvisoryEvent(supabase, gloveThread.id, {
+        candidate_count: pickRows.length,
+        model: "openai_json",
+      });
+    }
+
+    return NextResponse.json(out);
   } catch (e) {
     console.error("[glove-finder] Error:", e);
     return NextResponse.json(
-      { error: "Recommendation service unavailable. Please try again." },
+      { error: "Prep-line catalog advisory is temporarily unavailable. Please try again." },
       { status: 500 }
     );
   }

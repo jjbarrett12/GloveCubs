@@ -13,13 +13,27 @@ export const REQUEST_PRICING_QUERY_KEYS = [
   "case_range",
   "product",
   "source",
+  /** Phase 2B: operational ontology + procurement spine correlation */
+  "operational_environment",
+  "procurement_opportunity_id",
+  "client_trace",
 ] as const;
 
 const RFQ_QUERY_KEYS = new Set<string>(REQUEST_PRICING_QUERY_KEYS);
 
 export type RequestPricingQueryParams = Partial<
   Record<
-    "industry" | "type" | "material" | "size" | "volume" | "case_range" | "product" | "source",
+    | "industry"
+    | "type"
+    | "material"
+    | "size"
+    | "volume"
+    | "case_range"
+    | "product"
+    | "source"
+    | "operational_environment"
+    | "procurement_opportunity_id"
+    | "client_trace",
     string
   >
 >;

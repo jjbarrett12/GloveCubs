@@ -1,6 +1,6 @@
 import type { GloveProduct } from "@/lib/gloves/types";
 import {
-  gloveFinderResponseSchema,
+  GloveFinderResponseSchema,
   type GloveFinderRequest,
   type GloveFinderResponse,
   type InvoiceExtractResponse,
@@ -25,28 +25,27 @@ function buildGloveFinderMessages(request: GloveFinderRequest, candidates: Glove
     .slice(0, 30)
     .map(
       (p) =>
-        `- SKU: ${p.sku} | ${p.name} | ${p.material ?? "N/A"} | thickness: ${p.thickness_mil ?? "N/A"}mm | type: ${p.glove_type} | price: $${(p.price_cents / 100).toFixed(2)} | food_safe: ${p.food_safe} | medical: ${p.medical_grade} | powder_free: ${p.powder_free}`
+        `- SKU: ${p.sku} | ${p.name} | ${p.material ?? "N/A"} | thickness: ${p.thickness_mil ?? "N/A"}mm | type: ${p.glove_type} | price: $${(p.price_cents / 100).toFixed(2)}`
     )
     .join("\n");
   const userContent = [
-    "The user is looking for glove recommendations. Use ONLY the candidate SKUs below.",
+    "The user is looking for glove suggestions. Use ONLY the candidate SKUs below.",
     "Candidate SKUs (max 30):",
     candidateList,
     "",
     "User answers:",
-    `Industry/use case: ${request.industry ?? request.use_case ?? "not specified"}`,
-    `Material preference: ${request.material_preference ?? "not specified"}`,
-    `Quantity per month: ${request.quantity_per_month ?? "not specified"}`,
-    `Constraints/budget: ${request.constraints ?? request.budget ?? "not specified"}`,
-    `Hazards: ${request.hazards ?? "not specified"}`,
-    `Latex allergy: ${request.latex_allergy === true ? "yes" : request.latex_allergy === false ? "no" : "not specified"}`,
-    `Thickness preference: ${request.thickness_preference ?? "not specified"}`,
+    `Use case: ${request.useCaseLabel}`,
+    `Material preference: ${request.materialPreference ?? "not specified"}`,
+    `Quantity per month: ${request.quantityPerMonth ?? "not specified"}`,
+    `Constraints: ${request.constraints ?? "not specified"}`,
+    `Hazards: ${request.hazards.length ? request.hazards.join(", ") : "none"}`,
+    `Latex allergy: ${request.latexAllergy ? "yes" : "no"}`,
   ].join("\n");
   return [
     {
       role: "system",
       content:
-        "You are a glove product expert. Return a JSON object with: recommendations (array of { sku, name, brand?, reason, price_cents?, badges? }), summary (string, optional), follow_up_questions (array of strings, optional). Only recommend SKUs from the candidate list. Include exactly 3 recommendations when possible.",
+        "You are a glove product expert. Return ONLY JSON: { recommendations: array of { sku, name, brand?, reason, price? (number, dollars) }, summary (string, optional), followUpQuestions (array of strings, optional) }. Only recommend SKUs from the candidate list. Include exactly 3 recommendations when possible. Do not include badges. Do not claim regulatory compliance, food safety, medical grade, powder-free, latex-free, ANSI ratings, or catalog filter matches unless explicitly present in the candidate line.",
     },
     { role: "user", content: userContent },
   ];
@@ -62,7 +61,7 @@ export async function aiGloveFinder(
     const { content, usage } = await chatJsonSimple({
       messages: buildGloveFinderMessages(request, candidates),
     });
-    const parsed = gloveFinderResponseSchema.parse(content);
+    const parsed = GloveFinderResponseSchema.parse(content);
     return { ok: true, data: parsed, usage };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Parse or API error";
@@ -143,3 +142,5 @@ export async function aiInvoiceSavings(
     return { ok: false, error: message };
   }
 }
+
+export { chatCompletionPlain, OPENAI_CHAT_MODEL, getOpenAIClient } from "./openai";

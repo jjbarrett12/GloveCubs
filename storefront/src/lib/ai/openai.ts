@@ -33,3 +33,22 @@ export async function chatJsonSimple(params: {
       : undefined,
   };
 }
+
+/** Plain chat completion (no `response_format`) — callers parse JSON from text (e.g. markdown fences). */
+export async function chatCompletionPlain(params: {
+  messages: ChatMessage[];
+  model?: string;
+  temperature?: number;
+}): Promise<string> {
+  const client = getOpenAIClient();
+  if (!client) throw new Error("OPENAI_API_KEY not set");
+  const { messages, model = OPENAI_CHAT_MODEL, temperature = 0.2 } = params;
+  const res = await client.chat.completions.create({
+    model,
+    messages,
+    temperature,
+  });
+  const text = res.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("Empty OpenAI response");
+  return text;
+}

@@ -19,6 +19,18 @@ if (isProduction && (!JWT_SECRET_RAW.trim() || JWT_SECRET_RAW === JWT_SECRET_DEF
   throw new Error('JWT_SECRET must be set to a strong random value in production. Do not use the default.');
 }
 
+const {
+    validateStorefrontPublicOriginOnBoot,
+    shouldRedirectBrowserRequestToStorefront,
+    getPublicHtmlRedirectStatusCode,
+} = require('./lib/storefront-public-redirect');
+const _storefrontBoot = validateStorefrontPublicOriginOnBoot(process.env);
+for (const _line of _storefrontBoot.log) console.log(_line);
+if (_storefrontBoot.exitCode) process.exit(_storefrontBoot.exitCode);
+if (_storefrontBoot.normalizedOrigin) {
+    process.env.STOREFRONT_PUBLIC_ORIGIN = _storefrontBoot.normalizedOrigin;
+}
+
 const express = require('express');
 const cors = require('cors');
 const os = require('os');
@@ -801,21 +813,46 @@ app.get('/products-template.csv', (req, res) => {
     }
 });
 
+const activeCompanyResolve = require('./lib/active-company-resolve');
+
+/** Block checkout quote / orders when multi-company user has not chosen active_company_id. */
+function assertActiveCompanyAllowedForCommerce(req, res) {
+    if (!req.user?.id) return true;
+    const r = req.activeCompanyResolution;
+    if (r && r.requiresSelection) {
+        res.status(409).json({
+            error: 'Choose an active organization before checkout.',
+            code: 'ACTIVE_COMPANY_REQUIRED',
+            company_ids: r.memberships || [],
+        });
+        return false;
+    }
+    return true;
+}
+
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
         return res.status(401).json({ error: 'Access denied' });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, async (err, user) => {
         if (err) {
             const isExpired = err.name === 'TokenExpiredError';
             return res.status(isExpired ? 401 : 403).json({ error: isExpired ? 'Session expired' : 'Invalid token' });
         }
         req.user = user;
+        try {
+            const r = await activeCompanyResolve.resolveActiveCompanyId(String(user.id), {});
+            req.activeCompanyId = r.companyId;
+            req.activeCompanyResolution = r;
+        } catch (e) {
+            console.error('[authenticateToken] active company resolve', e.message || e);
+            return res.status(500).json({ error: 'Session resolution failed' });
+        }
         next();
     });
 };
@@ -824,12 +861,22 @@ const authenticateToken = (req, res, next) => {
 const optionalAuth = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
         return next();
     }
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (!err) req.user = user;
+    jwt.verify(token, JWT_SECRET, async (err, user) => {
+        if (!err) {
+            req.user = user;
+            try {
+                const r = await activeCompanyResolve.resolveActiveCompanyId(String(user.id), {});
+                req.activeCompanyId = r.companyId;
+                req.activeCompanyResolution = r;
+            } catch (e) {
+                console.error('[optionalAuth] active company resolve', e.message || e);
+                return res.status(500).json({ error: 'Session resolution failed' });
+            }
+        }
         next();
     });
 };
@@ -876,8 +923,21 @@ app.post('/api/auth/login', authContactLimiter, async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password || user.password_hash);
         if (!validPassword) return res.status(401).json({ error: 'Invalid email or password.' });
         const authSubject = String(user.id);
+        let activeCompanyPayload = null;
+        try {
+            const r = await activeCompanyResolve.resolveActiveCompanyId(authSubject, {});
+            activeCompanyPayload = r.companyId || null;
+        } catch (e) {
+            console.error('[login] active company resolve', e.message || e);
+        }
         const token = jwt.sign(
-            { id: authSubject, email: user.email, company: user.company_name, approved: user.is_approved },
+            {
+                id: authSubject,
+                email: user.email,
+                company: user.company_name,
+                approved: user.is_approved,
+                active_company_id: activeCompanyPayload,
+            },
             JWT_SECRET,
             { expiresIn: '7d' }
         );
@@ -925,10 +985,42 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
             console.error('[GET /api/auth/me net_terms]', e.message || e);
         }
         const presented = await attachPricingTierPresentation(safeUser);
-        res.json({ ...presented, is_admin: isAdminUser, company_net_terms });
+        res.json({
+            ...presented,
+            is_admin: isAdminUser,
+            company_net_terms,
+            active_company_id: req.activeCompanyId != null ? String(req.activeCompanyId) : null,
+            requires_company_selection: !!(req.activeCompanyResolution && req.activeCompanyResolution.requiresSelection),
+            company_ids: req.activeCompanyResolution?.memberships || [],
+        });
     } catch (err) {
         console.error('[GET /api/auth/me]', err);
         res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.post('/api/auth/active-company', authenticateToken, async (req, res) => {
+    try {
+        const raw = (req.body && (req.body.company_id ?? req.body.companyId)) || '';
+        const companyId = String(raw).trim();
+        if (!companyId) {
+            return res.status(400).json({ error: 'company_id is required', code: 'MISSING_COMPANY_ID' });
+        }
+        const setRes = await activeCompanyResolve.setActiveCompanyForUser(String(req.user.id), companyId, {});
+        if (!setRes.ok) {
+            const code = setRes.code === 'NOT_A_MEMBER' ? 403 : 400;
+            return res.status(code).json({ error: setRes.error, code: setRes.code });
+        }
+        const r = await activeCompanyResolve.resolveActiveCompanyId(String(req.user.id), {});
+        res.json({
+            ok: true,
+            company_id: r.companyId,
+            requires_company_selection: !!r.requiresSelection,
+            company_ids: r.memberships || [],
+        });
+    } catch (err) {
+        console.error('[POST /api/auth/active-company]', err);
+        res.status(500).json({ error: err.message || 'Failed to set active company' });
     }
 });
 
@@ -2401,7 +2493,39 @@ app.post('/api/admin/import/drafts/:id/approve', authenticateToken, requireAdmin
 });
 
 // ============ AI LAYER (glove-finder, invoice extract/recommend) ============
+// DEPRECATED for new integrations: prefer Next storefront routes:
+//   POST /api/ai/glove-finder (prep-line), POST /api/gloves/recommend (wizard),
+//   POST /api/invoice/intake (multipart invoice pipeline).
+// Each handler below logs `category: express_ai_deprecation` and may set `X-GC-API-Deprecation` when EXPRESS_AI_DEPRECATION_HEADERS=1.
 const getSupabaseForAi = () => (supabaseConfigured() ? getSupabase() : null);
+
+/** Structured log + optional response header for Phase B deprecation (do not delete routes until callers = 0). */
+function logExpressAiDeprecation(req, res, routeKey) {
+    try {
+        console.log(
+            JSON.stringify({
+                category: 'express_ai_deprecation',
+                event: 'request',
+                route: routeKey,
+                path: req.path,
+                method: req.method,
+                ts: new Date().toISOString(),
+                ip_hash: hashIp(req.ip || req.connection?.remoteAddress),
+            })
+        );
+    } catch (e) {
+        console.error('[express_ai_deprecation log]', e && e.message ? e.message : e);
+    }
+    const warn =
+        process.env.EXPRESS_AI_DEPRECATION_HEADERS === '1' ||
+        process.env.EXPRESS_AI_DEPRECATION_HEADERS === 'true';
+    if (warn) {
+        res.setHeader(
+            'X-GC-API-Deprecation',
+            'Prefer Next storefront: POST /api/invoice/intake (multipart), POST /api/ai/glove-finder (prep-line), POST /api/gloves/recommend (wizard); see ROUTE_OWNERSHIP.md'
+        );
+    }
+}
 
 // Stable error shape for AI endpoints: { error: { code, message }, details? }
 function aiError(res, status, code, message, details = null) {
@@ -2411,6 +2535,7 @@ function aiError(res, status, code, message, details = null) {
 }
 
 app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
+    logExpressAiDeprecation(req, res, 'glove-finder');
     const parsed = validateGloveFinderRequest(req.body || {});
     if (!parsed.success) {
         return aiError(res, 400, 'VALIDATION_ERROR', 'Invalid request', parsed.error.flatten());
@@ -2443,6 +2568,13 @@ app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
 });
 
 app.post('/api/ai/invoice/extract', optionalAuth, aiLimiter, async (req, res) => {
+    logExpressAiDeprecation(req, res, 'invoice-extract-text');
+    if (process.env.DEPRECATE_LEGACY_INVOICE_EXTRACT === 'true' || process.env.DEPRECATE_LEGACY_INVOICE_EXTRACT === '1') {
+        return res.status(410).json({
+            error: 'DEPRECATED',
+            message: 'Use storefront POST /api/invoice/intake (multipart file). Legacy text extract is disabled when DEPRECATE_LEGACY_INVOICE_EXTRACT is set.',
+        });
+    }
     const rawText = typeof req.body === 'object' && req.body && typeof req.body.text === 'string' ? req.body.text : (typeof req.body === 'string' ? req.body : '');
     if (!rawText || rawText.trim().length < 10) {
         return res.status(400).json({ error: 'Request body must include "text" with invoice content (min 10 chars).' });
@@ -2481,6 +2613,7 @@ app.post('/api/ai/invoice/extract', optionalAuth, aiLimiter, async (req, res) =>
 });
 
 app.post('/api/ai/invoice/recommend', optionalAuth, aiLimiter, async (req, res) => {
+    logExpressAiDeprecation(req, res, 'invoice-recommend');
     const extract = req.body && req.body.extract;
     if (!extract || !Array.isArray(extract.lines)) {
         return res.status(400).json({ error: 'Request body must include "extract" with "lines" array (e.g. from /api/ai/invoice/extract).' });
@@ -3024,6 +3157,7 @@ app.post('/api/checkout/quote', authenticateToken, async (req, res) => {
             code: 'CLIENT_TOTALS_REJECTED',
         });
     }
+    if (!assertActiveCompanyAllowedForCommerce(req, res)) return;
     try {
         const { shipping_address, ship_to_id, payment_method: quotePaymentMethod } = req.body || {};
         const companyIds = await getCompanyIdsForAuthenticatedUser(req);
@@ -3132,6 +3266,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         const marketingAtt = sanitizeMarketingAttribution(req.body && req.body.marketing_attribution);
 
         const { shipping_address, notes, ship_to_id, payment_method } = req.body;
+        if (!assertActiveCompanyAllowedForCommerce(req, res)) return;
         const companyIds = await getCompanyIdsForAuthenticatedUser(req);
         const addrRes = await resolveFinalShippingAddressForCheckout(companyIds, req.user.id, ship_to_id, shipping_address);
         if (!addrRes.ok) return res.status(addrRes.status).json(addrRes.body);
@@ -3445,6 +3580,7 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
     if (payment_method !== 'credit_card' && payment_method !== 'ach') {
         return res.status(400).json({ error: 'Use this endpoint only for credit_card or ach. Use POST /api/orders for Net 30.' });
     }
+    if (!assertActiveCompanyAllowedForCommerce(req, res)) return;
 
     try {
     // ====== FIX 4: Duplicate order prevention (idempotency) ======
@@ -6345,10 +6481,18 @@ app.get('/api/pricing/sell-price', (req, res) => {
 // Static files (CSS, JS, images) - after all API routes so /api/* is never served as static
 app.use(express.static(path.join(__dirname, 'public')));
 
+/**
+ * Customer-facing HTML: GET/HEAD redirect to Next when STOREFRONT_PUBLIC_ORIGIN is set (see lib/storefront-public-redirect.js).
+ * /api/* stays here. /admin* browser UI stays on legacy SPA until Next admin parity is verified (Phase A exception).
+ */
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
-app.get('*', (req, res) => {
+function handlePublicHtmlCatchAll(req, res) {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found', path: req.path });
+    }
+    if (shouldRedirectBrowserRequestToStorefront(req)) {
+        const origin = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+        return res.redirect(getPublicHtmlRedirectStatusCode(), origin + req.originalUrl);
     }
     // Prefer the request's own origin so www/apex and reverse-proxy hosts match fetch() (avoid cross-origin /api when DOMAIN is apex-only).
     const fromRequest = `${req.protocol}://${req.get('host') || 'localhost'}`.replace(/\/$/, '');
@@ -6362,12 +6506,41 @@ app.get('*', (req, res) => {
     try {
         let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
         html = html.replace('<!-- GLOVECUBS_API_URL_INJECT -->', '<meta name="glovecubs-api-url" content="' + mainApiUrl.replace(/"/g, '&quot;') + '">');
+        const storefrontMetaOrigin = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+        const storefrontMetaFallback =
+            storefrontMetaOrigin ||
+            (process.env.NODE_ENV !== 'production' ? 'http://localhost:3005' : '');
+        html = html.replace(
+            '<!-- GLOVECUBS_STOREFRONT_ORIGIN_INJECT -->',
+            storefrontMetaFallback
+                ? '<meta name="glovecubs-storefront-origin" content="' + storefrontMetaFallback.replace(/"/g, '&quot;') + '">'
+                : ''
+        );
+        if (req.method === 'GET' && !req.path.startsWith('/api/')) {
+            const p = (req.path || '').replace(/\/+$/, '') || '/';
+            if (p === '/glove-finder' || p === '/invoice-savings') {
+                try {
+                    console.log(
+                        JSON.stringify({
+                            category: 'legacy_spa_procurement_surface',
+                            event: 'legacy_html_route_get',
+                            path: p,
+                            ts: new Date().toISOString(),
+                        })
+                    );
+                } catch (e) {
+                    /* ignore */
+                }
+            }
+        }
         res.setHeader('Content-Type', 'text/html');
         res.send(html);
     } catch (err) {
         res.sendFile(INDEX_HTML_PATH);
     }
-});
+}
+app.get('*', handlePublicHtmlCatchAll);
+app.head('*', handlePublicHtmlCatchAll);
 
 // If default port is in use, try next ports (e.g. previous instance still running)
 function startServer(tryPort) {
@@ -6379,6 +6552,7 @@ function startServer(tryPort) {
     const server = app.listen(port, () => {
         const actualPort = server.address().port;
         console.log(`\n🧤 Glovecubs server running at http://localhost:${actualPort}\n`);
+        console.log('   API/cart/auth: this host /api/* — storefront HTML: Next (local default http://localhost:3005, npm run dev:storefront)\n');
         if (actualPort !== PORT) {
             console.log(`   (Port ${PORT} was in use; using ${actualPort} instead.)\n`);
         }

@@ -52,11 +52,10 @@
   - Domain adapters: Hospeco (SKU + GetImage.ashx), Global Glove.  
   - `POST /api/admin/products/ai-normalize`, `validate-images`, `save`; image URLs kept even if unverified.  
   - UI in admin: URL input, asset vs page flow, product page URL when asset.
-- **AI layer:**  
-  - Provider-agnostic `lib/ai/provider.js` (OpenAI implemented; Gemini stubbed).  
-  - Endpoints: `POST /api/ai/glove-finder`, `POST /api/ai/invoice/extract`, `POST /api/ai/invoice/recommend`.  
-  - Zod schemas in `lib/ai/schemas.js`; rate limiting; Supabase logging (summaries only).  
-  - Pages: `/glove-finder`, `/invoice-savings` in the SPA.
+- **AI / procurement intelligence (canonical = Next storefront):**  
+  - Customer HTML and primary AI routes: **`storefront/`** — e.g. `POST /api/invoice/intake` (multipart), `POST /api/ai/glove-finder`, `POST /api/ai/invoice/recommend`, pages `/glove-finder`, `/invoice-savings`.  
+  - Zod contracts: `storefront/src/lib/ai/schemas.ts`.  
+  - **Legacy Express** `server.js` still exposes `POST /api/ai/*` for backward compatibility only; they log deprecation and must not be used for new customer flows. The legacy SPA (`public/js/app.js`) shows a **migration screen** for `/glove-finder` and `/invoice-savings` when that HTML is still served (no in-page Express AI calls).
 - **Industry landing (main SPA):** Industry pages rendered from `src/config/industries.ts` via `buildIndustryLandingHTML()` and routing (e.g. `/industries/medical`). Homepage industry cards link to these.
 
 ---
@@ -97,7 +96,7 @@ If a **Next.js** app exists (e.g. in `storefront/`):
 
 - **Env:** Copy `.env.example` to `.env`; set Supabase, JWT, and optionally `OPENAI_API_KEY`, `AI_PROVIDER`, etc. Never commit `.env`.
 - **Main app:** `npm install` then `npm run dev` or `node server.js` (port e.g. 3001 or 3004).
-- **Storefront (if present):** `cd storefront && npm install && npm run dev` (often port 3000).
+- **Storefront (Next):** `cd storefront && npm install && npm run dev` (default port **3005** in this repo; see `storefront/package.json`).
 
 ---
 
