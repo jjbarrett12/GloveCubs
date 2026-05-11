@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { safeCommerceNextPath } from "@/lib/auth/safe-next-path";
+import { resolvePostLoginRedirectPath } from "@/lib/auth/post-login-path";
 
 type Props = {
   nextPath: string | string[] | undefined;
@@ -45,17 +46,19 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
         setError(signErr.message);
         return;
       }
-      if (hasExplicitNext) {
-        window.location.assign(explicitDest);
-        return;
-      }
       const res = await fetch("/api/auth/post-login-destination", { credentials: "include" });
-      const body = (await res.json()) as { path?: string };
-      const path =
+      const body = (await res.json().catch(() => ({}))) as { path?: string };
+      const apiPath =
         typeof body.path === "string" && body.path.startsWith("/") && !body.path.startsWith("//")
           ? body.path
           : "/account";
-      window.location.assign(path);
+      const isActiveAdmin = apiPath === "/admin";
+      const dest = resolvePostLoginRedirectPath({
+        hasExplicitNext,
+        safeNextPath: explicitDest,
+        isActiveAdmin,
+      });
+      window.location.assign(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {

@@ -12,6 +12,33 @@ describe("resolvePostLoginRedirectPath", () => {
     ).toBe("/workspace/procurement");
   });
 
+  it("sends active admins to /admin when explicit next is request-pricing (not buyer RFQ intent)", () => {
+    expect(
+      resolvePostLoginRedirectPath({
+        hasExplicitNext: true,
+        safeNextPath: "/request-pricing",
+        isActiveAdmin: true,
+      }),
+    ).toBe("/admin");
+    expect(
+      resolvePostLoginRedirectPath({
+        hasExplicitNext: true,
+        safeNextPath: "/request-pricing?source=homepage_bulk_builder",
+        isActiveAdmin: true,
+      }),
+    ).toBe("/admin");
+  });
+
+  it("keeps request-pricing for non-admin when explicit next is set", () => {
+    expect(
+      resolvePostLoginRedirectPath({
+        hasExplicitNext: true,
+        safeNextPath: "/request-pricing",
+        isActiveAdmin: false,
+      }),
+    ).toBe("/request-pricing");
+  });
+
   it("respects explicit safe next for non-admins", () => {
     expect(
       resolvePostLoginRedirectPath({
