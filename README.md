@@ -43,12 +43,15 @@ npm run seed
 npm start
 ```
 
-4. Open your browser to: http://localhost:3000
+4. Open your browser to the storefront (see below). Express defaults to **http://localhost:3004** (`PORT` in `.env`).
 
-### Development Mode
-```bash
-npm run dev
-```
+### Development Mode (Express + Next)
+
+- **`npm run dev`** — runs **Express** (API, default port **3004**) and **Next storefront** (default **3005**) together. Customer HTML on Express redirects to Next; the legacy public SPA is **not** served for customer routes by default.
+- **`npm run dev:api`** — Express only (API-only mode). Set `STOREFRONT_PUBLIC_ORIGIN` if you need HTML redirects; otherwise customer routes return **503** (see `ROUTE_OWNERSHIP.md`).
+- **`npm run dev:storefront`** — Next only on **3005**.
+
+Details: **`ROUTE_OWNERSHIP.md`**, root **`.env.example`**.
 
 ### Local dev: Admin API proxy (storefront on :3004, Express API on :3001)
 

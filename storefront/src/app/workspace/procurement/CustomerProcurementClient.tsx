@@ -75,7 +75,12 @@ export function OpportunityActionForms({ savingsOpportunityId }: { savingsOpport
           Request quote
         </button>
       </div>
-      <AskAlternateForm savingsOpportunityId={savingsOpportunityId} disabled={busy} onDone={() => setMsg("Sent.")} onError={setErr} />
+      <AskAlternateForm
+        savingsOpportunityId={savingsOpportunityId}
+        disabled={busy}
+        onDone={() => setMsg("Question recorded. Your procurement contact will follow up.")}
+        onError={setErr}
+      />
       {msg ? <p className="text-xs text-emerald-400/90">{msg}</p> : null}
       {err ? <p className="text-xs text-red-400/90">{err}</p> : null}
     </div>

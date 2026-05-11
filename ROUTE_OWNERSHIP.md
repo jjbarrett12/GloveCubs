@@ -1,6 +1,6 @@
 # Route ownership (Phase A)
 
-Canonical policy: **Next.js storefront owns all public/customer HTML**. **Express** owns **`/api/*`**, webhooks, integrations, and (until deprecated) **static files** under `public/` and the **legacy SPA shell** only when redirects do not apply.
+Canonical policy: **Next.js storefront owns all public/customer HTML**. **Express** owns **`/api/*`**, webhooks, integrations, and **static files** under `public/`. The **legacy SPA shell** (`public/index.html`) is **disabled for customer routes by default** in local dev; it is only served for those routes when **`ALLOW_LEGACY_SPA_HTML=1`** is set (escape hatch).
 
 ## Express (`server.js`, default port **3004**)
 
@@ -9,8 +9,8 @@ Canonical policy: **Next.js storefront owns all public/customer HTML**. **Expres
 | **`/api/*`** | Express | JSON APIs: cart, auth, checkout, admin JSON, integrations. |
 | **`/api/admin/*`** | Express | Unchanged (Phase A). |
 | **Static assets** | Express `public/` | Files with a normal static extension on the last path segment are not treated as HTML navigations (no redirect). |
-| **`/admin*` (browser)** | Legacy SPA (temporary) | **Phase A exception:** GET/HEAD to `/admin` and subpaths are **not** redirected to Next until admin parity is verified. |
-| **Customer HTML** (listed paths) | **Redirect → Next** | When `STOREFRONT_PUBLIC_ORIGIN` is set and valid, GET/HEAD for those paths respond with **HTTP 308** to `{origin}{originalUrl}`. |
+| **`/admin*` (browser)** | Legacy SPA (temporary) | **Phase A exception:** GET/HEAD to `/admin` and subpaths are **not** redirected to Next until admin parity is verified. Still served from Express (not gated like customer routes). |
+| **Customer HTML** (listed paths) | **Redirect → Next** | When `STOREFRONT_PUBLIC_ORIGIN` is set and valid, GET/HEAD for those paths respond with **HTTP 308** to `{origin}{originalUrl}`. If the origin is missing in **API-only** dev (`GLOVECUBS_DEV_API_ONLY=1`), Express returns **503** + instructions instead of `index.html` unless `ALLOW_LEGACY_SPA_HTML=1`. |
 
 ## Next.js storefront (`storefront/`, local dev default **3005**)
 
@@ -25,22 +25,35 @@ Browser clients should use **`NEXT_PUBLIC_GLOVECUBS_API`** pointing at the Expre
 
 - **Status code:** **308 Permanent Redirect** for all Express-initiated public HTML handoffs to the storefront origin (RFC 7538). Same practical effect as 301 for GET/HEAD.
 - **Preserve path and query:** `Location` is `normalize(origin) + req.originalUrl`.
-- **No redirect:** `/api/*`, asset-like paths (last segment contains `.`), **`/admin*`** (temporary), invalid or missing `STOREFRONT_PUBLIC_ORIGIN` (non-production warns; production **exits** on boot).
+- **No redirect:** `/api/*`, asset-like paths (last segment contains `.`), **`/admin*`** (temporary).
+- **Non-production boot:** If `STOREFRONT_PUBLIC_ORIGIN` is unset and **`GLOVECUBS_DEV_API_ONLY` is not set**, Express applies **`http://localhost:3005`** as the storefront origin (logged at boot). If **`GLOVECUBS_DEV_API_ONLY=1`**, no default origin is applied; customer routes get **503** unless you set `STOREFRONT_PUBLIC_ORIGIN` or `ALLOW_LEGACY_SPA_HTML=1`.
+- **Production:** Invalid or missing `STOREFRONT_PUBLIC_ORIGIN` → process **exits** on boot.
 
 ## Customer paths redirected (when origin configured)
 
-`/`, `/invoice-savings`, `/request-pricing`, `/glove-finder`, `/store`, `/contact`, `/faq`, `/resources`, `/brands`, `/industries`, `/quote-cart`, `/find-my-glove`, `/workspace`, `/gloves`, `/gloves/*`, `/b2b`, `/b2b/*`, `/portal-order`, `/portal-order/*`.
+`/`, `/invoice-savings`, `/request-pricing`, `/glove-finder`, `/store`, `/contact`, `/faq`, `/resources`, `/brands`, `/industries`, `/quote-cart`, `/login`, `/account`, `/find-my-glove`, `/workspace`, `/gloves`, `/gloves/*`, `/b2b`, `/b2b/*`, `/portal-order`, `/portal-order/*`.
 
 Implementation: `lib/storefront-public-redirect.js`.
 
 ## `STOREFRONT_PUBLIC_ORIGIN` enforcement
 
-| `NODE_ENV` | Missing / invalid origin |
-|------------|---------------------------|
-| **`production`** | Process **exits** at startup (fail fast). |
-| **Non-production** | **Warn**; redirects disabled until a valid origin is set. |
+| `NODE_ENV` | Missing origin | Invalid origin |
+|------------|----------------|----------------|
+| **`production`** | Process **exits** at startup. | Process **exits** at startup. |
+| **Non-production** + default dev | **Unset**, not API-only, and **`ALLOW_LEGACY_SPA_HTML` not set** → boot sets **`http://localhost:3005`** (logged). | **Warn**; no redirect; customer routes → **503** unless `ALLOW_LEGACY_SPA_HTML=1`. |
+| **Non-production** + API-only | **Unset** with `GLOVECUBS_DEV_API_ONLY=1` → no default; customer routes → **503** unless `ALLOW_LEGACY_SPA_HTML=1`. | Same as invalid row. |
+| **Non-production** + legacy escape | **`ALLOW_LEGACY_SPA_HTML=1`** and unset origin → **no** dev default (legacy SPA may serve customer routes). | Same as invalid row. |
 
 Normalize to `http(s)://host` only (trailing slash stripped on boot).
+
+## Legacy SPA (`public/index.html`)
+
+| `ALLOW_LEGACY_SPA_HTML` | Customer routes (same path list as redirects) |
+|-------------------------|--------------------------------------------------|
+| **Unset / not `1`** | **Never** served `index.html` when redirect is not in effect (503 dev gate instead). |
+| **`1`** | Legacy SPA may be served (escape hatch for rare debugging). |
+
+Admin `/admin*` is unchanged: not redirected to Next and not subject to this customer-route gate.
 
 ## Next.js redirects (`storefront/next.config.mjs`)
 
@@ -54,17 +67,26 @@ After Express **308**, the browser requests the **same path** on the storefront 
 
 ## Drift checks
 
-- **No duplicate public homepage for configured hosts:** Express must not return `index.html` for `/` when `STOREFRONT_PUBLIC_ORIGIN` is set — it must **308** to Next.
-- **No duplicate invoice-savings HTML on Express** for the same condition — **308** to Next.
+- **No duplicate public homepage:** Express must not return `index.html` for `/` on customer routes when redirects apply — it must **308** to Next. In local dev without a storefront origin and without `ALLOW_LEGACY_SPA_HTML=1`, customer routes must **not** silently serve `index.html` (503 gate or dev default origin applies).
+- **No duplicate invoice-savings HTML on Express** under the same rules — **308** to Next when origin is configured (or dev default).
 - **Ambiguous ownership:** New customer-facing paths must be added to `lib/storefront-public-redirect.js` and this doc together.
 - **API safety:** `/api/*` must never be redirected to Next by this mechanism.
 
 ## Local development
 
-1. Terminal A: `npm run dev` (Express, port **3004** by default).  
-2. Terminal B: `npm run dev:storefront` (Next, **3005**).  
-3. Root `.env`: `STOREFRONT_PUBLIC_ORIGIN=http://localhost:3005`  
-4. Smoke: `curl -sI http://localhost:3004/` → `308` with `Location: http://localhost:3005/`
+| Port | Process | Command |
+|------|---------|---------|
+| **3005** | Next.js storefront (customer HTML) | `npm run dev:storefront` |
+| **3004** | Express API (`/api/*`, admin SPA, static assets) | `npm run dev:api` |
+| **Both** | Recommended: one terminal | **`npm run dev`** (runs Express + Next via `concurrently`; sets `STOREFRONT_PUBLIC_ORIGIN=http://localhost:3005` for Express) |
+
+- **`npm run dev`**: Express on **3004** + Next on **3005**; customer paths on Express **308** to Next.  
+- **`npm run dev:api`**: Express only (`GLOVECUBS_DEV_API_ONLY=1`); **no** dev default origin — set `STOREFRONT_PUBLIC_ORIGIN` yourself or accept **503** on customer HTML routes (APIs still work).  
+- **`npm run dev:legacy`**: Legacy customer SPA allowed (`ALLOW_LEGACY_SPA_HTML=1`) — **not** recommended for normal work.
+
+Optional root `.env`: `STOREFRONT_PUBLIC_ORIGIN=http://localhost:3005` (redundant with `npm run dev` and with non-production dev default when not API-only).
+
+Smoke: `curl -sI http://localhost:3004/` → **`308`** with `Location: http://localhost:3005/` when redirects are active.
 
 Canonical **HTML** tests should hit **3005**; **API** tests hit **3004**.
 

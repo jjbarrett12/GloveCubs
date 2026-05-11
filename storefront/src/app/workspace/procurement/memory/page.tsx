@@ -12,11 +12,11 @@ export default async function CustomerSupplierProductMemoryPage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        A bounded operational view of the latest trusted observation per product and supplier pairing — not a dashboard
-        or benchmark.
+        Supplier and product history from verified spend: the latest governed observation per product and supplier
+        pairing. Illustrative — not a financial statement; not final pricing.
       </p>
       {rows.length === 0 ? (
-        <p className="text-white/45">No memory rows yet.</p>
+        <p className="text-white/45">No supplier or product history yet.</p>
       ) : (
         <ul className="space-y-2 text-xs text-white/80">
           {rows.map((m) => (

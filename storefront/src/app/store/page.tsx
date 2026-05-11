@@ -11,7 +11,7 @@ import { StoreSortBar } from "@/components/store/StoreSortBar";
 import { StoreFilterChips } from "@/components/store/StoreFilterChips";
 import { StorePagination } from "@/components/store/StorePagination";
 import { AddVisiblePageToQuote } from "@/components/store/AddVisiblePageToQuote";
-import { SiteHeader } from "@/components/home/SiteHeader";
+import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getRequestPricingHrefForIntent } from "@/lib/discovery/intent-routes";
 import { getCanonicalStoreHrefIfNeeded } from "@/lib/catalog/store-legacy-url";
 
@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Store | GloveCubs",
-  description: "B2B glove catalog — filter by spec, brand, and industry. Transparent list pricing when available; volume quotes for case and pallet buyers.",
+  description:
+    "Industrial and disposable glove catalog for business buyers—filter by spec, brand, and industry. List pricing when published; case, pallet, and contract paths through quote review.",
 };
 
 type PageProps = {
@@ -51,7 +52,7 @@ const STORE_REQUEST_CATEGORY_TILES: { label: string; description: string; intent
   },
   {
     label: "Medical / exam",
-    description: "Healthcare procurement",
+    description: "Exam-grade and clinical-use programs",
     intentId: "rfq.store.tile.healthcare",
   },
   {
@@ -89,7 +90,7 @@ function StoreRequestCategoryTiles() {
         >
           <div className="text-[13px] font-bold text-white">{t.label}</div>
           <div className="mt-1 text-[11px] leading-snug text-white/50">{t.description}</div>
-          <div className="mt-2 text-[11px] font-semibold text-[#f06232]">Request pricing →</div>
+          <div className="mt-2 text-[11px] font-semibold text-[#f06232]">Request program pricing →</div>
         </Link>
       ))}
     </div>
@@ -107,7 +108,7 @@ export default async function StorePage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-poppins">
-      <SiteHeader />
+      <SiteHeaderLoader />
 
       <main className="py-6 sm:py-8">
         <StorePageShell>
@@ -115,26 +116,26 @@ export default async function StorePage({ searchParams }: PageProps) {
             className="mb-8 rounded-xl border border-white/10 bg-gradient-to-br from-[#141414] to-[#101010] px-5 py-5 sm:px-6 sm:py-6"
             aria-labelledby="store-hero-heading"
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Commercial glove catalog</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">B2B glove catalog</p>
             <h1 id="store-hero-heading" className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">
-              Find the right glove fast
+              Pick fast. Buy with case context.
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">
-              Browse by material, mil, certification, industry, and brand. List pricing appears when we have a published offer; pallet
-              programs, contract pricing, and mixed-case buys route through quote review—without slowing down quick picks.
+              Filters map to how buyers actually shop—material, mil, certifications, industry, brand. Published list pricing shows
+              when we have it; pallet programs and contract paths go through quote review so operators are not blocked on edge buys.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <a
                 href="#store-catalog"
                 className="inline-flex items-center justify-center rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-[#f06232]"
               >
-                Browse catalog
+                Shop listings
               </a>
               <Link
                 href="/request-pricing"
                 className="inline-flex items-center justify-center rounded-lg border border-[#f06232]/60 bg-transparent px-4 py-2.5 text-sm font-semibold text-[#f06232] transition hover:border-[#f06232] hover:bg-[#f06232]/10"
               >
-                Request pricing
+                Business pricing
               </Link>
               <Link
                 href="/invoice-savings"
@@ -169,7 +170,7 @@ export default async function StorePage({ searchParams }: PageProps) {
                 </Link>
               </div>
               <div className="mt-5 border-t border-white/10 pt-4">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Request by category</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Common program entry points</p>
                 <StoreRequestCategoryTiles />
               </div>
             </div>
@@ -205,7 +206,7 @@ export default async function StorePage({ searchParams }: PageProps) {
                 </Link>
               </div>
               <div className="mt-5 border-t border-white/10 pt-4">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Start with a procurement category</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Start from a common program</p>
                 <StoreRequestCategoryTiles />
               </div>
             </div>

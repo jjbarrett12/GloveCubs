@@ -5,6 +5,8 @@ export type QuoteCartItem = {
   slug: string;
   brandName: string | null;
   quantity: number;
+  /** Buyer note for this line (merged key with product + variant). */
+  line_note?: string | null;
   /** catalog_v2.catalog_variants.id — when set, line merges on variant, not product-only. */
   catalog_variant_id?: string | null;
   variant_sku?: string | null;

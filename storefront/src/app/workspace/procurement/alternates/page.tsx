@@ -13,8 +13,9 @@ export default async function CustomerApprovedAlternatesPage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Approved alternates are governed substitutions your operators released for your workspace. They exclude draft
-        matches, blocked paths, and unreviewed suggestions.
+        These alternates were approved for your organization from governed observations. Items not yet approved or
+        unavailable for sourcing are excluded from this list. Economics are illustrative — not a commitment or final
+        pricing.
       </p>
       {rows.length === 0 ? (
         <p className="text-white/45">No approved alternates to show.</p>

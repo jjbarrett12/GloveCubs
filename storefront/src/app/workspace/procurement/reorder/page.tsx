@@ -13,8 +13,9 @@ export default async function CustomerReorderWorkspacePage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Active reorder items were promoted by your operators from governed procurement notes. Retired items are not
-        shown here.
+        Items on your reorder list were added after sourcing updates from governed approvals. Items removed from your
+        reorder list are not shown here. Last verified basis values come from governed observations — illustrative, not
+        final pricing.
       </p>
       {rows.length === 0 ? (
         <p className="text-white/45">No active reorder items.</p>

@@ -1,12 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProcurementCompanyHubPage({ params }: { params: { companyId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) notFound();
   const { companyId } = params;
   return (
     <div className="space-y-4">

@@ -22,6 +22,7 @@ if (isProduction && (!JWT_SECRET_RAW.trim() || JWT_SECRET_RAW === JWT_SECRET_DEF
 const {
     validateStorefrontPublicOriginOnBoot,
     shouldRedirectBrowserRequestToStorefront,
+    shouldSuppressLegacyCustomerSpaHtml,
     getPublicHtmlRedirectStatusCode,
 } = require('./lib/storefront-public-redirect');
 const _storefrontBoot = validateStorefrontPublicOriginOnBoot(process.env);
@@ -30,6 +31,20 @@ if (_storefrontBoot.exitCode) process.exit(_storefrontBoot.exitCode);
 if (_storefrontBoot.normalizedOrigin) {
     process.env.STOREFRONT_PUBLIC_ORIGIN = _storefrontBoot.normalizedOrigin;
 }
+
+const _bootListenPort = parseInt(process.env.PORT, 10) || 3004;
+const _allowLegacy = (process.env.ALLOW_LEGACY_SPA_HTML || '').trim() === '1';
+const _sfEffective = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+console.log('[boot] Express API:', `http://localhost:${_bootListenPort}`);
+console.log(
+    '[boot] Next storefront expected:',
+    _sfEffective || '(unset — set STOREFRONT_PUBLIC_ORIGIN or use dev default via npm run dev)',
+);
+console.log(
+    '[boot] Customer HTML:',
+    _sfEffective ? `redirected to Next (${_sfEffective}) when paths match storefront policy` : 'see messages above (dev default or API-only gate)',
+);
+console.log('[boot] Legacy SPA:', _allowLegacy ? 'ALLOW_LEGACY_SPA_HTML=1 (customer routes may serve public/index.html)' : 'disabled for customer routes unless ALLOW_LEGACY_SPA_HTML=1');
 
 const express = require('express');
 const cors = require('cors');
@@ -6486,6 +6501,35 @@ app.use(express.static(path.join(__dirname, 'public')));
  * /api/* stays here. /admin* browser UI stays on legacy SPA until Next admin parity is verified (Phase A exception).
  */
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
+
+function sendLegacyCustomerHtmlBlockedPage(req, res) {
+    const isProd = process.env.NODE_ENV === 'production';
+    const body =
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>GloveCubs — storefront required</title></head><body style="font-family:system-ui,sans-serif;max-width:42rem;margin:2rem auto;line-height:1.5">' +
+        '<h1>Customer HTML is not served here</h1>' +
+        '<p>Express is running in a mode where the legacy public SPA is disabled for customer routes (split-brain guard).</p>' +
+        '<ul>' +
+        '<li>Run the Next storefront: <code>npm run dev:storefront</code> (default <code>http://localhost:3005</code>)</li>' +
+        '<li>Run API + storefront together: <code>npm run dev</code> from the repo root</li>' +
+        '<li>Or set <code>STOREFRONT_PUBLIC_ORIGIN</code> to your Next origin and reload this URL (Express will HTTP 308 to Next)</li>' +
+        '<li>Legacy fallback only if you explicitly set <code>ALLOW_LEGACY_SPA_HTML=1</code> (not recommended)</li>' +
+        '</ul>' +
+        '<p>JSON APIs on this host are unchanged: <code>/api/*</code> (e.g. <code>curl ' +
+        (req.protocol || 'http') +
+        '://' +
+        (req.get('host') || 'localhost:' + _bootListenPort) +
+        '/api/config</code>).</p>' +
+        (isProd ? '<p><strong>Production:</strong> configure STOREFRONT_PUBLIC_ORIGIN; this page should not appear.</p>' : '') +
+        '</body></html>';
+    res.status(503);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'));
+    if (req.method === 'HEAD') {
+        return res.end();
+    }
+    return res.send(body);
+}
+
 function handlePublicHtmlCatchAll(req, res) {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found', path: req.path });
@@ -6493,6 +6537,9 @@ function handlePublicHtmlCatchAll(req, res) {
     if (shouldRedirectBrowserRequestToStorefront(req)) {
         const origin = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
         return res.redirect(getPublicHtmlRedirectStatusCode(), origin + req.originalUrl);
+    }
+    if (shouldSuppressLegacyCustomerSpaHtml(req)) {
+        return sendLegacyCustomerHtmlBlockedPage(req, res);
     }
     // Prefer the request's own origin so www/apex and reverse-proxy hosts match fetch() (avoid cross-origin /api when DOMAIN is apex-only).
     const fromRequest = `${req.protocol}://${req.get('host') || 'localhost'}`.replace(/\/$/, '');
@@ -6552,7 +6599,7 @@ function startServer(tryPort) {
     const server = app.listen(port, () => {
         const actualPort = server.address().port;
         console.log(`\n🧤 Glovecubs server running at http://localhost:${actualPort}\n`);
-        console.log('   API/cart/auth: this host /api/* — storefront HTML: Next (local default http://localhost:3005, npm run dev:storefront)\n');
+        console.log('   /api/* JSON on this host — customer HTML: Next storefront (see [boot] lines above).\n');
         if (actualPort !== PORT) {
             console.log(`   (Port ${PORT} was in use; using ${actualPort} instead.)\n`);
         }

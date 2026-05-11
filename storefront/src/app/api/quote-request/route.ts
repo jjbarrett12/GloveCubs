@@ -10,6 +10,8 @@ const itemSchema = z.object({
   slug: z.string().optional(),
   brandName: z.string().nullable().optional(),
   quantity: z.number().int().positive().max(99999),
+  /** Optional per-line buyer note (stored on quote_line_items.notes). */
+  line_note: z.string().trim().max(2000).optional().nullable(),
   catalog_variant_id: z.string().uuid().nullish(),
   variant_sku: z.string().max(200).nullish(),
   size_code: z.string().max(80).nullish(),
@@ -19,6 +21,7 @@ const bodySchema = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().email(),
   company: z.string().trim().max(300).optional().nullable(),
+  phone: z.string().trim().max(40).optional().nullable(),
   notes: z.string().trim().max(8000).optional().nullable(),
   items: z.array(itemSchema).min(1),
   /** Phase 2B: ontology environment when submitting from prep-line flows */
@@ -55,6 +58,9 @@ export async function POST(request: NextRequest) {
   const contactName = body.name.trim();
   const email = body.email.trim();
 
+  const phone = body.phone?.trim() || null;
+  const submittedAt = new Date().toISOString();
+
   const { data: qrRaw, error: qrErr } = await supabase
     .schema("catalogos")
     .from("quote_requests")
@@ -63,8 +69,9 @@ export async function POST(request: NextRequest) {
       contact_name: contactName,
       email,
       notes: body.notes?.trim() || null,
-      phone: null,
+      phone,
       status: "new",
+      submitted_at: submittedAt,
     })
     .select("id")
     .single();
@@ -80,6 +87,7 @@ export async function POST(request: NextRequest) {
 
   try {
     for (const item of body.items) {
+      const lineNote = item.line_note?.trim() || null;
       const snapshot = {
         product_name: item.name,
         slug: item.slug ?? null,
@@ -89,13 +97,14 @@ export async function POST(request: NextRequest) {
         variant_sku: item.variant_sku ?? null,
         size_code: item.size_code ?? null,
         quantity: item.quantity,
+        line_note: lineNote,
       };
 
       const { error: lineErr } = await supabase.schema("catalogos").from("quote_line_items").insert({
         quote_request_id: quoteRequestId,
         product_id: item.product_id,
         quantity: item.quantity,
-        notes: null,
+        notes: lineNote,
         product_snapshot: snapshot,
       } as never);
 
@@ -121,7 +130,9 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join("; ");
       const suffix = variantBits ? ` (${variantBits})` : "";
-      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}`;
+      const ln = i.line_note?.trim();
+      const noteLine = ln ? `\n  Line note: ${ln}` : "";
+      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}${noteLine}`;
     })
     .join("\n");
 
@@ -135,6 +146,7 @@ export async function POST(request: NextRequest) {
       `Contact: ${contactName}`,
       `Email: ${email}`,
       `Company: ${companyName}`,
+      `Phone: ${phone || "—"}`,
       "",
       "Notes:",
       body.notes?.trim() || "—",

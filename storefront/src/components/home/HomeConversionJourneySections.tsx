@@ -20,10 +20,10 @@ export function HomeHowInvoiceWorksSection() {
     >
       <div className="mx-auto max-w-7xl">
         <h2 id="how-invoice-heading" className="mb-3 text-center text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-          How it works
+          Invoice upload (optional)
         </h2>
         <p className="mx-auto mb-12 max-w-2xl text-center text-base leading-relaxed text-white/75">
-          Straightforward steps—built for kitchens, facilities, and shops that buy gloves by the case.
+          When you want us to map what you already buy—four straightforward steps. Prefer to shop cold? Use the catalog above.
         </p>
         <ol className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map(({ n, title, body, icon: Icon }) => (
@@ -55,20 +55,16 @@ export function HomeRecommendationExplainerSection() {
     >
       <div className="mx-auto max-w-3xl text-center lg:max-w-4xl">
         <h2 id="explainer-heading" className="mb-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-          What we mean by an approved alternate
+          When we suggest a swap, it is deliberate
         </h2>
         <div className="space-y-4 text-left text-base leading-relaxed text-white/80 sm:text-[17px]">
           <p>
-            An <strong className="font-semibold text-white">approved alternate</strong> is a glove path we can stand behind
-            for your use case: it meets the substitution rules we apply for that category—not every similar-looking SKU in the market.
+            We only surface alternates that clear our review rules for your category—not every lookalike SKU on the market.
+            Pack sizes and units are lined up so comparisons stay honest.
           </p>
           <p>
-            <strong className="font-semibold text-white">Normalized pricing</strong> means we line up pack sizes and units of measure
-            so you are comparing costs on a fair per-use basis, not apples-to-oranges case prices alone.
-          </p>
-          <p>
-            If something is not shown, it is usually because it has not cleared that review path yet, or it is not an appropriate swap
-            for how you work. We would rather show fewer options than flood you with unvetted substitutes.
+            If you do not see an option, it is because we have not cleared it for your use case yet. Fewer, vetted paths beat a wall
+            of unreviewed substitutes.
           </p>
         </div>
         <div className="mt-10">
@@ -91,11 +87,11 @@ export function HomeReorderSimplificationSection() {
         <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
             <h2 id="reorder-heading" className="mb-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              Easier reordering after you decide
+              Keep the same story on repeat buys
             </h2>
             <p className="mb-6 text-base leading-relaxed text-white/75">
-              Once you have line items and alternates in view, you should not have to rebuild the story every month.
-              Use your quote cart and bulk tools the same way you already buy—just with clearer line-of-sight on what you are ordering.
+              Once you have approved lines, your quote cart and bulk request tools carry the same SKUs forward—so monthly restocks
+              do not start from a blank spreadsheet.
             </p>
             <ul className="space-y-3 text-sm leading-relaxed text-white/85">
               <li className="flex gap-2">

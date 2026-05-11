@@ -7,17 +7,17 @@ import { requireCustomerProcurementSession } from "@/lib/procurement/customer-pr
 export const dynamic = "force-dynamic";
 
 const nav = [
-  { href: "/workspace/procurement", label: "Overview" },
-  { href: "/workspace/procurement/opportunities", label: "Approved notes" },
-  { href: "/workspace/procurement/alternates", label: "Approved alternates" },
+  { href: "/workspace/procurement", label: "Home" },
+  { href: "/workspace/procurement/opportunities", label: "Approvals" },
+  { href: "/workspace/procurement/alternates", label: "Alternates" },
   { href: "/workspace/procurement/reorder", label: "Reorder" },
-  { href: "/workspace/procurement/spend", label: "Trusted spend" },
-  { href: "/workspace/procurement/memory", label: "Supplier / product memory" },
+  { href: "/workspace/procurement/spend", label: "Spend record" },
+  { href: "/workspace/procurement/memory", label: "Supplier & product history" },
   { href: "/workspace/procurement/timeline", label: "Activity" },
 ] as const;
 
 export default async function CustomerProcurementLayout({ children }: { children: React.ReactNode }) {
-  if (!isSupabaseConfigured()) redirect("/");
+  if (!isSupabaseConfigured()) redirect("/request-pricing");
   const supabase = getSupabaseAdmin() as any;
   const pathname = (await headers()).get("x-gc-pathname") || "";
   const skipGate = pathname.includes("/workspace/procurement/active-company");
@@ -26,11 +26,13 @@ export default async function CustomerProcurementLayout({ children }: { children
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8">
       <header className="mb-8 border-b border-white/10 pb-6">
-        <h1 className="text-lg font-semibold tracking-tight">Procurement workspace</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-white/90">Procurement</h1>
         <p className="mt-1 text-sm text-white/60">
-          Operator-approved procurement notes, trusted spend, and reorder context for your organization.
+          {
+            "Built around your organization's approved paths, reorder signals, and verified spend observations."
+          }
         </p>
         <nav className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
           {nav.map((n) => (

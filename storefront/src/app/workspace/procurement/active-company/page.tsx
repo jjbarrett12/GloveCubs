@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function ProcurementActiveCompanyPage() {
   const supabase = getSupabaseAdmin() as any;
   const g = await resolveCustomerProcurementGate(supabase);
-  if (g.kind === "sign_in_required") redirect("/");
-  if (g.kind === "no_membership") redirect("/");
+  if (g.kind === "sign_in_required") {
+    redirect(`/login?next=${encodeURIComponent("/workspace/procurement/active-company")}`);
+  }
+  if (g.kind === "no_membership") redirect("/login?issue=no_membership");
   if (g.kind === "ready") redirect("/workspace/procurement");
 
   const ids = g.companyIds;

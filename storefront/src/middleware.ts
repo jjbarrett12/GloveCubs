@@ -1,26 +1,39 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { updateSupabaseSession } from "@/lib/supabase/middleware-session";
 
 /**
- * Runs only for `/admin/*` and `/api/internal/*` (see `config.matcher`).
- * Public marketing pages, `/workspace/*`, and public storefront `src/app/api/*` are never touched here
- * (workspace auth is enforced in `src/app/workspace/procurement/layout.tsx`).
+ * Supabase session refresh + route gates.
+ * Workspace and admin layouts read `x-gc-pathname` for safe post-login redirects.
+ *
+ * Admin HTML routes (`/admin`, not `/admin/api`) are not blocked here; authorization is
+ * `resolveAdminAccess()` / `getAdminUser()` on layouts and route handlers.
  */
 
-function relaxAdminPathGate(): boolean {
-  if (process.env.ENFORCE_ADMIN_MIDDLEWARE === "true") return false;
-  if (process.env.ADMIN_MIDDLEWARE_RELAXED === "true") return true;
-  if (process.env.VERCEL_ENV === "production") return false;
-  return true;
+function copyCookies(from: NextResponse, to: NextResponse) {
+  from.cookies.getAll().forEach((c) => {
+    to.cookies.set(c.name, c.value);
+  });
 }
 
-export function middleware(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl;
+function withPathnameHeader(request: NextRequest, base: NextResponse, pathname: string): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-gc-pathname", pathname);
+  const out = NextResponse.next({ request: { headers: requestHeaders } });
+  copyCookies(base, out);
+  return out;
+}
 
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  const sessionResponse = await updateSupabaseSession(request);
+
+  let response = sessionResponse;
   if (pathname.startsWith("/workspace/procurement")) {
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-gc-pathname", pathname);
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    response = withPathnameHeader(request, sessionResponse, pathname);
+  } else if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/api")) {
+    response = withPathnameHeader(request, sessionResponse, pathname);
   }
 
   if (pathname === "/api/ai/invoice/extract") {
@@ -31,53 +44,28 @@ export function middleware(request: NextRequest) {
         path: pathname,
         method: request.method,
         ts: new Date().toISOString(),
-      })
+      }),
     );
   }
 
   if (pathname.startsWith("/api/internal")) {
     const secret = process.env.INTERNAL_API_SECRET?.trim();
     if (!secret) {
-      return NextResponse.next();
+      return response;
     }
     if (request.headers.get("x-gc-internal-secret") !== secret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const denied = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      copyCookies(response, denied);
+      return denied;
     }
-    return NextResponse.next();
+    return response;
   }
 
-  if (pathname.startsWith("/admin")) {
-    // Route handlers under /admin/api/* enforce their own auth (e.g. Supabase session).
-    if (pathname.startsWith("/admin/api")) {
-      return NextResponse.next();
-    }
-
-    if (relaxAdminPathGate()) {
-      return NextResponse.next();
-    }
-
-    const gate = process.env.ADMIN_LEADS_SECRET?.trim();
-    if (!gate) {
-      return new NextResponse(null, { status: 404 });
-    }
-
-    const provided = searchParams.get("secret");
-    if (provided !== gate) {
-      return new NextResponse(null, { status: 404 });
-    }
-
-    return NextResponse.next();
-  }
-
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
   matcher: [
-    "/admin/:path*",
-    "/api/internal/:path*",
-    "/api/ai/invoice/extract",
-    "/workspace/procurement",
-    "/workspace/procurement/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

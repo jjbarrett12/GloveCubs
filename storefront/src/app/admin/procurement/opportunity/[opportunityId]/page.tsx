@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchProcurementEventTimeline, fetchProcurementOpportunitySummary } from "@/lib/procurement/procurement-workspace-read-models";
 import { describeLifecycleStageForOperator } from "@/lib/procurement/operator-lifecycle-copy";
@@ -8,10 +7,10 @@ import { describeLifecycleStageForOperator } from "@/lib/procurement/operator-li
 export const dynamic = "force-dynamic";
 
 export default async function ProcurementOpportunityWorkspacePage({ params }: { params: { opportunityId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) notFound();
   const { opportunityId } = params;
-  if (!isSupabaseConfigured()) notFound();
+  if (!isSupabaseConfigured()) {
+    return <p className="text-white/70">Supabase not configured.</p>;
+  }
   const supabase = getSupabaseAdmin() as any;
   const header = await fetchProcurementOpportunitySummary(supabase, opportunityId);
   if (!header) notFound();

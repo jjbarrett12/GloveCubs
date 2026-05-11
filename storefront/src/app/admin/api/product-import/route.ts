@@ -6,40 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getPendingCandidates, getCandidate, PRODUCT_IMPORT_DEPRECATED } from "@/lib/admin/productImport";
-
-async function getAdminUser(): Promise<{ id: string; email: string } | null> {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return null;
-
-  const { data: adminUser } = await supabase
-    .from("admin_users")
-    .select("id, email, is_active")
-    .eq("id", session.user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!adminUser) return null;
-
-  return { id: adminUser.id, email: adminUser.email };
-}
 
 export async function GET(request: NextRequest) {
   try {

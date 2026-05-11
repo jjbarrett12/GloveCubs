@@ -24,10 +24,10 @@ export function HomeWhoSection() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
           <h2 id="who-heading" className="mb-3 text-3xl font-extrabold tracking-tight text-neutral-900 md:text-4xl">
-            Built for teams that buy gloves by the case
+            Shop by where gloves get used
           </h2>
           <p className="mx-auto max-w-xl text-base leading-relaxed text-neutral-600 md:text-[17px]">
-            Operators, facilities leads, and front-line managers—not consumer checkout.
+            Industry pages connect operating context to catalog entry points—still B2B commerce, not a software tour.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">

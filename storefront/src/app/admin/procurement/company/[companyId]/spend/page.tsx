@@ -1,16 +1,14 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchTrustedSpendHistory } from "@/lib/procurement/procurement-workspace-read-models";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProcurementSpendPage({ params }: { params: { companyId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) notFound();
   const { companyId } = params;
-  if (!isSupabaseConfigured()) notFound();
+  if (!isSupabaseConfigured()) {
+    return <p className="text-white/70">Supabase not configured.</p>;
+  }
   const supabase = getSupabaseAdmin() as any;
   const rows = await fetchTrustedSpendHistory(supabase, companyId);
 

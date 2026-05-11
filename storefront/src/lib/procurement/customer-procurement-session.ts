@@ -3,7 +3,7 @@
  * Server-only; uses anon cookie client for auth then service-role for membership + active_company_id.
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { redirect } from "next/navigation";
 import { resolveActiveCompanyId } from "@/lib/procurement/repo-active-company-resolve";
@@ -79,7 +79,12 @@ export async function requireCustomerProcurementSession(
   if (g.kind === "active_company_required") {
     redirect("/workspace/procurement/active-company");
   }
-  redirect("/");
+  if (g.kind === "sign_in_required") {
+    const pathname = (await headers()).get("x-gc-pathname")?.trim() || "/workspace/procurement";
+    const nextPath = pathname.startsWith("/workspace/") ? pathname : "/workspace/procurement";
+    redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+  }
+  redirect("/login?issue=no_membership");
 }
 
 export async function assertCustomerCompanyAccess(

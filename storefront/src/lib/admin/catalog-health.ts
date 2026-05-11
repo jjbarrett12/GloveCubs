@@ -9,6 +9,12 @@
  */
 
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import {
+  isGloveAttributeCandidate,
+  isMissingGloveAttributesForKeys,
+  productHasOnlyPlaceholderImagery,
+  THIN_PDP_MIN_ATTRIBUTE_ROWS,
+} from "@/lib/admin/catalog-governance";
 
 export type CatalogHealthBucket = {
   key: string;
@@ -159,15 +165,16 @@ async function derivedPlaceholderOnly(supabase: any): Promise<number | null> {
       .from("catalog_product_images")
       .select("catalog_product_id, metadata")
       .limit(SOFT_LIMIT * 4);
-    const real = new Set<string>();
-    const any = new Set<string>();
+    const rowsByProduct = new Map<string, Array<{ metadata: Record<string, unknown> | null }>>();
     for (const r of (imgs ?? []) as { catalog_product_id: string; metadata: Record<string, unknown> | null }[]) {
-      any.add(r.catalog_product_id);
-      const provenance = (r.metadata as { image_provenance?: string } | null)?.image_provenance ?? null;
-      if (provenance && provenance !== "placeholder") real.add(r.catalog_product_id);
+      const list = rowsByProduct.get(r.catalog_product_id) ?? [];
+      list.push({ metadata: r.metadata });
+      rowsByProduct.set(r.catalog_product_id, list);
     }
     let onlyPlaceholder = 0;
-    for (const id of Array.from(any)) if (!real.has(id)) onlyPlaceholder += 1;
+    for (const [, rows] of Array.from(rowsByProduct.entries())) {
+      if (productHasOnlyPlaceholderImagery(rows)) onlyPlaceholder += 1;
+    }
     return onlyPlaceholder;
   } catch {
     return null;
@@ -194,7 +201,7 @@ async function derivedThinPdps(supabase: any): Promise<number | null> {
       counts.set(r.product_id, (counts.get(r.product_id) ?? 0) + 1);
     }
     let thin = 0;
-    for (const id of ids) if ((counts.get(id) ?? 0) < 5) thin += 1;
+    for (const id of ids) if ((counts.get(id) ?? 0) < THIN_PDP_MIN_ATTRIBUTE_ROWS) thin += 1;
     return thin;
   } catch {
     return null;
@@ -306,9 +313,6 @@ async function derivedSignatureCollisions(supabase: any): Promise<number | null>
   }
 }
 
-const REQUIRED_GLOVE_ANY: ReadonlyArray<string> = ["grade", "powder", "thickness_mil"];
-const REQUIRED_GLOVE_USE_ANY: ReadonlyArray<string> = ["industries", "uses"];
-
 async function derivedMissingGloveAttributes(supabase: any): Promise<number | null> {
   try {
     const { data: prods } = await supabase
@@ -319,9 +323,7 @@ async function derivedMissingGloveAttributes(supabase: any): Promise<number | nu
       .limit(SOFT_LIMIT);
     const candidateIds: string[] = [];
     for (const r of (prods ?? []) as { id: string; metadata: Record<string, unknown> | null }[]) {
-      const meta = (r.metadata ?? {}) as { product_line_code?: unknown };
-      const code = typeof meta.product_line_code === "string" ? meta.product_line_code : "";
-      if (code === "" || code === "ppe_gloves" || code === "legacy_glove") candidateIds.push(r.id);
+      if (isGloveAttributeCandidate(r.metadata)) candidateIds.push(r.id);
     }
     if (candidateIds.length === 0) return 0;
 
@@ -350,10 +352,7 @@ async function derivedMissingGloveAttributes(supabase: any): Promise<number | nu
     let missing = 0;
     for (const id of candidateIds) {
       const keys = keysByProduct.get(id) ?? new Set<string>();
-      const hasMaterial = keys.has("material");
-      const hasAnyGloveSpec = REQUIRED_GLOVE_ANY.some((k) => keys.has(k));
-      const hasAnyUse = REQUIRED_GLOVE_USE_ANY.some((k) => keys.has(k));
-      if (!hasMaterial || !hasAnyGloveSpec || !hasAnyUse) missing += 1;
+      if (isMissingGloveAttributesForKeys(keys)) missing += 1;
     }
     return missing;
   } catch {

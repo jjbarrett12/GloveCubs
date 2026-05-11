@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Hand, HardHat, Shield, FileText } from "lucide-react";
+import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
 
 export function HomeProductFinderSection() {
   return (
@@ -10,11 +11,11 @@ export function HomeProductFinderSection() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center sm:text-left">
           <h2 id="finder-heading" className="mb-3 text-4xl font-extrabold tracking-tight text-neutral-900">
-            Browse when you already know what you want
+            Spec shopping—without retail noise
           </h2>
           <p className="max-w-3xl text-base leading-relaxed text-neutral-700 sm:text-[17px]">
-            The store is here for straight repurchase and spec shopping—thickness, texture, certifications, and use cases on every SKU.
-            If you are unsure what to switch to, start with an invoice upload above.
+            Every listing carries the attributes we have on file—mil, texture, use-case tags, and certs where published. Need a
+            match from what you already run? Use invoice review or request pricing.
           </p>
         </div>
         <div className="mb-10 grid grid-cols-1 gap-7 md:grid-cols-2">
@@ -42,12 +43,12 @@ export function HomeProductFinderSection() {
                 </div>
               </div>
               <div>
-                <strong className="text-xs uppercase text-neutral-900">Certifications:</strong>
+                <strong className="text-xs uppercase text-neutral-900">On each PDP:</strong>
                 <div className="mt-1 text-neutral-700">
-                  • FDA 510(k)
+                  • Published attributes &amp; certs
                   <br />
-                  • ASTM D6319
-                  <br />• Powder-free options
+                  • Pack / case context
+                  <br />• Quote when list price is not published
                 </div>
               </div>
             </div>
@@ -89,7 +90,7 @@ export function HomeProductFinderSection() {
         </div>
         <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4 lg:gap-4">
           <Link
-            href="/store"
+            href={buildStoreCatalogHref({ q: "nitrile" })}
             className="rounded-xl bg-gradient-to-br from-[#f06232] to-[#f06232] p-7 text-center text-white shadow-[0_4px_14px_rgba(240, 98, 50,0.25)] transition hover:-translate-y-0.5"
           >
             <Shield className="mx-auto mb-3 h-10 w-10 text-white" strokeWidth={2} />
@@ -97,7 +98,7 @@ export function HomeProductFinderSection() {
             <div className="mt-2 text-sm text-white/90">4-8 mil thickness</div>
           </Link>
           <Link
-            href="/store"
+            href={buildStoreCatalogHref({ q: "latex powder-free" })}
             className="rounded-xl border border-neutral-300/90 bg-white p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
           >
             <Hand className="mx-auto mb-3 h-10 w-10 text-[#f06232]" strokeWidth={2} />
@@ -105,10 +106,10 @@ export function HomeProductFinderSection() {
             <div className="mt-2 text-sm text-neutral-600">Powder-free available</div>
           </Link>
           <Link
-            href="/store"
-            className="rounded-xl border border-neutral-300/90 bg-[#fafafa] p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-blue-600/60 hover:shadow-md"
+            href={buildStoreCatalogHref({ q: "vinyl" })}
+            className="rounded-xl border border-neutral-300/90 bg-[#fafafa] p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#f06232]/50 hover:shadow-md"
           >
-            <Hand className="mx-auto mb-3 h-10 w-10 text-blue-600" strokeWidth={2} />
+            <Hand className="mx-auto mb-3 h-10 w-10 text-[#f06232]" strokeWidth={2} />
             <strong className="text-base font-bold text-neutral-900">Vinyl</strong>
             <div className="mt-2 text-sm text-neutral-600">Economy option</div>
           </Link>

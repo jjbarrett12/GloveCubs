@@ -5,8 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
+    "dev": "concurrently -k -n express,storefront -c cyan,magenta \"cross-env NODE_ENV=development STOREFRONT_PUBLIC_ORIGIN=http://localhost:3005 node server.js\" \"npm run dev --prefix storefront\"",
+    "dev:api": "cross-env NODE_ENV=development GLOVECUBS_DEV_API_ONLY=1 node server.js",
     "dev:storefront": "npm run dev --prefix storefront",
+    "dev:legacy": "cross-env NODE_ENV=development ALLOW_LEGACY_SPA_HTML=1 node server.js",
     "seed": "node seed.js",
     "diagnose:products": "node scripts/diagnose-products.mjs",
     "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
@@ -47,6 +49,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "csv-parse": "^5.5.6",
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",

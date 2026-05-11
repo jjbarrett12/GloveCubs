@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchApprovedRecommendations, fetchRecommendationReviewQueueEnriched } from "@/lib/procurement/procurement-workspace-read-models";
 import { ReviewQueueRow } from "@/app/admin/procurement/ReviewQueueRow";
@@ -9,10 +7,10 @@ import { ApprovedReorderRow } from "@/app/admin/procurement/ApprovedReorderRow";
 export const dynamic = "force-dynamic";
 
 export default async function ProcurementQueuePage({ params }: { params: { companyId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) notFound();
   const { companyId } = params;
-  if (!isSupabaseConfigured()) notFound();
+  if (!isSupabaseConfigured()) {
+    return <p className="text-white/70">Supabase not configured.</p>;
+  }
   const supabase = getSupabaseAdmin() as any;
   const queue = await fetchRecommendationReviewQueueEnriched(supabase, companyId);
   const approved = await fetchApprovedRecommendations(supabase, companyId);

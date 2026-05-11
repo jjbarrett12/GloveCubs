@@ -12,11 +12,11 @@ export default async function CustomerTrustedSpendPage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Only trusted price observations derived from governed invoice lines appear here. Rejected or pending
-        observations are excluded.
+        Verified spend observations from governed invoice lines appear here. Lines not yet verified for your
+        organization are excluded. Illustrative — not a financial statement; not final pricing.
       </p>
       {rows.length === 0 ? (
-        <p className="text-white/45">No trusted spend rows.</p>
+        <p className="text-white/45">No verified spend observations yet.</p>
       ) : (
         <ul className="space-y-2 text-white/80">
           {rows.map((s) => (

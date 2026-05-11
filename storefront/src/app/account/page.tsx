@@ -5,6 +5,7 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { AccountSignOut } from "./AccountSignOut";
+import { getAdminUser } from "@/lib/admin/get-admin-user";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function AccountPage() {
   const showWorkspace = gate.kind === "ready" || gate.kind === "active_company_required";
   const workspaceHref =
     gate.kind === "active_company_required" ? "/workspace/procurement/active-company" : "/workspace/procurement";
+  const adminUser = await getAdminUser();
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
@@ -36,6 +38,16 @@ export default async function AccountPage() {
         <p className="mt-2 text-sm text-white/65">
           Manage sign-in, quotes, and (when enabled) your organization workspace.
         </p>
+
+        {adminUser ? (
+          <div className="mt-6 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+            You are signed in as an operator.{" "}
+            <Link className="font-semibold text-[#f06232] underline" href="/admin">
+              Open admin console
+            </Link>
+            .
+          </div>
+        ) : null}
 
         {gate.kind === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">

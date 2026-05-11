@@ -10,9 +10,10 @@ type Props = {
   nextPath: string | string[] | undefined;
   issue: string | string[] | undefined;
   supabaseConfigured: boolean;
+  hasExplicitNext: boolean;
 };
 
-export function LoginClient({ nextPath, issue, supabaseConfigured }: Props) {
+export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNext }: Props) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -20,7 +21,7 @@ export function LoginClient({ nextPath, issue, supabaseConfigured }: Props) {
   const [error, setError] = React.useState<string | null>(null);
 
   const issueStr = Array.isArray(issue) ? issue[0] : issue;
-  const dest = safeCommerceNextPath(nextPath);
+  const explicitDest = safeCommerceNextPath(nextPath);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +45,17 @@ export function LoginClient({ nextPath, issue, supabaseConfigured }: Props) {
         setError(signErr.message);
         return;
       }
-      window.location.assign(dest);
+      if (hasExplicitNext) {
+        window.location.assign(explicitDest);
+        return;
+      }
+      const res = await fetch("/api/auth/post-login-destination", { credentials: "include" });
+      const body = (await res.json()) as { path?: string };
+      const path =
+        typeof body.path === "string" && body.path.startsWith("/") && !body.path.startsWith("//")
+          ? body.path
+          : "/account";
+      window.location.assign(path);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {

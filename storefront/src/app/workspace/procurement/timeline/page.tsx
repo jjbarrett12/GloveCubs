@@ -14,8 +14,7 @@ export default async function CustomerProcurementTimelinePage() {
     <div className="text-sm">
       <RecordViewedProcurementHistory />
       <p className="mb-4 text-white/55">
-        Chronological procurement activity your workspace is allowed to see. Internal matching, extraction, and
-        governance reject events are not listed.
+        Only sourcing activity relevant to your organization is shown here, newest first.
       </p>
       {rows.length === 0 ? (
         <p className="text-white/45">No timeline entries yet.</p>

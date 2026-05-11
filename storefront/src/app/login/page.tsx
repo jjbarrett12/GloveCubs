@@ -7,6 +7,12 @@ export const metadata: Metadata = {
   description: "Sign in to your GloveCubs business account.",
 };
 
+function hasExplicitNextParam(raw: string | string[] | undefined): boolean {
+  if (raw === undefined || raw === null) return false;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return typeof v === "string" && v.trim() !== "";
+}
+
 export default function LoginPage({
   searchParams,
 }: {
@@ -24,6 +30,7 @@ export default function LoginPage({
           nextPath={searchParams.next}
           issue={searchParams.issue}
           supabaseConfigured={supabaseConfigured}
+          hasExplicitNext={hasExplicitNextParam(searchParams.next)}
         />
       </main>
     </div>

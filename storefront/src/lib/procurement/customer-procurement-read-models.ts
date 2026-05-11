@@ -419,12 +419,40 @@ export async function fetchProcurementOpportunityIdsForCompany(supabase: any, co
   return ids;
 }
 
+export type CustomerProcurementLifecycleRowDto = {
+  id: string;
+  lifecycle_stage: string;
+};
+
+/**
+ * Lifecycle rows for procurement threads linked to this company’s uploaded invoices.
+ * Used for buyer pipeline summaries only — no synthetic progress; counts are factual.
+ */
+export async function fetchCustomerProcurementLifecycleRows(
+  supabase: any,
+  companyId: string,
+  limitIds = 200
+): Promise<CustomerProcurementLifecycleRowDto[]> {
+  const oppIds = await fetchProcurementOpportunityIdsForCompany(supabase, companyId);
+  if (oppIds.length === 0) return [];
+  const slice = oppIds.slice(0, limitIds);
+  const { data, error } = await supabase
+    .from("procurement_opportunities")
+    .select("id, lifecycle_stage")
+    .in("id", slice);
+  if (error || !data?.length) return [];
+  return (data as { id: string; lifecycle_stage: string }[]).map((r) => ({
+    id: String(r.id),
+    lifecycle_stage: String(r.lifecycle_stage),
+  }));
+}
+
 function formatDeltaPlain(delta: number, basis: string): string {
   const d = Number(delta);
   if (!Number.isFinite(d)) return "";
   const sign = d > 0 ? "lower" : d < 0 ? "higher" : "unchanged";
   const abs = Math.abs(d);
-  return `Candidate unit economics on the recorded basis (${basis}) are ${sign} by ${abs.toFixed(4)} per basis vs. the current line (deterministic; not a price guarantee).`;
+  return `Candidate unit economics on the recorded basis (${basis}) are ${sign} by ${abs.toFixed(4)} per basis vs. the current line (based on governed observations; not a price guarantee).`;
 }
 
 export function mapRawProcurementEventToCustomerTimelineRow(raw: Record<string, unknown>): CustomerTimelineRowDto | null {
@@ -443,7 +471,7 @@ export function mapRawProcurementEventToCustomerTimelineRow(raw: Record<string, 
       const src = payload.source_unit_price_normalized != null ? Number(payload.source_unit_price_normalized) : null;
       const cand = payload.candidate_unit_price_normalized != null ? Number(payload.candidate_unit_price_normalized) : null;
       const delta = payload.estimated_delta_per_basis != null ? Number(payload.estimated_delta_per_basis) : null;
-      let detail: string | null = "Approved for your procurement workspace after operator review.";
+      let detail: string | null = "SourceIt reviewed and approved this alternate for your organization.";
       if (src != null && cand != null && delta != null && Number.isFinite(delta)) {
         detail = `${detail} ${formatDeltaPlain(delta, basis)}`;
       }
@@ -461,30 +489,30 @@ export function mapRawProcurementEventToCustomerTimelineRow(raw: Record<string, 
         event_type: eventType,
         occurred_at: occurredAt,
         headline: "Reorder item added",
-        detail: "An operator promoted a product into your reorder list.",
+        detail: "A sourcing update added a product to your reorder list.",
       };
     case ProcurementEventType.reorder_product_retired:
       return {
         id,
         event_type: eventType,
         occurred_at: occurredAt,
-        headline: "Reorder item retired",
-        detail: "An operator retired a reorder item.",
+        headline: "Reorder item removed",
+        detail: "This product was removed from your reorder list.",
       };
     case ProcurementEventType.trusted_spend_promoted:
       return {
         id,
         event_type: eventType,
         occurred_at: occurredAt,
-        headline: "Trusted spend updated",
-        detail: "Trusted procurement spend memory was updated.",
+        headline: "Verified spend updated",
+        detail: "Your verified spend on record was refreshed.",
       };
     case ProcurementEventType.customer_viewed_recommendation:
       return {
         id,
         event_type: eventType,
         occurred_at: occurredAt,
-        headline: "You viewed an approved note",
+        headline: "You viewed an approval",
         detail: null,
       };
     case ProcurementEventType.customer_acknowledged_recommendation:
@@ -492,7 +520,7 @@ export function mapRawProcurementEventToCustomerTimelineRow(raw: Record<string, 
         id,
         event_type: eventType,
         occurred_at: occurredAt,
-        headline: "You acknowledged an approved note",
+        headline: "You acknowledged an approval",
         detail: null,
       };
     case ProcurementEventType.customer_requested_reorder:

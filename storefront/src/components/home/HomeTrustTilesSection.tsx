@@ -11,8 +11,16 @@ const TILES = [
 
 export function HomeTrustTilesSection() {
   return (
-    <section className="border-t border-white/10 bg-gradient-to-b from-[#161616] to-[#0f0f0f] py-16 sm:py-20">
+    <section className="border-t border-white/10 bg-gradient-to-b from-[#161616] to-[#0f0f0f] py-16 sm:py-20" aria-labelledby="ops-trust-heading">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-10 text-center">
+          <h2 id="ops-trust-heading" className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+            Operational reliability
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm text-white/55">
+            How we show up for business buyers—without inflated metrics or borrowed testimonials.
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6 lg:gap-5">
           {TILES.map(({ icon: Icon, label }) => (
             <div

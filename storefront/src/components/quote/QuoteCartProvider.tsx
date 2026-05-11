@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { QuoteCartItem } from "@/lib/quote-cart/types";
 import { QUOTE_CART_STORAGE_KEY } from "@/lib/quote-cart/types";
-import { normalizeQuoteCartLineInput, quoteCartLinesMatch } from "@/lib/quote-cart/line-utils";
+import { normalizeQuoteCartLineInput, quoteCartCatalogMergeMatch } from "@/lib/quote-cart/line-utils";
 
 function isOptionalStringOrNull(v: unknown): boolean {
   return v === undefined || v === null || typeof v === "string";
@@ -35,6 +35,7 @@ function readCart(): QuoteCartItem[] {
       if (!isOptionalStringOrNull(o.catalog_variant_id)) return false;
       if (!isOptionalStringOrNull(o.variant_sku)) return false;
       if (!isOptionalStringOrNull(o.size_code)) return false;
+      if (!isOptionalStringOrNull(o.line_note)) return false;
       return true;
     });
     return filtered.map((i) => {
@@ -55,7 +56,7 @@ function writeCart(items: QuoteCartItem[]) {
 
 function findLineIndex(lines: QuoteCartItem[], incoming: Omit<QuoteCartItem, "quantity">): number {
   const norm = normalizeQuoteCartLineInput(incoming);
-  return lines.findIndex((x) => quoteCartLinesMatch(x, norm));
+  return lines.findIndex((x) => quoteCartCatalogMergeMatch(x, norm));
 }
 
 type QuoteCartContextValue = {
@@ -64,8 +65,10 @@ type QuoteCartContextValue = {
   addItem: (product: Omit<QuoteCartItem, "quantity">, qty?: number) => void;
   /** Single persist — merges each line like addItem. */
   addItems: (products: Omit<QuoteCartItem, "quantity">[], qtyEach?: number) => void;
-  setQuantity: (productId: string, quantity: number, catalogVariantId?: string | null) => void;
-  removeItem: (productId: string, catalogVariantId?: string | null) => void;
+  setQuantityAtIndex: (index: number, quantity: number) => void;
+  /** Update per-line note by stable cart index (supports multiple lines same product/variant with different notes). */
+  setLineNoteAtIndex: (index: number, lineNote: string) => void;
+  removeItemAtIndex: (index: number) => void;
   clear: () => void;
   lineCount: number;
   totalCount: number;
@@ -128,33 +131,38 @@ export function QuoteCartProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
-  const setQuantity = useCallback(
-    (productId: string, quantity: number, catalogVariantId?: string | null) => {
-      const q = Math.max(1, Math.min(99999, Math.floor(quantity)));
+  const setQuantityAtIndex = useCallback(
+    (index: number, quantity: number) => {
+      const floored = Math.floor(quantity);
+      const q =
+        !Number.isFinite(floored) || floored < 1 ? 1 : Math.min(99999, floored);
       const prev = readCart();
-      const probe = normalizeQuoteCartLineInput({
-        product_id: productId,
-        name: "",
-        slug: "",
-        brandName: null,
-        catalog_variant_id: catalogVariantId ?? null,
-      });
-      const next = prev.map((x) => (quoteCartLinesMatch(x, probe) && x.product_id === productId ? { ...x, quantity: q } : x));
+      if (index < 0 || index >= prev.length) return;
+      const next = [...prev];
+      next[index] = { ...next[index], quantity: q };
       persist(next);
     },
     [persist]
   );
 
-  const removeItem = useCallback(
-    (productId: string, catalogVariantId?: string | null) => {
-      const probe = normalizeQuoteCartLineInput({
-        product_id: productId,
-        name: "",
-        slug: "",
-        brandName: null,
-        catalog_variant_id: catalogVariantId ?? null,
-      });
-      persist(readCart().filter((x) => !(x.product_id === productId && quoteCartLinesMatch(x, probe))));
+  const setLineNoteAtIndex = useCallback(
+    (index: number, lineNote: string) => {
+      const prev = readCart();
+      if (index < 0 || index >= prev.length) return;
+      const row = prev[index];
+      const normalized = normalizeQuoteCartLineInput({ ...row, line_note: lineNote });
+      const next = [...prev];
+      next[index] = { ...row, line_note: normalized.line_note };
+      persist(next);
+    },
+    [persist]
+  );
+
+  const removeItemAtIndex = useCallback(
+    (index: number) => {
+      const prev = readCart();
+      if (index < 0 || index >= prev.length) return;
+      persist(prev.filter((_, i) => i !== index));
     },
     [persist]
   );
@@ -170,13 +178,14 @@ export function QuoteCartProvider({ children }: { children: ReactNode }) {
       hydrated,
       addItem,
       addItems,
-      setQuantity,
-      removeItem,
+      setQuantityAtIndex,
+      setLineNoteAtIndex,
+      removeItemAtIndex,
       clear,
       lineCount,
       totalCount,
     }),
-    [items, hydrated, addItem, addItems, setQuantity, removeItem, clear, lineCount, totalCount]
+    [items, hydrated, addItem, addItems, setQuantityAtIndex, setLineNoteAtIndex, removeItemAtIndex, clear, lineCount, totalCount]
   );
 
   return <QuoteCartContext.Provider value={value}>{children}</QuoteCartContext.Provider>;

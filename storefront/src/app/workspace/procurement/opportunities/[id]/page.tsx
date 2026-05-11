@@ -22,8 +22,8 @@ export default async function CustomerOpportunityDetailPage({ params }: { params
       <div className="text-sm">
         <RecordViewedRecommendation savingsOpportunityId={state.id} />
         <p className="text-white/70">
-          This procurement note is under review. Economics are being reconciled with the latest governed data — please
-          check back or contact your advisor.
+          This approval is being reconciled with the latest governed observations — please check back or contact your
+          advisor. When it returns here, economics are illustrative and not final pricing.
         </p>
         <ContactAdvisorForm />
       </div>
@@ -44,10 +44,10 @@ export default async function CustomerOpportunityDetailPage({ params }: { params
       <RecordViewedRecommendation savingsOpportunityId={o.id} />
       <p className="mb-2">
         <Link href="/workspace/procurement/opportunities" className="text-sky-400 hover:underline">
-          ← Approved notes
+          ← Approvals
         </Link>
       </p>
-      <h2 className="text-base font-medium text-white/90">Approved alternate (operator-reviewed)</h2>
+      <h2 className="text-base font-medium text-white/90">Approved alternate — SourceIt reviewed</h2>
       <p className="mt-2 text-white/60">
         <span className="text-white/80">{o.source_product.label}</span> →{" "}
         <span className="text-white/80">{o.candidate_product.label}</span>
@@ -78,7 +78,10 @@ export default async function CustomerOpportunityDetailPage({ params }: { params
       </dl>
       <p className="mt-3 text-xs text-white/50">{deltaNote}</p>
       <p className="mt-2 text-xs text-white/45">
-        Approved for your workspace on {o.approved_for_customer_at?.slice(0, 10) ?? "—"}.
+        Illustrative economics from governed observations — not final pricing.
+      </p>
+      <p className="mt-2 text-xs text-white/45">
+        Approved for your organization on {o.approved_for_customer_at?.slice(0, 10) ?? "—"}.
       </p>
       <div className="mt-4 flex flex-wrap gap-3 text-xs">
         {o.source_product.slug ? (

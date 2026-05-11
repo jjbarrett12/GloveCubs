@@ -81,8 +81,9 @@ describe("customer procurement read models", () => {
       created_at: "2026-03-01T12:00:00Z",
     });
     expect(row?.headline).toBe("Approved alternate recorded");
-    expect(row?.detail).toContain("deterministic");
-    expect(row?.detail).not.toMatch(/AI|smart|benchmark/i);
+    expect(row?.detail).toContain("SourceIt reviewed");
+    expect(row?.detail).toContain("governed observations");
+    expect(row?.detail).not.toMatch(/AI|smart|benchmark|operator|internal review queue/i);
   });
 });
 
