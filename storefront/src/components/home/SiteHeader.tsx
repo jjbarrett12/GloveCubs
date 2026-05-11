@@ -14,12 +14,17 @@ import {
   ShoppingCart,
   ChevronDown,
   FileText,
+  User,
+  LogOut,
 } from "lucide-react";
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
+import { industryNavIconForHref } from "@/config/industryNavIcons";
 import { HEADER_INDUSTRY_NAV_ITEMS } from "@/config/publicNav";
 import { SITE_PHONE_TEL_HREF, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
 import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
+import type { CommerceHeaderAuth } from "@/lib/customer/commerce-header-auth";
 import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-routes";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,7 +41,13 @@ function closeMobileNav(setMobileOpen: (v: boolean) => void, setMobilePanel: (v:
   setMobilePanel(null);
 }
 
-export function SiteHeader() {
+/**
+ * `auth` is optional so callers rendered against the static HEAD (e.g. legacy
+ * pages still on `<SiteHeader />`) get the anonymous UI without a build break.
+ * Auth-aware pages should render `<SiteHeaderLoader />` instead, which fetches
+ * the server-side auth snapshot and forwards it here.
+ */
+export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHeaderAuth }) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -104,6 +115,17 @@ export function SiteHeader() {
     closeMobileNav(setMobileOpen, setMobilePanel);
   }
 
+  async function onSignOut() {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // still navigate home if client misconfigured
+    }
+    router.push("/");
+    router.refresh();
+  }
+
   const navLinkClass =
     "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-[#f06232]";
 
@@ -156,7 +178,7 @@ export function SiteHeader() {
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <Link
                 href="/"
-                className="flex h-[60px] max-w-[min(660px,90vw)] items-end overflow-hidden bg-transparent no-underline [forced-color-adjust:none] sm:h-[66px] lg:h-[70px]"
+                className="flex h-[60px] w-[90px] shrink-0 items-end justify-start overflow-hidden bg-transparent no-underline [forced-color-adjust:none] sm:h-[66px] sm:w-[99px] lg:h-[70px] lg:w-[105px]"
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
@@ -166,19 +188,29 @@ export function SiteHeader() {
                   height={1024}
                   priority
                   unoptimized
-                  className="h-[96px] w-auto max-w-none shrink-0 translate-y-5 object-contain object-left sm:h-[108px] sm:translate-y-6 lg:h-[114px] lg:translate-y-7"
+                  className="h-[calc(60px/3)] w-auto max-w-none shrink-0 origin-bottom-left scale-[3] object-contain object-left sm:h-[calc(66px/3)] lg:h-[calc(70px/3)]"
                 />
               </Link>
 
-              <div className="flex items-center gap-4 lg:hidden">
+              <div className="flex items-center gap-3 lg:hidden">
                 <Link
                   href="/quote-cart"
                   className="relative flex cursor-pointer items-center text-neutral-800"
-                  aria-label="Quote cart"
+                  aria-label="Cart"
+                  title="Cart"
                   onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                 >
                   <ShoppingCart className="h-6 w-6" />
                 </Link>
+                {auth.kind === "anonymous" ? (
+                  <Link
+                    href="/login"
+                    className="text-[13px] font-semibold text-neutral-800 hover:text-[#f06232]"
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    Sign In
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   className="rounded-md border border-neutral-300 p-2.5 text-neutral-800 shadow-sm"
@@ -218,20 +250,62 @@ export function SiteHeader() {
                 href="/request-pricing"
                 className="order-1 hidden rounded-md border-2 border-[#f06232] bg-transparent px-5 py-2 text-[13px] font-bold text-[#f06232] transition hover:-translate-y-px hover:bg-[#f06232] hover:text-white hover:shadow-[0_4px_14px_rgba(240, 98, 50,0.35)] lg:inline-block"
               >
-                Request Quote
+                Business pricing
               </Link>
 
-              <Link
-                href="/workspace/procurement"
-                className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
-              >
-                Sign In
-              </Link>
+              {auth.kind === "anonymous" ? (
+                <Link
+                  href="/login"
+                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
+                >
+                  Sign In
+                </Link>
+              ) : (
+                <details className="order-2 relative hidden lg:inline-block">
+                  <summary className="list-none cursor-pointer text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] [&::-webkit-details-marker]:hidden">
+                    <span className="inline-flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                      Account
+                      <ChevronDown className="h-3 w-3 opacity-70" aria-hidden />
+                    </span>
+                  </summary>
+                  <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-neutral-200 bg-white py-1 text-left text-[13px] shadow-lg">
+                    <div className="border-b border-neutral-100 px-3 py-2 text-[11px] text-neutral-500">
+                      {auth.email ? <span className="break-all">{auth.email}</span> : "Signed in"}
+                    </div>
+                    <Link
+                      href="/account"
+                      className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
+                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                    >
+                      Account home
+                    </Link>
+                    {auth.showWorkspace ? (
+                      <Link
+                        href="/workspace/procurement"
+                        className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        Workspace
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left font-medium text-neutral-900 hover:bg-neutral-50"
+                      onClick={() => void onSignOut()}
+                    >
+                      <LogOut className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                      Sign out
+                    </button>
+                  </div>
+                </details>
+              )}
 
               <Link
                 href="/quote-cart"
                 className="relative order-2 hidden cursor-pointer items-center gap-1 text-neutral-800 lg:flex"
-                aria-label="Quote cart"
+                aria-label="Cart"
+                title="Cart"
               >
                 <ShoppingCart className="h-6 w-6" />
               </Link>
@@ -306,17 +380,23 @@ export function SiteHeader() {
                       mobilePanel === "industries" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
-                    {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
-                      <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
-                        <Link
-                          href={item.href}
-                          className={`${mobileNavLinkClass} flex min-h-[44px] items-center`}
-                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
+                    {HEADER_INDUSTRY_NAV_ITEMS.map((item) => {
+                      const IndustryIcon = industryNavIconForHref(item.href);
+                      return (
+                        <li key={item.href} className="border-t border-neutral-200 first:border-t-0 lg:border-t-0">
+                          <Link
+                            href={item.href}
+                            className={`${mobileNavLinkClass} flex min-h-[44px] items-center gap-3`}
+                            onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#f06232]/25 bg-[#f06232]/[0.07]">
+                              <IndustryIcon className="h-[18px] w-[18px] text-[#f06232]" aria-hidden />
+                            </span>
+                            <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
                   </ul>
                   <div
                     id="nav-mega-industries"
@@ -337,16 +417,22 @@ export function SiteHeader() {
                         Shop by industry
                       </h4>
                       <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-6">
-                        {HEADER_INDUSTRY_NAV_ITEMS.map((item) => (
-                          <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
-                            <Link
-                              href={item.href}
-                              className="flex min-h-[40px] items-center rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#f06232] lg:min-h-0 lg:py-1"
-                            >
-                              {item.label}
-                            </Link>
-                          </li>
-                        ))}
+                        {HEADER_INDUSTRY_NAV_ITEMS.map((item) => {
+                          const IndustryIcon = industryNavIconForHref(item.href);
+                          return (
+                            <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
+                              <Link
+                                href={item.href}
+                                className="flex min-h-[40px] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#f06232] lg:min-h-0 lg:py-1"
+                              >
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#f06232]/25 bg-[#f06232]/[0.07]">
+                                  <IndustryIcon className="h-4 w-4 text-[#f06232]" aria-hidden />
+                                </span>
+                                <span className="min-w-0 flex-1">{item.label}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   </div>
@@ -488,7 +574,7 @@ export function SiteHeader() {
                     className={navLinkClass}
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
-                    AI Recommender
+                    Glove Finder
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
@@ -497,7 +583,16 @@ export function SiteHeader() {
                     className={navLinkClass}
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
-                    Bulk / RFQ
+                    Business pricing
+                  </Link>
+                </li>
+                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
+                  <Link
+                    href="/faq"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    Support
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
@@ -510,19 +605,48 @@ export function SiteHeader() {
                   </Link>
                 </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/faq" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                    FAQ
-                  </Link>
-                </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link
-                    href="/contact"
-                    className={navLinkClass}
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
+                  <Link href="/contact" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                     Contact
                   </Link>
                 </li>
+                {auth.kind === "anonymous" ? (
+                  <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                    <Link href="/login" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                      Sign In
+                    </Link>
+                  </li>
+                ) : (
+                  <>
+                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                      <Link href="/account" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Account
+                      </Link>
+                    </li>
+                    {auth.showWorkspace ? (
+                      <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                        <Link
+                          href="/workspace/procurement"
+                          className={navLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          Workspace
+                        </Link>
+                      </li>
+                    ) : null}
+                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                      <button
+                        type="button"
+                        className={`${navLinkClass} w-full border-0 bg-transparent text-left`}
+                        onClick={() => {
+                          closeMobileNav(setMobileOpen, setMobilePanel);
+                          void onSignOut();
+                        }}
+                      >
+                        Sign out
+                      </button>
+                    </li>
+                  </>
+                )}
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2 lg:ml-4 lg:border-l lg:border-neutral-200 lg:pl-4">
                   <Link
                     href="/invoice-savings"
