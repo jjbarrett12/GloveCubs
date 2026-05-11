@@ -12,11 +12,31 @@ export function HomeHeroExpress() {
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(240,98,50,0.04)_0%,transparent_72%)]" />
 
       <div className="relative z-[1] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div
+          className="pointer-events-none absolute right-4 top-0 z-[2] hidden max-w-[min(100%,280px)] sm:block lg:right-8"
+          aria-hidden
+        >
+          <div className="float-right rounded-2xl border border-white/15 bg-gradient-to-br from-[#1a1a1a]/95 to-[#121212]/95 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(240,98,50,0.12)] backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#f06232]/95">Operator-grade catalog</p>
+            <p className="mt-1 text-xs font-medium leading-snug text-white/85">
+              Spec-grade attributes, governed alternates, and quote workflows—built for procurement teams.
+            </p>
+          </div>
+        </div>
+
         <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-14">
           <div>
             <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.16em] text-[#f06232]">
               Industrial & disposable gloves · B2B distributor
             </p>
+            <div className="mb-4 sm:hidden">
+              <div className="inline-block rounded-xl border border-white/15 bg-gradient-to-br from-[#1a1a1a]/95 to-[#121212]/95 px-3 py-2.5 shadow-[0_8px_28px_rgba(0,0,0,0.4)]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#f06232]/95">Operator-grade catalog</p>
+                <p className="mt-0.5 text-[11px] font-medium leading-snug text-white/80">
+                  Spec-grade attributes and quote workflows for procurement teams.
+                </p>
+              </div>
+            </div>
             <h1 className="mb-4 text-4xl font-black leading-[1.12] tracking-tight text-white sm:text-5xl lg:text-[52px]">
               Disposable and work gloves for teams that buy by the case
             </h1>

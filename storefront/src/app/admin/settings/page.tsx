@@ -27,9 +27,10 @@ export default function AdminSettingsPage() {
         <h2 className="text-xs font-bold uppercase tracking-wide text-white/45">Authorization model</h2>
         <p className="mt-2 leading-relaxed">
           Admin pages require a Supabase-authenticated user with an active row in{" "}
-          <code className="text-white/70">public.admin_users</code> (<code className="text-white/70">id</code> matches
-          auth user, <code className="text-white/70">is_active = true</code>). There is no shared query-secret gate for
-          normal navigation.
+          <code className="text-white/70">public.admin_users</code> where <code className="text-white/70">id</code> equals{" "}
+          <code className="text-white/70">auth.users.id</code> (not a separately generated UUID; email-only inserts will
+          not match sign-in) and <code className="text-white/70">is_active</code> is true. There is no shared query-secret
+          gate for normal navigation.
         </p>
       </div>
 
