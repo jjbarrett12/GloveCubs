@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
 import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
 import { StoreBadgeStack } from "@/components/store/StoreBadgeStack";
+import { ProductImage } from "@/components/store/ProductImage";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
@@ -26,17 +27,11 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
         <div className="relative aspect-square w-full bg-black/40">
           <StoreBadgeStack labels={product.badges} />
           <Link href={pdpHref} className="block h-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#f06232]">
-            {product.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.imageUrl}
-                alt={`${product.name} — product image`}
-                className="h-full w-full object-contain p-2"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-[11px] text-white/35">No image</div>
-            )}
+            <ProductImage
+              src={product.imageUrl}
+              alt={`${product.name} — product image`}
+              containerClassName="rounded-none border-0 bg-transparent"
+            />
           </Link>
         </div>
       </div>
@@ -54,9 +49,16 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
         ) : null}
         {certScan ? <p className="line-clamp-1 text-[10px] text-white/50">{certScan}</p> : null}
         <div className="space-y-0.5 text-[11px] text-white/55">
-          {product.variantSku ? <div>SKU: {product.variantSku}</div> : null}
+          {product.variantSku ? (
+            <div>
+              <span className="text-white/40">Order SKU</span>{" "}
+              <span className="font-mono text-white/80">{product.variantSku}</span>
+            </div>
+          ) : null}
           {product.internalSku && product.internalSku !== product.variantSku ? (
-            <div>Parent: {product.internalSku}</div>
+            <div className="text-[10px] text-white/45">
+              Style ref <span className="font-mono text-white/55">{product.internalSku}</span>
+            </div>
           ) : null}
           {specLine ? <div className="text-white/70">{specLine}</div> : null}
         </div>
