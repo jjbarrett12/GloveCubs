@@ -1,5 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { resolveUserFromAdminCookies } from "@/lib/auth/post-login-session";
 
 /**
  * Next `/admin/**` gate: any **active** `public.admin_users` row for the current Supabase auth user is treated as a
@@ -20,30 +21,24 @@ export async function resolveAdminAccess(): Promise<AdminAccessResult> {
   }
 
   const cookieStore = await cookies();
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-    },
-  });
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return { kind: "sign_in_required" };
+  const user = await resolveUserFromAdminCookies(url, key, cookieStore);
+  if (!user) return { kind: "sign_in_required" };
 
+  const supabase = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const { data: adminUser } = await supabase
     .from("admin_users")
     .select("id, is_active")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
   if (!adminUser) return { kind: "not_admin" };
 
   return {
     kind: "ok",
-    userId: session.user.id,
-    email: session.user.email ?? null,
+    userId: user.id,
+    email: user.email ?? null,
   };
 }
 

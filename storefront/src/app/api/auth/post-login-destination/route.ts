@@ -1,43 +1,109 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { resolveUserForPostLoginDestination } from "@/lib/auth/post-login-session";
 
 export const dynamic = "force-dynamic";
 
 /**
  * After password sign-in, LoginClient calls this to choose `/admin` vs `/account`
- * when no explicit `next` query was provided. Requires session cookies from the client.
+ * when no explicit `next` query was provided. Sends `Authorization: Bearer` with the
+ * fresh access token so this route does not race cookie persistence on the first fetch.
  */
-export async function GET() {
+const DEBUG_POST_LOGIN = process.env.GC_POST_LOGIN_DEBUG === "1";
+
+function supabaseHost(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(req: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) {
-    return NextResponse.json({ path: "/account" as const });
+  if (!url || !anon || !key) {
+    return NextResponse.json({
+      path: "/account" as const,
+      ...(DEBUG_POST_LOGIN
+        ? {
+            diag: {
+              logged_in: false,
+              user_id_suffix: null as string | null,
+              admin_row_found: false,
+              admin_active: false,
+              destination: "/account",
+              session_via: "none" as const,
+              supabase_url_host: url ? supabaseHost(url) : null,
+              reason: "missing_supabase_env",
+            },
+          }
+        : {}),
+    });
   }
 
   const cookieStore = await cookies();
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-    },
+  const auth = await resolveUserForPostLoginDestination({
+    supabaseUrl: url,
+    anonKey: anon,
+    serviceRoleKey: key,
+    authorizationHeader: req.headers.get("authorization"),
+    cookieGet: (name: string) => cookieStore.get(name)?.value,
   });
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) {
-    return NextResponse.json({ path: "/account" as const });
+  if (!auth.user) {
+    return NextResponse.json({
+      path: "/account" as const,
+      ...(DEBUG_POST_LOGIN
+        ? {
+            authDebug: "no_user_bearer_or_cookie" as const,
+            diag: {
+              logged_in: false,
+              user_id_suffix: null,
+              admin_row_found: false,
+              admin_active: false,
+              destination: "/account",
+              session_via: auth.via,
+              supabase_url_host: supabaseHost(url),
+              reason: "no_user_bearer_or_cookie",
+            },
+          }
+        : {}),
+    });
   }
 
-  const { data: adminUser } = await supabase
+  const svc = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: adminUser } = await svc
     .from("admin_users")
-    .select("id")
-    .eq("id", session.user.id)
+    .select("id, is_active")
+    .eq("id", auth.user.id)
     .eq("is_active", true)
     .maybeSingle();
 
   const path = adminUser ? ("/admin" as const) : ("/account" as const);
-  return NextResponse.json({ path });
+  const adminRowFound = Boolean(adminUser);
+  const adminActive = adminRowFound;
+
+  return NextResponse.json({
+    path,
+    ...(DEBUG_POST_LOGIN
+      ? {
+          authDebug: adminUser ? ("active_admin_row" as const) : ("no_admin_row_for_auth_uid" as const),
+          diag: {
+            logged_in: true,
+            user_id_suffix: auth.user.id.length >= 12 ? auth.user.id.slice(-12) : auth.user.id,
+            admin_row_found: adminRowFound,
+            admin_active: adminActive,
+            destination: path,
+            session_via: auth.via,
+            supabase_url_host: supabaseHost(url),
+            reason: adminUser ? "admin_ok" : "no_admin_row",
+          },
+        }
+      : {}),
+  });
 }

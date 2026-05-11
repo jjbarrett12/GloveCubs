@@ -38,7 +38,7 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
     setBusy(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const { error: signErr } = await supabase.auth.signInWithPassword({
+      const { data: signData, error: signErr } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -46,7 +46,13 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
         setError(signErr.message);
         return;
       }
-      const res = await fetch("/api/auth/post-login-destination", { credentials: "include" });
+      const accessToken = signData.session?.access_token;
+      const res = await fetch("/api/auth/post-login-destination", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
       const body = (await res.json().catch(() => ({}))) as { path?: string };
       const apiPath =
         typeof body.path === "string" && body.path.startsWith("/") && !body.path.startsWith("//")
