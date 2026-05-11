@@ -49,16 +49,9 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
         ) : null}
         {certScan ? <p className="line-clamp-1 text-[10px] text-white/50">{certScan}</p> : null}
         <div className="space-y-0.5 text-[11px] text-white/55">
-          {product.variantSku ? (
-            <div>
-              <span className="text-white/40">Order SKU</span>{" "}
-              <span className="font-mono text-white/80">{product.variantSku}</span>
-            </div>
-          ) : null}
+          {product.variantSku ? <div>SKU: {product.variantSku}</div> : null}
           {product.internalSku && product.internalSku !== product.variantSku ? (
-            <div className="text-[10px] text-white/45">
-              Style ref <span className="font-mono text-white/55">{product.internalSku}</span>
-            </div>
+            <div>Parent: {product.internalSku}</div>
           ) : null}
           {specLine ? <div className="text-white/70">{specLine}</div> : null}
         </div>

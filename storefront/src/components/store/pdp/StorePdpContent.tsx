@@ -3,10 +3,9 @@ import type { StoreProductDetail } from "@/lib/catalog/store-product-detail";
 import { buildStoreProductRowForVariant } from "@/lib/catalog/store-product-detail";
 import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
-import { ProductImage } from "@/components/store/ProductImage";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { StorePageShell } from "@/components/store/StorePageShell";
 import { PdpStickyMobileCta } from "@/components/store/pdp/PdpStickyMobileCta";
+import { ProductImage } from "@/components/store/ProductImage";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
@@ -19,7 +18,23 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] pb-24 font-poppins md:pb-10">
-      <SiteHeaderLoader />
+      <header className="border-b border-white/10">
+        <StorePageShell>
+          <div className="flex items-center justify-between gap-4 py-4">
+            <Link href="/" className="text-xl font-semibold text-white">
+              GloveCubs
+            </Link>
+            <nav className="flex flex-wrap items-center justify-end gap-3 text-sm">
+              <Link href="/store" className="text-white/80 hover:text-white">
+                Store
+              </Link>
+              <Link href="/quote-cart" className="text-white/80 hover:text-white">
+                Quote cart
+              </Link>
+            </nav>
+          </div>
+        </StorePageShell>
+      </header>
 
       <main className="py-6 sm:py-8">
         <StorePageShell>
@@ -40,11 +55,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                       <ProductImage
                         key={`${img.url}-${i}`}
                         src={img.url}
-                        alt={
-                          detail.gallery.length > 1
-                            ? `${detail.name} — product image ${i + 1}`
-                            : `${detail.name} — product image`
-                        }
+                        alt={detail.gallery.length > 1 ? `${detail.name} — product image ${i + 1}` : `${detail.name} — product image`}
                         loading={i === 0 ? "eager" : "lazy"}
                       />
                     ))
@@ -58,20 +69,16 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f06232]/90">{detail.brandName}</p>
                   ) : null}
                   <h1 className="text-xl font-black leading-tight tracking-tight text-white sm:text-2xl">{detail.name}</h1>
-                  <ul className="mt-1 flex flex-col gap-0.5 text-[11px] leading-snug text-white/50 sm:flex-row sm:flex-wrap sm:gap-x-5">
-                    <li>Case &amp; pallet programs available</li>
-                    <li>Quote when list price is not published</li>
-                  </ul>
-                  <dl className="mt-2 grid gap-1 text-[11px] text-white/55 sm:grid-cols-2">
+                  <dl className="grid gap-1 text-[11px] text-white/55 sm:grid-cols-2">
                     {detail.internalSku ? (
                       <>
-                        <dt className="text-white/40">Style reference</dt>
+                        <dt className="text-white/40">Internal SKU</dt>
                         <dd className="font-mono text-white/80">{detail.internalSku}</dd>
                       </>
                     ) : null}
                     {detail.defaultVariant?.variant_sku ? (
                       <>
-                        <dt className="text-white/40">Variant / order SKU</dt>
+                        <dt className="text-white/40">Default variant SKU</dt>
                         <dd className="font-mono text-white/80">{detail.defaultVariant.variant_sku}</dd>
                       </>
                     ) : null}
@@ -79,7 +86,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
 
                   {detail.commercialRows.length > 0 ? (
                     <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2.5">
-                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">Buying context</p>
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">Commercial summary</p>
                       <dl className="grid gap-1.5 sm:grid-cols-2">
                         {detail.commercialRows.map((row, cIdx) => (
                           <div key={`${row.label}::${row.value}::${cIdx}`} className="min-w-0 sm:col-span-2">
@@ -121,7 +128,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                         <tr>
                           <th className="px-3 py-2 font-semibold">Size</th>
                           <th className="px-3 py-2 font-semibold">Variant SKU</th>
-                          <th className="px-3 py-2 font-semibold">Add to quote</th>
+                          <th className="px-3 py-2 font-semibold">Quote</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -219,7 +226,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
 
             <aside className="hidden min-w-0 space-y-3 lg:block">
               <div className="sticky top-24 space-y-3 rounded-xl border border-white/10 bg-[#141414] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Quote</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Procurement</p>
                 {primaryQuoteProduct ? <AddToQuoteButton product={primaryQuoteProduct} /> : null}
                 <ButtonRequestPricingLink className="w-full" />
               </div>
