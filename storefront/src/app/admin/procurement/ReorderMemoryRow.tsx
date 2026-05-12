@@ -13,16 +13,18 @@ export function ReorderMemoryRow({ row, companyId, procurementOpportunityId }: {
   const id = String(row.id);
 
   return (
-    <tr className="border-b border-white/10 align-top text-sm">
-      <td className="py-2 pr-2 font-mono text-xs">{id.slice(0, 8)}…</td>
-      <td className="py-2 pr-2 font-mono text-xs">{String(row.catalog_product_id).slice(0, 8)}…</td>
-      <td className="py-2 pr-2">{String(row.basis_uom ?? "")}</td>
-      <td className="py-2 pr-2 text-right tabular-nums">{row.last_trusted_unit_basis != null ? String(row.last_trusted_unit_basis) : "—"}</td>
-      <td className="py-2">
+    <tr className="align-top text-sm hover:bg-blue-50/40">
+      <td className="p-3 font-mono text-xs text-gray-700">{id.slice(0, 8)}…</td>
+      <td className="p-3 font-mono text-xs text-gray-700">{String(row.catalog_product_id).slice(0, 8)}…</td>
+      <td className="p-3 text-gray-900">{String(row.basis_uom ?? "")}</td>
+      <td className="p-3 text-right font-mono tabular-nums text-gray-900">
+        {row.last_trusted_unit_basis != null ? String(row.last_trusted_unit_basis) : "—"}
+      </td>
+      <td className="p-3">
         <button
           type="button"
           disabled={pending}
-          className="rounded border border-white/20 px-2 py-1 text-xs hover:bg-white/10"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
           onClick={() => {
             setMessage(null);
             const reason = window.prompt("Retire reason (optional)") ?? "";
@@ -40,7 +42,7 @@ export function ReorderMemoryRow({ row, companyId, procurementOpportunityId }: {
         >
           Retire
         </button>
-        {message && <p className="mt-1 text-xs text-amber-300">{message}</p>}
+        {message && <p className="mt-2 text-xs text-amber-800">{message}</p>}
       </td>
     </tr>
   );

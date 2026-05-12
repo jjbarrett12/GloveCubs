@@ -14,15 +14,15 @@ export function ApprovedReorderRow({ row, companyId }: { row: Row; companyId: st
   const opp = row.procurement_opportunity_id != null ? String(row.procurement_opportunity_id) : "";
 
   return (
-    <tr className="border-b border-white/10 align-top text-sm">
-      <td className="py-2 pr-2 font-mono text-xs">{id.slice(0, 8)}…</td>
-      <td className="py-2 pr-2 font-mono text-xs">{String(row.source_catalog_product_id).slice(0, 8)}…</td>
-      <td className="py-2 pr-2 text-right tabular-nums">{String(row.estimated_delta_per_basis ?? "—")}</td>
-      <td className="py-2">
+    <tr className="align-top text-sm hover:bg-blue-50/40">
+      <td className="p-3 font-mono text-xs text-gray-700">{id.slice(0, 8)}…</td>
+      <td className="p-3 font-mono text-xs text-gray-700">{String(row.source_catalog_product_id).slice(0, 8)}…</td>
+      <td className="p-3 text-right font-mono tabular-nums text-gray-900">{String(row.estimated_delta_per_basis ?? "—")}</td>
+      <td className="p-3">
         <button
           type="button"
           disabled={pending || !opp}
-          className="rounded border border-white/20 px-2 py-1 text-xs hover:bg-white/10"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
           onClick={() => {
             setMessage(null);
             if (!opp) {
@@ -44,7 +44,7 @@ export function ApprovedReorderRow({ row, companyId }: { row: Row; companyId: st
         >
           Promote reorder memory
         </button>
-        {message && <p className="mt-1 text-xs text-amber-300">{message}</p>}
+        {message && <p className="mt-2 text-xs text-amber-800">{message}</p>}
       </td>
     </tr>
   );
