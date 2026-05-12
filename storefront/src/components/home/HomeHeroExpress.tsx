@@ -12,7 +12,7 @@ export function HomeHeroExpress() {
       <div className="pointer-events-none absolute -bottom-36 -left-36 h-[500px] w-[500px] rounded-full bg-[radial-gradient(circle,rgba(255,85,0,0.05)_0%,transparent_72%)]" />
 
       <div className="relative z-[1] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
             <div
               className="animate-hero-sku-alert-bob mb-7 inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#FF5500] to-[#FF5500] px-5 py-2 text-sm font-bold tracking-wide text-white shadow-md shadow-[#FF5500]/35 ring-1 ring-white/25"
