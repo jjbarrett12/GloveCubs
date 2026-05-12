@@ -117,7 +117,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
           <div className="flex h-14 items-center justify-between gap-4">
             <div className="flex items-center gap-6">
               <Link href="/admin" className="flex items-center gap-2" aria-label="GloveCubs admin home">
-                <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-gray-900">
+                <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-white">
                   <Image
                     src="/images/glovecubs-header-logo.png"
                     alt=""
