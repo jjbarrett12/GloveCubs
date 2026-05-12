@@ -49,7 +49,7 @@ export default async function AdminProductsImportPage() {
   const failedCount = jobs.filter((j) => j.status === "failed").length;
 
   return (
-    <div className="-mx-4 -my-6 min-h-[calc(100vh-180px)] bg-gray-50 px-6 py-8 text-gray-900 md:-mx-8 md:px-10">
+    <div>
       <PageHeader
         title="Product Import Command Center"
         description="Load products through CatalogOS, review extracted rows, and stage them for the review queue. Publish remains a separate guarded step."

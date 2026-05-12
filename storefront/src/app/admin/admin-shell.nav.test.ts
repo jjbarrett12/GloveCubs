@@ -8,8 +8,8 @@ describe("AdminShell navigation", () => {
     const s = readFileSync(p, "utf8");
     expect(s).toContain('href: "/admin"');
     expect(s).toContain('href: "/admin/products"');
-    expect(s).toContain('href: "/admin/imports"');
-    expect(s).toContain('href: "/admin/catalog"');
+    expect(s).not.toContain('href: "/admin/imports"');
+    expect(s).not.toContain('href: "/admin/catalog"');
     expect(s).toContain('href: "/admin/leads"');
     expect(s).toContain('href: "/admin/settings"');
   });

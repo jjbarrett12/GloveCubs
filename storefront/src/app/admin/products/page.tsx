@@ -79,7 +79,7 @@ export default async function AdminProductsPage({
   const withWarnings = result.rows.filter((r) => r.warnings.length > 0).length;
 
   return (
-    <div className="-mx-4 -my-6 min-h-[calc(100vh-180px)] bg-gray-50 px-6 py-8 text-gray-900 md:-mx-8 md:px-10">
+    <div>
       <PageHeader
         title="Products"
         description="Read-only operational view of catalog_v2 and catalogos. Ingestion and edits stay in CatalogOS."

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { PageHeader, TableCard, EmptyState } from "@/components/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,14 @@ type QuoteRow = {
 
 export default async function AdminLeadsPage() {
   if (!isSupabaseConfigured()) {
-    return <p className="text-white/70">Supabase not configured.</p>;
+    return (
+      <div>
+        <PageHeader title="Quotes / Leads" description="Supabase not configured." />
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to load quote requests.
+        </div>
+      </div>
+    );
   }
 
   const supabase = getSupabaseAdmin() as any;
@@ -27,39 +35,53 @@ export default async function AdminLeadsPage() {
   const rows = data ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Quotes / Leads</h1>
-        <p className="mt-2 text-sm text-white/60">Recent rows from catalogos.quote_requests (newest 100).</p>
-      </div>
-      {error ? <p className="text-sm text-amber-200">{error.message}</p> : null}
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-white/5 text-white/70">
-            <tr>
-              <th className="p-3 font-medium">Created</th>
-              <th className="p-3 font-medium">Quote id</th>
-              <th className="p-3 font-medium">Name</th>
-              <th className="p-3 font-medium">Email</th>
-              <th className="p-3 font-medium">Phone</th>
-              <th className="p-3 font-medium">Company</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-white/10 text-white">
-                <td className="whitespace-nowrap p-3 text-white/60">{new Date(r.created_at).toLocaleString()}</td>
-                <td className="p-3 font-mono text-xs text-white/80">{r.id}</td>
-                <td className="p-3">{r.contact_name}</td>
-                <td className="p-3">{r.email}</td>
-                <td className="p-3 text-white/70">{r.phone ?? "—"}</td>
-                <td className="p-3">{r.company_name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {rows.length === 0 && !error ? <p className="text-sm text-white/50">No quote requests yet.</p> : null}
+    <div>
+      <PageHeader
+        title="Quotes / Leads"
+        description="Recent rows from catalogos.quote_requests (newest 100)."
+      />
+
+      {error ? (
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {error.message}
+        </div>
+      ) : null}
+
+      <TableCard>
+        {rows.length === 0 ? (
+          <EmptyState
+            title="No quote requests yet"
+            description="Inbound quote requests will land here when they hit catalogos.quote_requests."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="p-3">Created</th>
+                  <th className="p-3">Quote id</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Email</th>
+                  <th className="p-3">Phone</th>
+                  <th className="p-3">Company</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-blue-50/40">
+                    <td className="whitespace-nowrap p-3 text-gray-600">{new Date(r.created_at).toLocaleString()}</td>
+                    <td className="p-3 font-mono text-xs text-gray-500">{r.id}</td>
+                    <td className="p-3 text-gray-900">{r.contact_name}</td>
+                    <td className="p-3 text-gray-900">{r.email}</td>
+                    <td className="p-3 text-gray-600">{r.phone ?? "—"}</td>
+                    <td className="p-3 text-gray-900">{r.company_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </TableCard>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Legacy path — canonical Imports module is `/admin/imports`. */
+/** Legacy path — canonical import entry is `/admin/products/import`. */
 export default function AdminProductImportRedirectPage() {
-  redirect("/admin/imports");
+  redirect("/admin/products/import");
 }

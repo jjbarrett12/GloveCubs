@@ -1,5 +1,6 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { describeLifecycleStageForOperator } from "@/lib/procurement/operator-lifecycle-copy";
+import { PageHeader, EmptyState } from "@/components/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,14 @@ type EventRow = {
 
 export default async function AdminOpportunitiesPage() {
   if (!isSupabaseConfigured()) {
-    return <p className="text-white/70">Supabase not configured.</p>;
+    return (
+      <div>
+        <PageHeader title="Opportunities" description="Supabase not configured." />
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to load opportunities.
+        </div>
+      </div>
+    );
   }
 
   const supabase = getSupabaseAdmin() as any;
@@ -58,50 +66,67 @@ export default async function AdminOpportunitiesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Opportunities</h1>
-        <p className="mt-2 text-sm text-white/60">Operational procurement opportunities and recent events.</p>
-      </div>
-      {error ? <p className="text-sm text-amber-200">{String((error as { message?: string }).message)}</p> : null}
-      <div className="space-y-8">
-        {rows.map((r) => (
-          <article key={r.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex flex-wrap gap-2 text-sm text-white/80">
-              <span className="font-mono text-xs text-white/50">{r.id}</span>
-              <span className="rounded bg-white/10 px-2 py-0.5 text-xs">{r.source}</span>
-              {r.operational_environment_key ? (
-                <span className="rounded bg-[#f06232]/20 px-2 py-0.5 text-xs text-[#f06232]">
-                  {r.operational_environment_key}
-                </span>
-              ) : null}
-              <span className="text-white/50">{new Date(r.created_at).toLocaleString()}</span>
-            </div>
-            <p className="mt-2 text-white">
-              <span className="text-white/50">Company:</span> {r.company_name ?? "—"}{" "}
-              <span className="text-white/50">Email:</span> {r.contact_email ?? "—"}
-            </p>
-            <p className="mt-1 text-xs text-white/50">
-              Stage: {r.lifecycle_stage} ({describeLifecycleStageForOperator(r.lifecycle_stage).label})
-              {r.sales_prospect_id != null ? ` · sales_prospect_id: ${r.sales_prospect_id}` : ""}
-              {r.quote_request_id != null ? ` · quote_request_id: ${r.quote_request_id}` : ""}
-            </p>
-            <div className="mt-3 border-t border-white/10 pt-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-white/45">Events</p>
-              <ul className="mt-2 space-y-1 text-xs text-white/70">
-                {(eventsByOpp.get(r.id) ?? []).map((ev) => (
-                  <li key={ev.id} className="font-mono">
-                    {new Date(ev.created_at).toLocaleString()} — {ev.event_type} (v{ev.schema_version})
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </article>
-        ))}
-      </div>
-      {rows.length === 0 && !error ? (
-        <p className="text-sm text-white/50">No procurement opportunities yet (or table not migrated).</p>
+    <div>
+      <PageHeader
+        title="Opportunities"
+        description="Operational procurement opportunities and their recent event history (newest 50)."
+      />
+
+      {error ? (
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {String((error as { message?: string }).message)}
+        </div>
       ) : null}
+
+      {rows.length === 0 && !error ? (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white">
+          <EmptyState
+            title="No opportunities yet"
+            description="No procurement opportunities yet (or the table has not been migrated)."
+          />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rows.map((r) => (
+            <article key={r.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-mono text-xs text-gray-400">{r.id}</span>
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium capitalize text-blue-700">
+                  {r.source}
+                </span>
+                {r.operational_environment_key ? (
+                  <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">
+                    {r.operational_environment_key}
+                  </span>
+                ) : null}
+                <span className="ml-auto text-xs text-gray-500">{new Date(r.created_at).toLocaleString()}</span>
+              </div>
+              <p className="mt-2 text-sm text-gray-900">
+                <span className="text-gray-500">Company:</span> {r.company_name ?? "—"}{" "}
+                <span className="ml-2 text-gray-500">Email:</span> {r.contact_email ?? "—"}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Stage: {r.lifecycle_stage} ({describeLifecycleStageForOperator(r.lifecycle_stage).label})
+                {r.sales_prospect_id != null ? ` · sales_prospect_id: ${r.sales_prospect_id}` : ""}
+                {r.quote_request_id != null ? ` · quote_request_id: ${r.quote_request_id}` : ""}
+              </p>
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Events</p>
+                <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                  {(eventsByOpp.get(r.id) ?? []).map((ev) => (
+                    <li key={ev.id} className="font-mono">
+                      {new Date(ev.created_at).toLocaleString()} — {ev.event_type} (v{ev.schema_version})
+                    </li>
+                  ))}
+                  {(eventsByOpp.get(r.id) ?? []).length === 0 ? (
+                    <li className="text-gray-400">No events yet</li>
+                  ) : null}
+                </ul>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

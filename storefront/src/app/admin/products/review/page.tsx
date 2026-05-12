@@ -13,7 +13,7 @@ export default function AdminProductsReviewPage() {
   const offline = conn.status !== "online";
 
   return (
-    <div className="-mx-4 -my-6 min-h-[calc(100vh-180px)] bg-gray-50 px-6 py-8 text-gray-900 md:-mx-8 md:px-10">
+    <div>
       <PageHeader
         title="Review queue"
         description="Staged import rows, duplicate evidence, and publish decisions surface here once CatalogOS proxy routes are wired. Read-only until then."
