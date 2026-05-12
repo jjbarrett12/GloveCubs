@@ -184,11 +184,11 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 <Image
                   src="/images/glovecubs-header-logo.png"
                   alt="GloveCubs"
-                  width={1536}
-                  height={1024}
+                  width={747}
+                  height={99}
                   priority
                   unoptimized
-                  className="h-[56px] w-auto max-w-[min(260px,72vw)] shrink-0 object-contain object-left sm:h-[64px] lg:h-[72px]"
+                  className="h-[48px] w-auto max-w-[min(440px,72vw)] shrink-0 object-contain object-left sm:h-[64px] lg:h-[80px]"
                 />
               </Link>
 
