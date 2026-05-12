@@ -178,7 +178,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <Link
                 href="/"
-                className="flex h-[60px] w-[90px] shrink-0 items-end justify-start overflow-hidden bg-transparent no-underline [forced-color-adjust:none] sm:h-[66px] sm:w-[99px] lg:h-[70px] lg:w-[105px]"
+                className="flex min-w-0 max-w-full items-center bg-transparent no-underline [forced-color-adjust:none]"
                 onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
               >
                 <Image
@@ -188,7 +188,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   height={1024}
                   priority
                   unoptimized
-                  className="h-[calc(60px/3)] w-auto max-w-none shrink-0 origin-bottom-left scale-[3] object-contain object-left sm:h-[calc(66px/3)] lg:h-[calc(70px/3)]"
+                  className="h-[56px] w-auto max-w-[min(260px,72vw)] shrink-0 object-contain object-left sm:h-[64px] lg:h-[72px]"
                 />
               </Link>
 
