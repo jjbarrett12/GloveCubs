@@ -41,9 +41,8 @@ export default async function AdminProductsImportJobDetailPage({
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title="URL import job"
         description={idValid ? `Job ${jobId}` : "Invalid job id"}
         breadcrumb={[
@@ -55,13 +54,12 @@ export default async function AdminProductsImportJobDetailPage({
       />
 
       {!idValid ? (
-        <div className="rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           Invalid job id.
         </div>
       ) : offline ? (
-        <div className="rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-          <strong className="font-semibold text-red-50">Ingestion offline.</strong>{" "}
-          <span className="text-red-200/90">{conn.message}</span>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <strong className="font-semibold">Ingestion offline.</strong> <span>{conn.message}</span>
         </div>
       ) : loadError && !initial ? (
         <UrlJobDetailClient jobId={jobId} initial={null} />

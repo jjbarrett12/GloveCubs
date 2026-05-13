@@ -39,9 +39,8 @@ export default async function AdminProductsImportUrlPage() {
       })();
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title="Import from URL"
         description="Clipboard staging writes to Supabase for operator review. CatalogOS crawl (supplier mode) still proxies upstream when online."
         breadcrumb={[
@@ -53,18 +52,18 @@ export default async function AdminProductsImportUrlPage() {
       />
 
       {offline ? (
-        <div className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          <strong className="font-semibold text-amber-50">CatalogOS offline.</strong> {conn.message} You can still use clipboard staging below.
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <strong className="font-semibold">CatalogOS offline.</strong> {conn.message} You can still use clipboard staging below.
         </div>
       ) : null}
 
-      <div className="mb-4 flex flex-wrap gap-3 text-sm">
-        <Link href="/admin/products/import/jobs" className="font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
+      <div className="mb-6 flex flex-wrap gap-4 text-sm">
+        <Link href="/admin/products/import/jobs" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
           View import jobs
         </Link>
-        <span className="text-neutral-600">|</span>
-        <Link href="/admin/products" className="font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
-          Product command center
+        <span className="text-slate-300">|</span>
+        <Link href="/admin/products" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+          Back to products
         </Link>
       </div>
 
@@ -77,17 +76,17 @@ export default async function AdminProductsImportUrlPage() {
       </div>
 
       {!offline && jobs.rows.length > 0 ? (
-        <div className="rounded-lg border border-white/10 bg-[#161616] px-4 py-3 text-xs text-neutral-400 ring-1 ring-white/[0.03]">
-          <span className="font-semibold text-neutral-200">Recent CatalogOS jobs (sample):</span>{" "}
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-800">Recent CatalogOS jobs (sample):</span>{" "}
           {jobs.rows.map((j) => (
             <span key={j.id} className="ml-2 inline-block">
               <Link
-                className="font-mono text-[#f06232] hover:text-[#ff8a5c] hover:underline"
+                className="font-mono font-medium text-[#c2410c] hover:text-[#e5582d] hover:underline"
                 href={`/admin/products/import/jobs/${encodeURIComponent(j.id)}`}
               >
                 {j.id.slice(0, 8)}…
               </Link>
-              <span className="text-neutral-600"> ({j.status})</span>
+              <span className="text-slate-500"> ({j.status})</span>
             </span>
           ))}
         </div>

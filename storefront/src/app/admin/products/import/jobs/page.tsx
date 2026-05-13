@@ -40,9 +40,8 @@ export default async function AdminProductsImportJobsPage() {
   const failedCount = jobs.filter((j) => j.status === "failed").length;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title="URL import jobs"
         description="CatalogOS-backed crawl jobs. Open a row to review extracted evidence before any publish step."
         breadcrumb={[
@@ -53,33 +52,31 @@ export default async function AdminProductsImportJobsPage() {
         actions={<StatusBadge status={connectionVariant(conn.status)} size="md" dot />}
       />
 
-      <div className="mb-4 text-sm">
-        <Link href="/admin/products/import/url" className="font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
+      <div className="mb-6 text-sm">
+        <Link href="/admin/products/import/url" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
           ← Back to URL import
         </Link>
       </div>
 
       {offline ? (
-        <div className="mb-6 rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-          <strong className="font-semibold text-red-50">Ingestion offline.</strong> <span className="text-red-200/90">{conn.message}</span>
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <strong className="font-semibold">Ingestion offline.</strong> <span>{conn.message}</span>
         </div>
       ) : null}
 
-      <StatGrid columns={3} className="mb-6">
+      <StatGrid columns={3} className="mb-8 gap-4">
         <StatCard
           label="Running / queued"
           value={runningCount}
           color={runningCount > 0 ? "blue" : "default"}
           accentBorder
-          variant="dark"
         />
-        <StatCard label="Completed" value={completedCount} color="green" accentBorder variant="dark" />
+        <StatCard label="Completed" value={completedCount} color="green" accentBorder />
         <StatCard
           label="Failed"
           value={failedCount}
           color={failedCount > 0 ? "red" : "default"}
           accentBorder
-          variant="dark"
         />
       </StatGrid>
 

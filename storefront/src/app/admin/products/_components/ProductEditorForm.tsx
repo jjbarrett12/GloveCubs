@@ -26,9 +26,9 @@ function defaultVariants(): ProductEditorInitial["variants"] {
   return [{ sizeCode: "M", variantSku: "", listPrice: "" }];
 }
 
-const lbl = "text-[10px] font-semibold uppercase tracking-wide text-neutral-500";
+const lbl = "text-xs font-semibold text-slate-600";
 const field =
-  "mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/45 focus:outline-none focus:ring-1 focus:ring-[#f06232]/35";
+  "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
 
 export function ProductEditorForm({
   categories,
@@ -133,18 +133,18 @@ export function ProductEditorForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="relative max-w-3xl space-y-6 rounded-xl border border-white/10 bg-[#141414] p-6 pb-28 shadow-md ring-1 ring-white/[0.04] sm:pb-24"
+      className="relative max-w-3xl space-y-6 rounded-2xl border border-slate-200 bg-white p-6 pb-28 shadow-sm sm:pb-24"
     >
       {mode === "create" ? (
-        <div className="rounded-lg border border-[#f06232]/25 bg-[#f06232]/[0.07] px-4 py-3 text-sm text-neutral-200">
-          <strong className="text-[#f06232]">Draft first, publish later.</strong> New rows default to draft. Switch to{" "}
-          <span className="font-medium text-white">Published</span> only after category, primary image, and variants satisfy database
+        <div className="rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-3 text-sm text-slate-800">
+          <strong className="text-[#c2410c]">Draft first, publish later.</strong> New rows default to draft. Switch to{" "}
+          <span className="font-semibold text-slate-900">Published</span> only after category, primary image, and variants satisfy database
           guards.
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-white/10 bg-[#161616] p-4">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Identity &amp; taxonomy</p>
+      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+        <p className="mb-4 text-xs font-bold uppercase tracking-wide text-[#c2410c]">Identity &amp; taxonomy</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
             <span className={lbl}>Product name</span>
@@ -200,14 +200,14 @@ export function ProductEditorForm({
           </label>
           <fieldset className="sm:col-span-2">
             <legend className={lbl}>Status</legend>
-            <div className="mt-2 flex flex-wrap gap-4 text-sm text-neutral-200">
+            <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-800">
               <label className="inline-flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="pub"
                   checked={status === "draft"}
                   onChange={() => setStatus("draft")}
-                  className="border-white/30 text-[#f06232] focus:ring-[#f06232]/40"
+                  className="border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
                 />
                 Draft (not on public store)
               </label>
@@ -217,29 +217,29 @@ export function ProductEditorForm({
                   name="pub"
                   checked={status === "active"}
                   onChange={() => setStatus("active")}
-                  className="border-white/30 text-[#f06232] focus:ring-[#f06232]/40"
+                  className="border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
                 />
                 Published (active on store when guards pass)
               </label>
             </div>
           </fieldset>
-          <label className="inline-flex cursor-pointer items-center gap-2 sm:col-span-2 text-sm text-neutral-200">
+          <label className="inline-flex cursor-pointer items-center gap-2 sm:col-span-2 text-sm text-slate-800">
             <input
               type="checkbox"
               checked={quoteOnly}
               onChange={(e) => setQuoteOnly(e.target.checked)}
-              className="rounded border-white/30 text-[#f06232] focus:ring-[#f06232]/40"
+              className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
             />
             Quote only (no list price on variants)
           </label>
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-[#161616] p-4">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f06232]">Variants &amp; pricing</p>
+      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+        <p className="mb-4 text-xs font-bold uppercase tracking-wide text-[#c2410c]">Variants &amp; pricing</p>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-white">Size variants</h3>
-          <button type="button" onClick={addVariantRow} className="text-sm font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
+          <h3 className="text-sm font-semibold text-slate-900">Size variants</h3>
+          <button type="button" onClick={addVariantRow} className="text-sm font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
             + Add variant
           </button>
         </div>
@@ -250,26 +250,26 @@ export function ProductEditorForm({
                 placeholder="Size"
                 value={row.sizeCode}
                 onChange={(e) => patchVariant(i, { sizeCode: e.target.value })}
-                className="col-span-3 rounded-md border border-white/12 bg-[#181818] px-2 py-1.5 text-sm text-neutral-100 focus:border-[#f06232]/45 focus:outline-none focus:ring-1 focus:ring-[#f06232]/35"
+                className="col-span-3 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
               />
               <input
                 placeholder="Variant SKU (optional — auto)"
                 value={row.variantSku}
                 onChange={(e) => patchVariant(i, { variantSku: e.target.value })}
-                className="col-span-4 rounded-md border border-white/12 bg-[#181818] px-2 py-1.5 font-mono text-xs text-neutral-100 focus:border-[#f06232]/45 focus:outline-none focus:ring-1 focus:ring-[#f06232]/35"
+                className="col-span-4 rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
               />
               <input
                 placeholder="List price"
                 value={row.listPrice}
                 onChange={(e) => patchVariant(i, { listPrice: e.target.value })}
                 disabled={quoteOnly}
-                className="col-span-3 rounded-md border border-white/12 bg-[#181818] px-2 py-1.5 text-sm text-neutral-100 focus:border-[#f06232]/45 focus:outline-none focus:ring-1 focus:ring-[#f06232]/35 disabled:cursor-not-allowed disabled:opacity-45"
+                className="col-span-3 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:cursor-not-allowed disabled:opacity-45"
               />
               <button
                 type="button"
                 onClick={() => removeVariantRow(i)}
                 disabled={variants.length <= 1}
-                className="col-span-2 rounded border border-white/12 text-xs text-neutral-400 transition hover:border-white/20 hover:bg-white/[0.04] hover:text-white disabled:opacity-40"
+                className="col-span-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
               >
                 Remove
               </button>
@@ -279,20 +279,20 @@ export function ProductEditorForm({
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-100">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
       ) : null}
 
-      <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex flex-wrap gap-3 border-t border-white/10 bg-[#121212]/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-[#121212]/90">
+      <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex flex-wrap gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/90">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:opacity-60"
+          className="rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:opacity-60"
         >
           {pending ? "Saving…" : mode === "create" ? "Create product" : "Save changes"}
         </button>
         <Link
           href="/admin/products"
-          className="inline-flex items-center rounded-md border border-white/15 px-4 py-2 text-sm text-neutral-200 hover:border-[#f06232]/35 hover:text-white"
+          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
         >
           Cancel
         </Link>

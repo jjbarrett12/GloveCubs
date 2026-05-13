@@ -62,23 +62,21 @@ export function UrlJobsPanel({
   }
 
   return (
-    <TableCard variant="dark">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-3">
+    <TableCard>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-4">
         <div>
-          <h2 className="text-base font-semibold text-white">Recent URL imports</h2>
-          <p className="text-xs text-neutral-500">
-            Live data from CatalogOS — no fabricated counts.
-          </p>
+          <h2 className="text-base font-semibold text-slate-900">Recent URL imports</h2>
+          <p className="text-sm text-slate-600">Live data from CatalogOS — no fabricated counts.</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] text-neutral-600">
+          <span className="font-mono text-xs text-slate-500">
             {lastRefreshed ? `Refreshed ${lastRefreshed.toISOString().slice(11, 19)} UTC` : "Not yet refreshed"}
           </span>
           <button
             type="button"
             onClick={() => void refresh()}
             disabled={offline || loading}
-            className="rounded-md border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-neutral-200 shadow-sm hover:border-[#f06232]/35 hover:text-white disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
@@ -86,62 +84,61 @@ export function UrlJobsPanel({
       </div>
 
       {error ? (
-        <div className="border-b border-red-500/25 bg-red-500/10 px-4 py-2 text-xs text-red-100">
+        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-800">
           {error}
         </div>
       ) : null}
 
       {jobs.length === 0 ? (
         <EmptyState
-          variant="dark"
           title={offline ? "CatalogOS not configured" : "No URL imports yet"}
           description={offline ? "Configure CatalogOS to load URL import history." : "Start one above to see jobs here."}
         />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-            <thead className="border-b border-white/10 bg-[#181818] text-xs font-medium uppercase tracking-wide text-neutral-500">
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Supplier</th>
-                <th className="px-3 py-2">Start URL</th>
-                <th className="px-3 py-2">Mode</th>
-                <th className="px-3 py-2">Pages crawled</th>
-                <th className="px-3 py-2">Products</th>
-                <th className="px-3 py-2">Created</th>
-                <th className="px-3 py-2">Finished</th>
-                <th className="px-3 py-2" />
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Supplier</th>
+                <th className="px-4 py-3">Start URL</th>
+                <th className="px-4 py-3">Mode</th>
+                <th className="px-4 py-3">Pages crawled</th>
+                <th className="px-4 py-3">Products</th>
+                <th className="px-4 py-3">Created</th>
+                <th className="px-4 py-3">Finished</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/[0.06] bg-[#141414] text-neutral-100">
+            <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
               {jobs.map((j) => (
-                <tr key={j.id} className="hover:bg-white/[0.04]">
-                  <td className="px-3 py-2 align-top">
+                <tr key={j.id} className="transition-colors hover:bg-slate-50/80">
+                  <td className="px-4 py-3 align-top">
                     <ImportStatusBadge status={j.status} rawStatus={j.rawStatus} />
                   </td>
-                  <td className="px-3 py-2 align-top text-neutral-300">{j.supplierName}</td>
-                  <td className="px-3 py-2 align-top">
+                  <td className="px-4 py-3 align-top text-slate-600">{j.supplierName}</td>
+                  <td className="px-4 py-3 align-top">
                     {j.startUrl ? (
-                      <span className="break-all font-mono text-[11px] text-neutral-400">{j.startUrl}</span>
+                      <span className="break-all font-mono text-xs text-slate-600">{j.startUrl}</span>
                     ) : (
-                      <span className="text-neutral-600">—</span>
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-400">
+                  <td className="px-4 py-3 align-top font-mono text-xs text-slate-600">
                     {j.crawlMode ?? "—"}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-neutral-200">{formatNumber(j.pagesCrawled)}</td>
-                  <td className="px-3 py-2 align-top font-mono text-neutral-200">{formatNumber(j.productsExtracted)}</td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-500">
+                  <td className="px-4 py-3 align-top font-mono text-slate-800">{formatNumber(j.pagesCrawled)}</td>
+                  <td className="px-4 py-3 align-top font-mono text-slate-800">{formatNumber(j.productsExtracted)}</td>
+                  <td className="px-4 py-3 align-top font-mono text-xs text-slate-500">
                     {formatDate(j.createdAt)}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-500">
+                  <td className="px-4 py-3 align-top font-mono text-xs text-slate-500">
                     {formatDate(j.finishedAt)}
                   </td>
-                  <td className="px-3 py-2 align-top text-right">
+                  <td className="px-4 py-3 align-top text-right">
                     <Link
                       href={`/admin/products/import/jobs/${encodeURIComponent(j.id)}`}
-                      className="rounded-md border border-white/12 bg-white/[0.06] px-2 py-1 text-xs font-medium text-[#f06232] shadow-sm hover:border-[#f06232]/40 hover:text-[#ff8a5c]"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-[#c2410c] shadow-sm hover:border-[#f06232]/40 hover:bg-[#fff7f2]"
                     >
                       Open
                     </Link>

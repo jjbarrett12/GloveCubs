@@ -28,9 +28,8 @@ export default async function AdminEditProductPage({ params }: { params: { produ
   const [data, categories] = await Promise.all([fetchAdminProductDetail(productId), fetchAdminCategoriesForProductForm()]);
   if (!data.configured) {
     return (
-      <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
         <PageHeader
-          variant="dark"
           title="Edit product"
           breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "Edit" }]}
         />
@@ -75,9 +74,8 @@ export default async function AdminEditProductPage({ params }: { params: { produ
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title={`Edit — ${p.name}`}
         description="Changes write to catalog_v2. Publishing flips status to active only when guards succeed."
         breadcrumb={[

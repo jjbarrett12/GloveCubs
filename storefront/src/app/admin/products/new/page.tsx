@@ -11,9 +11,8 @@ export default async function AdminNewProductPage() {
   const categories = await fetchAdminCategoriesForProductForm();
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title="Add product"
         description="Draft first, publish later: new rows default to draft. Publishing requires category, a non-placeholder image, and at least one active variant per database guardrails."
         breadcrumb={[
@@ -22,7 +21,7 @@ export default async function AdminNewProductPage() {
         ]}
       />
       {categories.length === 0 ? (
-        <div className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           No categories returned from Supabase. Confirm catalogos.categories is populated before assigning products.
         </div>
       ) : null}

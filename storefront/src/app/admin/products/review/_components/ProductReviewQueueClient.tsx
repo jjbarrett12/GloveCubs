@@ -21,10 +21,10 @@ function confidencePct(ex: Record<string, unknown>): string | null {
 }
 
 function statusBadgeClass(status: string): string {
-  if (status === "needs_review") return "border-amber-500/40 bg-amber-500/15 text-amber-100";
-  if (status === "converted_to_draft") return "border-emerald-500/40 bg-emerald-500/15 text-emerald-100";
-  if (status === "dismissed") return "border-neutral-600 bg-neutral-800 text-neutral-300";
-  return "border-white/15 bg-white/[0.06] text-neutral-200";
+  if (status === "needs_review") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (status === "converted_to_draft") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (status === "dismissed") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-slate-200 bg-slate-50 text-slate-800";
 }
 
 export function ProductReviewQueueClient({
@@ -92,7 +92,7 @@ export function ProductReviewQueueClient({
 
   if (!supabaseConfigured) {
     return (
-      <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
         Supabase is not configured — clipboard staging queue cannot load.
       </div>
     );
@@ -101,38 +101,38 @@ export function ProductReviewQueueClient({
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : null}
 
-      <TableCard variant="dark">
-        <div className="border-b border-white/10 bg-[#181818] px-4 py-3">
-          <h2 className="text-sm font-semibold text-white">Clipboard URL staging</h2>
-          <p className="mt-1 text-xs text-neutral-500">
-            Rows from <span className="font-mono text-neutral-400">catalog_v2.admin_url_clipboard_staging</span>. Promoting creates a{" "}
-            <strong className="text-neutral-300">draft</strong> product only — no storefront publish until you publish from the editor
+      <TableCard>
+        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-4">
+          <h2 className="text-base font-semibold text-slate-900">Clipboard URL staging</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            Rows from <span className="font-mono text-xs text-slate-800">catalog_v2.admin_url_clipboard_staging</span>. Promoting creates a{" "}
+            <strong className="text-slate-900">draft</strong> product only — no storefront publish until you publish from the editor
             with guards satisfied.
           </p>
         </div>
 
         {rows.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-neutral-500">No staging rows yet. Paste URLs under Import from URL.</div>
+          <div className="px-4 py-12 text-center text-sm text-slate-500">No staging rows yet. Paste URLs under Import from URL.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] border-collapse text-left text-sm">
-              <thead className="border-b border-white/10 bg-[#181818] text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Preview</th>
-                  <th className="px-3 py-2">Title</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Confidence</th>
-                  <th className="px-3 py-2">Source type</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Publish state</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
+                  <th className="px-4 py-3">Preview</th>
+                  <th className="px-4 py-3">Title</th>
+                  <th className="px-4 py-3">Source</th>
+                  <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">Source type</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3">Publish state</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.06] bg-[#141414] text-neutral-200">
+              <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
                 {rows.map((r) => {
                   const ex = (r.extracted ?? {}) as Record<string, unknown>;
                   const title = String(ex.suggested_name ?? ex.page_title ?? "—");
@@ -149,60 +149,60 @@ export function ProductReviewQueueClient({
                         : "Awaiting decision — not on storefront.";
 
                   return (
-                    <tr key={r.id} className="align-top hover:bg-white/[0.03]">
-                      <td className="px-3 py-2">
+                    <tr key={r.id} className="align-top transition-colors hover:bg-slate-50/80">
+                      <td className="px-4 py-3">
                         {thumb ? (
                           // eslint-disable-next-line @next/next/no-img-element -- admin staging preview; URLs validated at stage time
                           <img
                             src={thumb}
                             alt=""
-                            className="h-11 w-11 rounded-md border border-white/10 bg-black/40 object-cover"
+                            className="h-12 w-12 rounded-lg border border-slate-200 bg-slate-100 object-cover"
                           />
                         ) : (
-                          <div className="flex h-11 w-11 items-center justify-center rounded-md border border-dashed border-white/15 text-[9px] text-neutral-600">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
                             —
                           </div>
                         )}
                       </td>
-                      <td className="max-w-[200px] px-3 py-2">
-                        <div className="line-clamp-2 font-medium text-white" title={title}>
+                      <td className="max-w-[200px] px-4 py-3">
+                        <div className="line-clamp-2 font-semibold text-slate-900" title={title}>
                           {title}
                         </div>
                         {ex.fetch_error ? (
-                          <div className="mt-1 text-[10px] text-amber-300/90">Fetch: {String(ex.fetch_error)}</div>
+                          <div className="mt-1 text-xs text-amber-800">Fetch: {String(ex.fetch_error)}</div>
                         ) : null}
                       </td>
-                      <td className="max-w-[220px] px-3 py-2">
+                      <td className="max-w-[220px] px-4 py-3">
                         <a
                           href={r.product_page_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="break-all font-mono text-[11px] text-[#f06232] hover:text-[#ff8a5c] hover:underline"
+                          className="break-all font-mono text-xs font-medium text-[#c2410c] hover:text-[#e5582d] hover:underline"
                         >
                           {r.product_page_url}
                         </a>
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-neutral-400">{conf ?? "—"}</td>
-                      <td className="px-3 py-2 text-xs text-neutral-400">Clipboard URL</td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-3 font-mono text-sm text-slate-600">{conf ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">Clipboard URL</td>
+                      <td className="px-4 py-3">
                         <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(r.review_status)}`}
+                          className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(r.review_status)}`}
                         >
                           {r.review_status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-[11px] text-neutral-500">{formatWhen(r.created_at)}</td>
-                      <td className="max-w-[180px] px-3 py-2 text-xs text-neutral-400">{publishHint}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{formatWhen(r.created_at)}</td>
+                      <td className="max-w-[180px] px-4 py-3 text-sm text-slate-600">{publishHint}</td>
+                      <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1.5">
                           {r.review_status === "needs_review" ? (
                             <>
                               {promoteId === r.id ? (
-                                <div className="flex w-[200px] flex-col gap-1.5 rounded-md border border-white/12 bg-[#0e0e0e] p-2 text-left">
+                                <div className="flex w-[200px] flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left">
                                   <select
                                     value={promoteCategory}
                                     onChange={(e) => setPromoteCategory(e.target.value)}
-                                    className="rounded border border-white/12 bg-[#141414] px-2 py-1 text-xs text-neutral-100"
+                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
                                   >
                                     <option value="">Category…</option>
                                     {categories.map((c) => (
@@ -215,13 +215,13 @@ export function ProductReviewQueueClient({
                                     type="button"
                                     disabled={promoteBusy}
                                     onClick={() => void onPromote(r.id)}
-                                    className="rounded bg-[#f06232] px-2 py-1 text-xs font-semibold text-white hover:bg-[#e5582d] disabled:opacity-50"
+                                    className="rounded-lg bg-[#f06232] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#e5582d] disabled:opacity-50"
                                   >
                                     {promoteBusy ? "Working…" : "Approve → draft"}
                                   </button>
                                   <button
                                     type="button"
-                                    className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                                    className="text-xs font-medium text-slate-500 hover:text-slate-800"
                                     onClick={() => setPromoteId(null)}
                                   >
                                     Cancel
@@ -235,7 +235,7 @@ export function ProductReviewQueueClient({
                                       setPromoteId(r.id);
                                       setPromoteCategory("");
                                     }}
-                                    className="rounded border border-white/12 bg-white/[0.06] px-2 py-1 text-xs font-medium text-neutral-100 hover:border-[#f06232]/40"
+                                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-[#f06232]/40 hover:bg-[#fff7f2]"
                                   >
                                     Approve / promote…
                                   </button>
@@ -243,13 +243,13 @@ export function ProductReviewQueueClient({
                                     type="button"
                                     disabled={dismissId === r.id}
                                     onClick={() => void onDismiss(r.id)}
-                                    className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-200/90 hover:bg-red-500/10 disabled:opacity-50"
+                                    className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                                   >
                                     {dismissId === r.id ? "Dismissing…" : "Dismiss"}
                                   </button>
                                   <Link
                                     href={`/admin/products/import/url`}
-                                    className="text-[11px] font-medium text-neutral-500 hover:text-[#f06232]"
+                                    className="text-xs font-semibold text-slate-500 hover:text-[#c2410c]"
                                   >
                                     Open URL import
                                   </Link>
@@ -259,12 +259,12 @@ export function ProductReviewQueueClient({
                           ) : r.created_catalog_product_id ? (
                             <Link
                               href={`/admin/products/${r.created_catalog_product_id}/edit`}
-                              className="text-xs font-medium text-[#f06232] hover:underline"
+                              className="text-xs font-semibold text-[#c2410c] hover:underline"
                             >
                               Review / edit draft
                             </Link>
                           ) : (
-                            <span className="text-[11px] text-neutral-600">—</span>
+                            <span className="text-xs text-slate-400">—</span>
                           )}
                         </div>
                       </td>

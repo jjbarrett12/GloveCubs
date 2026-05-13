@@ -56,13 +56,15 @@ export function PageHeader({
           ) : null}
           <h1
             className={cn(
-              dark ? "mt-1 text-2xl font-bold tracking-tight text-white sm:text-[26px]" : "text-xl font-semibold text-gray-900 truncate",
+              dark
+                ? "mt-1 text-2xl font-bold tracking-tight text-white sm:text-[26px]"
+                : "text-2xl font-semibold tracking-tight text-slate-900 sm:text-[26px]",
             )}
           >
             {title}
           </h1>
           {description && (
-            <p className={cn("text-sm leading-relaxed", dark ? "mt-2 max-w-3xl text-neutral-400" : "mt-1 text-gray-500")}>
+            <p className={cn("text-sm leading-relaxed", dark ? "mt-2 max-w-3xl text-neutral-400" : "mt-2 max-w-3xl text-slate-600")}>
               {description}
             </p>
           )}

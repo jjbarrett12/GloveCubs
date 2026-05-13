@@ -50,72 +50,68 @@ export default async function AdminProductsImportPage() {
   const failedCount = jobs.filter((j) => j.status === "failed").length;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
-        title="Product Import Command Center"
-        description="Load products through CatalogOS crawls, stage clipboard URLs for review, or export the catalog grid. Publish stays a guarded database step."
+        title="Product import"
+        description="Run CatalogOS crawls, stage clipboard URLs for review, or export the catalog grid. Publishing stays a guarded database step."
         actions={<StatusBadge status={connectionVariant(conn.status)} size="md" dot />}
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <Link
           href="/admin/products/import/url"
-          className="rounded-lg border border-white/10 bg-[#161616] p-4 shadow-sm ring-1 ring-white/[0.03] transition hover:border-[#f06232]/40 hover:ring-[#f06232]/15"
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
-          <div className="text-sm font-semibold text-white">Import from URL</div>
-          <p className="mt-1 text-xs text-neutral-500">Stage → review → publish; CatalogOS supplier crawl when online</p>
+          <div className="text-sm font-semibold text-slate-900">Import from URL</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">Stage, review, then publish; CatalogOS crawl when online.</p>
         </Link>
         <Link
           href="/admin/products/import/jobs"
-          className="rounded-lg border border-white/10 bg-[#161616] p-4 shadow-sm ring-1 ring-white/[0.03] transition hover:border-[#f06232]/40 hover:ring-[#f06232]/15"
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
-          <div className="text-sm font-semibold text-white">View import jobs</div>
-          <p className="mt-1 text-xs text-neutral-500">Monitor queued, running, and completed crawls</p>
+          <div className="text-sm font-semibold text-slate-900">Import jobs</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">Monitor queued, running, and completed crawls.</p>
         </Link>
         <Link
           href="/admin/products/import/csv"
-          className="rounded-lg border border-white/10 bg-[#161616] p-4 shadow-sm ring-1 ring-white/[0.03] transition hover:border-[#f06232]/40 hover:ring-[#f06232]/15"
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
-          <div className="text-sm font-semibold text-white">CSV import (roadmap)</div>
-          <p className="mt-1 text-xs text-neutral-500">Feed mapper not in storefront yet — export grid CSV from command center today</p>
+          <div className="text-sm font-semibold text-slate-900">CSV import (roadmap)</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">Feed mapper not in storefront yet—export grid CSV from Products today.</p>
         </Link>
       </div>
 
       {offline ? (
-        <div className="mb-6 rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-          <strong className="font-semibold text-red-50">Ingestion offline — configure CatalogOS connection.</strong>{" "}
-          <span className="text-red-200/90">{conn.message}</span>
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <strong className="font-semibold">Ingestion offline — configure CatalogOS connection.</strong>{" "}
+          <span>{conn.message}</span>
         </div>
       ) : null}
 
-      <StatGrid columns={4} className="mb-6">
+      <StatGrid columns={4} className="mb-8 gap-4">
         <StatCard
           label="CatalogOS"
           value={conn.status === "online" ? "Online" : conn.status === "misconfigured" ? "Misconfigured" : "Offline"}
           color={conn.status === "online" ? "green" : conn.status === "misconfigured" ? "amber" : "red"}
           accentBorder
-          variant="dark"
         />
         <StatCard
           label="Running / queued"
           value={runningCount}
           color={runningCount > 0 ? "blue" : "default"}
           accentBorder
-          variant="dark"
         />
-        <StatCard label="Completed" value={completedCount} color="green" accentBorder variant="dark" />
+        <StatCard label="Completed" value={completedCount} color="green" accentBorder />
         <StatCard
           label="Failed"
           value={failedCount}
           color={failedCount > 0 ? "red" : "default"}
           accentBorder
-          variant="dark"
         />
       </StatGrid>
 
-      <div className="mb-6 rounded-lg border border-white/10 bg-[#161616] px-4 py-3 text-sm text-neutral-300 ring-1 ring-white/[0.03]">
-        <strong className="text-white">Storefront admin does not write canonical products directly.</strong>{" "}
+      <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+        <strong className="text-slate-900">Storefront admin does not write canonical products directly.</strong>{" "}
         CatalogOS owns extraction, matching, staging, and publish. This page only orchestrates operator actions.
       </div>
 
@@ -127,26 +123,26 @@ export default async function AdminProductsImportPage() {
         <UrlJobsPanel initialJobs={jobs} initialError={error} offline={offline} />
       </div>
 
-      <section aria-label="Coming next" className="mb-6 grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-white/10 bg-[#141414] p-4 opacity-95 ring-1 ring-white/[0.03]">
-          <h3 className="text-sm font-semibold text-white">CSV / spreadsheet import</h3>
-          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+      <section aria-label="Coming next" className="mb-8 grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+          <h3 className="text-sm font-semibold text-slate-900">CSV / spreadsheet import</h3>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
             Upload feeds, map columns, and preview standardized rows before staging. Handled in CatalogOS ingestion pipelines.
           </p>
-          <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-neutral-600">Roadmap</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Roadmap</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-[#141414] p-4 opacity-95 ring-1 ring-white/[0.03]">
-          <h3 className="text-sm font-semibold text-white">Publish from review queue</h3>
-          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+          <h3 className="text-sm font-semibold text-slate-900">Publish from review queue</h3>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
             Operator review and guarded publish into canonical catalog. CatalogOS publish-service rules apply.
           </p>
-          <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-neutral-600">Roadmap</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Roadmap</p>
         </div>
       </section>
 
-      <p className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+      <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
         <ImportStatusBadge status="completed" /> indicates CatalogOS finished a crawl. Bridge sends selected rows to CatalogOS for upstream
-        review. The storefront <strong className="text-neutral-400">Review queue</strong> lists <strong className="text-neutral-400">clipboard URL staging</strong> in Supabase—not CatalogOS batch rows. Storefront never writes canonical products.
+        review. The storefront <strong className="text-slate-800">Review queue</strong> lists <strong className="text-slate-800">clipboard URL staging</strong> in Supabase—not CatalogOS batch rows. Storefront never writes canonical products.
       </p>
     </div>
   );

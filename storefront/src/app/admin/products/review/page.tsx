@@ -36,43 +36,41 @@ export default async function AdminProductsReviewPage({
   const dismissed = rows.filter((r) => r.review_status === "dismissed").length;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        variant="dark"
         title="Review queue"
         description="Operational queue for clipboard URL staging (Supabase). Approve rows to create catalog_v2 drafts, or dismiss. CatalogOS crawl/bridge batches are separate — this page does not fabricate CatalogOS rows."
       />
 
-      <StatGrid columns={4} className="mb-6">
+      <StatGrid columns={4} className="mb-8 gap-4">
         <StatCard
           label="CatalogOS (crawl/bridge)"
           value={conn.status === "online" ? "Online" : conn.status === "misconfigured" ? "Misconfigured" : "Offline"}
           color={conn.status === "online" ? "green" : conn.status === "misconfigured" ? "amber" : "red"}
           accentBorder
-          variant="dark"
         />
-        <StatCard label="Awaiting decision" value={needsReview} color={needsReview > 0 ? "amber" : "default"} accentBorder variant="dark" />
-        <StatCard label="Promoted to draft" value={converted} color="green" accentBorder variant="dark" />
-        <StatCard label="Dismissed" value={dismissed} color="default" accentBorder variant="dark" />
+        <StatCard label="Awaiting decision" value={needsReview} color={needsReview > 0 ? "amber" : "default"} accentBorder />
+        <StatCard label="Promoted to draft" value={converted} color="green" accentBorder />
+        <StatCard label="Dismissed" value={dismissed} color="default" accentBorder />
       </StatGrid>
 
       {catalogOsOffline ? (
-        <div className="mb-6 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          <strong className="font-semibold text-amber-50">CatalogOS offline or misconfigured.</strong>{" "}
-          <span className="text-amber-200/90">{conn.message}</span> Clipboard staging below still loads from Supabase when configured.
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <strong className="font-semibold">CatalogOS offline or misconfigured.</strong>{" "}
+          <span>{conn.message}</span> Clipboard staging below still loads from Supabase when configured.
         </div>
       ) : (
-        <div className="mb-6 rounded-lg border border-white/10 bg-[#161616] px-4 py-3 text-sm text-neutral-300 ring-1 ring-white/[0.03]">
+        <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
           CatalogOS is reachable for URL crawls and bridge actions. This queue lists{" "}
-          <strong className="text-white">Supabase clipboard staging</strong> only — not CatalogOS extracted-product rows (no proxy wired
+          <strong className="text-slate-900">Supabase clipboard staging</strong> only — not CatalogOS extracted-product rows (no proxy wired
           here yet).
         </div>
       )}
 
       {batchId ? (
-        <div className="mb-6 rounded-lg border border-[#f06232]/30 bg-[#f06232]/10 px-4 py-3 text-sm text-neutral-100">
-          <strong className="text-[#f06232]">batchId in URL:</strong>{" "}
-          <span className="font-mono text-xs text-neutral-300">{batchId}</span> — CatalogOS bridge batches are not listed in this view
+        <div className="mb-6 rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-3 text-sm text-slate-800">
+          <strong className="text-[#c2410c]">batchId in URL:</strong>{" "}
+          <span className="font-mono text-xs text-slate-600">{batchId}</span> — CatalogOS bridge batches are not listed in this view
           yet. Use import job detail and CatalogOS tools for batch follow-up; clipboard rows appear in the table when present.
         </div>
       ) : null}

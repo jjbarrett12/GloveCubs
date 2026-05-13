@@ -12,7 +12,7 @@ const tabs: { id: string | null; label: string; href: string }[] = [
 
 export function ProductsWorkspaceTabs({
   activeTab,
-  variant = "dark",
+  variant = "default",
 }: {
   activeTab: string | undefined;
   variant?: "default" | "dark";
@@ -21,8 +21,8 @@ export function ProductsWorkspaceTabs({
   return (
     <div
       className={cn(
-        "mb-5 flex flex-wrap gap-1 rounded-lg border p-1",
-        dark ? "border-white/10 bg-[#141414]" : "border-gray-200 bg-gray-100",
+        "mb-6 flex flex-wrap gap-1 rounded-xl border p-1 shadow-sm",
+        dark ? "border-white/10 bg-[#141414]" : "border-slate-200/90 bg-slate-100/80",
       )}
       role="tablist"
       aria-label="Product workspace"
@@ -36,14 +36,14 @@ export function ProductsWorkspaceTabs({
             role="tab"
             aria-selected={active}
             className={cn(
-              "inline-flex min-h-[36px] items-center rounded-md px-3 py-1.5 text-sm font-medium transition",
+              "inline-flex min-h-[40px] items-center rounded-lg px-3.5 py-2 text-sm font-medium transition",
               dark
                 ? active
                   ? "bg-[#f06232] text-white shadow-sm"
                   : "text-neutral-400 hover:bg-white/[0.06] hover:text-white"
                 : active
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-600 hover:bg-gray-200 hover:text-gray-900",
+                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/90"
+                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900",
             )}
           >
             {t.label}
