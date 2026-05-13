@@ -32,20 +32,20 @@ export function SiteFooter() {
           <div>
             <div className="mb-[18px]">
               <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-95">
-                {/* Luminance mask uses /images/glovecubs-footer-logo-mask.png (transparent outside); regenerate via scripts/process-glovecubs-logo.ps1 */}
+                {/* Alpha mask: the header logo PNG has a transparent background and a paw cut-out, so the
+                    opaque orange wordmark becomes white-on-dark and the paw shows the footer bg through. */}
                 <span
-                  className="block h-[32px] max-w-full bg-white sm:h-[36px]"
+                  className="block h-[40px] max-w-full bg-white sm:h-[48px]"
                   style={{
-                    aspectRatio: "1536 / 1024",
-                    WebkitMaskImage: "url(/images/glovecubs-footer-logo-mask.png)",
-                    maskImage: "url(/images/glovecubs-footer-logo-mask.png)",
+                    aspectRatio: "1005 / 143",
+                    WebkitMaskImage: "url(/images/glovecubs-header-logo.png)",
+                    maskImage: "url(/images/glovecubs-header-logo.png)",
                     WebkitMaskRepeat: "no-repeat",
                     maskRepeat: "no-repeat",
                     WebkitMaskSize: "contain",
                     maskSize: "contain",
                     WebkitMaskPosition: "left center",
                     maskPosition: "left center",
-                    maskMode: "luminance",
                   }}
                   aria-hidden
                 />
