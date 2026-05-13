@@ -32,13 +32,13 @@ export function SiteFooter() {
           <div>
             <div className="mb-[18px]">
               <Link href="/" className="-m-1 inline-block rounded-lg p-1 hover:opacity-95">
-                {/* Luminance mask: orange → solid white; black (paw, letter gaps, crop) → footer bg */}
+                {/* Luminance mask uses /images/glovecubs-footer-logo-mask.png (transparent outside); regenerate via scripts/process-glovecubs-logo.ps1 */}
                 <span
                   className="block h-[32px] max-w-full bg-white sm:h-[36px]"
                   style={{
                     aspectRatio: "1536 / 1024",
-                    WebkitMaskImage: "url(/images/glovecubs-header-logo.png)",
-                    maskImage: "url(/images/glovecubs-header-logo.png)",
+                    WebkitMaskImage: "url(/images/glovecubs-footer-logo-mask.png)",
+                    maskImage: "url(/images/glovecubs-footer-logo-mask.png)",
                     WebkitMaskRepeat: "no-repeat",
                     maskRepeat: "no-repeat",
                     WebkitMaskSize: "contain",
