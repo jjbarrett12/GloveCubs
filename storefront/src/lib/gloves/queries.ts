@@ -130,8 +130,17 @@ export async function logRecoSession(
     model_used: string | null;
   }
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("glove_reco_sessions").insert({
+  const db = supabase as unknown as {
+    from: (t: string) => {
+      insert: (r: {
+        use_case_key: string | null;
+        answers: Record<string, unknown>;
+        result: Record<string, unknown>;
+        model_used: string | null;
+      }) => Promise<unknown>;
+    };
+  };
+  await db.from("glove_reco_sessions").insert({
     use_case_key: payload.use_case_key,
     answers: payload.answers as Record<string, unknown>,
     result: payload.result as Record<string, unknown>,

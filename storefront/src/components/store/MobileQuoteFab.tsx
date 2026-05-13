@@ -8,9 +8,8 @@ import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 /** Floating quote access on small screens (clears PDP sticky bar height). */
 export function MobileQuoteFab() {
   const pathname = usePathname();
-  if (pathname?.startsWith("/store/p/")) return null;
-
   const { lineCount, hydrated } = useQuoteCart();
+  if (pathname?.startsWith("/store/p/")) return null;
   const n = hydrated ? lineCount : 0;
 
   return (

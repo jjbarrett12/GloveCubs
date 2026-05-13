@@ -5,7 +5,6 @@
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const m = require("../../../../lib/active-company-resolve.js") as {
   resolveActiveCompanyId: (
     userId: string,

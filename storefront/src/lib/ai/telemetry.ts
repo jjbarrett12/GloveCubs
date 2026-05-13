@@ -24,8 +24,10 @@ export async function logAiEvent(
       meta: payload.meta ?? null,
     };
     // ai_events table: use dynamic insert (table may not be in generated types)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("ai_events").insert(row);
+    const db = supabase as unknown as {
+      from: (t: string) => { insert: (r: typeof row) => Promise<unknown> };
+    };
+    await db.from("ai_events").insert(row);
   } catch {
     // best-effort
   }
