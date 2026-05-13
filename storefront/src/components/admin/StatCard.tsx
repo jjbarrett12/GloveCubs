@@ -17,6 +17,8 @@ interface StatCardProps {
   onClick?: () => void;
   className?: string;
   accentBorder?: boolean;
+  /** Dark command-center surfaces */
+  variant?: "default" | "dark";
 }
 
 const COLORS = {
@@ -57,6 +59,44 @@ const COLORS = {
   },
 };
 
+const COLORS_DARK: typeof COLORS = {
+  default: {
+    text: "text-neutral-100",
+    accent: "border-l-neutral-500",
+    icon: "text-neutral-500",
+  },
+  blue: {
+    text: "text-sky-400",
+    accent: "border-l-sky-500",
+    icon: "text-sky-400",
+  },
+  green: {
+    text: "text-emerald-400",
+    accent: "border-l-emerald-500",
+    icon: "text-emerald-400",
+  },
+  amber: {
+    text: "text-amber-400",
+    accent: "border-l-amber-500",
+    icon: "text-amber-400",
+  },
+  red: {
+    text: "text-red-400",
+    accent: "border-l-red-500",
+    icon: "text-red-400",
+  },
+  purple: {
+    text: "text-purple-400",
+    accent: "border-l-purple-500",
+    icon: "text-purple-400",
+  },
+  orange: {
+    text: "text-[#f06232]",
+    accent: "border-l-[#f06232]",
+    icon: "text-[#f06232]",
+  },
+};
+
 export function StatCard({
   label,
   value,
@@ -67,40 +107,56 @@ export function StatCard({
   onClick,
   className,
   accentBorder = false,
+  variant = "default",
 }: StatCardProps) {
-  const colors = COLORS[color];
+  const dark = variant === "dark";
+  const palette = dark ? COLORS_DARK : COLORS;
+  const colors = palette[color];
   const isInteractive = !!href || !!onClick;
 
   const content = (
     <div
       className={cn(
-        "bg-white rounded-lg border border-gray-200 p-4 transition-all",
+        "rounded-lg border p-4 transition-all",
+        dark ? "border-white/10 bg-[#161616] ring-1 ring-white/[0.03]" : "border-gray-200 bg-white",
         accentBorder && `border-l-4 ${colors.accent}`,
-        isInteractive && "hover:shadow-md hover:border-gray-300 cursor-pointer",
-        className
+        isInteractive && (dark ? "cursor-pointer hover:border-white/20 hover:bg-[#1c1c1c]" : "cursor-pointer hover:border-gray-300 hover:shadow-md"),
+        className,
       )}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide truncate">
+          <p className={cn("text-xs font-medium uppercase tracking-wide truncate", dark ? "text-neutral-500" : "text-gray-500")}>
             {label}
           </p>
           <p className={cn("mt-1 text-2xl font-semibold tabular-nums", colors.text)}>
             {value}
           </p>
           {trend && (
-            <p className={cn(
-              "mt-1 text-xs font-medium",
-              trend.value > 0 ? "text-emerald-600" : trend.value < 0 ? "text-red-600" : "text-gray-500"
-            )}>
-              {trend.value > 0 ? "Γåæ" : trend.value < 0 ? "Γåô" : "ΓåÆ"} {Math.abs(trend.value)}%
-              {trend.label && <span className="text-gray-400 ml-1">{trend.label}</span>}
+            <p
+              className={cn(
+                "mt-1 text-xs font-medium",
+                trend.value > 0
+                  ? dark
+                    ? "text-emerald-400"
+                    : "text-emerald-600"
+                  : trend.value < 0
+                    ? dark
+                      ? "text-red-400"
+                      : "text-red-600"
+                    : dark
+                      ? "text-neutral-500"
+                      : "text-gray-500",
+              )}
+            >
+              {trend.value > 0 ? "\u2191" : trend.value < 0 ? "\u2193" : "\u2192"} {Math.abs(trend.value)}%
+              {trend.label && <span className={cn("ml-1", dark ? "text-neutral-600" : "text-gray-400")}>{trend.label}</span>}
             </p>
           )}
         </div>
         {icon && (
-          <div className={cn("flex-shrink-0 ml-3", colors.icon)}>
+          <div className={cn("ml-3 flex-shrink-0", colors.icon)}>
             {icon}
           </div>
         )}

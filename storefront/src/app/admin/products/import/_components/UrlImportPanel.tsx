@@ -98,25 +98,25 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+      className="space-y-4 rounded-lg border border-white/10 bg-[#161616] p-5 shadow-sm ring-1 ring-white/[0.03]"
       aria-label="URL import"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-100 pb-3">
-        <h2 className="text-base font-semibold text-gray-900">URL import</h2>
-        <p className="text-xs text-gray-500">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 pb-3">
+        <h2 className="text-base font-semibold text-white">URL import</h2>
+        <p className="text-xs text-neutral-500">
           Storefront only proxies. CatalogOS runs the crawl and extraction.
         </p>
       </div>
 
       {offline ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
           {offlineMessage}
         </div>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             Supplier name
           </span>
           <input
@@ -125,19 +125,19 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
             onChange={(e) => setSupplierName(e.target.value)}
             disabled={disabled}
             placeholder="Acme Glove Co"
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-70"
+            className="mt-1 w-full rounded-md border border-white/12 bg-[#0e0e0e] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:opacity-50"
           />
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             Crawl mode
           </span>
           <select
             value={crawlMode}
             onChange={(e) => setCrawlMode(e.target.value as "single_product" | "category")}
             disabled={disabled}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-70"
+            className="mt-1 w-full rounded-md border border-white/12 bg-[#0e0e0e] px-3 py-2 text-sm text-neutral-100 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:opacity-50"
           >
             <option value="single_product">Single product</option>
             <option value="category">Category</option>
@@ -145,7 +145,7 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
         </label>
 
         <label className="block sm:col-span-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             Start URL
           </span>
           <input
@@ -154,12 +154,12 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
             onChange={(e) => setStartUrl(e.target.value)}
             disabled={disabled}
             placeholder="https://supplier.example.com/products/..."
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-70"
+            className="mt-1 w-full rounded-md border border-white/12 bg-[#0e0e0e] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:opacity-50"
           />
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             Allowed domain
           </span>
           <input
@@ -171,15 +171,15 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
             }}
             disabled={disabled}
             placeholder="supplier.example.com"
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-70"
+            className="mt-1 w-full rounded-md border border-white/12 bg-[#0e0e0e] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:opacity-50"
           />
-          <span className="mt-1 block text-[11px] text-gray-500">
+          <span className="mt-1 block text-[11px] text-neutral-500">
             Auto-filled from start URL host. Override only if needed.
           </span>
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             Max pages
           </span>
           <input
@@ -192,29 +192,29 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
               setMaxPages(Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 500) : 1);
             }}
             disabled={disabled || crawlMode === "single_product"}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-70"
+            className="mt-1 w-full rounded-md border border-white/12 bg-[#0e0e0e] px-3 py-2 text-sm text-neutral-100 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:opacity-50"
           />
-          <span className="mt-1 block text-[11px] text-gray-500">
+          <span className="mt-1 block text-[11px] text-neutral-500">
             {crawlMode === "single_product" ? "Single product mode crawls exactly 1 page." : "Capped at 500."}
           </span>
         </label>
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
           {error}
         </div>
       ) : null}
 
-      <div className="flex items-center gap-3 border-t border-gray-100 pt-3">
+      <div className="flex items-center gap-3 border-t border-white/10 pt-3">
         <button
           type="submit"
           disabled={disabled}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? "Starting…" : "Start URL import"}
         </button>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-neutral-500">
           The crawl runs synchronously inside CatalogOS; this may take up to a few minutes for category crawls.
         </p>
       </div>

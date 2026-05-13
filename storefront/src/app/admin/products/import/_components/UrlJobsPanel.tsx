@@ -62,23 +62,23 @@ export function UrlJobsPanel({
   }
 
   return (
-    <TableCard>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3">
+    <TableCard variant="dark">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#181818] px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Recent URL imports</h2>
-          <p className="text-xs text-gray-500">
+          <h2 className="text-base font-semibold text-white">Recent URL imports</h2>
+          <p className="text-xs text-neutral-500">
             Live data from CatalogOS — no fabricated counts.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] text-gray-400">
+          <span className="font-mono text-[10px] text-neutral-600">
             {lastRefreshed ? `Refreshed ${lastRefreshed.toISOString().slice(11, 19)} UTC` : "Not yet refreshed"}
           </span>
           <button
             type="button"
             onClick={() => void refresh()}
             disabled={offline || loading}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-neutral-200 shadow-sm hover:border-[#f06232]/35 hover:text-white disabled:opacity-50"
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
@@ -86,20 +86,21 @@ export function UrlJobsPanel({
       </div>
 
       {error ? (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800">
+        <div className="border-b border-red-500/25 bg-red-500/10 px-4 py-2 text-xs text-red-100">
           {error}
         </div>
       ) : null}
 
       {jobs.length === 0 ? (
         <EmptyState
+          variant="dark"
           title={offline ? "CatalogOS not configured" : "No URL imports yet"}
           description={offline ? "Configure CatalogOS to load URL import history." : "Start one above to see jobs here."}
         />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <thead className="border-b border-white/10 bg-[#181818] text-xs font-medium uppercase tracking-wide text-neutral-500">
               <tr>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Supplier</th>
@@ -112,35 +113,35 @@ export function UrlJobsPanel({
                 <th className="px-3 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white text-gray-900">
+            <tbody className="divide-y divide-white/[0.06] bg-[#141414] text-neutral-100">
               {jobs.map((j) => (
-                <tr key={j.id} className="hover:bg-blue-50/40">
+                <tr key={j.id} className="hover:bg-white/[0.04]">
                   <td className="px-3 py-2 align-top">
                     <ImportStatusBadge status={j.status} rawStatus={j.rawStatus} />
                   </td>
-                  <td className="px-3 py-2 align-top text-gray-700">{j.supplierName}</td>
+                  <td className="px-3 py-2 align-top text-neutral-300">{j.supplierName}</td>
                   <td className="px-3 py-2 align-top">
                     {j.startUrl ? (
-                      <span className="break-all font-mono text-[11px] text-gray-600">{j.startUrl}</span>
+                      <span className="break-all font-mono text-[11px] text-neutral-400">{j.startUrl}</span>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-neutral-600">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-gray-600">
+                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-400">
                     {j.crawlMode ?? "—"}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-gray-700">{formatNumber(j.pagesCrawled)}</td>
-                  <td className="px-3 py-2 align-top font-mono text-gray-700">{formatNumber(j.productsExtracted)}</td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-gray-500">
+                  <td className="px-3 py-2 align-top font-mono text-neutral-200">{formatNumber(j.pagesCrawled)}</td>
+                  <td className="px-3 py-2 align-top font-mono text-neutral-200">{formatNumber(j.productsExtracted)}</td>
+                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-500">
                     {formatDate(j.createdAt)}
                   </td>
-                  <td className="px-3 py-2 align-top font-mono text-[11px] text-gray-500">
+                  <td className="px-3 py-2 align-top font-mono text-[11px] text-neutral-500">
                     {formatDate(j.finishedAt)}
                   </td>
                   <td className="px-3 py-2 align-top text-right">
                     <Link
                       href={`/admin/products/import/jobs/${encodeURIComponent(j.id)}`}
-                      className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+                      className="rounded-md border border-white/12 bg-white/[0.06] px-2 py-1 text-xs font-medium text-[#f06232] shadow-sm hover:border-[#f06232]/40 hover:text-[#ff8a5c]"
                     >
                       Open
                     </Link>

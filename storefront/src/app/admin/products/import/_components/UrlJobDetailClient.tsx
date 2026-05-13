@@ -33,7 +33,7 @@ function formatNumber(n: number | null): string | number {
 function ImageEvidenceStrip({ images }: { images: string[] }) {
   if (images.length === 0) {
     return (
-      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 text-[11px] text-gray-400">
+      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-white/15 bg-black/30 px-3 text-[11px] text-neutral-500">
         No images extracted
       </div>
     );
@@ -46,7 +46,7 @@ function ImageEvidenceStrip({ images }: { images: string[] }) {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block h-16 w-16 overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+          className="block h-16 w-16 overflow-hidden rounded-md border border-white/12 bg-black/40"
           title={url}
         >
           {/* Operator review — domain-agnostic; external images shown as-is. */}
@@ -55,7 +55,7 @@ function ImageEvidenceStrip({ images }: { images: string[] }) {
         </a>
       ))}
       {images.length > 6 ? (
-        <span className="self-end font-mono text-[10px] text-gray-400">+{images.length - 6} more</span>
+        <span className="self-end font-mono text-[10px] text-neutral-500">+{images.length - 6} more</span>
       ) : null}
     </div>
   );
@@ -64,21 +64,21 @@ function ImageEvidenceStrip({ images }: { images: string[] }) {
 function DuplicateMatchList({ matches }: { matches: UrlImportExtractedProduct["duplicateCandidates"] }) {
   if (matches.length === 0) return null;
   return (
-    <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">
         Duplicate candidates ({matches.length})
       </p>
       <ul className="mt-1 space-y-1">
         {matches.slice(0, 5).map((m, i) => (
-          <li key={`${m.targetId ?? "_"}-${i}`} className="text-xs text-amber-900">
+          <li key={`${m.targetId ?? "_"}-${i}`} className="text-xs text-amber-100/95">
             <span className="font-medium">{m.label}</span>
             {m.similarity != null ? (
-              <span className="ml-2 font-mono text-[10px] text-amber-700">
+              <span className="ml-2 font-mono text-[10px] text-amber-300">
                 {(m.similarity * (m.similarity <= 1 ? 100 : 1)).toFixed(0)}%
               </span>
             ) : null}
             {m.reasons.length > 0 ? (
-              <span className="ml-2 text-amber-700">· {m.reasons.slice(0, 3).join(" · ")}</span>
+              <span className="ml-2 text-amber-200/90">· {m.reasons.slice(0, 3).join(" · ")}</span>
             ) : null}
           </li>
         ))}
@@ -99,7 +99,7 @@ function ExtractedProductCard({
   disabled: boolean;
 }) {
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <article className="rounded-lg border border-white/10 bg-[#161616] p-4 shadow-sm ring-1 ring-white/[0.03]">
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
@@ -107,14 +107,14 @@ function ExtractedProductCard({
           onChange={() => onToggle(product.id)}
           disabled={disabled}
           aria-label={`Select ${product.title}`}
-          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="mt-1 h-4 w-4 rounded border-white/25 text-[#f06232] focus:ring-[#f06232]/40"
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-sm font-semibold text-gray-900">{product.title}</h3>
+            <h3 className="text-sm font-semibold text-white">{product.title}</h3>
             {product.confidence != null ? (
               <span
-                className="font-mono text-[10px] text-gray-500"
+                className="font-mono text-[10px] text-neutral-500"
                 title="Extraction confidence reported by CatalogOS"
               >
                 conf {(product.confidence * 100).toFixed(0)}%
@@ -122,41 +122,41 @@ function ExtractedProductCard({
               </span>
             ) : null}
           </div>
-          <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-600 sm:grid-cols-3">
+          <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-neutral-400 sm:grid-cols-3">
             {product.brand ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">Brand</dt>
-                <dd className="text-gray-800">{product.brand}</dd>
+                <dt className="text-neutral-600">Brand</dt>
+                <dd className="text-neutral-200">{product.brand}</dd>
               </div>
             ) : null}
             {product.sku ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">SKU</dt>
-                <dd className="font-mono text-gray-800">{product.sku}</dd>
+                <dt className="text-neutral-600">SKU</dt>
+                <dd className="font-mono text-neutral-200">{product.sku}</dd>
               </div>
             ) : null}
             {product.mpn ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">MPN</dt>
-                <dd className="font-mono text-gray-800">{product.mpn}</dd>
+                <dt className="text-neutral-600">MPN</dt>
+                <dd className="font-mono text-neutral-200">{product.mpn}</dd>
               </div>
             ) : null}
             {product.gtin ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">GTIN/UPC</dt>
-                <dd className="font-mono text-gray-800">{product.gtin}</dd>
+                <dt className="text-neutral-600">GTIN/UPC</dt>
+                <dd className="font-mono text-neutral-200">{product.gtin}</dd>
               </div>
             ) : null}
             {product.size ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">Inferred size</dt>
-                <dd className="text-gray-800">{product.size}</dd>
+                <dt className="text-neutral-600">Inferred size</dt>
+                <dd className="text-neutral-200">{product.size}</dd>
               </div>
             ) : null}
             {product.baseSku ? (
               <div className="flex gap-2">
-                <dt className="text-gray-400">Base SKU</dt>
-                <dd className="font-mono text-gray-800">{product.baseSku}</dd>
+                <dt className="text-neutral-600">Base SKU</dt>
+                <dd className="font-mono text-neutral-200">{product.baseSku}</dd>
               </div>
             ) : null}
           </dl>
@@ -167,7 +167,7 @@ function ExtractedProductCard({
                 href={product.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-blue-700 hover:underline"
+                className="font-mono text-[#f06232] hover:text-[#ff8a5c] hover:underline"
               >
                 {product.sourceUrl}
               </a>
@@ -179,9 +179,9 @@ function ExtractedProductCard({
               {product.attributes.map((a) => (
                 <li
                   key={a.key}
-                  className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-gray-700"
+                  className="rounded border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] text-neutral-300"
                 >
-                  <span className="text-gray-400">{a.key}:</span> <span className="text-gray-800">{a.value}</span>
+                  <span className="text-neutral-500">{a.key}:</span> <span className="text-neutral-100">{a.value}</span>
                 </li>
               ))}
             </ul>
@@ -192,8 +192,8 @@ function ExtractedProductCard({
           </div>
 
           {product.warnings.length > 0 ? (
-            <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              <p className="font-semibold uppercase tracking-wide text-[10px] text-amber-800">Warnings</p>
+            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              <p className="font-semibold uppercase tracking-wide text-[10px] text-amber-200">Warnings</p>
               <ul className="mt-1 list-inside list-disc space-y-0.5">
                 {product.warnings.slice(0, 6).map((w, i) => (
                   <li key={`${w}-${i}`}>{w}</li>
@@ -230,18 +230,18 @@ function BridgeActionBar({
 }) {
   const disabled = selectedCount === 0 || result.kind === "submitting" || disabledReason !== null;
   return (
-    <div className="sticky bottom-3 z-10 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-md">
+    <div className="sticky bottom-3 z-10 rounded-lg border border-white/10 bg-[#121212]/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-[#121212]/90">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 text-sm text-gray-700">
+        <div className="flex items-center gap-3 text-sm text-neutral-300">
           <span>
-            <span className="font-mono text-gray-900">{selectedCount}</span> of{" "}
-            <span className="font-mono text-gray-900">{totalCount}</span> extracted rows selected
+            <span className="font-mono text-white">{selectedCount}</span> of{" "}
+            <span className="font-mono text-white">{totalCount}</span> extracted rows selected
           </span>
           <button
             type="button"
             onClick={onSelectAll}
             disabled={totalCount === 0 || result.kind === "submitting"}
-            className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-white/12 bg-white/[0.05] px-2 py-0.5 text-xs text-neutral-200 hover:border-[#f06232]/35 hover:text-white disabled:opacity-50"
           >
             Select all visible
           </button>
@@ -249,27 +249,27 @@ function BridgeActionBar({
             type="button"
             onClick={onClear}
             disabled={selectedCount === 0 || result.kind === "submitting"}
-            className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-white/12 bg-white/[0.05] px-2 py-0.5 text-xs text-neutral-200 hover:border-[#f06232]/35 hover:text-white disabled:opacity-50"
           >
             Clear
           </button>
         </div>
         <div className="flex items-center gap-3">
           {disabledReason ? (
-            <span className="text-xs text-amber-700">{disabledReason}</span>
+            <span className="text-xs text-amber-300/95">{disabledReason}</span>
           ) : null}
           <button
             type="button"
             onClick={onBridge}
             disabled={disabled}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:cursor-not-allowed disabled:opacity-50"
             title="Stages selected rows for CatalogOS review. Does not publish."
           >
             {result.kind === "submitting" ? "Bridging…" : "Send selected to review queue"}
           </button>
         </div>
       </div>
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-neutral-500">
         This does not publish products. It stages selected extracted rows for CatalogOS review.
       </p>
     </div>
@@ -324,14 +324,14 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
 
   if (!detail) {
     return (
-      <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+      <div className="rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
         Job <span className="font-mono">{jobId}</span> could not be loaded from CatalogOS.{" "}
-        {error ? <span className="text-red-700">{error}</span> : null}
+        {error ? <span className="text-red-200/90">{error}</span> : null}
         <div className="mt-2">
           <button
             type="button"
             onClick={() => void refresh()}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            className="rounded-md border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-neutral-200 shadow-sm hover:border-[#f06232]/35 hover:text-white"
           >
             Retry
           </button>
@@ -399,25 +399,25 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-lg border border-white/10 bg-[#161616] p-4 shadow-sm ring-1 ring-white/[0.03]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <ImportStatusBadge status={status} rawStatus={job.rawStatus} />
-              <h2 className="truncate text-lg font-semibold text-gray-900">{job.supplierName}</h2>
+              <h2 className="truncate text-lg font-semibold text-white">{job.supplierName}</h2>
             </div>
-            <p className="mt-1 truncate font-mono text-xs text-gray-500">{job.startUrl || "—"}</p>
-            <p className="mt-0.5 font-mono text-[10px] text-gray-400">job id: {job.id}</p>
+            <p className="mt-1 truncate font-mono text-xs text-neutral-500">{job.startUrl || "—"}</p>
+            <p className="mt-0.5 font-mono text-[10px] text-neutral-600">job id: {job.id}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] text-gray-400">
+            <span className="font-mono text-[10px] text-neutral-600">
               {lastRefreshed ? `Refreshed ${lastRefreshed.toISOString().slice(11, 19)} UTC` : "—"}
             </span>
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={refreshing}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-md border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-neutral-200 shadow-sm hover:border-[#f06232]/35 hover:text-white disabled:opacity-50"
             >
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>
@@ -426,33 +426,38 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
 
         <div className="mt-4">
           <StatGrid columns={6} className="gap-3">
-            <StatCard label="Mode" value={job.crawlMode ?? "—"} />
-            <StatCard label="Allowed domain" value={job.allowedDomain ?? "—"} />
-            <StatCard label="Pages crawled" value={formatNumber(job.pagesCrawled)} color="blue" />
-            <StatCard label="Product pages" value={formatNumber(job.productPagesDetected)} color="blue" />
-            <StatCard label="Products extracted" value={formatNumber(job.productsExtracted)} color="green" />
-            <StatCard label="Failed pages" value={formatNumber(job.failedPagesCount)} color={job.failedPagesCount && job.failedPagesCount > 0 ? "red" : "default"} />
+            <StatCard label="Mode" value={job.crawlMode ?? "—"} variant="dark" />
+            <StatCard label="Allowed domain" value={job.allowedDomain ?? "—"} variant="dark" />
+            <StatCard label="Pages crawled" value={formatNumber(job.pagesCrawled)} color="blue" variant="dark" />
+            <StatCard label="Product pages" value={formatNumber(job.productPagesDetected)} color="blue" variant="dark" />
+            <StatCard label="Products extracted" value={formatNumber(job.productsExtracted)} color="green" variant="dark" />
+            <StatCard
+              label="Failed pages"
+              value={formatNumber(job.failedPagesCount)}
+              color={job.failedPagesCount && job.failedPagesCount > 0 ? "red" : "default"}
+              variant="dark"
+            />
           </StatGrid>
         </div>
 
-        <dl className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-3">
+        <dl className="mt-3 grid gap-2 text-xs text-neutral-400 sm:grid-cols-3">
           <div>
-            <dt className="text-gray-400">Created</dt>
-            <dd className="font-mono text-gray-800">{formatDate(job.createdAt)}</dd>
+            <dt className="text-neutral-600">Created</dt>
+            <dd className="font-mono text-neutral-200">{formatDate(job.createdAt)}</dd>
           </div>
           <div>
-            <dt className="text-gray-400">Started</dt>
-            <dd className="font-mono text-gray-800">{formatDate(job.startedAt)}</dd>
+            <dt className="text-neutral-600">Started</dt>
+            <dd className="font-mono text-neutral-200">{formatDate(job.startedAt)}</dd>
           </div>
           <div>
-            <dt className="text-gray-400">Finished</dt>
-            <dd className="font-mono text-gray-800">{formatDate(job.finishedAt)}</dd>
+            <dt className="text-neutral-600">Finished</dt>
+            <dd className="font-mono text-neutral-200">{formatDate(job.finishedAt)}</dd>
           </div>
         </dl>
 
         {job.warnings.length > 0 ? (
-          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">
               Job warnings ({job.warnings.length})
             </p>
             <ul className="mt-1 list-inside list-disc space-y-0.5">
@@ -464,14 +469,14 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
         ) : null}
 
         {error ? (
-          <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+          <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
             {error}
           </div>
         ) : null}
       </div>
 
       {bridge.kind === "ok" ? (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
           Sent to CatalogOS review queue.
           {bridge.batchId ? (
             <span className="ml-1">
@@ -482,7 +487,7 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
               .{" "}
               <Link
                 href={`/admin/products/review?batchId=${encodeURIComponent(bridge.batchId)}`}
-                className="font-medium text-emerald-800 underline"
+                className="font-medium text-[#f06232] underline hover:text-[#ff8a5c]"
               >
                 Open review queue
               </Link>
@@ -492,14 +497,15 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
       ) : null}
 
       {bridge.kind === "error" ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-          Bridge failed: <span className="font-mono text-xs">{bridge.message}</span>
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          Bridge failed: <span className="font-mono text-xs text-red-200/90">{bridge.message}</span>
         </div>
       ) : null}
 
       {products.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white">
+        <div className="rounded-lg border border-dashed border-white/15 bg-[#141414]">
           <EmptyState
+            variant="dark"
             title={isTerminal ? "No extracted products" : "Crawl in progress"}
             description={
               isTerminal

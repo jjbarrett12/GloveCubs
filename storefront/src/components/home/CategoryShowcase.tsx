@@ -50,7 +50,7 @@ export function CategoryShowcase() {
           Shop gloves by material &amp; use case
         </h2>
         <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-white/55">
-          Browse the live catalog and add lines to your quote cart—priced and fulfilled for business case quantities.
+          Browse the published catalog and add lines to your quote cart—list pricing when published; case, pallet, and contract paths through request pricing and review.
         </p>
         <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {CATEGORIES.map((c) => (

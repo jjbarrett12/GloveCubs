@@ -13,6 +13,7 @@ interface EmptyStateProps {
   description?: string;
   action?: ReactNode;
   className?: string;
+  variant?: "default" | "dark";
 }
 
 export function EmptyState({
@@ -21,17 +22,15 @@ export function EmptyState({
   description,
   action,
   className,
+  variant = "default",
 }: EmptyStateProps) {
+  const dark = variant === "dark";
   return (
-    <div className={cn("flex flex-col items-center justify-center py-12 px-4", className)}>
-      {icon && (
-        <div className="mb-4 text-gray-300">
-          {icon}
-        </div>
-      )}
-      <h3 className="text-sm font-medium text-gray-900">{title}</h3>
+    <div className={cn("flex flex-col items-center justify-center px-4 py-12", className)}>
+      {icon && <div className={cn("mb-4", dark ? "text-neutral-600" : "text-gray-300")}>{icon}</div>}
+      <h3 className={cn("text-sm font-medium", dark ? "text-white" : "text-gray-900")}>{title}</h3>
       {description && (
-        <p className="mt-1 text-sm text-gray-500 text-center max-w-sm">
+        <p className={cn("mt-1 max-w-sm text-center text-sm", dark ? "text-neutral-500" : "text-gray-500")}>
           {description}
         </p>
       )}

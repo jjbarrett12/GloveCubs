@@ -27,7 +27,7 @@
   }
 }
 
-/* Hero “1,000+ SKUs” alert bar — subtle vertical motion */
+/* Optional hero accent motion utility */
 @layer utilities {
   @keyframes hero-sku-alert-bob {
     0%,

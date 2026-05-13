@@ -24,10 +24,11 @@ export async function resolveUserForPostLoginDestination(params: {
     if (!error && data.user) return { user: data.user, via: "bearer" };
   }
 
-  const svc = createServerClient(params.supabaseUrl, params.serviceRoleKey, {
+  /** `createServerClient` must use the anon (publishable) key — service role here yields Supabase "Invalid API key". */
+  const cookieClient = createServerClient(params.supabaseUrl, params.anonKey, {
     cookies: { get: params.cookieGet },
   });
-  const { data, error } = await svc.auth.getUser();
+  const { data, error } = await cookieClient.auth.getUser();
   if (!error && data.user) return { user: data.user, via: "cookie" };
   return { user: null, via: "none" };
 }
@@ -35,10 +36,10 @@ export async function resolveUserForPostLoginDestination(params: {
 /** Same cookie contract as `resolveUserForPostLoginDestination` cookie path, for `/admin` layout. */
 export async function resolveUserFromAdminCookies(
   supabaseUrl: string,
-  serviceRoleKey: string,
+  anonKey: string,
   cookieStore: { get(name: string): { value?: string } | undefined },
 ): Promise<User | null> {
-  const supabase = createServerClient(supabaseUrl, serviceRoleKey, {
+  const supabase = createServerClient(supabaseUrl, anonKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value;

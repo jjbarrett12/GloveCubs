@@ -7,7 +7,8 @@ import {
 describe("products subnav active state", () => {
   it("marks All products for list and detail only", () => {
     expect(isProductsSubnavAllProductsActive("/admin/products")).toBe(true);
-    expect(isProductsSubnavAllProductsActive("/admin/products/aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee")).toBe(true);
+    expect(isProductsSubnavAllProductsActive("/admin/products/new")).toBe(true);
+    expect(isProductsSubnavAllProductsActive("/admin/products/aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee/edit")).toBe(true);
     expect(isProductsSubnavAllProductsActive("/admin/products/import")).toBe(false);
     expect(isProductsSubnavAllProductsActive("/admin/products/review")).toBe(false);
     expect(isProductsSubnavAllProductsActive("/admin/products/catalog-health")).toBe(false);

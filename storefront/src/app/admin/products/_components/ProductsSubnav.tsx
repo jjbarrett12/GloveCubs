@@ -17,7 +17,7 @@ export function ProductsSubnav() {
   return (
     <nav
       aria-label="Products module"
-      className="-mt-2 mb-6 flex flex-wrap items-center gap-1 border-b border-gray-200 pb-3"
+      className="-mt-2 mb-6 flex flex-wrap items-center gap-1 border-b border-white/10 pb-3"
     >
       {ITEMS.map((item) => {
         const active = isProductsSubnavHrefActive(pathname, item.href);
@@ -27,8 +27,8 @@ export function ProductsSubnav() {
             href={item.href}
             className={
               active
-                ? "inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white"
-                : "inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                ? "inline-flex items-center rounded-md bg-[#f06232] px-3 py-1.5 text-sm font-medium text-white shadow-sm"
+                : "inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white"
             }
           >
             {item.label}

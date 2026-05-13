@@ -22,7 +22,7 @@ export function ImportStatusBadge({
   return (
     <span className="inline-flex items-center gap-1" title={rawStatus || m.label}>
       <StatusBadge status={m.variant} dot />
-      {showRaw ? <span className="font-mono text-[10px] text-gray-400">({rawStatus})</span> : null}
+      {showRaw ? <span className="font-mono text-[10px] text-neutral-500">({rawStatus})</span> : null}
     </span>
   );
 }

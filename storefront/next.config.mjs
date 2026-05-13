@@ -15,7 +15,11 @@ const nextConfig = {
    * `repo-root/lib/` cannot find `@supabase/supabase-js`. Pin a deterministic
    * fallback that always resolves to the storefront install.
    */
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    /** Avoid stale/missing chunk refs on Windows when `.next` is deleted while dev is running. */
+    if (dev) {
+      config.cache = false;
+    }
     const storefrontNodeModules = path.resolve(__dirname, "node_modules");
     config.resolve = config.resolve || {};
     const existing = Array.isArray(config.resolve.modules)

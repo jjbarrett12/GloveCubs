@@ -3,8 +3,8 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { LoginClient } from "./LoginClient";
 
 export const metadata: Metadata = {
-  title: "Sign in | GloveCubs",
-  description: "Sign in to your GloveCubs business account.",
+  title: "Customer login | GloveCubs",
+  description: "Log in to your GloveCubs business account for saved pricing and quotes.",
 };
 
 function hasExplicitNextParam(raw: string | string[] | undefined): boolean {
@@ -25,7 +25,7 @@ export default function LoginPage({
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <SiteHeaderLoader />
-      <main>
+      <main className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center">
         <LoginClient
           nextPath={searchParams.next}
           issue={searchParams.issue}

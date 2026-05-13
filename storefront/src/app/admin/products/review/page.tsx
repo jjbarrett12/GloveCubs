@@ -1,5 +1,9 @@
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
-import { PageHeader, EmptyState, StatCard, StatGrid } from "@/components/admin";
+import { PageHeader, StatCard, StatGrid } from "@/components/admin";
+import { listClipboardStaging, type ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
+import { fetchAdminCategoriesForProductForm, type AdminCategoryOption } from "@/lib/admin/product-form-options";
+import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { ProductReviewQueueClient } from "./_components/ProductReviewQueueClient";
 
 export const dynamic = "force-dynamic";
 
@@ -8,52 +12,72 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminProductsReviewPage() {
+export default async function AdminProductsReviewPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const conn = computeProductsImportConnectionStatus();
-  const offline = conn.status !== "online";
+  const catalogOsOffline = conn.status !== "online";
+  const configured = isSupabaseConfigured();
+
+  const rawBatch = searchParams.batchId;
+  const batchId =
+    typeof rawBatch === "string" ? rawBatch.trim() : Array.isArray(rawBatch) ? (rawBatch[0] ?? "").trim() : "";
+
+  let rows: ClipboardStagingRow[] = [];
+  let categories: AdminCategoryOption[] = [];
+  if (configured) {
+    [rows, categories] = await Promise.all([listClipboardStaging(200), fetchAdminCategoriesForProductForm()]);
+  }
+
+  const needsReview = rows.filter((r) => r.review_status === "needs_review").length;
+  const converted = rows.filter((r) => r.review_status === "converted_to_draft").length;
+  const dismissed = rows.filter((r) => r.review_status === "dismissed").length;
 
   return (
-    <div>
+    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 pb-8 shadow-md ring-1 ring-black/30 sm:p-5">
       <PageHeader
+        variant="dark"
         title="Review queue"
-        description="Staged import rows, duplicate evidence, and publish decisions surface here once CatalogOS proxy routes are wired. Read-only until then."
+        description="Operational queue for clipboard URL staging (Supabase). Approve rows to create catalog_v2 drafts, or dismiss. CatalogOS crawl/bridge batches are separate — this page does not fabricate CatalogOS rows."
       />
 
       <StatGrid columns={4} className="mb-6">
         <StatCard
-          label="CatalogOS"
+          label="CatalogOS (crawl/bridge)"
           value={conn.status === "online" ? "Online" : conn.status === "misconfigured" ? "Misconfigured" : "Offline"}
           color={conn.status === "online" ? "green" : conn.status === "misconfigured" ? "amber" : "red"}
           accentBorder
+          variant="dark"
         />
-        <StatCard label="Open reviews" value="—" color="default" accentBorder />
-        <StatCard label="Approved (24h)" value="—" color="default" accentBorder />
-        <StatCard label="Rejected (24h)" value="—" color="default" accentBorder />
+        <StatCard label="Awaiting decision" value={needsReview} color={needsReview > 0 ? "amber" : "default"} accentBorder variant="dark" />
+        <StatCard label="Promoted to draft" value={converted} color="green" accentBorder variant="dark" />
+        <StatCard label="Dismissed" value={dismissed} color="default" accentBorder variant="dark" />
       </StatGrid>
 
-      {offline ? (
-        <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong className="font-semibold">Ingestion offline — configure CatalogOS connection.</strong>{" "}
-          <span className="text-amber-800">{conn.message}</span>
+      {catalogOsOffline ? (
+        <div className="mb-6 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong className="font-semibold text-amber-50">CatalogOS offline or misconfigured.</strong>{" "}
+          <span className="text-amber-200/90">{conn.message}</span> Clipboard staging below still loads from Supabase when configured.
         </div>
       ) : (
-        <div className="mb-6 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          CatalogOS connection is configured. Review queue data will load from CatalogOS-backed APIs when those
-          proxies ship — storefront will not fabricate staged rows.
+        <div className="mb-6 rounded-lg border border-white/10 bg-[#161616] px-4 py-3 text-sm text-neutral-300 ring-1 ring-white/[0.03]">
+          CatalogOS is reachable for URL crawls and bridge actions. This queue lists{" "}
+          <strong className="text-white">Supabase clipboard staging</strong> only — not CatalogOS extracted-product rows (no proxy wired
+          here yet).
         </div>
       )}
 
-      <div className="rounded-lg border border-dashed border-gray-300 bg-white">
-        <EmptyState
-          icon={
-            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
-            </svg>
-          }
-          title="No staged rows in this view yet"
-          description="Once CatalogOS proxy routes for the review queue are wired, staged extracted rows will appear here for operator review and publish."
-        />
-      </div>
+      {batchId ? (
+        <div className="mb-6 rounded-lg border border-[#f06232]/30 bg-[#f06232]/10 px-4 py-3 text-sm text-neutral-100">
+          <strong className="text-[#f06232]">batchId in URL:</strong>{" "}
+          <span className="font-mono text-xs text-neutral-300">{batchId}</span> — CatalogOS bridge batches are not listed in this view
+          yet. Use import job detail and CatalogOS tools for batch follow-up; clipboard rows appear in the table when present.
+        </div>
+      ) : null}
+
+      <ProductReviewQueueClient rows={rows} categories={categories} supabaseConfigured={configured} />
     </div>
   );
 }

@@ -18,10 +18,10 @@ export async function HomeFeaturedCatalogSection() {
       >
         <div className="mx-auto max-w-7xl text-center">
           <h2 id="featured-catalog-heading" className="text-xl font-extrabold text-white sm:text-2xl">
-            Shop the live catalog
+            Published catalog
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-white/65">
-            Listings load from inventory-backed data. Open the store to browse everything we have published right now.
+            Open the store to browse quote-ready listings as operators publish them—request pricing anytime for programs not yet on the grid.
           </p>
           <Link
             href="/store"
@@ -47,7 +47,7 @@ export async function HomeFeaturedCatalogSection() {
               Current listings
             </h2>
             <p className="mt-2 max-w-xl text-sm text-white/65">
-              A live slice of the store—sorted newest first. Open any SKU for specs, variants, and quote actions.
+              A slice of the published catalog—sorted newest first. Open any listing for specs, variants, and add-to-quote.
             </p>
           </div>
           <Link

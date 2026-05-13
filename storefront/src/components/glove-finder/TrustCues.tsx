@@ -6,8 +6,8 @@ import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 
 const CUES = [
   { icon: ShieldCheck, label: "B2B pricing" },
-  { icon: Truck, label: "Fast fulfillment" },
-  { icon: FileCheck, label: "1,000+ SKUs" },
+  { icon: Truck, label: "Case & pallet programs" },
+  { icon: FileCheck, label: "Published catalog SKUs" },
 ];
 
 const PREP_LINE_CUES = [

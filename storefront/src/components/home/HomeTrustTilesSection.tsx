@@ -2,7 +2,7 @@ import { Award, Warehouse, Truck, ClipboardCheck, FileText, UserRound } from "lu
 
 const TILES = [
   { icon: Award, label: "Authorized distributor" },
-  { icon: Warehouse, label: "Consistent inventory" },
+  { icon: Warehouse, label: "Repeatable supply programs" },
   { icon: Truck, label: "Fast fulfillment" },
   { icon: ClipboardCheck, label: "Reviewed sourcing paths" },
   { icon: FileText, label: "Net terms (approved accounts)" },

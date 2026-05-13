@@ -15,13 +15,14 @@ export type AdminAccessResult =
 
 export async function resolveAdminAccess(): Promise<AdminAccessResult> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) {
+  if (!url || !anon || !key) {
     return { kind: "sign_in_required" };
   }
 
   const cookieStore = await cookies();
-  const user = await resolveUserFromAdminCookies(url, key, cookieStore);
+  const user = await resolveUserFromAdminCookies(url, anon, cookieStore);
   if (!user) return { kind: "sign_in_required" };
 
   const supabase = createClient(url, key, {

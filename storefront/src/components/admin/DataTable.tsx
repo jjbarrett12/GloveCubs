@@ -146,17 +146,47 @@ function TableSkeleton({ columns, rows }: { columns: number; rows: number }) {
   );
 }
 
-export function TableCard({ children, className }: { children: ReactNode; className?: string }) {
+export function TableCard({
+  children,
+  className,
+  variant = "default",
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "default" | "dark";
+}) {
   return (
-    <div className={cn("bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden", className)}>
+    <div
+      className={cn(
+        "rounded-lg border shadow-sm overflow-hidden",
+        variant === "dark"
+          ? "border-white/10 bg-[#141414] ring-1 ring-white/[0.04]"
+          : "border-gray-200 bg-white",
+        className,
+      )}
+    >
       {children}
     </div>
   );
 }
 
-export function TableToolbar({ children, className }: { children: ReactNode; className?: string }) {
+export function TableToolbar({
+  children,
+  className,
+  variant = "default",
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "default" | "dark";
+}) {
   return (
-    <div className={cn("px-4 py-3 border-b border-gray-200 flex items-center gap-4 flex-wrap", className)}>
+    <div
+      className={cn(
+        "px-4 py-3 border-b flex items-center gap-4 flex-wrap",
+        variant === "dark" ? "border-white/10 bg-[#181818] text-xs text-neutral-400" : "border-gray-200 bg-gray-50 text-xs text-gray-500",
+        className,
+      )}
+    >
       {children}
     </div>
   );

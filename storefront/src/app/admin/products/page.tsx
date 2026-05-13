@@ -14,6 +14,11 @@ import {
   EmptyState,
   StatusBadge,
 } from "@/components/admin";
+import { ProductsCommandActions } from "@/app/admin/products/_components/ProductsCommandActions";
+import { ProductsWorkspaceTabs } from "@/app/admin/products/_components/ProductsWorkspaceTabs";
+import { listClipboardStaging } from "@/lib/admin/clipboard-url-staging";
+import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
+import { ClipboardUrlStagingClient } from "@/app/admin/products/import/_components/ClipboardUrlStagingClient";
 
 export const dynamic = "force-dynamic";
 
@@ -45,29 +50,66 @@ function pdpLabel(row: AdminProductListRow): string {
   return "OK";
 }
 
+function parseWorkspaceTab(sp: Record<string, string | string[] | undefined>): string | undefined {
+  const raw = sp.tab;
+  const v = typeof raw === "string" ? raw.trim() : Array.isArray(raw) ? (raw[0] ?? "").trim() : "";
+  return ["products", "drafts", "url-imports", "needs-review", "archived"].includes(v) ? v : undefined;
+}
+
 export default async function AdminProductsPage({
   searchParams,
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
+  const tab = parseWorkspaceTab(searchParams);
   const qs = parseAdminProductListQuery(searchParams);
-  const result = await fetchAdminProductsPage(qs);
+  const listQs = { ...qs, filters: { ...qs.filters } };
+  if (tab === "products") listQs.status = "active";
+  else if (tab === "drafts") listQs.status = "draft";
+  else if (tab === "archived") listQs.status = "archived";
+  else if (tab === "needs-review") {
+    listQs.status = "all";
+    listQs.filters.pending_match_reviews = true;
+  }
+
+  const isUrlImports = tab === "url-imports";
+
+  const result = isUrlImports
+    ? {
+        rows: [] as AdminProductListRow[],
+        total: 0,
+        page: 1,
+        limit: qs.limit,
+        scanLimited: false,
+        configured: true,
+        error: null as string | null,
+      }
+    : await fetchAdminProductsPage(listQs);
+
+  let stagingRows: Awaited<ReturnType<typeof listClipboardStaging>> = [];
+  let stagingCategories: Awaited<ReturnType<typeof fetchAdminCategoriesForProductForm>> = [];
+  if (isUrlImports) {
+    const pair = await Promise.all([listClipboardStaging(50), fetchAdminCategoriesForProductForm()]);
+    stagingRows = pair[0];
+    stagingCategories = pair[1];
+  }
 
   const baseQs: Record<string, string | undefined> = {
     q: qs.q || undefined,
-    status: qs.status === "all" ? undefined : qs.status,
+    status: tab ? undefined : qs.status === "all" ? undefined : qs.status,
     sort: qs.sort === "newest" ? undefined : qs.sort,
     category: qs.categoryId ?? undefined,
     brand: qs.brand || undefined,
     limit: String(qs.limit),
-    missing_images: qs.filters.missing_images ? "1" : undefined,
-    placeholder_only_images: qs.filters.placeholder_only_images ? "1" : undefined,
-    thin_pdp: qs.filters.thin_pdp ? "1" : undefined,
-    missing_glove_attributes: qs.filters.missing_glove_attributes ? "1" : undefined,
-    orphan_category: qs.filters.orphan_category ? "1" : undefined,
-    variant_issues: qs.filters.variant_issues ? "1" : undefined,
-    duplicate_warnings: qs.filters.duplicate_warnings ? "1" : undefined,
-    pending_match_reviews: qs.filters.pending_match_reviews ? "1" : undefined,
+    missing_images: listQs.filters.missing_images ? "1" : undefined,
+    placeholder_only_images: listQs.filters.placeholder_only_images ? "1" : undefined,
+    thin_pdp: listQs.filters.thin_pdp ? "1" : undefined,
+    missing_glove_attributes: listQs.filters.missing_glove_attributes ? "1" : undefined,
+    orphan_category: listQs.filters.orphan_category ? "1" : undefined,
+    variant_issues: listQs.filters.variant_issues ? "1" : undefined,
+    duplicate_warnings: listQs.filters.duplicate_warnings ? "1" : undefined,
+    pending_match_reviews: listQs.filters.pending_match_reviews ? "1" : undefined,
+    tab: tab ?? undefined,
   };
 
   const totalPages = Math.max(1, Math.ceil(result.total / qs.limit) || 1);
@@ -79,68 +121,98 @@ export default async function AdminProductsPage({
   const withWarnings = result.rows.filter((r) => r.warnings.length > 0).length;
 
   return (
-    <div>
+    <div className="rounded-xl border border-white/10 bg-[#0e0e0e] p-4 shadow-md ring-1 ring-black/30 sm:p-5">
       <PageHeader
-        title="Products"
-        description="Read-only operational view of catalog_v2 and catalogos. Ingestion and edits stay in CatalogOS."
+        variant="dark"
+        title="Product command center"
+        description="Manage catalog_v2 parents, variants, and imagery. URL clipboard staging never auto-publishes; CatalogOS crawl remains available for deep extraction."
         actions={
-          catalogosBase ? (
-            <a
-              href={`${catalogosBase}/dashboard/url-import`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-            >
-              Open CatalogOS
-            </a>
-          ) : null
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <ProductsCommandActions />
+            {catalogosBase ? (
+              <a
+                href={`${catalogosBase}/dashboard/url-import`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center rounded-md border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-neutral-200 shadow-sm transition hover:border-[#f06232]/35 hover:bg-white/[0.08] sm:w-auto"
+              >
+                Open CatalogOS URL import
+              </a>
+            ) : null}
+          </div>
         }
       />
 
+      <ProductsWorkspaceTabs activeTab={tab} variant="dark" />
+
       {!result.configured ? (
-        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           Supabase is not configured. Set credentials to load the product grid.
         </div>
       ) : null}
 
       {result.error ? (
-        <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-          {result.error}
-        </div>
+        <div className="mb-4 rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">{result.error}</div>
       ) : null}
 
       {result.scanLimited ? (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/70 px-4 py-2 text-xs text-amber-800">
+        <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/[0.08] px-4 py-2 text-xs text-amber-100/90">
           Governance or search scan capped at 5,000 products by recency. Refine filters or search to narrow results.
         </div>
       ) : null}
 
-      <StatGrid columns={4} className="mb-6">
-        <StatCard label="Matching" value={result.total} color="blue" accentBorder />
-        <StatCard label="Missing images" value={missingImages} color={missingImages > 0 ? "red" : "default"} accentBorder />
-        <StatCard label="Placeholder only" value={placeholderImages} color={placeholderImages > 0 ? "amber" : "default"} accentBorder />
-        <StatCard label="Thin PDP" value={thinPdp} color={thinPdp > 0 ? "amber" : "default"} accentBorder />
-      </StatGrid>
+      {isUrlImports ? (
+        <div className="mb-6 space-y-4">
+          <div className="rounded-lg border border-white/10 bg-[#161616] px-4 py-3 text-sm text-neutral-300">
+            <strong className="text-white">Clipboard URLs</strong> — stage distributor or manufacturer PDP links, review extracted evidence,
+            then promote to a <em className="text-[#f06232]">draft</em> catalog product. For full-site crawls, use{" "}
+            <Link href="/admin/products/import/url" className="font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
+              Import from URL (tools)
+            </Link>{" "}
+            or CatalogOS.
+          </div>
+          {isUrlImports ? (
+            <ClipboardUrlStagingClient categories={stagingCategories} initialRows={stagingRows} />
+          ) : null}
+        </div>
+      ) : null}
 
-      <TableCard className="mb-6">
-        <form method="get" className="space-y-4 p-4">
+      {!isUrlImports ? (
+        <>
+          <StatGrid columns={4} className="mb-5 gap-3">
+            <StatCard label="Matching" value={result.total} color="blue" accentBorder variant="dark" />
+            <StatCard label="Missing images" value={missingImages} color={missingImages > 0 ? "red" : "default"} accentBorder variant="dark" />
+            <StatCard
+              label="Placeholder only"
+              value={placeholderImages}
+              color={placeholderImages > 0 ? "amber" : "default"}
+              accentBorder
+              variant="dark"
+            />
+            <StatCard label="Thin PDP" value={thinPdp} color={thinPdp > 0 ? "amber" : "default"} accentBorder variant="dark" />
+          </StatGrid>
+
+          <TableCard className="mb-6" variant="dark">
+        <form method="get" className="space-y-4 border-b border-white/10 p-4">
+          {tab ? <input type="hidden" name="tab" value={tab} /> : null}
           <div className="grid gap-3 md:grid-cols-12 md:items-end">
             <div className="md:col-span-4">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Search</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Search</label>
               <input
                 name="q"
                 type="search"
                 defaultValue={qs.q}
                 placeholder="Name, slug, SKU, GTIN, brand, category…"
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Status</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Status</label>
               <select
                 name="status"
-                defaultValue={qs.status}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                defaultValue={listQs.status}
+                disabled={Boolean(tab)}
+                className="mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-2 py-2 text-sm text-neutral-100 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="all">All</option>
                 <option value="active">Active</option>
@@ -149,11 +221,11 @@ export default async function AdminProductsPage({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Sort</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Sort</label>
               <select
                 name="sort"
                 defaultValue={qs.sort}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-2 py-2 text-sm text-neutral-100 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40"
               >
                 <option value="newest">Newest updated</option>
                 <option value="oldest">Oldest updated</option>
@@ -165,57 +237,105 @@ export default async function AdminProductsPage({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Category ID</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Category ID</label>
               <input
                 name="category"
                 defaultValue={qs.categoryId ?? ""}
                 placeholder="UUID"
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-3 py-2 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Brand contains</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Brand contains</label>
               <input
                 name="brand"
                 defaultValue={qs.brand}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 w-full rounded-md border border-white/12 bg-[#181818] px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-[#f06232]/50 focus:outline-none focus:ring-1 focus:ring-[#f06232]/40"
               />
             </div>
           </div>
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Governance filters</p>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-700">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Governance filters</p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-neutral-300">
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="missing_images" value="1" defaultChecked={qs.filters.missing_images} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="missing_images"
+                  value="1"
+                  defaultChecked={listQs.filters.missing_images}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Missing images
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="placeholder_only_images" value="1" defaultChecked={qs.filters.placeholder_only_images} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="placeholder_only_images"
+                  value="1"
+                  defaultChecked={listQs.filters.placeholder_only_images}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Placeholder-only
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="thin_pdp" value="1" defaultChecked={qs.filters.thin_pdp} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="thin_pdp"
+                  value="1"
+                  defaultChecked={listQs.filters.thin_pdp}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Thin PDP
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="missing_glove_attributes" value="1" defaultChecked={qs.filters.missing_glove_attributes} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="missing_glove_attributes"
+                  value="1"
+                  defaultChecked={listQs.filters.missing_glove_attributes}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Missing glove attrs
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="orphan_category" value="1" defaultChecked={qs.filters.orphan_category} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="orphan_category"
+                  value="1"
+                  defaultChecked={listQs.filters.orphan_category}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Orphan category
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="variant_issues" value="1" defaultChecked={qs.filters.variant_issues} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="variant_issues"
+                  value="1"
+                  defaultChecked={listQs.filters.variant_issues}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Variant issues
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="duplicate_warnings" value="1" defaultChecked={qs.filters.duplicate_warnings} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="duplicate_warnings"
+                  value="1"
+                  defaultChecked={listQs.filters.duplicate_warnings}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Duplicate warnings
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input type="checkbox" name="pending_match_reviews" value="1" defaultChecked={qs.filters.pending_match_reviews} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  name="pending_match_reviews"
+                  value="1"
+                  defaultChecked={listQs.filters.pending_match_reviews}
+                  className="rounded border-white/20 bg-[#181818] text-[#f06232] focus:ring-[#f06232]/40"
+                />
                 Pending match reviews
               </label>
             </div>
@@ -225,32 +345,32 @@ export default async function AdminProductsPage({
             <input type="hidden" name="limit" value={String(qs.limit)} />
             <button
               type="submit"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+              className="rounded-md bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d]"
             >
               Apply
             </button>
-            <Link href="/admin/products" className="text-xs text-gray-500 hover:text-gray-800">
+            <Link href="/admin/products" className="text-xs text-neutral-500 hover:text-[#f06232]">
               Reset
             </Link>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-neutral-500">
               {result.configured ? (
                 <>
-                  <span className="font-mono text-gray-800">{result.total}</span> matching
+                  <span className="font-mono text-neutral-300">{result.total}</span> matching
                 </>
               ) : null}
             </span>
           </div>
         </form>
 
-        <TableToolbar className="bg-gray-50 text-xs text-gray-500">
+        <TableToolbar variant="dark" className="text-neutral-400">
           <span>
-            Page <span className="font-mono text-gray-800">{qs.page}</span> of{" "}
-            <span className="font-mono text-gray-800">{totalPages}</span>
+            Page <span className="font-mono text-neutral-200">{qs.page}</span> of{" "}
+            <span className="font-mono text-neutral-200">{totalPages}</span>
           </span>
           <span className="ml-auto inline-flex gap-2">
             {qs.page > 1 ? (
               <Link
-                className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700 hover:bg-gray-50"
+                className="rounded border border-white/12 bg-[#1a1a1a] px-2 py-1 text-neutral-200 hover:border-[#f06232]/40 hover:text-white"
                 href={`/admin/products${buildQuery(baseQs, { page: String(qs.page - 1) })}`}
               >
                 Previous
@@ -258,7 +378,7 @@ export default async function AdminProductsPage({
             ) : null}
             {qs.page < totalPages ? (
               <Link
-                className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700 hover:bg-gray-50"
+                className="rounded border border-white/12 bg-[#1a1a1a] px-2 py-1 text-neutral-200 hover:border-[#f06232]/40 hover:text-white"
                 href={`/admin/products${buildQuery(baseQs, { page: String(qs.page + 1) })}`}
               >
                 Next
@@ -269,67 +389,90 @@ export default async function AdminProductsPage({
 
         {result.rows.length === 0 ? (
           <EmptyState
+            variant="dark"
             title="No products in this view"
-            description="Adjust filters or search to broaden the result."
+            description={
+              tab === "products"
+                ? "No published (active) products yet. Add a product as draft, then publish when category, image, and variant guards pass."
+                : "Adjust filters or search to broaden the result."
+            }
+            action={
+              tab === "products" ? (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Link
+                    href="/admin/products/new"
+                    className="inline-flex rounded-md bg-[#f06232] px-3 py-2 text-sm font-semibold text-white hover:bg-[#e5582d]"
+                  >
+                    Add first product
+                  </Link>
+                  <Link
+                    href="/admin/products/import/url"
+                    className="inline-flex rounded-md border border-white/15 px-3 py-2 text-sm text-neutral-200 hover:border-[#f06232]/40 hover:text-white"
+                  >
+                    Import from URL
+                  </Link>
+                </div>
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[1100px] w-full border-collapse text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+              <thead className="border-b border-white/10 bg-[#181818] text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
                 <tr>
-                  <th className="px-3 py-2">Image</th>
-                  <th className="px-3 py-2">Product</th>
-                  <th className="px-3 py-2">Brand</th>
-                  <th className="px-3 py-2">Category</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Visible</th>
-                  <th className="px-3 py-2">Variants</th>
-                  <th className="px-3 py-2">Images</th>
-                  <th className="px-3 py-2">PDP</th>
-                  <th className="px-3 py-2">Quote</th>
-                  <th className="px-3 py-2">Updated</th>
-                  <th className="px-3 py-2">Warnings</th>
+                  <th className="px-3 py-2.5">Image</th>
+                  <th className="px-3 py-2.5">Product</th>
+                  <th className="px-3 py-2.5">Brand</th>
+                  <th className="px-3 py-2.5">Category</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Visible</th>
+                  <th className="px-3 py-2.5">Variants</th>
+                  <th className="px-3 py-2.5">Images</th>
+                  <th className="px-3 py-2.5">PDP</th>
+                  <th className="px-3 py-2.5">Quote</th>
+                  <th className="px-3 py-2.5">Updated</th>
+                  <th className="px-3 py-2.5">Warnings</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white text-gray-900">
+              <tbody className="divide-y divide-white/[0.06] bg-[#141414] text-neutral-200">
                 {result.rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-blue-50/40">
+                  <tr key={row.id} className="transition-colors hover:bg-white/[0.04]">
                     <td className="px-3 py-2 align-middle">
-                      <Link href={`/admin/products/${row.id}`} className="block w-14 shrink-0">
+                      <Link href={`/admin/products/${row.id}`} className="block w-16 shrink-0">
                         <ProductImage
                           src={row.primaryImageUrl}
                           alt={row.name}
-                          containerClassName="!rounded-md !border-gray-200"
+                          containerClassName="!rounded-md !border-white/15 !bg-black/50"
                           loading="lazy"
                         />
                       </Link>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <Link href={`/admin/products/${row.id}`} className="font-medium text-blue-700 hover:underline">
+                      <Link href={`/admin/products/${row.id}`} className="font-medium text-[#f06232] hover:text-[#ff8a5c] hover:underline">
                         {row.name}
                       </Link>
-                      <div className="mt-0.5 font-mono text-[10px] text-gray-400">{row.id}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-neutral-600">{row.id}</div>
                     </td>
-                    <td className="px-3 py-2 align-top text-gray-700">{row.brandName ?? "—"}</td>
-                    <td className="px-3 py-2 align-top text-gray-700">{row.categoryName ?? "—"}</td>
+                    <td className="px-3 py-2 align-top text-neutral-300">{row.brandName ?? "—"}</td>
+                    <td className="px-3 py-2 align-top text-neutral-300">{row.categoryName ?? "—"}</td>
                     <td className="px-3 py-2 align-top">
                       <StatusBadge status={row.status === "active" ? "enabled" : row.status === "archived" ? "disabled" : "pending"} />
                     </td>
-                    <td className="px-3 py-2 align-top">{row.storefrontVisible ? "Yes" : "No"}</td>
-                    <td className="px-3 py-2 align-top font-mono text-gray-700">{row.activeVariantCount}</td>
-                    <td className="px-3 py-2 align-top text-gray-700">
+                    <td className="px-3 py-2 align-top text-neutral-400">{row.storefrontVisible ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 align-top font-mono text-neutral-300">{row.activeVariantCount}</td>
+                    <td className="px-3 py-2 align-top text-neutral-300">
                       {healthLabel(row)}
-                      <span className="text-gray-400"> ({row.imageCount})</span>
+                      <span className="text-neutral-600"> ({row.imageCount})</span>
                     </td>
-                    <td className="px-3 py-2 align-top text-gray-700">{pdpLabel(row)}</td>
-                    <td className="px-3 py-2 align-top">{row.quoteEnabled ? "Yes" : "No"}</td>
-                    <td className="px-3 py-2 align-top font-mono text-[10px] text-gray-500">
+                    <td className="px-3 py-2 align-top text-neutral-300">{pdpLabel(row)}</td>
+                    <td className="px-3 py-2 align-top text-neutral-400">{row.quoteEnabled ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 align-top font-mono text-[10px] text-neutral-500">
                       {row.updatedAt ? new Date(row.updatedAt).toISOString().slice(0, 10) : "—"}
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <span className="font-mono text-gray-800">{row.warnings.length}</span>
+                      <span className="font-mono text-neutral-200">{row.warnings.length}</span>
                       {row.warnings.length > 0 ? (
-                        <ul className="mt-1 max-w-[200px] list-inside list-disc text-[10px] text-amber-700">
+                        <ul className="mt-1 max-w-[200px] list-inside list-disc text-[10px] text-amber-400/95">
                           {row.warnings.slice(0, 3).map((w) => (
                             <li key={w.code}>{w.label}</li>
                           ))}
@@ -344,12 +487,15 @@ export default async function AdminProductsPage({
           </div>
         )}
 
-        {result.total > 0 && (withWarnings > 0) ? (
-          <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500">
-            <span className="font-mono text-amber-700">{withWarnings}</span> of {result.rows.length} rows on this page have governance warnings.
+        {result.total > 0 && withWarnings > 0 ? (
+          <div className="border-t border-white/10 bg-[#181818] px-4 py-2 text-xs text-neutral-500">
+            <span className="font-mono text-amber-400">{withWarnings}</span> of {result.rows.length} rows on this page have governance
+            warnings.
           </div>
         ) : null}
       </TableCard>
+        </>
+      ) : null}
     </div>
   );
 }
