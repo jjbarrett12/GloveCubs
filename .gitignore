@@ -1,6 +1,7 @@
 # Dependencies & build output
 **/node_modules/
 **/.next/
+storefront/tsconfig.tsbuildinfo
 
 # Local tooling (git worktrees / agent paths — never commit)
 .claude/worktrees/
