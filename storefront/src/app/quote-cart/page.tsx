@@ -117,7 +117,7 @@ export default function QuoteCartPage() {
       setCompany("");
       setNotes("");
     } catch {
-      setError("Network error. Your quote cart is unchanged — try again when you are back online.");
+      setError("Network error. Your quote request cart is unchanged — try again when you are back online.");
     } finally {
       setSubmitting(false);
     }
@@ -126,7 +126,7 @@ export default function QuoteCartPage() {
   return (
     <div>
       <main className="max-w-2xl mx-auto px-4 py-10 pb-28 md:pb-10">
-        <h1 className="text-3xl font-bold text-white mb-2">Quote cart</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Quote request cart</h1>
         <p className="text-white/60 text-sm mb-8">
           Request pricing for distributor review — not a checkout. We follow up on every saved request.
         </p>
@@ -168,7 +168,7 @@ export default function QuoteCartPage() {
 
         {hydrated && items.length === 0 && !done && (
           <p className="text-white/50 text-sm mb-6">
-            Your quote cart is empty.{" "}
+            Your quote request cart is empty.{" "}
             <Link href="/store" className="text-[hsl(var(--primary))] underline">
               Browse the store
             </Link>{" "}

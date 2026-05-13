@@ -17,7 +17,7 @@ const supabaseAdmin = new Proxy({} as SupabaseClient, {
 
 /** Same message as POST /admin/api/product-import (410). */
 export const PRODUCT_IMPORT_DEPRECATED =
-  "Product import has moved to CatalogOS. Please use the URL import dashboard.";
+  "Product import runs in the catalog sync service. Use Import from URL in admin.";
 
 // ============================================================================
 // TYPES

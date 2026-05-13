@@ -5,7 +5,7 @@ import { PageHeader, StatCard, StatGrid } from "@/components/admin";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Analytics | GloveCubs admin",
+  title: "Activity | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -20,8 +20,8 @@ export default async function AdminAnalyticsPage() {
   return (
     <div>
       <PageHeader
-        title="Analytics"
-        description="No charts or inferred KPIs yet — only counts already queried elsewhere in admin."
+        title="Activity"
+        description="High-level volume counts—the same figures you see on the dashboard. Deeper sales KPIs will layer in as reporting matures."
       />
 
       <StatGrid columns={3} className="mb-6">
@@ -31,11 +31,11 @@ export default async function AdminAnalyticsPage() {
       </StatGrid>
 
       <p className="text-sm text-gray-500">
-        Full catalog governance buckets:{" "}
+        Full catalog quality breakdown:{" "}
         <Link href="/admin/catalog" className="font-medium text-blue-700 hover:underline">
-          Catalog health
+          Catalog overview
         </Link>
-        . A future dashboard can join quote lines, opportunities, and coverage metrics — without synthetic traffic or revenue.
+        .
       </p>
     </div>
   );

@@ -4,7 +4,7 @@ import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 const CARDS = [
   {
     title: "B2B store",
-    body: "Browse active SKUs, thickness, and certifications. Add lines to your quote cart.",
+    body: "Browse active SKUs, thickness, and certifications. Add lines to your quote request cart.",
     href: "/store",
     cta: "Open store",
   },

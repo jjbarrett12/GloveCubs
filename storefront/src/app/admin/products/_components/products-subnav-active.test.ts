@@ -20,7 +20,7 @@ describe("products subnav active state", () => {
     expect(isProductsSubnavHrefActive("/admin/products/review", "/admin/products/import")).toBe(false);
   });
 
-  it("marks Review queue and Catalog health by prefix", () => {
+  it("marks Review & staging and Catalog quality by prefix", () => {
     expect(isProductsSubnavHrefActive("/admin/products/review", "/admin/products/review")).toBe(true);
     expect(isProductsSubnavHrefActive("/admin/products/review/x", "/admin/products/review")).toBe(true);
     expect(isProductsSubnavHrefActive("/admin/products/catalog-health", "/admin/products/catalog-health")).toBe(true);

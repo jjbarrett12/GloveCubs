@@ -196,8 +196,8 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 <Link
                   href="/quote-cart"
                   className="relative flex cursor-pointer items-center text-neutral-800"
-                  aria-label="Cart"
-                  title="Cart"
+                  aria-label="Quote request cart"
+                  title="Quote request cart"
                   onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                 >
                   <ShoppingCart className="h-6 w-6" />
@@ -286,7 +286,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
                         onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                       >
-                        Workspace
+                        Buyer workspace
                       </Link>
                     ) : null}
                     <button
@@ -304,8 +304,8 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
               <Link
                 href="/quote-cart"
                 className="relative order-2 hidden cursor-pointer items-center gap-1 text-neutral-800 lg:flex"
-                aria-label="Cart"
-                title="Cart"
+                aria-label="Quote request cart"
+                title="Quote request cart"
               >
                 <ShoppingCart className="h-6 w-6" />
               </Link>
@@ -629,7 +629,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                           className={navLinkClass}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
-                          Workspace
+                          Buyer workspace
                         </Link>
                       </li>
                     ) : null}

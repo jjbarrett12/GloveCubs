@@ -38,7 +38,7 @@ export default async function AdminLeadsPage() {
     <div>
       <PageHeader
         title="Quotes / Leads"
-        description="Recent rows from catalogos.quote_requests (newest 100)."
+        description="Recent quote requests (newest 100)."
       />
 
       {error ? (
@@ -51,7 +51,7 @@ export default async function AdminLeadsPage() {
         {rows.length === 0 ? (
           <EmptyState
             title="No quote requests yet"
-            description="Inbound quote requests will land here when they hit catalogos.quote_requests."
+            description="Inbound quote requests appear here as soon as buyers submit them from the storefront."
           />
         ) : (
           <div className="overflow-x-auto">

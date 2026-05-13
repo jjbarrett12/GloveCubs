@@ -16,7 +16,7 @@ export function ProductsCommandActions() {
           Import from URL
         </Link>
         <Link href="/admin/products/review" className={secondary}>
-          Review queue
+          Review & staging
         </Link>
       </div>
       <div className="flex flex-wrap gap-2 border-t border-slate-200/90 pt-3 sm:border-t-0 sm:pt-0">
@@ -24,10 +24,10 @@ export function ProductsCommandActions() {
           Export CSV
         </a>
         <Link href="/admin/products/import/jobs" className={secondary}>
-          Import jobs
+          Import activity
         </Link>
         <Link href="/admin/products/import/csv" className={secondary}>
-          CSV import (roadmap)
+          CSV (coming soon)
         </Link>
       </div>
     </div>

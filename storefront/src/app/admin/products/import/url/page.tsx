@@ -42,7 +42,7 @@ export default async function AdminProductsImportUrlPage() {
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
         title="Import from URL"
-        description="Clipboard staging writes to Supabase for operator review. CatalogOS crawl (supplier mode) still proxies upstream when online."
+        description="Paste supplier links for staging and review. Remote crawls run when catalog sync is online; clipboard staging works either way."
         breadcrumb={[
           { label: "Products", href: "/admin/products" },
           { label: "Import", href: "/admin/products/import" },
@@ -53,13 +53,13 @@ export default async function AdminProductsImportUrlPage() {
 
       {offline ? (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <strong className="font-semibold">CatalogOS offline.</strong> {conn.message} You can still use clipboard staging below.
+          <strong className="font-semibold">Catalog sync is offline.</strong> {conn.message} You can still use clipboard staging below.
         </div>
       ) : null}
 
       <div className="mb-6 flex flex-wrap gap-4 text-sm">
         <Link href="/admin/products/import/jobs" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
-          View import jobs
+          Import activity
         </Link>
         <span className="text-slate-300">|</span>
         <Link href="/admin/products" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
@@ -77,7 +77,7 @@ export default async function AdminProductsImportUrlPage() {
 
       {!offline && jobs.rows.length > 0 ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <span className="font-semibold text-slate-800">Recent CatalogOS jobs (sample):</span>{" "}
+          <span className="font-semibold text-slate-800">Recent import runs (sample):</span>{" "}
           {jobs.rows.map((j) => (
             <span key={j.id} className="ml-2 inline-block">
               <Link

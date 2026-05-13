@@ -4,7 +4,7 @@ import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 const FAQ_ITEMS: { q: string; a: string }[] = [
   {
     q: "Do you sell to consumers?",
-    a: "We are built for businesses buying by the case. Checkout is quote-first; a specialist may follow up on large or mixed orders.",
+    a: "We are built for businesses buying by the case. You start with a quote request; our team confirms cases, SKUs, and pricing before anything ships.",
   },
   {
     q: "How do I get distributor or volume pricing?",
@@ -12,7 +12,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
   },
   {
     q: "What is the AI Glove Finder?",
-    a: "It is our in-house wizard at /glove-finder. It recommends SKUs from your task, materials, and risk profile—then you can add selections to your quote workflow.",
+    a: "It is our in-house wizard at /glove-finder. It recommends SKUs from your task, materials, and risk profile—then you can add selections to your quote request flow.",
   },
   {
     q: "How does invoice upload work?",

@@ -12,11 +12,11 @@ export default async function CustomerTrustedSpendPage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Verified spend observations from governed invoice lines appear here. Lines not yet verified for your
-        organization are excluded. Illustrative — not a financial statement; not final pricing.
+        Invoice lines we have verified for your organization appear here. Others stay hidden until review finishes.
+        Illustrative—not a financial statement or final pricing.
       </p>
       {rows.length === 0 ? (
-        <p className="text-white/45">No verified spend observations yet.</p>
+        <p className="text-white/45">No verified spend lines yet.</p>
       ) : (
         <ul className="space-y-2 text-white/80">
           {rows.map((s) => (

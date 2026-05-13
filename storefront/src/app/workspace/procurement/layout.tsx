@@ -11,8 +11,8 @@ const nav = [
   { href: "/workspace/procurement/opportunities", label: "Approvals" },
   { href: "/workspace/procurement/alternates", label: "Alternates" },
   { href: "/workspace/procurement/reorder", label: "Reorder" },
-  { href: "/workspace/procurement/spend", label: "Spend record" },
-  { href: "/workspace/procurement/memory", label: "Supplier & product history" },
+  { href: "/workspace/procurement/spend", label: "Spend history" },
+  { href: "/workspace/procurement/memory", label: "Purchase history" },
   { href: "/workspace/procurement/timeline", label: "Activity" },
 ] as const;
 
@@ -28,11 +28,9 @@ export default async function CustomerProcurementLayout({ children }: { children
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <header className="mb-8 border-b border-white/10 pb-6">
-        <h1 className="text-lg font-semibold tracking-tight text-white/90">Procurement</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-white/90">Buyer workspace</h1>
         <p className="mt-1 text-sm text-white/60">
-          {
-            "Built around your organization's approved paths, reorder signals, and verified spend observations."
-          }
+          Track approvals, alternates, verified spend, and reorder shortcuts for your organization.
         </p>
         <nav className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
           {nav.map((n) => (

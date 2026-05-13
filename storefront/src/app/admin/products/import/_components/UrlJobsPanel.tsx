@@ -65,8 +65,8 @@ export function UrlJobsPanel({
     <TableCard>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Recent URL imports</h2>
-          <p className="text-sm text-slate-600">Live data from CatalogOS — no fabricated counts.</p>
+          <h2 className="text-base font-semibold text-slate-900">Recent import runs</h2>
+          <p className="text-sm text-slate-600">Live status from the import service—no placeholder numbers.</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="font-mono text-xs text-slate-500">
@@ -91,8 +91,8 @@ export function UrlJobsPanel({
 
       {jobs.length === 0 ? (
         <EmptyState
-          title={offline ? "CatalogOS not configured" : "No URL imports yet"}
-          description={offline ? "Configure CatalogOS to load URL import history." : "Start one above to see jobs here."}
+          title={offline ? "Catalog sync not configured" : "No import runs yet"}
+          description={offline ? "Finish catalog sync setup to load history." : "Start a crawl above to see runs here."}
         />
       ) : (
         <div className="overflow-x-auto">

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/admin";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Catalog health | GloveCubs admin",
+  title: "Catalog overview | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -14,8 +14,8 @@ export default async function AdminCatalogHealthPage() {
   return (
     <div>
       <PageHeader
-        title="Catalog governance buckets"
-        description="Operator observability for catalog quality. CatalogOS owns ingestion and resolution; this page does not write to the database. Each bucket is a count against canonical catalog_v2 and catalogos tables."
+        title="Catalog overview"
+        description="Quality signals for your published catalog—coverage, completeness, and readiness. Read-only counts; nothing on this page writes to the database."
       />
 
       {!configured ? (
@@ -44,9 +44,7 @@ export default async function AdminCatalogHealthPage() {
       </div>
 
       <p className="mt-6 text-xs text-gray-500">
-        Counts are bounded reads (limit 5,000–20,000 rows). For exact production audits, run the audit SQL listed in the
-        migration files (<code className="font-mono text-gray-700">supabase/migrations/20261111120000_*</code>,{" "}
-        <code className="font-mono text-gray-700">_120100</code>, <code className="font-mono text-gray-700">_120200</code>).
+        Counts are sampled for speed. For a full reconciliation export, use your reporting database or ask your data team—this screen is meant for day-to-day health checks.
       </p>
     </div>
   );

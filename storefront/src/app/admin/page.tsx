@@ -22,7 +22,7 @@ export default async function AdminDashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        description="Live operational counts from Supabase. Nothing estimated — only data the app already reads for catalog governance and intake."
+        description="Live counts from your connected data—quotes, pipeline, and catalog status. No estimates or sample data."
       />
 
       <PageSection title="At a glance">
@@ -59,8 +59,8 @@ export default async function AdminDashboardPage() {
       </PageSection>
 
       <PageSection
-        title="Catalog governance"
-        description="Bounded reads against canonical catalog_v2 and catalogos tables."
+        title="Catalog quality"
+        description="Snapshot of how complete and ready your published catalog is."
         actions={
           <Link
             href="/admin/catalog"
@@ -97,7 +97,7 @@ export default async function AdminDashboardPage() {
             className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
             href="/admin/products/review"
           >
-            Review queue
+            Review & staging
           </Link>
           <Link
             className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
@@ -109,13 +109,13 @@ export default async function AdminDashboardPage() {
             className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
             href="/admin/opportunities"
           >
-            Opportunities
+            Pipeline
           </Link>
           <Link
             className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
             href="/admin/procurement"
           >
-            Procurement
+            Sourcing
           </Link>
         </div>
       </PageSection>

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/admin";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Catalog health | Products | GloveCubs admin",
+  title: "Catalog quality | Products | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -14,8 +14,8 @@ export default async function AdminProductsCatalogHealthPage() {
   return (
     <div>
       <PageHeader
-        title="Catalog governance buckets"
-        description="Same counts as the standalone catalog health page — operator observability for catalog quality. Each bucket is a bounded read against canonical catalog_v2 and catalogos tables."
+        title="Catalog quality"
+        description="Same overview as the standalone catalog page—quick read on how complete and customer-ready your assortment is."
       />
 
       {!configured ? (
@@ -44,8 +44,7 @@ export default async function AdminProductsCatalogHealthPage() {
       </div>
 
       <p className="mt-6 text-xs text-gray-500">
-        Counts are bounded reads (limit 5,000–20,000 rows). For exact production audits, run the audit SQL listed in the
-        migration files.
+        Counts are sampled for speed. For a full reconciliation export, use your reporting tools or data team.
       </p>
     </div>
   );

@@ -8,7 +8,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "URL import jobs | GloveCubs admin",
+  title: "Import activity | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -42,12 +42,12 @@ export default async function AdminProductsImportJobsPage() {
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        title="URL import jobs"
-        description="CatalogOS-backed crawl jobs. Open a row to review extracted evidence before any publish step."
+        title="Import activity"
+        description="Open a run to inspect extracted lines before anything is published."
         breadcrumb={[
           { label: "Products", href: "/admin/products" },
           { label: "Import", href: "/admin/products/import" },
-          { label: "Jobs" },
+          { label: "Activity" },
         ]}
         actions={<StatusBadge status={connectionVariant(conn.status)} size="md" dot />}
       />
@@ -60,7 +60,7 @@ export default async function AdminProductsImportJobsPage() {
 
       {offline ? (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          <strong className="font-semibold">Ingestion offline.</strong> <span>{conn.message}</span>
+          <strong className="font-semibold">Catalog sync offline.</strong> <span>{conn.message}</span>
         </div>
       ) : null}
 

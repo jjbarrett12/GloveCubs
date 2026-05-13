@@ -36,33 +36,36 @@ export default function AdminSettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Environment signals safe to show operators (no secret values)."
+        description="Environment status for this deployment. Values are on/off only—no secrets are shown."
       />
 
       <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Authorization model</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who can use admin</h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-700">
-          Admin pages require a Supabase-authenticated user with an active row in{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-800">public.admin_users</code> where{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-800">id</code> equals{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-800">auth.users.id</code> (not a
-          separately generated UUID; email-only inserts will not match sign-in) and{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-800">is_active</code> is true. There
-          is no shared query-secret gate for normal navigation.
+          Admin is limited to team accounts that are explicitly enabled. If someone can sign in but cannot reach admin,
+          their profile likely is not on the allowlist yet—have an owner add them or confirm they are using the same
+          email as their invite.
         </p>
+        <details className="mt-4 rounded-md border border-gray-100 bg-gray-50/80 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-gray-700">Technical details (IT)</summary>
+          <p className="mt-2 text-xs leading-relaxed text-gray-600">
+            Access is tied to Supabase Auth plus an active row in the admin allowlist table keyed by the same user id
+            as sign-in. Email-only placeholders without that link will not match a live session.
+          </p>
+        </details>
       </section>
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <header className="border-b border-gray-200 bg-gray-50 px-4 py-3">
-          <h2 className="text-sm font-semibold text-gray-900">Environment</h2>
+          <h2 className="text-sm font-semibold text-gray-900">Integrations</h2>
         </header>
         <dl>
           <Row label="Deployment" value={deployEnv} on />
-          <Row label="Supabase client (public URL + anon)" value={supabasePublic ? "configured" : "not configured"} on={supabasePublic} />
-          <Row label="Supabase service role (server)" value={serviceConfigured ? "configured" : "not configured"} on={serviceConfigured} />
-          <Row label="CatalogOS internal URL (server import proxies)" value={catalogOsInternal ? "configured" : "not configured"} on={catalogOsInternal} />
-          <Row label="Internal API key (server)" value={internalKey ? "set" : "not set"} on={internalKey} />
-          <Row label="CatalogOS public URL" value={catalogOsPublic ? "configured" : "not configured"} on={catalogOsPublic} />
+          <Row label="Supabase (browser client)" value={supabasePublic ? "configured" : "not configured"} on={supabasePublic} />
+          <Row label="Supabase (server)" value={serviceConfigured ? "configured" : "not configured"} on={serviceConfigured} />
+          <Row label="Catalog sync service (internal URL)" value={catalogOsInternal ? "configured" : "not configured"} on={catalogOsInternal} />
+          <Row label="Server API key (imports)" value={internalKey ? "set" : "not set"} on={internalKey} />
+          <Row label="Catalog sync (public URL)" value={catalogOsPublic ? "configured" : "not configured"} on={catalogOsPublic} />
         </dl>
       </section>
     </div>

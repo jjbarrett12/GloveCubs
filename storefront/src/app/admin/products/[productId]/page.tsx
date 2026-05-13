@@ -179,12 +179,12 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
 
       <PageSection
         title="Product quality"
-        description={`Attribute rows (catalogos): ${data.attributeRowCount ?? 0}`}
+        description={`Attribute rows on file: ${data.attributeRowCount ?? 0}`}
       >
         <div className={panel}>
           <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
             {(data.warnings ?? []).length === 0 ? (
-              <li className="text-slate-500">No governance warnings for this product.</li>
+              <li className="text-slate-500">No data-quality warnings for this product.</li>
             ) : (
               (data.warnings ?? []).map((w) => (
                 <li key={w.code} className="text-amber-900">
@@ -235,7 +235,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
         </div>
       </PageSection>
 
-      <PageSection title="CatalogOS" description="Read-only links. No ingestion or mutations from this console.">
+      <PageSection title="Catalog sync tools" description="Read-only shortcuts. No ingestion or edits from this page.">
         <div className={panel}>
           <ul className="list-inside list-disc space-y-2 text-sm text-slate-700">
             {catalogosBase ? (
@@ -247,7 +247,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
                     rel="noopener noreferrer"
                     className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
                   >
-                    Open CatalogOS (URL import)
+                    Open catalog sync — URL import
                   </a>
                 </li>
                 <li>
@@ -257,7 +257,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
                     rel="noopener noreferrer"
                     className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
                   >
-                    CatalogOS home
+                    Catalog sync home
                   </a>
                 </li>
               </>
@@ -275,7 +275,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
 
       <p className="text-sm text-slate-600">
         <Link href="/admin/catalog" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
-          Catalog health buckets
+          Catalog overview
         </Link>
         {" · "}
         <Link href="/admin/products" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">

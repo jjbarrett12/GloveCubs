@@ -124,7 +124,7 @@ export default async function AdminProductsPage({
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-8">
       <PageHeader
         title="Products"
-        description="Manage catalog parents, variants, and media. Clipboard URL staging never auto-publishes. Use Import from URL tools or CatalogOS for deeper crawls."
+        description="Manage parents, variants, and media. Clipboard staging never auto-publishes; use Import for deeper supplier URL runs."
         actions={
           <div className="flex flex-col items-stretch gap-2 sm:items-end">
             <ProductsCommandActions />
@@ -135,7 +135,7 @@ export default async function AdminProductsPage({
                 rel="noopener noreferrer"
                 className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
               >
-                Open CatalogOS URL import
+                Open catalog sync (URL import)
               </a>
             ) : null}
           </div>
@@ -168,7 +168,7 @@ export default async function AdminProductsPage({
             <Link href="/admin/products/import/url" className="font-semibold text-[#e5582d] underline decoration-[#f06232]/40 underline-offset-2 hover:text-[#c2410c]">
               Import from URL (tools)
             </Link>{" "}
-            or CatalogOS.
+            or Catalog sync tools.
           </div>
           {isUrlImports ? (
             <ClipboardUrlStagingClient categories={stagingCategories} initialRows={stagingRows} />

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader, EmptyState } from "@/components/admin";
 
 export const metadata = {
-  title: "CSV import roadmap | GloveCubs admin",
+  title: "CSV import (coming soon) | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -10,8 +10,8 @@ export default function AdminProductsImportCsvPage() {
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        title="CSV import (roadmap)"
-        description="Spreadsheet ingestion is not wired in the storefront yet. Export the current catalog grid as CSV from Products; feed mapping stays a CatalogOS roadmap item."
+        title="CSV import (coming soon)"
+        description="Spreadsheet uploads will land here in a future release. Until then, export your catalog from Products or use URL import."
         breadcrumb={[
           { label: "Products", href: "/admin/products" },
           { label: "Import", href: "/admin/products/import" },
@@ -25,14 +25,14 @@ export default function AdminProductsImportCsvPage() {
         </Link>
         <span className="mx-2 text-slate-300">|</span>
         <Link href="/admin/products/import/jobs" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
-          View import jobs
+          Import activity
         </Link>
       </div>
 
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80">
         <EmptyState
-          title="CSV import not wired here yet"
-          description="Use URL clipboard staging or CatalogOS ingestion for now. Export the current grid as CSV from Products when you need a baseline file."
+          title="CSV import is not available in this console yet"
+          description="Use URL import and Review & staging for now. Export the current grid as CSV from Products when you need a baseline file."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Link

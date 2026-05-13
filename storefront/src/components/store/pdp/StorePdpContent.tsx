@@ -29,7 +29,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                 Store
               </Link>
               <Link href="/quote-cart" className="text-white/80 hover:text-white">
-                Quote cart
+                Quote request cart
               </Link>
             </nav>
           </div>
@@ -70,15 +70,9 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                   ) : null}
                   <h1 className="text-xl font-black leading-tight tracking-tight text-white sm:text-2xl">{detail.name}</h1>
                   <dl className="grid gap-1 text-[11px] text-white/55 sm:grid-cols-2">
-                    {detail.internalSku ? (
-                      <>
-                        <dt className="text-white/40">Internal SKU</dt>
-                        <dd className="font-mono text-white/80">{detail.internalSku}</dd>
-                      </>
-                    ) : null}
                     {detail.defaultVariant?.variant_sku ? (
                       <>
-                        <dt className="text-white/40">Default variant SKU</dt>
+                        <dt className="text-white/40">SKU</dt>
                         <dd className="font-mono text-white/80">{detail.defaultVariant.variant_sku}</dd>
                       </>
                     ) : null}
@@ -127,7 +121,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                       <thead className="border-b border-white/10 bg-black/30 text-[10px] uppercase tracking-wide text-white/45">
                         <tr>
                           <th className="px-3 py-2 font-semibold">Size</th>
-                          <th className="px-3 py-2 font-semibold">Variant SKU</th>
+                          <th className="px-3 py-2 font-semibold">SKU</th>
                           <th className="px-3 py-2 font-semibold">Quote</th>
                         </tr>
                       </thead>
@@ -226,7 +220,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
 
             <aside className="hidden min-w-0 space-y-3 lg:block">
               <div className="sticky top-24 space-y-3 rounded-xl border border-white/10 bg-[#141414] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Procurement</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Add to quote</p>
                 {primaryQuoteProduct ? <AddToQuoteButton product={primaryQuoteProduct} /> : null}
                 <ButtonRequestPricingLink className="w-full" />
               </div>

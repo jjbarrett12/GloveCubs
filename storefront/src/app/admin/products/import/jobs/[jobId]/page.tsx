@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/admin";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "URL import job | GloveCubs admin",
+  title: "Import job | GloveCubs admin",
   robots: { index: false, follow: false },
 };
 
@@ -34,7 +34,7 @@ export default async function AdminProductsImportJobDetailPage({
     });
     if (res.ok) {
       initial = adaptUrlImportJobDetail(res.data);
-      if (!initial) loadError = "CatalogOS returned an unexpected job detail shape.";
+      if (!initial) loadError = "Import service returned an unexpected job shape.";
     } else {
       loadError = res.error.message;
     }
@@ -43,13 +43,13 @@ export default async function AdminProductsImportJobDetailPage({
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
-        title="URL import job"
-        description={idValid ? `Job ${jobId}` : "Invalid job id"}
+        title="Import run"
+        description={idValid ? `Run ${jobId}` : "Invalid run id"}
         breadcrumb={[
           { label: "Products", href: "/admin/products" },
           { label: "Import", href: "/admin/products/import" },
-          { label: "Jobs", href: "/admin/products/import/jobs" },
-          { label: "Job detail" },
+          { label: "Activity", href: "/admin/products/import/jobs" },
+          { label: "Detail" },
         ]}
       />
 
@@ -59,7 +59,7 @@ export default async function AdminProductsImportJobDetailPage({
         </div>
       ) : offline ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          <strong className="font-semibold">Ingestion offline.</strong> <span>{conn.message}</span>
+          <strong className="font-semibold">Catalog sync offline.</strong> <span>{conn.message}</span>
         </div>
       ) : loadError && !initial ? (
         <UrlJobDetailClient jobId={jobId} initial={null} />

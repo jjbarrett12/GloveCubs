@@ -102,9 +102,9 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
       aria-label="URL import"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-4">
-        <h2 className="text-lg font-semibold text-slate-900">CatalogOS URL crawl</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Supplier URL crawl</h2>
         <p className="text-sm text-slate-600">
-          Storefront only proxies. CatalogOS runs the crawl and extraction.
+          This console starts the job; extraction runs in the catalog sync service.
         </p>
       </div>
 
@@ -215,7 +215,7 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
           {submitting ? "Starting…" : "Start URL import"}
         </button>
         <p className="text-sm text-slate-600">
-          The crawl runs synchronously inside CatalogOS; this may take up to a few minutes for category crawls.
+          Large category crawls can take a few minutes; keep this tab open until the run finishes.
         </p>
       </div>
     </form>

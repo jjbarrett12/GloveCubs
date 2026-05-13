@@ -115,7 +115,7 @@ function ExtractedProductCard({
             {product.confidence != null ? (
               <span
                 className="font-mono text-xs text-slate-500"
-                title="Extraction confidence reported by CatalogOS"
+                title="Extraction confidence from import service"
               >
                 conf {(product.confidence * 100).toFixed(0)}%
                 {product.aiUsed ? " · AI" : ""}
@@ -263,14 +263,14 @@ function BridgeActionBar({
             onClick={onBridge}
             disabled={disabled}
             className="rounded-md bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:cursor-not-allowed disabled:opacity-50"
-            title="Stages selected rows for CatalogOS review. Does not publish."
+            title="Stages selected rows for upstream review. Does not publish."
           >
             {result.kind === "submitting" ? "Bridging…" : "Send selected to review queue"}
           </button>
         </div>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        This does not publish products. It stages selected extracted rows for CatalogOS review.
+        This does not publish products. It stages selected extracted rows for the catalog sync review path.
       </p>
     </div>
   );
@@ -325,7 +325,7 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
   if (!detail) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-        Job <span className="font-mono">{jobId}</span> could not be loaded from CatalogOS. {error ? <span>{error}</span> : null}
+        Run <span className="font-mono">{jobId}</span> could not be loaded from the import service. {error ? <span>{error}</span> : null}
         <div className="mt-2">
           <button
             type="button"
@@ -475,7 +475,7 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
 
       {bridge.kind === "ok" ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-          Sent to CatalogOS review queue.
+          Sent to catalog sync review.
           {bridge.batchId ? (
             <span className="ml-1">
               Batch <span className="font-mono">{bridge.batchId}</span>
@@ -506,8 +506,8 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
             title={isTerminal ? "No extracted products" : "Crawl in progress"}
             description={
               isTerminal
-                ? "CatalogOS returned no extracted products for this job."
-                : "Extracted products will appear here as CatalogOS produces them."
+                ? "No extracted products were returned for this run."
+                : "Extracted products will appear here as the import service finishes each page."
             }
           />
         </div>

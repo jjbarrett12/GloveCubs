@@ -90,7 +90,7 @@ export function HomeReorderSimplificationSection() {
               Keep the same story on repeat buys
             </h2>
             <p className="mb-6 text-base leading-relaxed text-white/75">
-              Once you have approved lines, your quote cart and bulk request tools carry the same SKUs forward—so monthly restocks
+              Once you have approved lines, your quote request cart and bulk request tools carry the same SKUs forward—so monthly restocks
               do not start from a blank spreadsheet.
             </p>
             <ul className="space-y-3 text-sm leading-relaxed text-white/85">

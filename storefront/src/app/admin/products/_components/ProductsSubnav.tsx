@@ -7,8 +7,8 @@ import { isProductsSubnavHrefActive } from "./products-subnav-active";
 const ITEMS: { href: string; label: string }[] = [
   { href: "/admin/products", label: "All products" },
   { href: "/admin/products/import", label: "Import" },
-  { href: "/admin/products/review", label: "Review queue" },
-  { href: "/admin/products/catalog-health", label: "Catalog health" },
+  { href: "/admin/products/review", label: "Review & staging" },
+  { href: "/admin/products/catalog-health", label: "Catalog quality" },
 ];
 
 export function ProductsSubnav() {

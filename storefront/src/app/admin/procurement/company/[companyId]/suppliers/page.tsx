@@ -10,9 +10,9 @@ export default async function ProcurementSuppliersPage({ params }: { params: { c
     return (
       <div>
         <PageHeader
-          title="Supplier observation summary"
+          title="Supplier activity"
           breadcrumb={[
-            { label: "Procurement", href: "/admin/procurement" },
+            { label: "Sourcing", href: "/admin/procurement" },
             { label: "Company", href: `/admin/procurement/company/${companyId}` },
             { label: "Suppliers" },
           ]}
@@ -29,10 +29,10 @@ export default async function ProcurementSuppliersPage({ params }: { params: { c
   return (
     <div>
       <PageHeader
-        title="Supplier observation summary"
-        description="Bounded scan of recent trusted observations — operational summary only."
+        title="Supplier activity"
+        description="Recent verified supplier touchpoints from invoice data—summary only."
         breadcrumb={[
-          { label: "Procurement", href: "/admin/procurement" },
+          { label: "Sourcing", href: "/admin/procurement" },
           { label: "Company", href: `/admin/procurement/company/${companyId}` },
           { label: "Suppliers" },
         ]}
@@ -41,13 +41,13 @@ export default async function ProcurementSuppliersPage({ params }: { params: { c
       <PageSection>
         <TableCard>
           {rows.length === 0 ? (
-            <EmptyState title="No data" description="No supplier observations in the current scan window." />
+            <EmptyState title="No supplier rows yet" description="Nothing in the current scan window for this account." />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">CatalogOS supplier</th>
+                    <th className="p-3">Supplier ID</th>
                     <th className="p-3 text-right">Rows (in scan)</th>
                     <th className="p-3">Last observed</th>
                   </tr>

@@ -13,8 +13,8 @@ export default async function CustomerApprovedOpportunitiesPage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Each row is a SourceIt-reviewed approval for your organization, tied to governed observations from verified spend.
-        Economics are illustrative on the stated basis UOM — not a commitment or final pricing.
+        Each row is a reviewed approval for your organization, tied to verified spend from your invoices. Economics are
+        illustrative on the stated basis UOM—not a commitment or final pricing.
       </p>
       {rows.length === 0 ? (
         <p className="text-white/45">No active approvals right now.</p>

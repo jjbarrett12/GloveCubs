@@ -43,7 +43,7 @@ const NAV_MAIN: NavItem[] = [
   },
   {
     href: "/admin/opportunities",
-    label: "Opportunities",
+    label: "Pipeline",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
@@ -55,7 +55,7 @@ const NAV_MAIN: NavItem[] = [
 const NAV_MORE: NavItem[] = [
   {
     href: "/admin/procurement",
-    label: "Procurement",
+    label: "Sourcing",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
@@ -64,7 +64,7 @@ const NAV_MORE: NavItem[] = [
   },
   {
     href: "/admin/analytics",
-    label: "Analytics",
+    label: "Activity",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
@@ -200,7 +200,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
       <aside className="hidden w-[220px] shrink-0 flex-col border-r border-slate-200/90 bg-white lg:flex">
         <div className="flex h-14 items-center border-b border-slate-100 px-3">{brandBlock}</div>
         <div className="flex-1 overflow-y-auto px-2 py-4">
-          <NavBlock title="Commerce" items={NAV_MAIN} pathname={pathname} />
+          <NavBlock title="Sales & catalog" items={NAV_MAIN} pathname={pathname} />
           <NavBlock title="Operations" items={NAV_MORE} pathname={pathname} />
         </div>
         <div className="border-t border-slate-100 p-3">
@@ -212,7 +212,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
               href="/store"
               className="rounded-md px-2 py-1.5 text-center text-xs font-medium text-slate-600 ring-1 ring-slate-200/90 hover:bg-slate-50"
             >
-              View storefront
+              View store
             </Link>
             <button
               type="button"
@@ -257,7 +257,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
               {identity}
             </span>
             <Link href="/store" className="shrink-0 font-medium text-slate-600 hover:text-slate-900">
-              Storefront
+              Store
             </Link>
             <button
               type="button"
@@ -270,11 +270,10 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
           </div>
         </header>
 
-        <div className="border-b border-amber-200/70 bg-amber-50/90">
+        <div className="border-b border-slate-200/80 bg-slate-50/90">
           <div className="mx-auto max-w-[1400px] px-4 py-2.5 sm:px-6 lg:px-10">
-            <p className="text-sm leading-snug text-amber-950/90">
-              Internal workspace. Access requires an active <code className="rounded bg-amber-100/80 px-1 font-mono text-amber-950">admin_users</code>{" "}
-              record. Catalog changes follow your published governance rules.
+            <p className="text-sm leading-snug text-slate-700">
+              Signed-in operators only. Product edits here follow your team&apos;s publishing rules.
             </p>
           </div>
         </div>
@@ -305,7 +304,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-2 py-3">
-              <NavBlock title="Commerce" items={NAV_MAIN} pathname={pathname} onNavigate={closeMobile} />
+              <NavBlock title="Sales & catalog" items={NAV_MAIN} pathname={pathname} onNavigate={closeMobile} />
               <NavBlock title="Operations" items={NAV_MORE} pathname={pathname} onNavigate={closeMobile} />
             </div>
             <div className="border-t border-slate-100 p-3">
@@ -324,7 +323,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
                   onClick={closeMobile}
                   className="rounded-md px-2 py-1.5 text-center text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
                 >
-                  View storefront
+                  View store
                 </Link>
                 <button
                   type="button"

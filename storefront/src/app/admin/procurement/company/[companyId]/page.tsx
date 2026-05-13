@@ -8,7 +8,7 @@ export default async function ProcurementCompanyHubPage({ params }: { params: { 
   const links: { href: string; label: string; description: string }[] = [
     {
       href: `/admin/procurement/company/${companyId}/queue`,
-      label: "Recommendation review queue",
+      label: "Savings recommendations",
       description: "Review and approve savings recommendations for this company.",
     },
     {
@@ -18,18 +18,18 @@ export default async function ProcurementCompanyHubPage({ params }: { params: { 
     },
     {
       href: `/admin/procurement/company/${companyId}/spend`,
-      label: "Trusted spend history",
-      description: "Observed unit prices and quantities from trusted invoice lines.",
+      label: "Verified spend history",
+      description: "Observed unit prices and quantities from verified invoice lines.",
     },
     {
       href: `/admin/procurement/company/${companyId}/suppliers`,
-      label: "Supplier observation summary",
-      description: "Bounded scan of recent trusted observations by CatalogOS supplier.",
+      label: "Supplier activity",
+      description: "Recent supplier touchpoints from verified invoice data.",
     },
     {
       href: `/admin/procurement/company/${companyId}/reorder`,
-      label: "Reorder memory",
-      description: "Active reorder memory rows and retire actions when anchored.",
+      label: "Reorder list",
+      description: "Active reorder shortcuts and retire actions for this account.",
     },
   ];
 
@@ -39,7 +39,7 @@ export default async function ProcurementCompanyHubPage({ params }: { params: { 
         title="Company workspace"
         description={companyId}
         breadcrumb={[
-          { label: "Procurement", href: "/admin/procurement" },
+          { label: "Sourcing", href: "/admin/procurement" },
           { label: "Company" },
         ]}
       />

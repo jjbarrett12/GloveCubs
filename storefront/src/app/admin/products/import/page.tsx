@@ -53,7 +53,7 @@ export default async function AdminProductsImportPage() {
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
       <PageHeader
         title="Product import"
-        description="Run CatalogOS crawls, stage clipboard URLs for review, or export the catalog grid. Publishing stays a guarded database step."
+        description="Bring in new items from supplier URLs, track import runs, or export your grid for offline work. Publishing always stays operator-controlled."
         actions={<StatusBadge status={connectionVariant(conn.status)} size="md" dot />}
       />
 
@@ -63,34 +63,34 @@ export default async function AdminProductsImportPage() {
           className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
           <div className="text-sm font-semibold text-slate-900">Import from URL</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">Stage, review, then publish; CatalogOS crawl when online.</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">Paste links, stage rows for review, then promote to drafts when ready.</p>
         </Link>
         <Link
           href="/admin/products/import/jobs"
           className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
-          <div className="text-sm font-semibold text-slate-900">Import jobs</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">Monitor queued, running, and completed crawls.</p>
+          <div className="text-sm font-semibold text-slate-900">Import activity</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">See queued, running, and finished import runs.</p>
         </Link>
         <Link
           href="/admin/products/import/csv"
           className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
         >
-          <div className="text-sm font-semibold text-slate-900">CSV import (roadmap)</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">Feed mapper not in storefront yet—export grid CSV from Products today.</p>
+          <div className="text-sm font-semibold text-slate-900">CSV import (coming soon)</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">Spreadsheet ingest is not in this console yet—export CSV from Products for now.</p>
         </Link>
       </div>
 
       {offline ? (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          <strong className="font-semibold">Ingestion offline — configure CatalogOS connection.</strong>{" "}
+          <strong className="font-semibold">Catalog sync is offline.</strong>{" "}
           <span>{conn.message}</span>
         </div>
       ) : null}
 
       <StatGrid columns={4} className="mb-8 gap-4">
         <StatCard
-          label="CatalogOS"
+          label="Catalog sync"
           value={conn.status === "online" ? "Online" : conn.status === "misconfigured" ? "Misconfigured" : "Offline"}
           color={conn.status === "online" ? "green" : conn.status === "misconfigured" ? "amber" : "red"}
           accentBorder
@@ -111,8 +111,9 @@ export default async function AdminProductsImportPage() {
       </StatGrid>
 
       <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-        <strong className="text-slate-900">Storefront admin does not write canonical products directly.</strong>{" "}
-        CatalogOS owns extraction, matching, staging, and publish. This page only orchestrates operator actions.
+        <strong className="text-slate-900">Imports are staged first.</strong>{" "}
+        Heavy extraction and matching run in the catalog sync service; this console is where your team reviews, approves,
+        and publishes.
       </div>
 
       <div className="mb-6">
@@ -127,22 +128,22 @@ export default async function AdminProductsImportPage() {
         <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
           <h3 className="text-sm font-semibold text-slate-900">CSV / spreadsheet import</h3>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Upload feeds, map columns, and preview standardized rows before staging. Handled in CatalogOS ingestion pipelines.
+            Upload feeds, map columns, and preview rows before they hit the catalog. Planned for a future release.
           </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Roadmap</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Coming soon</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-          <h3 className="text-sm font-semibold text-slate-900">Publish from review queue</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Publish from review</h3>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Operator review and guarded publish into canonical catalog. CatalogOS publish-service rules apply.
+            Operator review with publish checks stays the gate for anything customer-facing.
           </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Roadmap</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">In progress</p>
         </div>
       </section>
 
       <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-        <ImportStatusBadge status="completed" /> indicates CatalogOS finished a crawl. Bridge sends selected rows to CatalogOS for upstream
-        review. The storefront <strong className="text-slate-800">Review queue</strong> lists <strong className="text-slate-800">clipboard URL staging</strong> in Supabase—not CatalogOS batch rows. Storefront never writes canonical products.
+        <ImportStatusBadge status="completed" /> marks a finished remote crawl. Use <strong className="text-slate-800">Review &amp; staging</strong>{" "}
+        for URL clipboard rows stored here; deep crawl batches open from each import run detail.
       </p>
     </div>
   );

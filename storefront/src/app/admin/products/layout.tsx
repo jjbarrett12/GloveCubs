@@ -1,8 +1,8 @@
 import { ProductsSubnav } from "./_components/ProductsSubnav";
 
 /**
- * Production launch scope (storefront): catalog_v2 CRUD, URL clipboard staging + review queue,
- * quote/RFQ paths, CSV export. Excludes CSV import mapper and CatalogOS batch review grid until wired upstream.
+ * Production launch scope (storefront): catalog_v2 CRUD, URL clipboard staging + review,
+ * quote/RFQ paths, CSV export. CSV bulk mapper and remote batch review grid remain future work.
  */
 export default function AdminProductsModuleLayout({ children }: { children: React.ReactNode }) {
   return (

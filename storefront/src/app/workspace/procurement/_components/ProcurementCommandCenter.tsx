@@ -23,11 +23,10 @@ function ProcurementPageHeader(props: { companyLabel: string }) {
   return (
     <div className="flex flex-col gap-3 border-b border-white/10 pb-6 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-white/45">Procurement</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-white/45">Buyer workspace</p>
         <h2 className="mt-1 text-base font-semibold tracking-tight text-white/90">{props.companyLabel}</h2>
         <p className="mt-1 max-w-xl text-sm text-white/55">
-          Command center for SourceIt-reviewed alternates, verified spend, and reorder context. Numbers come from
-          governed observations — they are illustrative, not a price commitment.
+          Snapshot of approved alternates, verified invoice spend, and reorder shortcuts. Figures help your team plan—they are not a live quote or checkout total.
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
@@ -291,8 +290,8 @@ function ReorderSection(props: { rows: CustomerReorderRowDto[] }) {
         <div className="mt-3">
           <EmptyState
             title="No reorder shortcuts yet"
-            body="Reorder items come from verified purchase history. After verified spend or approved paths, shortcuts can appear here."
-            action={{ href: "/workspace/procurement/reorder", label: "Reorder workspace" }}
+            body="Reorder shortcuts appear after we have verified spend or approved alternates on file for your team."
+            action={{ href: "/workspace/procurement/reorder", label: "Open reorder list" }}
           />
         </div>
       </section>
@@ -354,7 +353,7 @@ function SpendPreviewTable(props: { rows: CustomerTrustedSpendRowDto[] }) {
         <div className="mt-3">
           <EmptyState
             title="No verified spend on file"
-            body="Trusted observations appear after invoices are matched and governed. An empty list is normal until that work completes."
+            body="Verified lines appear after invoices are matched and reviewed. An empty list is normal until that work completes."
             action={{ href: "/invoice-savings", label: "Submit spend signal" }}
           />
         </div>
@@ -365,7 +364,7 @@ function SpendPreviewTable(props: { rows: CustomerTrustedSpendRowDto[] }) {
   return (
     <section aria-label="Spend on record">
       <h3 className="text-sm font-medium text-white/90">Spend on record</h3>
-      <p className="mt-1 text-xs text-white/45">Recent trusted price observations — not a financial statement.</p>
+      <p className="mt-1 text-xs text-white/45">Recent verified unit pricing from invoices—not a financial statement.</p>
       <div className="mt-3 overflow-x-auto rounded-lg border border-white/10">
         <table className="w-full min-w-[520px] border-collapse text-left text-xs">
           <caption className="sr-only">
@@ -455,8 +454,8 @@ function QuietStatsRail(props: {
 function TrustDisclaimerBlock() {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-xs leading-relaxed text-white/45">
-      Economics use trusted invoice observations on a declared basis UOM. They help your team decide — they are not a
-      quote, contract, or price guarantee. Questions belong with your procurement contact.
+      Economics reflect verified invoice data on the unit of measure shown. They help your team compare options—they are
+      not a quote, contract, or price guarantee. Reach your GloveCubs contact with questions.
     </div>
   );
 }

@@ -10,8 +10,7 @@ export function HomeReorderAccountBand() {
             Buying again next month?
           </h2>
           <p className="mt-1 max-w-xl text-sm text-white/65">
-            Use your business account for a stable entry point—quotes, cart, and (when enabled) your organization workspace stay
-            under one sign-in.
+            Use your business account for quotes, the catalog, and (when enabled) your buyer workspace under one sign-in.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
