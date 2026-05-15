@@ -94,7 +94,7 @@ export default async function AdminOrdersPage({
     <div>
       <PageHeader
         title="Order records"
-        description="Canonical gc_commerce order headers and line counts for validation. May include migrated legacy history. These are database records—not finance-approved totals or margin reporting."
+        description="Canonical gc_commerce order headers and line counts for validation. May include migrated legacy history. These are database records—not finance-approved totals for downstream reporting."
       />
 
       <PageSection title="Filters">

@@ -7,8 +7,14 @@ import {
   assertCustomerCompanyAccess,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
-import { fetchBuyerOrderDetailForCompany, isGcOrderHistoryEnabled } from "@/lib/account/buyer-orders-read-model";
+import {
+  fetchBuyerOrderDetailForCompany,
+  isGcOrderHistoryEnabled,
+  isGcReorderToQuoteEnabled,
+  isGcReorderToQuoteFlagOnly,
+} from "@/lib/account/buyer-orders-read-model";
 import { formatMinorAmount } from "@/lib/admin/admin-orders-read-model";
+import { AccountReorderToQuoteClient } from "./AccountReorderToQuoteClient";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +45,7 @@ export default async function AccountOrderDetailPage({ params }: { params: { ord
     notFound();
   }
 
-  if (!isGcOrderHistoryEnabled()) {
+  if (!isGcOrderHistoryEnabled() && !isGcReorderToQuoteFlagOnly()) {
     redirect("/account/orders");
   }
 
@@ -147,7 +153,7 @@ export default async function AccountOrderDetailPage({ params }: { params: { ord
               </thead>
               <tbody>
                 {lines.map((ln) => (
-                  <tr key={`${ln.line_number}-${ln.sellable_product_id}`} className="border-b border-white/5 last:border-0">
+                  <tr key={ln.id} className="border-b border-white/5 last:border-0">
                     <td className="px-3 py-2 font-mono text-xs text-white/80">{ln.line_number}</td>
                     <td className="px-3 py-2 tabular-nums text-white/80">{ln.quantity}</td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-white/70">{ln.unit_price_minor}</td>
@@ -169,6 +175,21 @@ export default async function AccountOrderDetailPage({ params }: { params: { ord
             </details>
           ) : null}
         </section>
+
+        {isGcReorderToQuoteEnabled() && lines.length > 0 ? (
+          <AccountReorderToQuoteClient
+            orderId={h.id}
+            orderNumber={h.order_number}
+            currencyCode={h.currency_code}
+            lines={lines.map((ln) => ({
+              id: ln.id,
+              lineNumber: ln.line_number,
+              quantity: ln.quantity,
+              unitPriceMinor: ln.unit_price_minor,
+              label: snapshotSummary(ln.product_snapshot),
+            }))}
+          />
+        ) : null}
       </main>
     </div>
   );

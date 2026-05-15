@@ -32,6 +32,7 @@ export type BuyerOrderHeaderDto = {
 };
 
 export type BuyerOrderLineDto = {
+  id: string;
   line_number: number;
   quantity: number;
   unit_price_minor: number;
@@ -163,7 +164,7 @@ export async function fetchBuyerOrderDetailForCompany(
   const { data: linesRaw, error: lErr } = await supabase
     .schema("gc_commerce")
     .from("order_lines")
-    .select("line_number, quantity, unit_price_minor, line_subtotal_minor, discount_minor, tax_minor, total_minor, sellable_product_id, product_snapshot")
+    .select("id, line_number, quantity, unit_price_minor, line_subtotal_minor, discount_minor, tax_minor, total_minor, sellable_product_id, product_snapshot")
     .eq("order_id", orderId)
     .order("line_number", { ascending: true });
 
@@ -174,6 +175,7 @@ export async function fetchBuyerOrderDetailForCompany(
   const lines: BuyerOrderLineDto[] = (linesRaw ?? []).map((row: Record<string, unknown>) => {
     const snap = row.product_snapshot && typeof row.product_snapshot === "object" ? (row.product_snapshot as Record<string, unknown>) : {};
     return {
+      id: String(row.id),
       line_number: Number(row.line_number),
       quantity: Number(row.quantity),
       unit_price_minor: Number(row.unit_price_minor),
@@ -192,4 +194,19 @@ export async function fetchBuyerOrderDetailForCompany(
 export function isGcOrderHistoryEnabled(): boolean {
   const v = process.env.FEATURE_GC_ORDER_HISTORY?.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+function envTruthy(raw: string | undefined): boolean {
+  const v = raw?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+/** Buyer reorder-to-quote API + UI (still requires authenticated company gate on routes). */
+export function isGcReorderToQuoteEnabled(): boolean {
+  return isGcOrderHistoryEnabled() || envTruthy(process.env.FEATURE_GC_REORDER_TO_QUOTE);
+}
+
+/** True when reorder flag alone is on (order history flag may be off). */
+export function isGcReorderToQuoteFlagOnly(): boolean {
+  return !isGcOrderHistoryEnabled() && envTruthy(process.env.FEATURE_GC_REORDER_TO_QUOTE);
 }

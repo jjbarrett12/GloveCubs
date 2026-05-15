@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader, PageSection } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminOrderDetail, formatMinorAmount, type OrderProvenance } from "@/lib/admin/admin-orders-read-model";
+import { buildReorderQuotePayload } from "@/lib/account/reorder-to-quote-read-model";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,8 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
   const h = header;
   const metaJson = JSON.stringify(h.metadata, null, 2);
   const shipJson = h.shipping_address != null ? JSON.stringify(h.shipping_address, null, 2) : null;
+
+  const reorderDry = await buildReorderQuotePayload(supabase, h.company_id, params.orderId);
 
   return (
     <div>
@@ -147,6 +150,21 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
           </details>
         ) : null}
       </PageSection>
+
+      {reorderDry.payload ? (
+        <PageSection title="Reorder-to-quote mapping (read-only indicator)">
+          <p className="text-sm text-gray-600">
+            Dry run for buyer quote cart: how many lines would add as catalog-backed quote lines vs need review or are
+            blocked. No writes.
+          </p>
+          <ul className="mt-2 list-inside list-disc text-sm text-gray-800">
+            <li>Available: {reorderDry.payload.summary.available}</li>
+            <li>Needs review: {reorderDry.payload.summary.needs_review}</li>
+            <li>Unavailable: {reorderDry.payload.summary.unavailable}</li>
+            <li>Snapshot-only: {reorderDry.payload.summary.snapshot_only}</li>
+          </ul>
+        </PageSection>
+      ) : null}
 
       <PageSection title="Order lines">
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">

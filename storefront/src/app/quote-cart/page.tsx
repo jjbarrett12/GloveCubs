@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 import { quoteCartLineReactKey } from "@/lib/quote-cart/line-utils";
+import { clearReorderSource, readReorderSource, type ReorderSourcePayload } from "@/lib/quote-cart/reorder-source-session";
 import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
 import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
@@ -29,6 +30,21 @@ export default function QuoteCartPage() {
   const [done, setDone] = useState(false);
   const [quoteRequestId, setQuoteRequestId] = useState<string | null>(null);
   const [buyerDisplayRef, setBuyerDisplayRef] = useState<string | null>(null);
+  const [reorderSource, setReorderSource] = useState<ReorderSourcePayload | null>(null);
+  const [reorderBannerDismissed, setReorderBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || reorderBannerDismissed) return;
+    setReorderSource(readReorderSource());
+  }, [hydrated, reorderBannerDismissed]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (items.length === 0) {
+      clearReorderSource();
+      setReorderSource(null);
+    }
+  }, [hydrated, items.length]);
 
   async function submit() {
     setError(null);
@@ -109,6 +125,9 @@ export default function QuoteCartPage() {
 
       setQuoteRequestId(qid);
       setBuyerDisplayRef(prepRef);
+      clearReorderSource();
+      setReorderSource(null);
+      setReorderBannerDismissed(false);
       clear();
       setDone(true);
       setName("");
@@ -130,6 +149,29 @@ export default function QuoteCartPage() {
         <p className="text-white/60 text-sm mb-8">
           Request pricing for distributor review — not a checkout. We follow up on every saved request.
         </p>
+
+        {reorderSource && !reorderBannerDismissed && items.length > 0 ? (
+          <div className="mb-6 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-50">
+            <p className="font-medium text-white">
+              Started from order <span className="font-mono">#{reorderSource.orderNumber}</span>
+            </p>
+            <p className="mt-2 text-xs text-white/75">
+              Items were added as a quote request. Pricing and availability will be confirmed — this is not an order or
+              checkout.
+            </p>
+            <button
+              type="button"
+              className="mt-3 text-xs font-semibold text-[#f06232] underline"
+              onClick={() => {
+                clearReorderSource();
+                setReorderSource(null);
+                setReorderBannerDismissed(true);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         <input
           ref={honeypotRef}
