@@ -14,6 +14,8 @@ import {
 import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
 import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
+import type { AdminShipToAddressRow } from "@/lib/admin/admin-ship-to-addresses";
+import { formatShipToOneLine } from "@/lib/commerce/ship-to-address-format";
 
 function isValidEmail(value: string): boolean {
   const v = value.trim();
@@ -38,6 +40,10 @@ export default function QuoteCartPage() {
   const [reorderBannerDismissed, setReorderBannerDismissed] = useState(false);
   const [quicklistNote, setQuicklistNote] = useState<string | null>(null);
   const [quicklistBannerDismissed, setQuicklistBannerDismissed] = useState(false);
+  const [shipToRows, setShipToRows] = useState<AdminShipToAddressRow[]>([]);
+  const [shipToUi, setShipToUi] = useState<"off" | "loading" | "on">("off");
+  const [selectedShipToId, setSelectedShipToId] = useState<string>("__none__");
+  const submitIdempotencyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!hydrated || reorderBannerDismissed) return;
@@ -56,7 +62,35 @@ export default function QuoteCartPage() {
       setReorderSource(null);
       clearQuicklistQuoteSourceNote();
       setQuicklistNote(null);
+      setShipToUi("off");
+      setShipToRows([]);
+      setSelectedShipToId("__none__");
     }
+  }, [hydrated, items.length]);
+
+  useEffect(() => {
+    if (!hydrated || items.length === 0) return;
+    let cancelled = false;
+    setShipToUi("loading");
+    void (async () => {
+      const res = await fetch("/api/account/shipping-addresses", { method: "GET" });
+      if (cancelled) return;
+      if (res.status !== 200) {
+        setShipToUi("off");
+        setShipToRows([]);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { addresses?: AdminShipToAddressRow[] };
+      const addresses = data.addresses ?? [];
+      const active = addresses.filter((r) => !r.address.is_archived);
+      setShipToRows(active);
+      const def = active.find((r) => r.is_default) ?? active[0] ?? null;
+      setSelectedShipToId(def ? def.id : "__none__");
+      setShipToUi("on");
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [hydrated, items.length]);
 
   async function submit() {
@@ -89,6 +123,13 @@ export default function QuoteCartPage() {
         // ignore
       }
 
+      if (!submitIdempotencyRef.current) {
+        submitIdempotencyRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `qr-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
       const res = await fetch("/api/quote-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,6 +141,9 @@ export default function QuoteCartPage() {
           notes: notes.trim() || null,
           website: honeypotRef.current?.value ?? null,
           operational_environment_key,
+          idempotency_key: submitIdempotencyRef.current,
+          ship_to_address_id:
+            shipToUi === "on" && selectedShipToId !== "__none__" && selectedShipToId ? selectedShipToId : null,
           items: items.map((i) => ({
             product_id: i.product_id,
             name: i.name,
@@ -127,6 +171,10 @@ export default function QuoteCartPage() {
       if (data.ignored === true) {
         return;
       }
+      if (data.duplicate === true) {
+        setError("This request was already received. If you need changes, start a new quote request.");
+        return;
+      }
       const qid = typeof data.quote_request_id === "string" ? data.quote_request_id : null;
       if (!qid) {
         setError("We could not save your quote request. Please try again.");
@@ -138,6 +186,7 @@ export default function QuoteCartPage() {
 
       setQuoteRequestId(qid);
       setBuyerDisplayRef(prepRef);
+      submitIdempotencyRef.current = null;
       clearReorderSource();
       setReorderSource(null);
       setReorderBannerDismissed(false);
@@ -366,6 +415,45 @@ export default function QuoteCartPage() {
                   autoComplete="organization"
                 />
               </div>
+              {(shipToUi === "loading" || shipToUi === "on") && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-4 space-y-3">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-white/50">
+                    Delivery location for this quote
+                  </h2>
+                  {shipToUi === "loading" ? (
+                    <p className="text-sm text-white/55">Loading delivery locations…</p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-white/70">Select a delivery location for this quote request.</p>
+                      <p className="text-sm text-white/55">Shipping rates are not calculated here.</p>
+                      <p className="text-sm text-white/55">
+                        Your team will confirm availability, pricing, and delivery details.
+                      </p>
+                      <label className="block text-sm text-white/70 mb-1" htmlFor="quote-ship-to-select">
+                        Saved company addresses
+                      </label>
+                      <select
+                        id="quote-ship-to-select"
+                        className="w-full min-h-11 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-white"
+                        value={selectedShipToId}
+                        onChange={(e) => setSelectedShipToId(e.target.value)}
+                      >
+                        <option value="__none__">No delivery location selected yet</option>
+                        {shipToRows.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {(r.label?.trim() || "Address") + " — " + formatShipToOneLine(r.address)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-white/50">
+                        <Link className="font-semibold text-[#f06232] hover:underline" href="/account/shipping-addresses">
+                          Manage shipping addresses
+                        </Link>
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm text-white/70 mb-1">Notes for your request (optional)</label>
                 <textarea

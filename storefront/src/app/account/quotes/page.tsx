@@ -8,6 +8,7 @@ import {
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import { fetchBuyerQuoteHistoryWithLines } from "@/lib/account/buyer-account-snapshot";
+import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,7 @@ export default async function AccountQuotesPage() {
                 <tr>
                   <th className="px-3 py-2.5">Submitted</th>
                   <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Delivery</th>
                   <th className="px-3 py-2.5">Company / contact</th>
                   <th className="px-3 py-2.5 text-right">Lines</th>
                   <th className="px-3 py-2.5 font-mono">Id</th>
@@ -101,6 +103,10 @@ export default async function AccountQuotesPage() {
               <tbody>
                 {rows.map((q) => {
                   const when = q.submitted_at || q.created_at;
+                  const delivery =
+                    q.ship_to_snapshot != null
+                      ? formatShipToLabel(q.ship_to_label, q.ship_to_snapshot)
+                      : "No delivery location provided";
                   return (
                     <tr key={q.id} className="border-b border-white/[0.06] last:border-0">
                       <td className="whitespace-nowrap px-3 py-2.5 text-xs text-white/70">
@@ -110,6 +116,9 @@ export default async function AccountQuotesPage() {
                         <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/80">
                           {q.status}
                         </span>
+                      </td>
+                      <td className="max-w-[220px] px-3 py-2.5 text-xs text-white/70">
+                        <p className="line-clamp-3">{delivery}</p>
                       </td>
                       <td className="max-w-[280px] px-3 py-2.5">
                         <p className="truncate font-medium text-white/90">{q.company_name || "—"}</p>

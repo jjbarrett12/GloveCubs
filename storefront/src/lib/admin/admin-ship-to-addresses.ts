@@ -113,7 +113,8 @@ export function normalizeShipToAddressInput(
   return { ok: true, address: withOptionals as unknown as ShipToAddressJsonV1 };
 }
 
-function parseRowAddress(raw: unknown): ShipToAddressJsonV1 | null {
+/** Validates persisted address JSONB from `gc_commerce.ship_to_addresses.address`. */
+export function tryParsePersistedShipToAddressJson(raw: unknown): ShipToAddressJsonV1 | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (o._v !== 1) return null;
@@ -154,7 +155,7 @@ export async function fetchAdminShipToAddresses(
   const rows: AdminShipToAddressRow[] = [];
   for (const r of data ?? []) {
     const row = r as Record<string, unknown>;
-    const addr = parseRowAddress(row.address);
+    const addr = tryParsePersistedShipToAddressJson(row.address);
     if (!addr) continue;
     rows.push({
       id: String(row.id),
@@ -204,7 +205,7 @@ export async function createAdminShipToAddress(
     return { row: null, error: error.message, code: "db" };
   }
 
-  const addr = parseRowAddress((data as { address?: unknown }).address);
+  const addr = tryParsePersistedShipToAddressJson((data as { address?: unknown }).address);
   if (!data || !addr) {
     return { row: null, error: "Insert returned invalid row", code: "db" };
   }
@@ -251,7 +252,7 @@ export async function updateAdminShipToAddress(
   }
 
   const ex = existing as { label: string | null; address: unknown; is_default: boolean };
-  const current = parseRowAddress(ex.address);
+  const current = tryParsePersistedShipToAddressJson(ex.address);
   if (!current) {
     return { row: null, error: "Existing address record is invalid", code: "validation" };
   }
@@ -317,7 +318,7 @@ export async function updateAdminShipToAddress(
     return { row: null, error: "Address not found", code: "not_found" };
   }
 
-  const addr = parseRowAddress((data as { address?: unknown }).address);
+  const addr = tryParsePersistedShipToAddressJson((data as { address?: unknown }).address);
   if (!addr) {
     return { row: null, error: "Updated row has invalid address", code: "db" };
   }
@@ -370,7 +371,7 @@ export async function setDefaultAdminShipToAddress(
     return { ok: false, error: "Address not found", code: "not_found" };
   }
 
-  const addr = parseRowAddress((target as { address: unknown }).address);
+  const addr = tryParsePersistedShipToAddressJson((target as { address: unknown }).address);
   if (!addr) {
     return { ok: false, error: "Address record is invalid", code: "db" };
   }

@@ -4,6 +4,8 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, isSmtpConfigured, sendSmtpMail } from "@/lib/email/smtp";
 import { recordQuoteCartSpine } from "@/lib/procurement/spine-writes";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
+import { resolveQuoteShipToSnapshot } from "@/lib/commerce/quote-request-ship-to";
+import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
 
 const itemSchema = z.object({
   product_id: z.string().uuid(),
@@ -18,18 +20,24 @@ const itemSchema = z.object({
   size_code: z.string().max(80).nullish(),
 });
 
-const bodySchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  email: z.string().trim().email(),
-  company: z.string().trim().max(300).optional().nullable(),
-  phone: z.string().trim().max(40).optional().nullable(),
-  notes: z.string().trim().max(8000).optional().nullable(),
-  items: z.array(itemSchema).min(1),
-  /** Phase 2B: ontology environment when submitting from prep-line flows */
-  operational_environment_key: z.literal("restaurant_prep_line").optional().nullable(),
-  /** Honeypot */
-  website: z.string().optional().nullable(),
-});
+const bodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    email: z.string().trim().email(),
+    company: z.string().trim().max(300).optional().nullable(),
+    phone: z.string().trim().max(40).optional().nullable(),
+    notes: z.string().trim().max(8000).optional().nullable(),
+    items: z.array(itemSchema).min(1),
+    /** Phase 2B: ontology environment when submitting from prep-line flows */
+    operational_environment_key: z.literal("restaurant_prep_line").optional().nullable(),
+    /** Honeypot */
+    website: z.string().optional().nullable(),
+    /** Idempotent replay: first saved quote wins; ship-to snapshot is never mutated on replay. */
+    idempotency_key: z.string().trim().min(1).max(200).optional().nullable(),
+    /** Optional company ship-to row id; validated server-side against active company. */
+    ship_to_address_id: z.string().uuid().optional().nullable(),
+  })
+  .strict();
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured()) {
@@ -55,14 +63,62 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin() as any;
 
+  const idemKey = body.idempotency_key?.trim() || null;
+  if (idemKey) {
+    const { data: existingId, error: idemErr } = await supabase
+      .schema("catalogos")
+      .from("quote_requests")
+      .select("id")
+      .eq("idempotency_key", idemKey)
+      .maybeSingle();
+    if (idemErr) {
+      console.error("[POST /api/quote-request] idempotency lookup failed", idemErr);
+      return NextResponse.json({ error: idemErr.message }, { status: 500 });
+    }
+    if (existingId && typeof (existingId as { id?: unknown }).id === "string") {
+      return NextResponse.json({
+        success: true,
+        quote_request_id: (existingId as { id: string }).id,
+        duplicate: true,
+        email_notification_sent: false,
+        procurement_opportunity_id: null,
+        buyer_display_ref: null,
+      });
+    }
+  }
+
   let gcCompanyId: string | null = null;
+  let gateReady = false;
   try {
     const gate = await resolveCustomerProcurementGate(supabase);
     if (gate.kind === "ready") {
       gcCompanyId = gate.session.companyId;
+      gateReady = true;
     }
   } catch {
     gcCompanyId = null;
+    gateReady = false;
+  }
+
+  let shipToAddressId: string | null = null;
+  let shipToLabel: string | null = null;
+  let shipToSnapshot: Record<string, unknown> | null = null;
+
+  const requestedShipTo = body.ship_to_address_id?.trim() || null;
+  if (requestedShipTo) {
+    if (!gateReady || !gcCompanyId) {
+      return NextResponse.json(
+        { error: "Ship-to selection requires a signed-in buyer with an active company" },
+        { status: 400 },
+      );
+    }
+    const resolved = await resolveQuoteShipToSnapshot(supabase, gcCompanyId, requestedShipTo);
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+    }
+    shipToAddressId = resolved.ship.ship_to_address_id;
+    shipToLabel = resolved.ship.ship_to_label;
+    shipToSnapshot = resolved.ship.ship_to_snapshot;
   }
 
   const companyName = body.company?.trim() || "Unknown";
@@ -72,19 +128,25 @@ export async function POST(request: NextRequest) {
   const phone = body.phone?.trim() || null;
   const submittedAt = new Date().toISOString();
 
+  const insertPayload: Record<string, unknown> = {
+    company_name: companyName,
+    contact_name: contactName,
+    email,
+    notes: body.notes?.trim() || null,
+    phone,
+    status: "new",
+    submitted_at: submittedAt,
+    gc_company_id: gcCompanyId,
+    idempotency_key: idemKey,
+    ship_to_address_id: shipToAddressId,
+    ship_to_label: shipToLabel,
+    ship_to_snapshot: shipToSnapshot,
+  };
+
   const { data: qrRaw, error: qrErr } = await supabase
     .schema("catalogos")
     .from("quote_requests")
-    .insert({
-      company_name: companyName,
-      contact_name: contactName,
-      email,
-      notes: body.notes?.trim() || null,
-      phone,
-      status: "new",
-      submitted_at: submittedAt,
-      gc_company_id: gcCompanyId,
-    })
+    .insert(insertPayload as never)
     .select("id")
     .single();
 
@@ -131,6 +193,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
+  const deliveryBlock =
+    shipToSnapshot != null
+      ? [
+          "",
+          "Requested delivery location (quote-time snapshot):",
+          formatShipToLabel(shipToLabel, shipToSnapshot),
+          `ship_to_address_id: ${shipToAddressId ?? "—"}`,
+        ].join("\n")
+      : "";
+
   const adminTo = getAdminNotificationEmail();
   const linesText = body.items
     .map((i) => {
@@ -159,6 +231,7 @@ export async function POST(request: NextRequest) {
       `Email: ${email}`,
       `Company: ${companyName}`,
       `Phone: ${phone || "—"}`,
+      deliveryBlock,
       "",
       "Notes:",
       body.notes?.trim() || "—",

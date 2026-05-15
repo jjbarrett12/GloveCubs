@@ -1,5 +1,6 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PageHeader, TableCard, EmptyState } from "@/components/admin";
+import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ type QuoteRow = {
   company_name: string;
   phone: string | null;
   created_at: string;
+  ship_to_address_id: string | null;
+  ship_to_label: string | null;
+  ship_to_snapshot: unknown | null;
 };
 
 export default async function AdminLeadsPage() {
@@ -28,7 +32,9 @@ export default async function AdminLeadsPage() {
   const { data, error } = (await supabase
     .schema("catalogos")
     .from("quote_requests")
-    .select("id, contact_name, email, company_name, phone, created_at")
+    .select(
+      "id, contact_name, email, company_name, phone, created_at, ship_to_address_id, ship_to_label, ship_to_snapshot",
+    )
     .order("created_at", { ascending: false })
     .limit(100)) as { data: QuoteRow[] | null; error: { message: string } | null };
 
@@ -64,10 +70,17 @@ export default async function AdminLeadsPage() {
                   <th className="p-3">Email</th>
                   <th className="p-3">Phone</th>
                   <th className="p-3">Company</th>
+                  <th className="p-3">Requested delivery location</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {rows.map((r) => (
+                {rows.map((r) => {
+                  const hasSnap = r.ship_to_snapshot != null;
+                  const warnIdNoSnap = Boolean(r.ship_to_address_id) && !hasSnap;
+                  const deliveryText = hasSnap
+                    ? formatShipToLabel(r.ship_to_label, r.ship_to_snapshot)
+                    : "—";
+                  return (
                   <tr key={r.id} className="hover:bg-blue-50/40">
                     <td className="whitespace-nowrap p-3 text-gray-600">{new Date(r.created_at).toLocaleString()}</td>
                     <td className="p-3 font-mono text-xs text-gray-500">{r.id}</td>
@@ -75,8 +88,18 @@ export default async function AdminLeadsPage() {
                     <td className="p-3 text-gray-900">{r.email}</td>
                     <td className="p-3 text-gray-600">{r.phone ?? "—"}</td>
                     <td className="p-3 text-gray-900">{r.company_name}</td>
+                    <td className="max-w-[280px] p-3 align-top text-gray-800">
+                      <p className="text-sm">{deliveryText}</p>
+                      {warnIdNoSnap ? (
+                        <p className="mt-1 text-xs font-medium text-amber-800">
+                          Warning: ship_to_address_id present but quote-time snapshot is missing — do not rely on the
+                          live address book for this request.
+                        </p>
+                      ) : null}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

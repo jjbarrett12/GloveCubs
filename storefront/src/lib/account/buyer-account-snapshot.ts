@@ -11,6 +11,9 @@ export type BuyerAccountQuoteRow = {
   contact_name: string | null;
   email: string | null;
   line_count: number;
+  ship_to_address_id: string | null;
+  ship_to_label: string | null;
+  ship_to_snapshot: unknown | null;
 };
 
 export type BuyerAccountSnapshot = {
@@ -35,7 +38,7 @@ export async function fetchBuyerAccountSnapshot(supabase: any, companyId: string
     supabase
       .schema("catalogos")
       .from("quote_requests")
-      .select("id, status, created_at, submitted_at, company_name, contact_name, email")
+      .select("id, status, created_at, submitted_at, company_name, contact_name, email, ship_to_address_id, ship_to_label, ship_to_snapshot")
       .eq("gc_company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(5),
@@ -52,6 +55,9 @@ export async function fetchBuyerAccountSnapshot(supabase: any, companyId: string
     company_name: string | null;
     contact_name: string | null;
     email: string | null;
+    ship_to_address_id: string | null;
+    ship_to_label: string | null;
+    ship_to_snapshot: unknown | null;
   }>;
 
   const ids = rawQuotes.map((q) => q.id);
@@ -71,7 +77,16 @@ export async function fetchBuyerAccountSnapshot(supabase: any, companyId: string
   }
 
   const recentQuotes: BuyerAccountQuoteRow[] = rawQuotes.map((q) => ({
-    ...q,
+    id: q.id,
+    status: q.status,
+    created_at: q.created_at,
+    submitted_at: q.submitted_at,
+    company_name: q.company_name,
+    contact_name: q.contact_name,
+    email: q.email,
+    ship_to_address_id: q.ship_to_address_id ?? null,
+    ship_to_label: q.ship_to_label ?? null,
+    ship_to_snapshot: q.ship_to_snapshot ?? null,
     line_count: lineCountByQuote.get(q.id) ?? 0,
   }));
 
@@ -95,7 +110,7 @@ export async function fetchBuyerQuoteHistoryWithLines(
   const { data: quotes, error } = await supabase
     .schema("catalogos")
     .from("quote_requests")
-    .select("id, status, submitted_at, created_at, company_name, contact_name, email")
+    .select("id, status, submitted_at, created_at, company_name, contact_name, email, ship_to_address_id, ship_to_label, ship_to_snapshot")
     .eq("gc_company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -112,6 +127,9 @@ export async function fetchBuyerQuoteHistoryWithLines(
     company_name: string | null;
     contact_name: string | null;
     email: string | null;
+    ship_to_address_id: string | null;
+    ship_to_label: string | null;
+    ship_to_snapshot: unknown | null;
   }>;
 
   const ids = rawQuotes.map((q) => q.id);
@@ -131,7 +149,16 @@ export async function fetchBuyerQuoteHistoryWithLines(
   }
 
   const rows: BuyerQuoteHistoryRow[] = rawQuotes.map((q) => ({
-    ...q,
+    id: q.id,
+    status: q.status,
+    created_at: q.created_at,
+    submitted_at: q.submitted_at,
+    company_name: q.company_name,
+    contact_name: q.contact_name,
+    email: q.email,
+    ship_to_address_id: q.ship_to_address_id ?? null,
+    ship_to_label: q.ship_to_label ?? null,
+    ship_to_snapshot: q.ship_to_snapshot ?? null,
     line_count: lineCountByQuote.get(q.id) ?? 0,
   }));
 
