@@ -2,14 +2,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("admin company detail page (Phase C + D2 quicklist)", () => {
-  it("includes profile, pricing, members, quotes, orders, quicklist manager, payment placeholder", () => {
+describe("admin company detail page (Phase C + D2 quicklist + ship-to)", () => {
+  it("includes profile, pricing, members, quotes, orders, quicklist manager, ship-to manager, payment placeholder", () => {
     const p = join(process.cwd(), "src/app/admin/companies/[companyId]/page.tsx");
     const s = readFileSync(p, "utf8");
     expect(s).toContain("CompanyProfileForm");
     expect(s).toContain("CompanyB2bTierSelect");
     expect(s).toContain("CompanyQuicklistManager");
+    expect(s).toContain("CompanyShipToAddressesManager");
     expect(s).toContain("fetchCompanyQuicklistItems");
+    expect(s).toContain("fetchAdminShipToAddresses");
     expect(s).toContain("Member contact from auth identity");
     expect(s).toContain("Quote activity");
     expect(s).toContain("Order activity");

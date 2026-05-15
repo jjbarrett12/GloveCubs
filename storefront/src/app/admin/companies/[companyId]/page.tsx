@@ -4,9 +4,11 @@ import { PageHeader, PageSection, TableCard } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminCompanyDetail } from "@/lib/admin/admin-companies-read-model";
 import { fetchCompanyQuicklistItems } from "@/lib/admin/admin-company-quicklist";
+import { fetchAdminShipToAddresses } from "@/lib/admin/admin-ship-to-addresses";
 import { CompanyB2bTierSelect } from "../CompanyB2bTierSelect";
 import { CompanyProfileForm } from "../CompanyProfileForm";
 import { CompanyQuicklistManager } from "../CompanyQuicklistManager";
+import { CompanyShipToAddressesManager } from "../CompanyShipToAddressesManager";
 import { b2bTierLabel } from "@/lib/pricing/b2b-tier-meta";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +32,10 @@ export default async function AdminCompanyDetailPage({ params }: { params: { com
   }
 
   const supabase = getSupabaseAdmin() as any;
-  const [detailRes, quicklist] = await Promise.all([
+  const [detailRes, quicklist, shipTos] = await Promise.all([
     fetchAdminCompanyDetail(supabase, companyId),
     fetchCompanyQuicklistItems(supabase, companyId),
+    fetchAdminShipToAddresses(supabase, companyId),
   ]);
 
   const { detail, error } = detailRes;
@@ -139,6 +142,14 @@ export default async function AdminCompanyDetailPage({ params }: { params: { com
               </div>
             )}
           </TableCard>
+        </PageSection>
+
+        <PageSection title="Ship-to addresses">
+          {shipTos.error ? (
+            <p className="text-sm text-red-600">Could not load ship-to addresses: {shipTos.error}</p>
+          ) : (
+            <CompanyShipToAddressesManager companyId={companyId} initialAddresses={shipTos.rows} />
+          )}
         </PageSection>
 
         <PageSection title="Quote activity">
