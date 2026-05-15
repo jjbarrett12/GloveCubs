@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("admin company detail page (Phase C + D2 quicklist + ship-to)", () => {
-  it("includes profile, pricing, members, quotes, orders, quicklist manager, ship-to manager, payment placeholder", () => {
+  it("includes profile, pricing, team access, quotes, orders, quicklist manager, ship-to manager, tab deep links, payment placeholder", () => {
     const p = join(process.cwd(), "src/app/admin/companies/[companyId]/page.tsx");
+    const header = join(process.cwd(), "src/components/admin/CustomerDetailHeader.tsx");
     const s = readFileSync(p, "utf8");
+    const h = readFileSync(header, "utf8");
     expect(s).toContain("CompanyProfileForm");
     expect(s).toContain("CompanyB2bTierSelect");
     expect(s).toContain("CompanyQuicklistManager");
@@ -13,12 +15,17 @@ describe("admin company detail page (Phase C + D2 quicklist + ship-to)", () => {
     expect(s).toContain("fetchCompanyQuicklistItems");
     expect(s).toContain("fetchAdminShipToAddresses");
     expect(s).toContain("Member contact from auth identity");
-    expect(s).toContain("Quote activity");
-    expect(s).toContain("Order activity");
+    expect(s).toContain("Quote requests");
+    expect(s).toContain("Order records");
     expect(s).toContain("View order records");
     expect(s).toContain("order records");
     expect(s).toContain("Pricing is resolved server-side");
-    expect(s).toContain("Payment method setup is not enabled yet");
+    expect(s).toContain("Online payment setup is not enabled yet");
+    expect(s).toContain("parseCustomerDetailTab");
+    expect(h).toContain("?tab=delivery");
+    expect(s).toContain("Team access");
+    expect(s).toContain("Delivery locations");
+    expect(s).toContain("Preferred products");
     expect(s).toContain("not revenue or margin reporting");
     expect(s).not.toContain("profit");
     expect(s).not.toContain("checkout");
