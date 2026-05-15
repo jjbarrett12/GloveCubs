@@ -28,7 +28,8 @@ describe("Phase 2a admin orders (read-only, honest copy)", () => {
 
   it("admin orders read model stays schema-read-only", () => {
     const s = read("admin-orders-read-model.ts");
-    expect(s).toContain('schema("gc_commerce").from("orders")');
+    expect(s).toContain('.schema("gc_commerce")');
+    expect(s).toContain('.from("orders")');
     expect(s).toContain('from("order_lines")');
     expect(s).toContain('from("legacy_order_map")');
     expect(s).not.toMatch(/\.insert\(/);

@@ -65,7 +65,7 @@ const NAV_MAIN: NavItem[] = [
   },
   {
     href: "/admin/companies",
-    label: "Companies",
+    label: "Customers",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path
