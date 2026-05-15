@@ -17,3 +17,6 @@ export { PlaceholderPanel } from "./PlaceholderPanel";
 export { CustomerDetailTabNav } from "./CustomerDetailTabNav";
 export { CustomerDetailHeader } from "./CustomerDetailHeader";
 export { CustomerDetailMetrics } from "./CustomerDetailMetrics";
+export { OnboardingCard } from "./OnboardingCard";
+export { SetupChecklist } from "./SetupChecklist";
+export { CustomerAccountCard } from "./CustomerAccountCard";

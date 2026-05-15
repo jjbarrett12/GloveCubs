@@ -14,7 +14,7 @@ export default async function AdminCompaniesPage() {
   if (!isSupabaseConfigured()) {
     return (
       <div>
-        <PageHeader title="Customers" description="Supabase is not configured in this environment." />
+        <PageHeader title="Customer accounts" description="Supabase is not configured in this environment." />
       </div>
     );
   }
@@ -25,17 +25,17 @@ export default async function AdminCompaniesPage() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Customers" description="Could not load customers." />
+        <PageHeader title="Customer accounts" description="Could not load customer accounts." />
         <p className="mt-4 text-sm text-red-600">{error}</p>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="mx-auto max-w-[1480px]">
       <PageHeader
-        title="Customers"
-        description="Canonical gc_commerce tenants — membership, linked quotes, and order records."
+        title="Customer accounts"
+        description="Operational workspace for pricing tiers, delivery locations, preferred products, team access, and order records."
       />
 
       <PageSection title="Directory">

@@ -19,11 +19,14 @@ describe("admin companies directory (Phase A)", () => {
     expect(s).not.toContain("card");
   });
 
-  it("list UI has Add Customer and search", () => {
+  it("list UI has Add Customer, search, and customer account workspace", () => {
     const client = join(process.cwd(), "src/app/admin/companies/CompaniesDirectoryClient.tsx");
+    const card = join(process.cwd(), "src/components/admin/CustomerAccountCard.tsx");
     const s = readFileSync(client, "utf8");
+    const k = readFileSync(card, "utf8");
     expect(s).toContain("+ Add Customer");
-    expect(s).toContain("Quicklist");
+    expect(k).toContain("Preferred products");
+    expect(s).toContain("CustomerAccountCard");
     expect(s).not.toContain("CompanyB2bTierSelect");
   });
 });
