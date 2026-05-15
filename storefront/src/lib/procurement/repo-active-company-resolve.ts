@@ -1,11 +1,12 @@
 /**
- * Re-exports repo-root active company resolver (CommonJS) for Next server code.
- * Keeps a single implementation shared with Express (`lib/active-company-resolve.js`).
+ * Re-exports active company resolver (CommonJS) for Next server code.
+ * Local dev: resolves `storefront/lib/` (kept in sync with repo-root `lib/` for Express).
+ * Vercel builds only `storefront/`, so repo-root `../../../../lib/` is not bundled.
  */
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const m = require("../../../../lib/active-company-resolve.js") as {
+const m = require("../../../lib/active-company-resolve.js") as {
   resolveActiveCompanyId: (
     userId: string,
     options?: { supabase?: unknown }

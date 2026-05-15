@@ -8,12 +8,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   reactStrictMode: true,
   /**
-   * Cross-boundary imports: storefront server code re-exports a few CommonJS
-   * modules from repo-root `lib/` (e.g. `lib/active-company-resolve.js` and
-   * `lib/supabaseAdmin.js`). On Vercel the project root is `storefront/`, so
-   * `node_modules` only exists here. Webpack's default upward walk from
-   * `repo-root/lib/` cannot find `@supabase/supabase-js`. Pin a deterministic
-   * fallback that always resolves to the storefront install.
+   * `storefront/lib/*.js` mirrors repo-root `lib/` for modules required from CJS
+   * (e.g. active-company-resolve + supabaseAdmin) so Vercel can bundle them.
+   * Pin `node_modules` resolution to this package so `@supabase/supabase-js`
+   * resolves from the storefront install.
    */
   webpack: (config, { dev }) => {
     /** Avoid stale/missing chunk refs on Windows when `.next` is deleted while dev is running. */
