@@ -208,6 +208,14 @@ export default async function AccountPage() {
               </span>
             </li>
             <li>
+              <Link className="font-medium text-[#f06232] hover:underline" href="/account/quicklist">
+                Glove quicklist
+              </Link>
+              <span className="mt-0.5 block text-xs text-white/45">
+                Company-assigned variants for quote requests (no catalog-wide search).
+              </span>
+            </li>
+            <li>
               <Link className="font-medium text-[#f06232] hover:underline" href="/account/quotes">
                 Quote history
               </Link>

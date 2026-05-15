@@ -280,6 +280,13 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     >
                       Account home
                     </Link>
+                    <Link
+                      href="/account/quicklist"
+                      className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
+                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                    >
+                      Glove quicklist
+                    </Link>
                     {auth.showWorkspace ? (
                       <Link
                         href="/workspace/procurement"
@@ -620,6 +627,15 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
                       <Link href="/account" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Account
+                      </Link>
+                    </li>
+                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                      <Link
+                        href="/account/quicklist"
+                        className={navLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        Glove quicklist
                       </Link>
                     </li>
                     {auth.showWorkspace ? (

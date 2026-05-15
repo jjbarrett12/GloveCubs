@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 import { quoteCartLineReactKey } from "@/lib/quote-cart/line-utils";
 import { clearReorderSource, readReorderSource, type ReorderSourcePayload } from "@/lib/quote-cart/reorder-source-session";
+import {
+  clearQuicklistQuoteSourceNote,
+  readQuicklistQuoteSourceNote,
+} from "@/lib/quote-cart/quicklist-quote-source-session";
 import { RESTAURANT_PREP_LINE_ENVIRONMENT_KEY } from "@/lib/ontology/operational-environments";
 import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
@@ -32,6 +36,8 @@ export default function QuoteCartPage() {
   const [buyerDisplayRef, setBuyerDisplayRef] = useState<string | null>(null);
   const [reorderSource, setReorderSource] = useState<ReorderSourcePayload | null>(null);
   const [reorderBannerDismissed, setReorderBannerDismissed] = useState(false);
+  const [quicklistNote, setQuicklistNote] = useState<string | null>(null);
+  const [quicklistBannerDismissed, setQuicklistBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (!hydrated || reorderBannerDismissed) return;
@@ -39,10 +45,17 @@ export default function QuoteCartPage() {
   }, [hydrated, reorderBannerDismissed]);
 
   useEffect(() => {
+    if (!hydrated || quicklistBannerDismissed) return;
+    setQuicklistNote(readQuicklistQuoteSourceNote());
+  }, [hydrated, quicklistBannerDismissed]);
+
+  useEffect(() => {
     if (!hydrated) return;
     if (items.length === 0) {
       clearReorderSource();
       setReorderSource(null);
+      clearQuicklistQuoteSourceNote();
+      setQuicklistNote(null);
     }
   }, [hydrated, items.length]);
 
@@ -128,6 +141,9 @@ export default function QuoteCartPage() {
       clearReorderSource();
       setReorderSource(null);
       setReorderBannerDismissed(false);
+      clearQuicklistQuoteSourceNote();
+      setQuicklistNote(null);
+      setQuicklistBannerDismissed(false);
       clear();
       setDone(true);
       setName("");
@@ -166,6 +182,26 @@ export default function QuoteCartPage() {
                 clearReorderSource();
                 setReorderSource(null);
                 setReorderBannerDismissed(true);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
+        {quicklistNote && !quicklistBannerDismissed && items.length > 0 ? (
+          <div className="mb-6 rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-50">
+            <p className="font-medium text-white">{quicklistNote}</p>
+            <p className="mt-2 text-xs text-white/75">
+              Lines were added as a quote request. Formal pricing is confirmed when our team reviews your request.
+            </p>
+            <button
+              type="button"
+              className="mt-3 text-xs font-semibold text-[#f06232] underline"
+              onClick={() => {
+                clearQuicklistQuoteSourceNote();
+                setQuicklistNote(null);
+                setQuicklistBannerDismissed(true);
               }}
             >
               Dismiss
