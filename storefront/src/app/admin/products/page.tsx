@@ -19,6 +19,7 @@ import { ProductsWorkspaceTabs } from "@/app/admin/products/_components/Products
 import { listClipboardStaging } from "@/lib/admin/clipboard-url-staging";
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ClipboardUrlStagingClient } from "@/app/admin/products/import/_components/ClipboardUrlStagingClient";
+import { fetchAdminCatalogOperationalCounts } from "@/lib/admin/admin-catalog-operational-counts";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,11 @@ function parseWorkspaceTab(sp: Record<string, string | string[] | undefined>): s
   return ["products", "drafts", "url-imports", "needs-review", "archived"].includes(v) ? v : undefined;
 }
 
+function fmtCount(n: number | null | undefined) {
+  if (n == null) return "n/a";
+  return n.toLocaleString();
+}
+
 export default async function AdminProductsPage({
   searchParams,
 }: {
@@ -73,6 +79,8 @@ export default async function AdminProductsPage({
   }
 
   const isUrlImports = tab === "url-imports";
+
+  const catalogOverview = !isUrlImports ? await fetchAdminCatalogOperationalCounts() : null;
 
   const result = isUrlImports
     ? {
@@ -143,6 +151,41 @@ export default async function AdminProductsPage({
       />
 
       <ProductsWorkspaceTabs activeTab={tab} variant="default" />
+
+      {!isUrlImports && catalogOverview?.configured ? (
+        <StatGrid columns={5} className="mb-6 gap-4">
+          <StatCard
+            label="Active variants (all)"
+            value={fmtCount(catalogOverview.activeVariantCount)}
+            color="green"
+            accentBorder
+          />
+          <StatCard
+            label="Draft parents (catalog)"
+            value={fmtCount(catalogOverview.catalog.buckets.find((b) => b.key === "drafts")?.count ?? null)}
+            color="amber"
+            accentBorder
+          />
+          <StatCard
+            label="Missing imagery"
+            value={fmtCount(catalogOverview.catalog.buckets.find((b) => b.key === "missing_images")?.count ?? null)}
+            color="default"
+            accentBorder
+          />
+          <StatCard
+            label="Pending match reviews"
+            value={fmtCount(catalogOverview.catalog.buckets.find((b) => b.key === "pending_match_reviews")?.count ?? null)}
+            color="default"
+            accentBorder
+          />
+          <StatCard
+            label="Thin PDPs"
+            value={fmtCount(catalogOverview.catalog.buckets.find((b) => b.key === "thin_pdps")?.count ?? null)}
+            color="default"
+            accentBorder
+          />
+        </StatGrid>
+      ) : null}
 
       {!result.configured ? (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">

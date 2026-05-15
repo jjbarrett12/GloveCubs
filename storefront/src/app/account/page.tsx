@@ -6,6 +6,8 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { AccountSignOut } from "./AccountSignOut";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
+import { b2bTierLabel, b2bTierSiteDiscountPercent } from "@/lib/pricing/b2b-tier-meta";
+import { fetchBuyerAccountSnapshot } from "@/lib/account/buyer-account-snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +32,30 @@ export default async function AccountPage() {
     gate.kind === "active_company_required" ? "/workspace/procurement/active-company" : "/workspace/procurement";
   const adminUser = await getAdminUser();
 
+  let companySummary: { tradeName: string; tierCode: string; discountPct: number | null } | null = null;
+  let buyerSnap: Awaited<ReturnType<typeof fetchBuyerAccountSnapshot>> | null = null;
+  if (gate.kind === "ready") {
+    const { data: co, error: coErr } = await supabase
+      .schema("gc_commerce")
+      .from("companies")
+      .select("trade_name, b2b_pricing_tier_code")
+      .eq("id", gate.session.companyId)
+      .maybeSingle();
+    if (!coErr && co && typeof co.trade_name === "string") {
+      const tierCode = typeof co.b2b_pricing_tier_code === "string" ? co.b2b_pricing_tier_code : "cub";
+      companySummary = {
+        tradeName: co.trade_name,
+        tierCode,
+        discountPct: b2bTierSiteDiscountPercent(tierCode),
+      };
+    }
+    buyerSnap = await fetchBuyerAccountSnapshot(supabase, gate.session.companyId);
+  }
+
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <SiteHeaderLoader />
-      <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-white">Account home</h1>
         <p className="mt-2 text-sm text-white/65">
           Sign-in, quotes, and your buyer workspace—everything you need to keep restocks moving.
@@ -63,9 +85,127 @@ export default async function AccountPage() {
           </div>
         ) : null}
 
+        {gate.kind === "active_company_required" ? (
+          <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Choose which organization you are buying for to unlock the full dashboard.{" "}
+            <Link className="font-semibold text-[#f06232] underline" href="/workspace/procurement/active-company">
+              Select active company
+            </Link>
+            .
+          </div>
+        ) : null}
+
+        {companySummary && buyerSnap ? (
+          <section className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 sm:col-span-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Your organization</h2>
+              <p className="mt-1 text-lg font-semibold text-white">{companySummary.tradeName}</p>
+              <p className="mt-3 text-xs text-white/45">
+                Tier: <span className="font-medium text-white/80">{b2bTierLabel(companySummary.tierCode)}</span>
+                {companySummary.discountPct != null ? (
+                  <span className="text-white/50"> · {companySummary.discountPct}% off published site list (reference)</span>
+                ) : null}
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+                Unit amounts are resolved on our servers from catalog list pricing and your company tier—never trust
+                browser-side math for commercial totals. Formal quote responses from our team remain the contract path.
+              </p>
+              <p className="mt-2">
+                <Link className="text-xs font-semibold text-[#f06232] hover:underline" href="/account/pricing">
+                  How pricing tiers work
+                </Link>
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Quote requests (linked)</h2>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-white">
+                {buyerSnap.quoteLinkedCount == null ? "—" : buyerSnap.quoteLinkedCount}
+              </p>
+              <p className="mt-2 text-[10px] leading-snug text-white/40">Submitted while signed in with this company.</p>
+            </div>
+          </section>
+        ) : null}
+
+        {companySummary && buyerSnap && buyerSnap.trustedSpendObservationCount !== null ? (
+          <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Verified invoice observations</h2>
+            <p className="mt-1 text-sm text-white/80">
+              <span className="font-semibold tabular-nums">{buyerSnap.trustedSpendObservationCount}</span> trusted line
+              observations on file for your company (from reviewed intake — not a financial statement).
+            </p>
+            <p className="mt-2">
+              <Link className="text-xs font-semibold text-[#f06232] hover:underline" href="/workspace/procurement/spend">
+                View spend workspace
+              </Link>
+            </p>
+          </section>
+        ) : null}
+
+        {buyerSnap && buyerSnap.recentQuotes.length > 0 ? (
+          <section className="mt-8">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Recent quote activity</h2>
+              <Link href="/account/quotes" className="text-[11px] font-semibold text-[#f06232] hover:underline">
+                View all
+              </Link>
+            </div>
+            <ul className="mt-3 divide-y divide-white/10 rounded-lg border border-white/10">
+              {buyerSnap.recentQuotes.map((q) => {
+                const when = q.submitted_at || q.created_at;
+                return (
+                  <li key={q.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white/90">{q.company_name || "Quote request"}</p>
+                      <p className="text-[11px] text-white/45">{when ? new Date(when).toLocaleString() : "—"}</p>
+                    </div>
+                    <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/75">
+                      {q.status}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        {companySummary && buyerSnap && buyerSnap.quoteLinkedCount === 0 ? (
+          <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/70">
+            <p className="font-medium text-white/85">No quote requests linked yet</p>
+            <p className="mt-2 text-xs text-white/50">
+              Start a quote request from the cart while signed in with this company, and it will appear here and in
+              history.
+            </p>
+            <p className="mt-3">
+              <Link className="font-semibold text-[#f06232] hover:underline" href="/quote-cart">
+                Open quote request cart
+              </Link>
+            </p>
+          </div>
+        ) : null}
+
+        <section className="mt-10 rounded-lg border border-white/10 bg-black/20 px-4 py-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Orders &amp; payments</h2>
+          <p className="mt-2 text-sm text-white/65">
+            Online checkout and payment history are not enabled for this account yet. Use quote requests for formal
+            pricing; our team will route you through the right commercial path.
+          </p>
+        </section>
+
         <section className="mt-10">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Buying & quotes</h2>
           <ul className="mt-3 space-y-3 text-sm">
+            <li>
+              <Link className="font-medium text-[#f06232] hover:underline" href="/account/quotes">
+                Quote history
+              </Link>
+              <span className="mt-0.5 block text-xs text-white/45">Requests linked to your signed-in company.</span>
+            </li>
+            <li>
+              <Link className="font-medium text-[#f06232] hover:underline" href="/account/pricing">
+                Pricing tier explained
+              </Link>
+              <span className="mt-0.5 block text-xs text-white/45">Cub, Grizzly, Kodiak — reference only.</span>
+            </li>
             <li>
               <Link className="font-medium text-[#f06232] hover:underline" href="/quote-cart">
                 Quote request cart
