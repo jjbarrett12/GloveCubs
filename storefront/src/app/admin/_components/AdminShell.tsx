@@ -42,6 +42,19 @@ const NAV_MAIN: NavItem[] = [
     ),
   },
   {
+    href: "/admin/orders",
+    label: "Orders",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm0 5.25h.007v.008H3.75V12zm0 5.25h.007v.008H3.75v-.008z"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/admin/opportunities",
     label: "Pipeline",
     icon: (

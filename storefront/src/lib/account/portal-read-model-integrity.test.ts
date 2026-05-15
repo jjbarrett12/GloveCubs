@@ -18,11 +18,11 @@ describe("Phase 1b portal read models (no fake commerce)", () => {
     expect(s.toLowerCase()).not.toContain("margin");
   });
 
-  it("buyer account page copy does not claim order or payment history exists", () => {
+  it("buyer account page copy stays honest about checkout and points to order records", () => {
     const p = join(__dirname, "../../app/account/page.tsx");
     const s = readFileSync(p, "utf8");
     expect(s).toContain("not enabled");
-    expect(s).not.toMatch(/order history/i);
+    expect(s).toContain("/account/orders");
     expect(s).not.toMatch(/fake/i);
   });
 });

@@ -184,16 +184,29 @@ export default async function AccountPage() {
         ) : null}
 
         <section className="mt-10 rounded-lg border border-white/10 bg-black/20 px-4 py-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Orders &amp; payments</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Order records</h2>
           <p className="mt-2 text-sm text-white/65">
-            Online checkout and payment history are not enabled for this account yet. Use quote requests for formal
-            pricing; our team will route you through the right commercial path.
+            Checkout and self-serve payment are not enabled for this account yet. You can open the order records page
+            for read-only canonical headers when the feature flag is on; otherwise it explains what is coming next.
+          </p>
+          <p className="mt-3">
+            <Link className="text-sm font-semibold text-[#f06232] hover:underline" href="/account/orders">
+              View order records
+            </Link>
           </p>
         </section>
 
         <section className="mt-10">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Buying & quotes</h2>
           <ul className="mt-3 space-y-3 text-sm">
+            <li>
+              <Link className="font-medium text-[#f06232] hover:underline" href="/account/orders">
+                Order records
+              </Link>
+              <span className="mt-0.5 block text-xs text-white/45">
+                Read-only canonical orders when enabled; otherwise an honest “not available yet” shell.
+              </span>
+            </li>
             <li>
               <Link className="font-medium text-[#f06232] hover:underline" href="/account/quotes">
                 Quote history
