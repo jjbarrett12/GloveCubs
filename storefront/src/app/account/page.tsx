@@ -126,6 +126,20 @@ export default async function AccountPage() {
           </section>
         ) : null}
 
+        {gate.kind === "ready" ? (
+          <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Shipping addresses</h2>
+            <p className="mt-2 text-sm text-white/65">
+              Manage company delivery locations for future quotes and orders.
+            </p>
+            <p className="mt-3">
+              <Link className="text-sm font-semibold text-[#f06232] hover:underline" href="/account/shipping-addresses">
+                Open shipping addresses
+              </Link>
+            </p>
+          </section>
+        ) : null}
+
         {companySummary && buyerSnap && buyerSnap.trustedSpendObservationCount !== null ? (
           <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Verified invoice observations</h2>
@@ -199,6 +213,16 @@ export default async function AccountPage() {
         <section className="mt-10">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Buying & quotes</h2>
           <ul className="mt-3 space-y-3 text-sm">
+            {gate.kind === "ready" ? (
+              <li>
+                <Link className="font-medium text-[#f06232] hover:underline" href="/account/shipping-addresses">
+                  Shipping addresses
+                </Link>
+                <span className="mt-0.5 block text-xs text-white/45">
+                  Manage company delivery locations for future quotes and orders.
+                </span>
+              </li>
+            ) : null}
             <li>
               <Link className="font-medium text-[#f06232] hover:underline" href="/account/orders">
                 Order records

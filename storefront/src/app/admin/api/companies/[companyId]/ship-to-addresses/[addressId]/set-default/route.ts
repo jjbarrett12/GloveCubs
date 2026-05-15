@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { fetchAdminShipToAddresses, setDefaultAdminShipToAddress } from "@/lib/admin/admin-ship-to-addresses";
-
-function uuidParam(id: string | undefined): string | null {
-  if (!id || !z.string().uuid().safeParse(id).success) return null;
-  return id;
-}
+import { shipToAddressUuidParam as uuidParam } from "@/lib/commerce/ship-to-address-http-schema";
 
 export async function POST(_request: Request, ctx: { params: { companyId: string; addressId: string } }) {
   const admin = await getAdminUser();

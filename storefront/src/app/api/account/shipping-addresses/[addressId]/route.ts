@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { archiveAdminShipToAddress, updateAdminShipToAddress } from "@/lib/admin/admin-ship-to-addresses";
-import {
-  shipToAddressPatchBodySchema as patchSchema,
-  shipToAddressUuidParam as uuidParam,
-} from "@/lib/commerce/ship-to-address-http-schema";
+import { resolveBuyerShippingAddressesGate } from "@/lib/account/buyer-shipping-addresses-gate";
+import { shipToAddressPatchBodySchema, shipToAddressUuidParam } from "@/lib/commerce/ship-to-address-http-schema";
 
-export async function PATCH(request: NextRequest, ctx: { params: { companyId: string; addressId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function PATCH(request: NextRequest, ctx: { params: { addressId: string } }) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+  }
 
-  const companyId = uuidParam(ctx.params.companyId);
-  const addressId = uuidParam(ctx.params.addressId);
-  if (!companyId || !addressId) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  const addressId = shipToAddressUuidParam(ctx.params.addressId);
+  if (!addressId) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+
+  const supabase = getSupabaseAdmin() as any;
+  const gated = await resolveBuyerShippingAddressesGate(supabase, { requireMutate: true });
+  if (!gated.ok) return gated.response;
+
+  const { companyId } = gated.ctx;
 
   let body: unknown;
   try {
@@ -22,7 +25,7 @@ export async function PATCH(request: NextRequest, ctx: { params: { companyId: st
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const parsed = patchSchema.safeParse(body);
+  const parsed = shipToAddressPatchBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
   }
@@ -36,7 +39,6 @@ export async function PATCH(request: NextRequest, ctx: { params: { companyId: st
     patchFields.country_code = patchFields.country_code.toUpperCase();
   }
 
-  const supabase = getSupabaseAdmin() as any;
   const { row, error, code } = await updateAdminShipToAddress(supabase, companyId, addressId, patchFields);
 
   if (code === "not_found") {
@@ -49,7 +51,7 @@ export async function PATCH(request: NextRequest, ctx: { params: { companyId: st
     return NextResponse.json({ error }, { status: 400 });
   }
   if (error || !row) {
-    console.error("[PATCH ship-to-address]", error);
+    console.error("[PATCH account/shipping-addresses]", error);
     return NextResponse.json({ error: error || "Update failed" }, { status: 500 });
   }
 
@@ -57,22 +59,27 @@ export async function PATCH(request: NextRequest, ctx: { params: { companyId: st
 }
 
 /** Archives the address (JSONB `is_archived`); does not hard-delete. */
-export async function DELETE(_request: NextRequest, ctx: { params: { companyId: string; addressId: string } }) {
-  const admin = await getAdminUser();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function DELETE(_request: NextRequest, ctx: { params: { addressId: string } }) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+  }
 
-  const companyId = uuidParam(ctx.params.companyId);
-  const addressId = uuidParam(ctx.params.addressId);
-  if (!companyId || !addressId) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  const addressId = shipToAddressUuidParam(ctx.params.addressId);
+  if (!addressId) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
   const supabase = getSupabaseAdmin() as any;
+  const gated = await resolveBuyerShippingAddressesGate(supabase, { requireMutate: true });
+  if (!gated.ok) return gated.response;
+
+  const { companyId } = gated.ctx;
+
   const { row, error, code } = await archiveAdminShipToAddress(supabase, companyId, addressId);
 
   if (code === "not_found") {
     return NextResponse.json({ error: error || "Not found" }, { status: 404 });
   }
   if (error || !row) {
-    console.error("[DELETE ship-to-address archive]", error);
+    console.error("[DELETE account/shipping-addresses archive]", error);
     return NextResponse.json({ error: error || "Archive failed" }, { status: 500 });
   }
 

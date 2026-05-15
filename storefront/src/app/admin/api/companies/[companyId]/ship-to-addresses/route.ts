@@ -1,28 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createAdminShipToAddress, fetchAdminShipToAddresses } from "@/lib/admin/admin-ship-to-addresses";
-
-function uuidParam(id: string | undefined): string | null {
-  if (!id || !z.string().uuid().safeParse(id).success) return null;
-  return id;
-}
-
-const addressBodySchema = z.object({
-  label: z.string().trim().max(200).optional().nullable(),
-  recipient_name: z.string().trim().min(1).max(500),
-  company_name: z.string().trim().max(500).optional().nullable(),
-  address_line_1: z.string().trim().min(1).max(500),
-  address_line_2: z.string().trim().max(500).optional().nullable(),
-  city: z.string().trim().min(1).max(200),
-  region: z.string().trim().min(1).max(200),
-  postal_code: z.string().trim().min(1).max(32),
-  country_code: z.string().trim().length(2).optional(),
-  phone: z.string().trim().max(50).optional().nullable(),
-  delivery_notes: z.string().trim().max(500).optional().nullable(),
-  is_archived: z.boolean().optional(),
-});
+import { shipToAddressPostBodySchema as addressBodySchema, shipToAddressUuidParam as uuidParam } from "@/lib/commerce/ship-to-address-http-schema";
 
 export async function GET(_request: NextRequest, ctx: { params: { companyId: string } }) {
   const admin = await getAdminUser();
