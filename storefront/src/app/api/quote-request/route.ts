@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, isSmtpConfigured, sendSmtpMail } from "@/lib/email/smtp";
 import { recordQuoteCartSpine } from "@/lib/procurement/spine-writes";
+import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 
 const itemSchema = z.object({
   product_id: z.string().uuid(),
@@ -54,6 +55,16 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin() as any;
 
+  let gcCompanyId: string | null = null;
+  try {
+    const gate = await resolveCustomerProcurementGate(supabase);
+    if (gate.kind === "ready") {
+      gcCompanyId = gate.session.companyId;
+    }
+  } catch {
+    gcCompanyId = null;
+  }
+
   const companyName = body.company?.trim() || "Unknown";
   const contactName = body.name.trim();
   const email = body.email.trim();
@@ -72,6 +83,7 @@ export async function POST(request: NextRequest) {
       phone,
       status: "new",
       submitted_at: submittedAt,
+      gc_company_id: gcCompanyId,
     })
     .select("id")
     .single();

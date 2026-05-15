@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { PageHeader, PageSection, TableCard } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminCompanyDetail } from "@/lib/admin/admin-companies-read-model";
+import { fetchCompanyQuicklistItems } from "@/lib/admin/admin-company-quicklist";
 import { CompanyB2bTierSelect } from "../CompanyB2bTierSelect";
 import { CompanyProfileForm } from "../CompanyProfileForm";
+import { CompanyQuicklistManager } from "../CompanyQuicklistManager";
 import { b2bTierLabel } from "@/lib/pricing/b2b-tier-meta";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +30,12 @@ export default async function AdminCompanyDetailPage({ params }: { params: { com
   }
 
   const supabase = getSupabaseAdmin() as any;
-  const { detail, error } = await fetchAdminCompanyDetail(supabase, companyId);
+  const [detailRes, quicklist] = await Promise.all([
+    fetchAdminCompanyDetail(supabase, companyId),
+    fetchCompanyQuicklistItems(supabase, companyId),
+  ]);
+
+  const { detail, error } = detailRes;
 
   if (error) {
     return (
@@ -217,10 +224,11 @@ export default async function AdminCompanyDetailPage({ params }: { params: { com
           </TableCard>
         </PageSection>
 
-        <PageSection title="Glove quicklist">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Customer glove quicklists require the dedicated quicklist data model approved in Phase D.
-          </div>
+        <PageSection
+          title="Glove quicklist"
+          description="Pricing is resolved server-side when quotes are requested. This is separate from procurement reorder memory."
+        >
+          <CompanyQuicklistManager companyId={companyId} initialItems={quicklist.error ? [] : quicklist.rows} />
         </PageSection>
 
         <PageSection title="Payment setup">

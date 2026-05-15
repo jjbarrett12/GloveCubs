@@ -9,7 +9,7 @@ describe("admin companies directory (Phase A)", () => {
     expect(s).toContain('schema("gc_commerce")');
     expect(s).toContain("companies");
     expect(s).toContain("company_members");
-    expect(s).toContain("quote_requests");
+    expect(s).toContain("company_quicklist_items");
     expect(s).not.toContain('from("users")');
     expect(s).not.toContain("public.users");
     expect(s).not.toContain("procurement_reorder_memory");
@@ -23,7 +23,7 @@ describe("admin companies directory (Phase A)", () => {
     const client = join(process.cwd(), "src/app/admin/companies/CompaniesDirectoryClient.tsx");
     const s = readFileSync(client, "utf8");
     expect(s).toContain("+ Add Customer");
-    expect(s).toContain("Search by company name, slug, or contact email");
+    expect(s).toContain("Quicklist");
     expect(s).not.toContain("CompanyB2bTierSelect");
   });
 });

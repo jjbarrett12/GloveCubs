@@ -9,7 +9,21 @@ import { ProductImage } from "@/components/store/ProductImage";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
+export type BuyerUnitReference = {
+  tierLabel: string;
+  tierCode: string;
+  listUsd: number;
+  yourUsd: number;
+  pricingSource: string;
+};
+
+export function StorePdpContent({
+  detail,
+  buyerUnitReference,
+}: {
+  detail: StoreProductDetail;
+  buyerUnitReference?: BuyerUnitReference | null;
+}) {
   const quoteBase = detail.quoteProductRow;
   const primaryQuoteProduct =
     quoteBase && detail.defaultVariant
@@ -99,6 +113,19 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
                       ) : (
                         <p className="text-[12px] font-medium text-white/45">Request pricing</p>
                       )}
+                      {buyerUnitReference ? (
+                        <div className="mt-2 max-w-md rounded-md border border-emerald-500/25 bg-emerald-500/[0.07] px-2.5 py-2 text-[11px] leading-snug text-white/80">
+                          <p className="font-semibold text-emerald-200/95">{buyerUnitReference.tierLabel} tier reference</p>
+                          <p className="mt-1 tabular-nums text-white/85">
+                            Site list from {usd.format(buyerUnitReference.listUsd)} · Tier unit reference{" "}
+                            {usd.format(buyerUnitReference.yourUsd)}
+                          </p>
+                          <p className="mt-1 text-[10px] text-white/45">
+                            Server-resolved from published list pricing ({buyerUnitReference.pricingSource}). Quote
+                            responses from our team are separate from this reference.
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="hidden min-w-[200px] flex-1 md:block md:max-w-xs">
                       {primaryQuoteProduct ? <AddToQuoteButton product={primaryQuoteProduct} /> : null}

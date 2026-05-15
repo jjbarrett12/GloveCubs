@@ -70,6 +70,7 @@ export function CompaniesDirectoryClient({ rows }: Props) {
                 <th className="px-4 py-3 text-right">Members</th>
                 <th className="px-4 py-3 text-right">Quotes</th>
                 <th className="px-4 py-3 text-right">Orders</th>
+                <th className="px-4 py-3 text-right">Quicklist</th>
                 <th className="px-4 py-3">Last activity</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -77,7 +78,7 @@ export function CompaniesDirectoryClient({ rows }: Props) {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
                     No customers yet.{" "}
                     <Link href="/admin/companies/new" className="font-medium text-[#f06232] underline">
                       Add your first customer
@@ -87,7 +88,7 @@ export function CompaniesDirectoryClient({ rows }: Props) {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
                     No customers match your search.
                   </td>
                 </tr>
@@ -113,6 +114,7 @@ export function CompaniesDirectoryClient({ rows }: Props) {
                     <td className="px-4 py-3 text-right tabular-nums text-slate-800">{c.member_count}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-800">{c.quote_count}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-800">{c.order_count}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-800">{c.quicklist_count}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
                       {c.last_activity_at ? new Date(c.last_activity_at).toLocaleString() : "—"}
                     </td>

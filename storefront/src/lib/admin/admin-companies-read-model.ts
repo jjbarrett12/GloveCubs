@@ -14,6 +14,7 @@ export type AdminCompanyDirectoryRow = {
   member_count: number;
   quote_count: number;
   order_count: number;
+  quicklist_count: number;
   derived_contact_email: string | null;
   last_activity_at: string | null;
 };
@@ -106,7 +107,7 @@ export async function fetchAdminCompaniesDirectory(supabase: any): Promise<{
     status: string;
   }>;
 
-  const [memberRes, quoteRes, orderRes] = await Promise.all([
+  const [memberRes, quoteRes, orderRes, quicklistRes] = await Promise.all([
     supabase.schema("gc_commerce").from("company_members").select("company_id"),
     supabase
       .schema("catalogos")
@@ -114,6 +115,11 @@ export async function fetchAdminCompaniesDirectory(supabase: any): Promise<{
       .select("gc_company_id, created_at, submitted_at, email")
       .not("gc_company_id", "is", null),
     supabase.schema("gc_commerce").from("orders").select("company_id, placed_at, created_at"),
+    supabase
+      .schema("gc_commerce")
+      .from("company_quicklist_items")
+      .select("company_id")
+      .is("valid_to", null),
   ]);
 
   const memberCounts = countByKey(
@@ -125,6 +131,11 @@ export async function fetchAdminCompaniesDirectory(supabase: any): Promise<{
   const orderCounts = countByKey(
     ((orderRes.data ?? []) as { company_id: string }[]).map((r) => ({ key: r.company_id }))
   );
+  const quicklistCounts = quicklistRes.error
+    ? new Map<string, number>()
+    : countByKey(
+        ((quicklistRes.data ?? []) as { company_id: string }[]).map((r) => ({ key: r.company_id }))
+      );
 
   const lastQuoteAt = new Map<string, string>();
   const latestQuoteEmail = new Map<string, string>();
@@ -170,6 +181,7 @@ export async function fetchAdminCompaniesDirectory(supabase: any): Promise<{
     member_count: memberCounts.get(c.id) ?? 0,
     quote_count: quoteCounts.get(c.id) ?? 0,
     order_count: orderCounts.get(c.id) ?? 0,
+    quicklist_count: quicklistCounts.get(c.id) ?? 0,
     derived_contact_email: latestQuoteEmail.get(c.id) ?? null,
     last_activity_at: maxIso(lastQuoteAt.get(c.id), lastOrderAt.get(c.id)),
   }));
