@@ -1,5 +1,6 @@
 import { MapPin } from "lucide-react";
 import { getHomeMapEmbedSrc, isHomeMapEmbedDisabled } from "@/config/expressHomeMap";
+import { ProcurementSectionShell } from "@/components/procurement";
 
 const MAPS_LINK_HREF =
   "https://www.google.com/maps/search/?api=1&query=Salt+Lake+City+Utah+glove+distributor";
@@ -9,21 +10,20 @@ export function ServiceAreaPanel() {
   const showIframe = embedSrc.length > 0;
 
   return (
-    <section className="border-t border-border-subtle bg-surface-base py-16 sm:py-20" aria-labelledby="map-heading">
-      <div className="mx-auto max-w-proc px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[1200px]">
-          <div className="rounded-2xl border border-border-subtle bg-white/[0.05] p-10 shadow-proc-sm sm:p-12">
-            <h3 id="map-heading" className="mb-4 text-center text-[32px] font-bold text-brand">
-              Built Here, Servicing Everywhere
-            </h3>
-            <p className="mb-8 text-center text-base leading-relaxed text-white/90">
-              Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central
-              location, we efficiently distribute quality gloves to businesses across the United States and beyond.
-              Whether you&apos;re on the East Coast, West Coast, or anywhere in between, we&apos;re here to serve you.
-            </p>
+    <ProcurementSectionShell tone="light-alt" headingId="map-heading" ariaLabel="Distribution and service area">
+      <div className="mx-auto max-w-[1200px]">
+        <h2 id="map-heading" className="proc-h2-light mb-3 text-center">
+          Built here, servicing everywhere
+        </h2>
+        <p className="proc-body-light mx-auto mb-8 max-w-2xl text-center">
+          Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central location, we
+          efficiently distribute quality gloves to businesses across the United States and beyond.
+        </p>
 
-            {showIframe ? (
-              <div className="relative min-h-[400px] w-full overflow-hidden rounded-xl bg-black/40 shadow-2xl ring-1 ring-white/10">
+        <div className="overflow-hidden rounded-xl border border-border-light bg-white shadow-proc-light-md">
+          {showIframe ? (
+            <>
+              <div className="relative min-h-[400px] w-full bg-[#111111]">
                 <iframe
                   src={embedSrc}
                   width="100%"
@@ -34,42 +34,44 @@ export function ServiceAreaPanel() {
                   referrerPolicy="no-referrer-when-downgrade"
                   title="Glovecubs headquarters region — Salt Lake City, UT"
                 />
-                <p className="mt-3 text-center text-sm text-white/55">
-                  Map not loading?{" "}
-                  <a
-                    href={MAPS_LINK_HREF}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-[#f06232] underline-offset-2 hover:underline"
-                  >
-                    Open in Google Maps
-                  </a>
-                </p>
               </div>
-            ) : (
-              <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-white/20 bg-gradient-to-b from-[#1a1a1a] to-[#111] px-6 py-16 text-center shadow-inner">
-                <MapPin className="h-12 w-12 text-[#f06232]" aria-hidden />
-                <p className="max-w-md text-base font-medium text-white/90">
-                  Map preview is turned off in this environment, or no embed URL is configured.
-                </p>
-                <p className="max-w-lg text-sm text-white/60">
-                  Set <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs text-white/90">NEXT_PUBLIC_HOME_MAP_EMBED_URL</code>{" "}
-                  to a Google Maps embed link, or clear <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_HOME_MAP_DISABLED</code>{" "}
-                  to use the default embed.
-                </p>
+              <p className="border-t border-border-light px-4 py-3 text-center text-sm text-text-muted-light">
+                Map not loading?{" "}
                 <a
                   href={MAPS_LINK_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#f06232] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#f06232]/25 transition hover:bg-[#f06232]"
+                  className="font-medium text-brand hover:underline"
                 >
-                  Open map — Salt Lake City, UT
+                  Open in Google Maps
                 </a>
-              </div>
-            )}
-          </div>
+              </p>
+            </>
+          ) : (
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 bg-[#111111] px-6 py-16 text-center">
+              <MapPin className="h-12 w-12 text-brand" aria-hidden />
+              <p className="max-w-md text-base font-medium text-white/90">
+                Map preview is turned off in this environment, or no embed URL is configured.
+              </p>
+              <p className="max-w-lg text-sm text-white/60">
+                Set{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs text-white/90">NEXT_PUBLIC_HOME_MAP_EMBED_URL</code> to a
+                Google Maps embed link, or clear{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_HOME_MAP_DISABLED</code> to use the default
+                embed.
+              </p>
+              <a
+                href={MAPS_LINK_HREF}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-brand px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-hover"
+              >
+                Open map — Salt Lake City, UT
+              </a>
+            </div>
+          )}
         </div>
       </div>
-    </section>
+    </ProcurementSectionShell>
   );
 }

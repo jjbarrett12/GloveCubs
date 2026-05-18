@@ -1,18 +1,30 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+export type ProcurementCardVariant = "dark" | "light";
+
 export type ProcurementCardProps = {
   children: ReactNode;
   className?: string;
   as?: "div" | "li" | "article";
+  variant?: ProcurementCardVariant;
 };
 
-export function ProcurementCard({ children, className, as: Tag = "div" }: ProcurementCardProps) {
+export function ProcurementCard({
+  children,
+  className,
+  as: Tag = "div",
+  variant = "dark",
+}: ProcurementCardProps) {
+  const isLight = variant === "light";
+
   return (
     <Tag
       className={cn(
-        "rounded-2xl border border-border-subtle bg-surface-card p-proc-card-p shadow-proc-sm transition-shadow sm:p-proc-card-p-lg",
-        "hover:border-brand/30 hover:shadow-proc-sm",
+        "rounded-xl border p-proc-card-p transition-shadow sm:p-proc-card-p-lg",
+        isLight
+          ? "border-border-light bg-white shadow-proc-light-sm hover:border-brand/35 hover:shadow-proc-light-md"
+          : "border-border-subtle bg-surface-card shadow-proc-sm hover:border-brand/30 hover:shadow-proc-sm",
         className
       )}
     >

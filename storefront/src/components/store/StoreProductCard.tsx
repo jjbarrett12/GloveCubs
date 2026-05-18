@@ -12,51 +12,80 @@ import {
   productRequiresSizeSelection,
   storeProductPdpVariantsAnchor,
 } from "@/lib/catalog/store-quote-rules";
+import { cn } from "@/lib/utils";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-function ProcurementSpecStrip({ product }: { product: StoreProductRow }) {
+export type StoreProductCardSurface = "dark" | "light";
+
+function ProcurementSpecStrip({
+  product,
+  surface,
+}: {
+  product: StoreProductRow;
+  surface: StoreProductCardSurface;
+}) {
   const specParts = [product.materialHint, product.sizeCode].filter(Boolean);
   const certParts = [product.protectionHint, ...(product.certificationHints ?? [])].filter(Boolean).slice(0, 2);
   const multi = productRequiresSizeSelection(product);
+  const isLight = surface === "light";
 
   return (
-    <div className="space-y-1.5 border-t border-white/[0.06] pt-2">
+    <div className={cn("space-y-1.5 border-t pt-2", isLight ? "border-border-light" : "border-white/[0.06]")}>
       {product.commercialUseSummary ? (
-        <p className="line-clamp-2 text-[10px] font-medium leading-snug text-white/60">{product.commercialUseSummary}</p>
+        <p
+          className={cn(
+            "line-clamp-2 text-[10px] font-medium leading-snug",
+            isLight ? "text-text-muted-light" : "text-white/60"
+          )}
+        >
+          {product.commercialUseSummary}
+        </p>
       ) : null}
       {specParts.length > 0 ? (
-        <p className="text-[10px] font-medium text-white/70">
-          <span className="text-white/40">Spec · </span>
+        <p className={cn("text-[10px] font-medium", isLight ? "text-neutral-700" : "text-white/70")}>
+          <span className={isLight ? "text-neutral-400" : "text-white/40"}>Spec · </span>
           {specParts.join(" · ")}
         </p>
       ) : null}
       {certParts.length > 0 ? (
-        <p className="line-clamp-1 text-[10px] text-white/50">{certParts.join(" · ")}</p>
+        <p className={cn("line-clamp-1 text-[10px]", isLight ? "text-neutral-500" : "text-white/50")}>
+          {certParts.join(" · ")}
+        </p>
       ) : null}
       {multi ? (
-        <p className="text-[10px] font-semibold text-[#f06232]/90">
+        <p className="text-[10px] font-semibold text-brand">
           {product.activeVariantCount} sizes · select on detail
         </p>
       ) : product.variantSku ? (
-        <p className="font-mono text-[10px] text-white/55">
-          <span className="text-white/40">SKU · </span>
+        <p className={cn("font-mono text-[10px]", isLight ? "text-neutral-500" : "text-white/55")}>
+          <span className={isLight ? "text-neutral-400" : "text-white/40"}>SKU · </span>
           {product.variantSku}
         </p>
       ) : null}
       {!multi && product.internalSku && product.internalSku !== product.variantSku ? (
-        <p className="font-mono text-[10px] text-white/40">Parent {product.internalSku}</p>
+        <p className={cn("font-mono text-[10px]", isLight ? "text-neutral-400" : "text-white/40")}>
+          Parent {product.internalSku}
+        </p>
       ) : null}
     </div>
   );
 }
 
-export function StoreProductCard({ product }: { product: StoreProductRow }) {
+export function StoreProductCard({
+  product,
+  surface = "dark",
+}: {
+  product: StoreProductRow;
+  surface?: StoreProductCardSurface;
+}) {
+  const isLight = surface === "light";
+
   const priceLine =
     product.bestPrice != null ? (
       <div className="text-[13px] font-bold tabular-nums text-sales">From {usd.format(product.bestPrice)}</div>
     ) : (
-      <div className="text-[11px] font-medium text-white/45">Request pricing</div>
+      <div className={cn("text-[11px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>Request pricing</div>
     );
 
   const pdpHref = `/store/p/${encodeURIComponent(product.slug)}`;
@@ -65,13 +94,28 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
   const needsSize = productRequiresSizeSelection(product);
 
   return (
-    <Card className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#121212] shadow-sm transition-[border-color,box-shadow] hover:border-[#f06232]/35 hover:shadow-md">
+    <Card
+      className={cn(
+        "flex h-full min-w-0 flex-col overflow-hidden rounded-xl border shadow-proc-light-sm transition-[border-color,box-shadow] hover:shadow-proc-light-md",
+        isLight
+          ? "border-border-light bg-canvas hover:border-brand/35"
+          : "border-white/10 bg-[#121212] shadow-sm hover:border-[#f06232]/35 hover:shadow-md"
+      )}
+    >
       <div className="relative shrink-0">
-        <div className="relative aspect-[4/3] w-full bg-black/40 sm:aspect-square">
+        <div
+          className={cn(
+            "relative aspect-[4/3] w-full sm:aspect-square",
+            isLight ? "bg-neutral-100" : "bg-black/40"
+          )}
+        >
           <StoreBadgeStack labels={product.badges} />
           <Link
             href={pdpHref}
-            className="block h-full outline-none ring-offset-2 ring-offset-[#121212] focus-visible:ring-2 focus-visible:ring-[#f06232]"
+            className={cn(
+              "block h-full outline-none focus-visible:ring-2 focus-visible:ring-brand",
+              isLight ? "ring-offset-2 ring-offset-white" : "ring-offset-2 ring-offset-[#121212]"
+            )}
           >
             <ProductImage
               src={product.imageUrl}
@@ -85,23 +129,31 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
 
       <CardHeader className="flex flex-1 flex-col gap-1.5 px-3 pb-2 pt-3">
         {product.brandName ? (
-          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#f06232]/90">{product.brandName}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand">{product.brandName}</div>
         ) : null}
-        <CardTitle className="line-clamp-2 text-left text-[14px] font-bold leading-snug text-white">
+        <CardTitle
+          className={cn(
+            "line-clamp-2 text-left text-[14px] font-bold leading-snug",
+            isLight ? "text-ink" : "text-white"
+          )}
+        >
           <Link
             href={pdpHref}
-            className="transition-colors hover:text-[#ffb27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06232]"
+            className={cn(
+              "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+              isLight ? "hover:text-brand" : "hover:text-[#ffb27a]"
+            )}
           >
             {product.name}
           </Link>
         </CardTitle>
-        <ProcurementSpecStrip product={product} />
+        <ProcurementSpecStrip product={product} surface={surface} />
         <div className="pt-0.5">{priceLine}</div>
       </CardHeader>
 
       <CardContent className="mt-auto flex flex-col gap-2 px-3 pb-3 pt-0">
         {needsSize ? (
-          <Button asChild className="h-11 w-full bg-[#f06232] text-sm font-bold text-white hover:bg-[#e5582d]">
+          <Button asChild className="h-11 w-full bg-brand text-sm font-bold text-white hover:bg-brand-hover">
             <Link href={selectSizeHref}>Select size</Link>
           </Button>
         ) : showQuote ? (
@@ -110,14 +162,17 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
           <Button
             asChild
             variant="outline"
-            className="h-11 w-full border-[#f06232]/45 text-sm font-semibold text-[#f06232] hover:bg-[#f06232]/10"
+            className="h-11 w-full border-brand/45 text-sm font-semibold text-brand hover:bg-brand/10"
           >
             <Link href="/request-pricing">Request pricing</Link>
           </Button>
         )}
         <Link
           href={pdpHref}
-          className="text-center text-[11px] font-semibold text-white/55 transition-colors hover:text-[#f06232] hover:underline"
+          className={cn(
+            "text-center text-[11px] font-semibold transition-colors hover:text-brand hover:underline",
+            isLight ? "text-neutral-500" : "text-white/55"
+          )}
         >
           View details
         </Link>
@@ -125,4 +180,3 @@ export function StoreProductCard({ product }: { product: StoreProductRow }) {
     </Card>
   );
 }
-

@@ -1,83 +1,98 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Droplets, UtensilsCrossed, Stethoscope, Factory } from "lucide-react";
+import { ArrowRight, Droplets, UtensilsCrossed, Stethoscope, Factory } from "lucide-react";
 import { BrandCarousel } from "@/components/home/BrandCarousel";
+import { cn } from "@/lib/utils";
 
-function IndustryIcon({ children }: { children: ReactNode }) {
+const INDUSTRIES = [
+  {
+    href: "/industries/janitorial",
+    icon: Droplets,
+    title: "Janitorial Contractors",
+    body: "Reduce cost per building. Standardize SKUs.",
+  },
+  {
+    href: "/industries/hospitality",
+    icon: UtensilsCrossed,
+    title: "Hospitality",
+    body: "Food-safe vinyl & nitrile at competitive case pricing.",
+  },
+  {
+    href: "/industries/healthcare",
+    icon: Stethoscope,
+    title: "Healthcare",
+    body: "Medical-grade compliance with reliable stock.",
+  },
+  {
+    href: "/industries/industrial",
+    icon: Factory,
+    title: "Industrial & Manufacturing",
+    body: "Cut-resistant, chemical, and task-specific gloves at scale.",
+  },
+] as const;
+
+function IndustryIconWrap({ children }: { children: ReactNode }) {
   return (
-    <div
-      className="mb-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-neutral-700"
-      aria-hidden
-    >
+    <span className="mx-auto mb-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border-light bg-[#fafafa] text-neutral-700">
       {children}
-    </div>
+    </span>
   );
 }
 
-export function HomeWhoSection() {
+type HomeWhoSectionProps = {
+  /** Render inside HomeIndustriesTrustSection (no outer section shell). */
+  embedded?: boolean;
+};
+
+export function HomeWhoSection({ embedded = false }: HomeWhoSectionProps) {
+  const inner = (
+    <>
+      <div className={cn("mb-10 text-center", embedded ? "pt-10" : "")}>
+        <h2 id="who-heading" className="mb-3 text-3xl font-extrabold tracking-tight text-ink md:text-4xl">
+          Shop where gloves get used
+        </h2>
+        <p className="mx-auto max-w-xl text-base leading-relaxed text-text-muted-light md:text-[17px]">
+          Industry pages connect operating context to catalog entry points—still B2B commerce, not a software tour.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {INDUSTRIES.map(({ href, icon: Icon, title, body }) => (
+          <Link
+            key={href}
+            href={href}
+            className="group flex h-full flex-col items-center rounded-xl border border-border-light bg-white p-5 text-center shadow-proc-light-sm transition hover:border-brand/40 hover:shadow-proc-light-md"
+          >
+            <IndustryIconWrap>
+              <Icon className="h-5 w-5 text-brand" strokeWidth={2} aria-hidden />
+            </IndustryIconWrap>
+            <h3 className="mb-2 text-lg font-bold text-ink">{title}</h3>
+            <p className="m-0 flex-1 text-sm leading-snug text-text-muted-light">{body}</p>
+            <span className="mt-3 inline-flex items-center justify-center gap-1 text-sm font-semibold text-brand">
+              View industry page
+              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" aria-hidden />
+            </span>
+          </Link>
+        ))}
+      </div>
+      <BrandCarousel />
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div id="industries" className="scroll-mt-28">
+        {inner}
+      </div>
+    );
+  }
+
   return (
     <section
       id="industries"
-      className="scroll-mt-28 border-t border-neutral-200/80 bg-gradient-to-b from-[#f3f4f6] to-white py-20 pb-24"
+      className="scroll-mt-28 border-t border-border-light bg-white py-20 pb-24"
       aria-labelledby="who-heading"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center">
-          <h2 id="who-heading" className="mb-3 text-3xl font-extrabold tracking-tight text-neutral-900 md:text-4xl">
-            Shop by where gloves get used
-          </h2>
-          <p className="mx-auto max-w-xl text-base leading-relaxed text-neutral-600 md:text-[17px]">
-            Industry pages connect operating context to catalog entry points—still B2B commerce, not a software tour.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            href="/industries/janitorial"
-            className="block rounded-2xl border border-neutral-300/90 bg-white p-7 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
-          >
-            <IndustryIcon>
-              <Droplets className="h-6 w-6" strokeWidth={2} />
-            </IndustryIcon>
-            <h3 className="mb-2.5 text-lg font-bold text-neutral-900">Janitorial Contractors</h3>
-            <p className="m-0 text-sm leading-snug text-neutral-600">Reduce cost per building. Standardize SKUs.</p>
-            <span className="mt-3.5 inline-block text-sm font-semibold text-[#f06232]">View industry page →</span>
-          </Link>
-          <Link
-            href="/industries/hospitality"
-            className="block rounded-2xl border border-neutral-300/90 bg-white p-7 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
-          >
-            <IndustryIcon>
-              <UtensilsCrossed className="h-6 w-6" strokeWidth={2} />
-            </IndustryIcon>
-            <h3 className="mb-2.5 text-lg font-bold text-neutral-900">Hospitality</h3>
-            <p className="m-0 text-sm leading-snug text-neutral-600">Food-safe vinyl &amp; nitrile at competitive case pricing.</p>
-            <span className="mt-3.5 inline-block text-sm font-semibold text-[#f06232]">View industry page →</span>
-          </Link>
-          <Link
-            href="/industries/healthcare"
-            className="block rounded-2xl border border-neutral-300/90 bg-white p-7 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
-          >
-            <IndustryIcon>
-              <Stethoscope className="h-6 w-6" strokeWidth={2} />
-            </IndustryIcon>
-            <h3 className="mb-2.5 text-lg font-bold text-neutral-900">Healthcare</h3>
-            <p className="m-0 text-sm leading-snug text-neutral-600">Medical-grade compliance with reliable stock.</p>
-            <span className="mt-3.5 inline-block text-sm font-semibold text-[#f06232]">View industry page →</span>
-          </Link>
-          <Link
-            href="/industries/industrial"
-            className="block rounded-2xl border border-neutral-300/90 bg-white p-7 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:border-[#f06232]/60 hover:shadow-md"
-          >
-            <IndustryIcon>
-              <Factory className="h-6 w-6" strokeWidth={2} />
-            </IndustryIcon>
-            <h3 className="mb-2.5 text-lg font-bold text-neutral-900">Industrial &amp; Manufacturing</h3>
-            <p className="m-0 text-sm leading-snug text-neutral-600">Cut-resistant, chemical, and task-specific gloves at scale.</p>
-            <span className="mt-3.5 inline-block text-sm font-semibold text-[#f06232]">View industry page →</span>
-          </Link>
-        </div>
-        <BrandCarousel />
-      </div>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">{inner}</div>
     </section>
   );
 }

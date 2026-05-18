@@ -26,10 +26,10 @@ function CtaLink({
   const base = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition";
   const styles =
     variant === "primary"
-      ? cn(base, "bg-brand px-7 py-3.5 font-bold text-white shadow-proc-brand hover:-translate-y-0.5 hover:bg-brand-hover")
+      ? cn(base, "bg-brand px-7 py-3.5 font-bold text-white shadow-proc-sm hover:bg-brand-hover")
       : cn(
           base,
-          "border border-brand/55 bg-white/[0.04] px-5 py-3 text-brand backdrop-blur-[2px] hover:-translate-y-0.5 hover:border-brand hover:bg-white/[0.07]"
+          "border border-brand/55 bg-white/[0.04] px-5 py-3 text-brand hover:border-brand hover:bg-white/[0.07]"
         );
 
   return (

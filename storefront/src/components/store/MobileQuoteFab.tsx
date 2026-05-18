@@ -15,12 +15,12 @@ export function MobileQuoteFab() {
   return (
     <Link
       href="/quote-cart"
-      className="fixed bottom-24 right-4 z-[45] flex h-12 w-12 items-center justify-center rounded-full border border-[#f06232]/45 bg-[#141414]/95 text-[#f06232] shadow-lg backdrop-blur-sm md:hidden"
+      className="fixed bottom-24 right-4 z-[45] flex h-11 w-11 items-center justify-center rounded-full border border-border-light bg-white text-brand shadow-proc-light-md md:hidden"
       aria-label={n > 0 ? `Quote request cart, ${n} lines — review quote` : "Quote request cart — review quote"}
     >
       <ClipboardList className="h-5 w-5" />
       {n > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#f06232] px-1 text-[10px] font-bold text-black">
+        <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
           {n > 99 ? "99+" : n}
         </span>
       ) : null}

@@ -26,7 +26,7 @@ const iconForSocial = (label: string) => {
 
 export function SiteFooter() {
   return (
-    <footer className="mt-[72px] border-t border-white/10 bg-[#141414] pb-2 pt-16 text-white sm:pt-20">
+    <footer className="mt-0 border-t border-white/10 bg-[#111111] pb-2 pt-16 text-white sm:pt-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 border-b border-white/10 pb-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] lg:gap-x-12 lg:gap-y-8">
           <div>

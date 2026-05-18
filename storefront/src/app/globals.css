@@ -28,6 +28,14 @@
 
   --color-border-subtle: rgb(255 255 255 / 0.1);
   --color-text-muted: rgb(255 255 255 / 0.65);
+
+  /* Homepage light procurement surfaces (V4) */
+  --color-canvas: #ffffff;
+  --color-canvas-alt: #fafafa;
+  --color-ink: #111111;
+  --color-ink-secondary: #1a1a1a;
+  --color-border-light: #e7e7e7;
+  --color-text-muted-light: #666666;
 }
 
 @layer base {
@@ -64,6 +72,22 @@
   .proc-mono-sku {
     @apply font-mono text-[10px] text-white/60;
   }
+
+  .proc-h2-light {
+    @apply text-2xl font-extrabold tracking-tight text-[var(--color-ink)] sm:text-3xl;
+  }
+
+  .proc-h3-light {
+    @apply text-lg font-bold text-[var(--color-ink)];
+  }
+
+  .proc-body-light {
+    @apply text-base leading-relaxed text-[var(--color-text-muted-light)] sm:text-[15px];
+  }
+
+  .proc-eyebrow-light {
+    @apply text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500;
+  }
 }
 
 @layer utilities {
@@ -80,6 +104,76 @@
     animation: hero-sku-alert-bob 2.25s ease-in-out infinite;
   }
 
+  @keyframes hero-b2b-badge-glow {
+    0%,
+    100% {
+      transform: translateY(0);
+      box-shadow:
+        0 0 0 1px rgb(240 98 50 / 0.45),
+        0 0 14px rgb(240 98 50 / 0.35),
+        0 0 28px rgb(240 98 50 / 0.18);
+    }
+    50% {
+      transform: translateY(-6px);
+      box-shadow:
+        0 0 0 1px rgb(240 98 50 / 0.7),
+        0 0 22px rgb(240 98 50 / 0.65),
+        0 0 44px rgb(240 98 50 / 0.4),
+        0 0 64px rgb(240 98 50 / 0.22);
+    }
+  }
+  .animate-hero-b2b-badge-glow {
+    animation: hero-b2b-badge-glow 2.25s ease-in-out infinite;
+  }
+
+  @keyframes header-sku-nudge {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+  .animate-header-sku-nudge {
+    animation: header-sku-nudge 3s ease-in-out infinite;
+  }
+
+  .header-nav-link {
+    @apply relative inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-800 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+  }
+  .header-nav-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -5px;
+    height: 2px;
+    background: hsl(var(--brand));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.18s ease;
+  }
+  .header-nav-link:hover::after,
+  .header-nav-link[aria-expanded="true"]::after {
+    transform: scaleX(1);
+  }
+
+  .header-sticky-bridge {
+    position: relative;
+  }
+  .header-sticky-bridge::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    height: 10px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgb(0 0 0 / 0), rgb(0 0 0 / 0.04));
+  }
+
   .shadow-proc-sm {
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
   }
@@ -94,7 +188,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-hero-sku-alert-bob {
+  .animate-hero-sku-alert-bob,
+  .animate-hero-b2b-badge-glow,
+  .animate-header-sku-nudge {
     animation: none;
+    transform: none;
+  }
+  .animate-hero-b2b-badge-glow {
+    box-shadow:
+      0 0 0 1px rgb(240 98 50 / 0.45),
+      0 0 14px rgb(240 98 50 / 0.35);
   }
 }
