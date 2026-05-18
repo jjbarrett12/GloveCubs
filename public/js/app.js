@@ -3215,6 +3215,22 @@ function pdpVariantSkuCaption(product, sizes, preSelectSize, firstSizeDisplay) {
     return String((product && product.sku) || '—');
 }
 
+/** Phase 0D: legacy SPA must not add to cart without catalog_variant_id (Phase 0B). */
+function legacyCommerceBlockAddWithoutVariant(catalogVariantId, context) {
+    if (catalogVariantId) return true;
+    try {
+        console.warn('[GC_LEGACY_COMMERCE_PATH]', JSON.stringify({
+            context: context || 'addProductToCart',
+            reason: 'missing catalog_variant_id',
+            migration: 'Use Next storefront /store for variant-safe add-to-cart',
+        }));
+    } catch (e) { /* */ }
+    if (typeof showToast === 'function') {
+        showToast('Select a size or use the store at /store to add this item.');
+    }
+    return false;
+}
+
 async function addProductToCart(productId) {
     const quantity = parseInt(document.getElementById('productQuantity')?.value || 1);
     const selectedSizes = window.selectedSizes && Array.isArray(window.selectedSizes) ? window.selectedSizes : [];
@@ -3227,6 +3243,7 @@ async function addProductToCart(productId) {
     if (sizesToAdd.length === 0 || (sizesToAdd.length === 1 && sizesToAdd[0] === null)) {
         // Product has no sizes - add single item
         var vidSingle = (pCur && pCur.default_catalog_variant_id) || null;
+        if (!legacyCommerceBlockAddWithoutVariant(vidSingle, 'addProductToCart_no_size')) return;
         await api.post('/api/cart', Object.assign({
             product_id: productId,
             size: null,
@@ -3245,6 +3262,7 @@ async function addProductToCart(productId) {
 
     for (const size of sizesToAdd) {
         var vidSz = catalogVariantIdForCartSize(size);
+        if (!legacyCommerceBlockAddWithoutVariant(vidSz, 'addProductToCart_size_' + String(size))) continue;
         await api.post('/api/cart', Object.assign({
             product_id: productId,
             size: size,

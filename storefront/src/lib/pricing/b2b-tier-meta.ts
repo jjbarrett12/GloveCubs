@@ -23,7 +23,10 @@ export function b2bTierLabel(code: string): string {
   }
 }
 
-/** Narrative only; unit math is enforced server-side in resolve_buyer_unit_price. */
+/**
+ * Narrative/display only — do not multiply prices in the frontend.
+ * Unit math must come from Pricing Authority V2 / server RPC (Phase 0A).
+ */
 export function b2bTierSiteDiscountPercent(code: string): number | null {
   switch (code) {
     case "cub":

@@ -59,6 +59,12 @@ const emailTemplates = require('./lib/email-templates');
 const productStore = require('./lib/product-store');
 const { getEffectiveMargin, computeSellPrice } = require('./lib/pricing');
 const commercePricing = require('./lib/commerce-pricing');
+const { resolveCheckoutLineUnitPrice } = require('./lib/pricing-authority-checkout');
+const {
+    warnPricingDeprecated,
+    warnParentInventory,
+    warnVariantInference,
+} = require('./lib/commerce-truth-warnings');
 const checkoutCompute = require('./lib/checkout-compute');
 const { assertNoClientSuppliedTotals } = require('./lib/checkout-client-body-guard');
 const orderReorder = require('./lib/order-reorder');
@@ -102,6 +108,11 @@ const {
     resolveCartLineListingProductId,
 } = require('./lib/resolve-canonical-product-id');
 const { resolveCatalogVariantForCommerceLine } = require('./lib/resolve-cart-catalog-variant');
+const {
+    isVariantMandatoryEnforceEnabled,
+    lineHasExplicitVariantIdentity,
+    assertCommercialLineIdentity,
+} = require('./lib/commercial-line-identity');
 const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
@@ -394,7 +405,7 @@ async function findExistingCartLineByVariant(supabase, cartItems, catalogV2Id, r
         if (String(resolveLineCatalogProductId(item)) !== String(catalogV2Id)) continue;
         const iVid = normalizeCanonicalUuidInput(item.catalog_variant_id);
         if (iVid && String(iVid) === rid) return item;
-        if (!iVid) {
+        if (!isVariantMandatoryEnforceEnabled() && !iVid) {
             const r2 = await resolveCatalogVariantForCommerceLine(supabase, item);
             if (r2.ok && String(r2.catalog_variant_id) === rid) return item;
         }
@@ -402,14 +413,37 @@ async function findExistingCartLineByVariant(supabase, cartItems, catalogV2Id, r
     return null;
 }
 
-/** Resolve and persist catalog_variant_id + variant_sku on cart rows missing them (legacy JSON). */
+/** Validate or resolve catalog_variant_id + variant_sku on cart rows (checkout money path). */
 async function ensureCartLinesHaveResolvedVariants(cartKey, cartItems, res) {
     const supabase = getSupabaseAdmin();
+    if (isVariantMandatoryEnforceEnabled()) {
+        for (let i = 0; i < cartItems.length; i++) {
+            const item = cartItems[i];
+            const r = await assertCommercialLineIdentity(supabase, item);
+            if (!r.ok) {
+                res.status(422).json({
+                    error: r.message,
+                    code: r.code,
+                    commercial_status: 'invalid',
+                    line_index: i,
+                });
+                return false;
+            }
+        }
+        return true;
+    }
     let changed = false;
     for (const item of cartItems) {
         const hasVid = normalizeCanonicalUuidInput(item.catalog_variant_id);
         const hasVsku = item.variant_sku != null && String(item.variant_sku).trim() !== '';
-        if (hasVid && hasVsku) continue;
+        if (hasVid && hasVsku) {
+            const validated = await assertCommercialLineIdentity(supabase, item);
+            if (!validated.ok) {
+                res.status(422).json({ error: validated.message, code: validated.code, commercial_status: 'invalid' });
+                return false;
+            }
+            continue;
+        }
         const r = await resolveCatalogVariantForCommerceLine(supabase, item);
         if (!r.ok) {
             res.status(422).json({ error: r.message, code: r.code });
@@ -417,6 +451,13 @@ async function ensureCartLinesHaveResolvedVariants(cartKey, cartItems, res) {
         }
         item.catalog_variant_id = r.catalog_variant_id;
         item.variant_sku = r.variant_sku;
+        warnVariantInference({
+            module: 'server.js',
+            path: 'ensureCartLinesHaveResolvedVariants',
+            reason: 'persisted_inferred_variant_on_cart',
+            catalog_product_id: resolveLineCatalogProductId(item) || undefined,
+            catalog_variant_id: r.catalog_variant_id,
+        });
         changed = true;
     }
     if (changed) {
@@ -455,9 +496,14 @@ async function loadAndValidateCartForCheckout(cartKey, res, contextLabel) {
     const avail = await inventory.checkAvailability(cartItems);
     if (!avail.ok) {
         const first = avail.insufficient[0];
-        const idLabel = first.canonical_product_id || 'unknown';
-        res.status(400).json({
-            error: `Insufficient stock for one or more items. Catalog product ${idLabel}: need ${first.needed}, available ${first.available}.`,
+        const idLabel = first.catalog_variant_id || first.canonical_product_id || 'unknown';
+        const code = first.code || 'INSUFFICIENT_STOCK';
+        res.status(code === 'MISSING_VARIANT_INVENTORY' || code === 'MISSING_CATALOG_VARIANT_ID' ? 422 : 400).json({
+            error:
+                code === 'MISSING_VARIANT_INVENTORY'
+                    ? `No variant inventory row for ${idLabel}.`
+                    : `Insufficient stock for one or more items (${idLabel}): need ${first.needed}, available ${first.available ?? 0}.`,
+            code,
             insufficient: avail.insufficient,
         });
         return null;
@@ -1796,11 +1842,21 @@ app.get('/api/products', optionalAuth, async (req, res) => {
 
     // Apply inventory (in-app fishbowl): in_stock and quantity_on_hand from inventory table when present
     const inventory = await getInventoryForCatalogRoutes();
+    warnParentInventory({
+        module: 'server.js',
+        path: 'GET /api/products',
+        reason: 'applyInventoryToProducts parent in_stock overlay',
+    });
     products = applyInventoryToProducts(products, inventory);
 
     const access = await getPublicProductApiAccess(req);
     if (!access.isAdmin && access.companyId != null) {
         const ctx = await getPricingContext();
+        warnPricingDeprecated({
+            module: 'server.js',
+            path: 'GET /api/products',
+            reason: 'inline computeSellPrice catalog sell_price overlay',
+        });
         products = products.map((p) => {
             const cost = p.cost != null && p.cost !== '' ? Number(p.cost) : (p.price != null ? Number(p.price) : 0);
             const margin = getEffectiveMargin(ctx, access.companyId, p.manufacturer_id);
@@ -2999,49 +3055,101 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
                     image_url: '',
                     sku: '',
                     variant_sku: '',
+                    commercial_status: 'invalid',
                     catalog_error: 'MISSING_CANONICAL_PRODUCT_ID',
                 });
                 continue;
             }
             const listingId = resolveCartLineListingProductId(item);
             const product = await productsService.getProductById(listingId || catalogId);
-            const resolved = commercePricing.resolveLineUnitPriceForCheckout({
-                user,
-                companyId,
-                product,
-                quantity: item.quantity,
-                pricingContext: ctx,
-            });
+            const supabaseCartGet = getSupabaseAdmin();
             let variantSku = String(item.variant_sku || '').trim();
+            let catalogVariantIdForLine = normalizeCanonicalUuidInput(item.catalog_variant_id);
             let variantErr = null;
-            if (!variantSku) {
-                const vr = await resolveCatalogVariantForCommerceLine(getSupabaseAdmin(), item);
-                if (vr.ok) variantSku = vr.variant_sku;
-                else variantErr = vr.code;
+            let commercial_status = 'invalid';
+            if (isVariantMandatoryEnforceEnabled()) {
+                const idRes = await assertCommercialLineIdentity(supabaseCartGet, {
+                    ...item,
+                    canonical_product_id: catalogId,
+                    product_id: catalogId,
+                });
+                if (!idRes.ok) {
+                    variantErr = idRes.code;
+                } else {
+                    variantSku = idRes.variant_sku;
+                    commercial_status = 'valid';
+                }
+            } else if (lineHasExplicitVariantIdentity(item)) {
+                const idRes = await assertCommercialLineIdentity(supabaseCartGet, {
+                    ...item,
+                    canonical_product_id: catalogId,
+                    product_id: catalogId,
+                });
+                if (idRes.ok) {
+                    variantSku = idRes.variant_sku;
+                    commercial_status = 'valid';
+                } else {
+                    variantErr = idRes.code;
+                }
+            } else {
+                const vr = await resolveCatalogVariantForCommerceLine(supabaseCartGet, item);
+                if (vr.ok) {
+                    variantSku = vr.variant_sku;
+                    if (!catalogVariantIdForLine) catalogVariantIdForLine = vr.catalog_variant_id;
+                } else variantErr = vr.code;
             }
             if (variantErr) {
                 enrichedCart.push({
                     ...item,
                     name: product?.name || 'Unknown',
-                    price: resolved.listUnitPrice,
-                    bulk_price: resolved.catalogBulkUnitPrice,
-                    checkout_unit_price: resolved.unitPrice,
+                    price: product?.price ?? 0,
+                    bulk_price: product?.bulk_price ?? null,
+                    checkout_unit_price: 0,
                     image_url: product?.image_url || '',
                     sku: product?.sku || '',
                     variant_sku: '',
+                    commercial_status: 'invalid',
                     catalog_error: variantErr,
+                });
+                continue;
+            }
+            const priceRes = await resolveCheckoutLineUnitPrice({
+                flow: 'cart_get',
+                user,
+                companyId,
+                product,
+                quantity: item.quantity,
+                pricingContext: ctx,
+                catalog_variant_id: catalogVariantIdForLine,
+                variant_sku: variantSku,
+                catalog_product_id: catalogId,
+            });
+            if (!priceRes.ok) {
+                enrichedCart.push({
+                    ...item,
+                    name: product?.name || 'Unknown',
+                    price: product?.price ?? 0,
+                    bulk_price: product?.bulk_price ?? null,
+                    checkout_unit_price: 0,
+                    image_url: product?.image_url || '',
+                    sku: product?.sku || '',
+                    variant_sku: variantSku,
+                    commercial_status: 'invalid',
+                    catalog_error: priceRes.code,
                 });
                 continue;
             }
             enrichedCart.push({
                 ...item,
                 name: product?.name || 'Unknown',
-                price: resolved.listUnitPrice,
-                bulk_price: resolved.catalogBulkUnitPrice,
-                checkout_unit_price: resolved.unitPrice,
+                price: priceRes.listUnitPrice,
+                bulk_price: priceRes.catalogBulkUnitPrice,
+                checkout_unit_price: priceRes.unitPrice,
                 image_url: product?.image_url || '',
                 sku: product?.sku || '',
                 variant_sku: variantSku,
+                commercial_status,
+                pricing_source: priceRes.pricing_source,
             });
         }
         res.json(enrichedCart);
@@ -3058,12 +3166,12 @@ app.get('/api/cart', optionalAuth, async (req, res) => {
 
 app.post('/api/cart', optionalAuth, async (req, res) => {
     try {
-        const { product_id, size, quantity, canonical_product_id, catalog_variant_id } = req.body;
+        const { product_id, size, quantity, canonical_product_id, catalog_variant_id, variant_sku } = req.body;
         const qty = Math.max(1, parseInt(quantity, 10) || 1);
         const sessionId = req.headers['x-session-id'] || 'anonymous';
         const cartKey = req.user?.id ? `user_${req.user.id}` : `session_${sessionId}`;
         const cartItems = await dataService.getCart(cartKey);
-        const lineForCanon = { product_id, size, canonical_product_id, catalog_variant_id };
+        const lineForCanon = { product_id, size, canonical_product_id, catalog_variant_id, variant_sku };
         try {
             await ensureCommerceLinesHaveCanonical([lineForCanon], 'cart_post');
         } catch (e) {
@@ -3075,15 +3183,40 @@ app.post('/api/cart', optionalAuth, async (req, res) => {
         const product = await productsService.getProductById(listingId || catalogV2Id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
         const supabaseCart = getSupabaseAdmin();
-        const draftForVariant = {
-            product_id: catalogV2Id,
-            canonical_product_id: catalogV2Id,
-            size: size != null && size !== '' ? String(size) : null,
-            catalog_variant_id: normalizeCanonicalUuidInput(catalog_variant_id) || catalog_variant_id,
-        };
-        const variantRes = await resolveCatalogVariantForCommerceLine(supabaseCart, draftForVariant);
-        if (!variantRes.ok) {
-            return res.status(422).json({ error: variantRes.message, code: variantRes.code });
+        let variantRes;
+        if (isVariantMandatoryEnforceEnabled()) {
+            if (size != null && size !== '' && !catalog_variant_id) {
+                return res.status(422).json({
+                    error: 'size is not a commercial identity; send catalog_variant_id and variant_sku.',
+                    code: 'SIZE_NOT_COMMERCIAL_IDENTITY',
+                });
+            }
+            const identity = await assertCommercialLineIdentity(supabaseCart, {
+                catalog_variant_id,
+                variant_sku,
+                canonical_product_id: catalogV2Id,
+                product_id: catalogV2Id,
+            });
+            if (!identity.ok) {
+                return res.status(422).json({ error: identity.message, code: identity.code });
+            }
+            variantRes = {
+                ok: true,
+                catalog_variant_id: identity.catalog_variant_id,
+                variant_sku: identity.variant_sku,
+            };
+        } else {
+            const draftForVariant = {
+                product_id: catalogV2Id,
+                canonical_product_id: catalogV2Id,
+                size: size != null && size !== '' ? String(size) : null,
+                catalog_variant_id: normalizeCanonicalUuidInput(catalog_variant_id) || catalog_variant_id,
+                variant_sku: variant_sku != null ? String(variant_sku).trim() : null,
+            };
+            variantRes = await resolveCatalogVariantForCommerceLine(supabaseCart, draftForVariant);
+            if (!variantRes.ok) {
+                return res.status(422).json({ error: variantRes.message, code: variantRes.code });
+            }
         }
         const existing = await findExistingCartLineByVariant(supabaseCart, cartItems, catalogV2Id, variantRes);
         if (existing) {
@@ -4729,6 +4862,7 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
             const qty = Math.max(1, parseInt(row.quantity || row.qty || 1, 10));
             const size = row.size != null && row.size !== '' ? String(row.size) : null;
             const rowCatalogVariantId = row.catalog_variant_id != null ? row.catalog_variant_id : null;
+            const rowVariantSku = row.variant_sku != null ? String(row.variant_sku).trim() : '';
             if (!sku) { skipped++; continue; }
             const product = await productsService.getProductById(sku);
             if (!product) { skipped++; continue; }
@@ -4739,6 +4873,7 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
                     quantity: qty,
                     canonical_product_id: product.id,
                     catalog_variant_id: rowCatalogVariantId,
+                    variant_sku: rowVariantSku || undefined,
                 },
                 Date.now() + added + bulkIdx
             );
@@ -4749,19 +4884,38 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
                 throw e;
             }
             const catalogV2Id = resolveLineCatalogProductId(draftLine);
-            const vBulk = await resolveCatalogVariantForCommerceLine(supabaseBulk, {
-                product_id: catalogV2Id,
-                canonical_product_id: catalogV2Id,
-                size: draftLine.size,
-                catalog_variant_id: normalizeCanonicalUuidInput(rowCatalogVariantId) || rowCatalogVariantId,
-            });
-            if (!vBulk.ok) {
-                return res.status(422).json({
-                    error: vBulk.message,
-                    code: vBulk.code,
-                    bulk_line_index: bulkIdx,
-                    sku,
+            let vBulk;
+            if (isVariantMandatoryEnforceEnabled()) {
+                const bulkIdentity = await assertCommercialLineIdentity(supabaseBulk, {
+                    catalog_variant_id: rowCatalogVariantId,
+                    variant_sku: rowVariantSku,
+                    canonical_product_id: catalogV2Id,
+                    product_id: catalogV2Id,
                 });
+                if (!bulkIdentity.ok) {
+                    return res.status(422).json({
+                        error: bulkIdentity.message,
+                        code: bulkIdentity.code,
+                        bulk_line_index: bulkIdx,
+                        sku,
+                    });
+                }
+                vBulk = bulkIdentity;
+            } else {
+                vBulk = await resolveCatalogVariantForCommerceLine(supabaseBulk, {
+                    product_id: catalogV2Id,
+                    canonical_product_id: catalogV2Id,
+                    size: draftLine.size,
+                    catalog_variant_id: normalizeCanonicalUuidInput(rowCatalogVariantId) || rowCatalogVariantId,
+                });
+                if (!vBulk.ok) {
+                    return res.status(422).json({
+                        error: vBulk.message,
+                        code: vBulk.code,
+                        bulk_line_index: bulkIdx,
+                        sku,
+                    });
+                }
             }
             const resolvedShape = { catalog_variant_id: vBulk.catalog_variant_id, variant_sku: vBulk.variant_sku };
             const existing = await findExistingCartLineByVariant(supabaseBulk, cartItems, catalogV2Id, resolvedShape);

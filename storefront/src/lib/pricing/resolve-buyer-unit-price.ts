@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** PDP company pricing uses gc_resolve_buyer_unit_price — same RPC as Pricing Authority V2 company path (Phase 0E parity). */
+
 export type ResolvedBuyerUnitPrice = {
   company_id: string;
   catalog_variant_id: string;

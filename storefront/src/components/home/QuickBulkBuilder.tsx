@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { INDUSTRIES, INDUSTRY_KEYS } from "@/config/industries";
 import { STORE_INDUSTRY_FACET_ROWS } from "@/config/store-industry-facet";
+import { STORE_MATERIAL_BULK_OPTIONS, type StoreMaterialBulkValue } from "@/config/store-material-bulk-options";
 import { buildRequestPricingHref, type RequestPricingQueryParams } from "@/lib/discovery/request-pricing-url";
 
 const GLOVE_TYPES = [
@@ -13,12 +14,6 @@ const GLOVE_TYPES = [
   { value: "food_service", label: "Food service" },
   { value: "cleanroom", label: "Cleanroom / critical" },
   { value: "unsure", label: "Not sure — help me choose" },
-] as const;
-
-const MATERIALS = [
-  { value: "latex", label: "Latex" },
-  { value: "poly", label: "Poly / hybrid" },
-  { value: "blend", label: "Blend / specialty" },
 ] as const;
 
 const SIZES = [
@@ -66,7 +61,7 @@ const BULK_INDUSTRY_OPTIONS: { value: string; label: string }[] = (() => {
 function bulkOrderToRfqParams(args: {
   industry: string;
   gloveType: (typeof GLOVE_TYPES)[number]["value"] | "";
-  material: (typeof MATERIALS)[number]["value"] | "";
+  material: StoreMaterialBulkValue | "";
   size: (typeof SIZES)[number]["value"] | "";
   volume: (typeof VOLUMES)[number]["value"] | "";
 }): RequestPricingQueryParams {
@@ -84,7 +79,7 @@ export function QuickBulkBuilder() {
   const router = useRouter();
   const [industry, setIndustry] = React.useState<string>("");
   const [gloveType, setGloveType] = React.useState<(typeof GLOVE_TYPES)[number]["value"] | "">("");
-  const [material, setMaterial] = React.useState<(typeof MATERIALS)[number]["value"] | "">("");
+  const [material, setMaterial] = React.useState<StoreMaterialBulkValue | "">("");
   const [size, setSize] = React.useState<(typeof SIZES)[number]["value"] | "">("");
   const [volume, setVolume] = React.useState<(typeof VOLUMES)[number]["value"] | "">("");
 
@@ -173,12 +168,12 @@ export function QuickBulkBuilder() {
               id="qb-material"
               className={inputClass}
               value={material}
-              onChange={(e) => setMaterial(e.target.value as (typeof MATERIALS)[number]["value"] | "")}
+              onChange={(e) => setMaterial(e.target.value as StoreMaterialBulkValue | "")}
             >
               <option value="" className="bg-white text-neutral-900">
                 Select material
               </option>
-              {MATERIALS.map((o) => (
+              {STORE_MATERIAL_BULK_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value} className="bg-white text-neutral-900">
                   {o.label}
                 </option>

@@ -7,16 +7,31 @@
 
 const fs = require('fs');
 const path = require('path');
-const { describe, it } = require('node:test');
+const { describe, it, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveReorderSelections } = require('../lib/order-reorder');
+const reorderResolved = path.join(__dirname, '..', 'lib', 'order-reorder.js');
+const identityResolved = path.join(__dirname, '..', 'lib', 'commercial-line-identity.js');
 
 const PARENT = 'aaaaaaaa-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const VAR_A = '11111111-1111-4111-8111-111111111111';
 const VAR_B = '22222222-2222-4222-8222-222222222222';
 
 describe('resolveReorderSelections (catalog_variant_id)', () => {
+  const origEnforce = process.env.VARIANT_MANDATORY_ENFORCE;
+
+  afterEach(() => {
+    process.env.VARIANT_MANDATORY_ENFORCE = origEnforce;
+    delete require.cache[reorderResolved];
+    delete require.cache[identityResolved];
+  });
+
+  function loadReorder() {
+    delete require.cache[reorderResolved];
+    delete require.cache[identityResolved];
+    return require('../lib/order-reorder');
+  }
+
   const basePreview = {
     product_id: PARENT,
     canonical_product_id: PARENT,
@@ -33,6 +48,7 @@ describe('resolveReorderSelections (catalog_variant_id)', () => {
   };
 
   it('matches Pattern A line by catalog_variant_id (N125F-M style)', () => {
+    const { resolveReorderSelections } = loadReorder();
     const previews = [{ ...basePreview, catalog_variant_id: VAR_A, variant_sku: 'N125F-M' }];
     const r = resolveReorderSelections(previews, [
       { product_id: PARENT, catalog_variant_id: VAR_A, quantity: 3 },
@@ -44,6 +60,7 @@ describe('resolveReorderSelections (catalog_variant_id)', () => {
   });
 
   it('matches Pattern B line by catalog_variant_id (numeric style)', () => {
+    const { resolveReorderSelections } = loadReorder();
     const previews = [{ ...basePreview, catalog_variant_id: VAR_B, variant_sku: '14404', size: null }];
     const r = resolveReorderSelections(previews, [
       { product_id: PARENT, catalog_variant_id: VAR_B, quantity: 2 },
@@ -53,9 +70,19 @@ describe('resolveReorderSelections (catalog_variant_id)', () => {
   });
 
   it('falls back to product_id + size when catalog_variant_id omitted', () => {
+    process.env.VARIANT_MANDATORY_ENFORCE = '0';
+    const { resolveReorderSelections } = loadReorder();
     const previews = [{ ...basePreview, catalog_variant_id: VAR_A, size: 'M' }];
     const r = resolveReorderSelections(previews, [{ product_id: PARENT, size: 'M', quantity: 1 }]);
     assert.equal(r.ok, true);
+  });
+
+  it('rejects product_id + size when VARIANT_MANDATORY_ENFORCE is on', () => {
+    process.env.VARIANT_MANDATORY_ENFORCE = '1';
+    const { resolveReorderSelections } = loadReorder();
+    const previews = [{ ...basePreview, catalog_variant_id: VAR_A, size: 'M' }];
+    const r = resolveReorderSelections(previews, [{ product_id: PARENT, size: 'M', quantity: 1 }]);
+    assert.equal(r.ok, false);
   });
 });
 

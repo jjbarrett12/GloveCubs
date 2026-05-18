@@ -7,18 +7,35 @@ import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procu
 import { resolveQuoteShipToSnapshot } from "@/lib/commerce/quote-request-ship-to";
 import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
 
-const itemSchema = z.object({
+function isVariantMandatoryEnforceEnabled(): boolean {
+  const v = process.env.VARIANT_MANDATORY_ENFORCE;
+  if (v === "0" || v === "off" || String(v || "").toLowerCase() === "false" || String(v || "").toLowerCase() === "no") {
+    return false;
+  }
+  return v === "1" || v === "true" || ["yes", "on"].includes(String(v || "").toLowerCase());
+}
+
+const itemSchemaBase = {
   product_id: z.string().uuid(),
   name: z.string().min(1),
   slug: z.string().optional(),
   brandName: z.string().nullable().optional(),
   quantity: z.number().int().positive().max(99999),
-  /** Optional per-line buyer note (stored on quote_line_items.notes). */
   line_note: z.string().trim().max(2000).optional().nullable(),
-  catalog_variant_id: z.string().uuid().nullish(),
-  variant_sku: z.string().max(200).nullish(),
   size_code: z.string().max(80).nullish(),
-});
+};
+
+const itemSchema = isVariantMandatoryEnforceEnabled()
+  ? z.object({
+      ...itemSchemaBase,
+      catalog_variant_id: z.string().uuid(),
+      variant_sku: z.string().min(1).max(200),
+    })
+  : z.object({
+      ...itemSchemaBase,
+      catalog_variant_id: z.string().uuid().nullish(),
+      variant_sku: z.string().max(200).nullish(),
+    });
 
 const bodySchema = z
   .object({
@@ -62,6 +79,50 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin() as any;
+
+  if (isVariantMandatoryEnforceEnabled()) {
+    for (let i = 0; i < body.items.length; i++) {
+      const item = body.items[i];
+      const vid = item.catalog_variant_id;
+      const sku = item.variant_sku?.trim() ?? "";
+      if (!vid) {
+        return NextResponse.json(
+          { error: "catalog_variant_id is required on every quote line.", code: "MISSING_CATALOG_VARIANT_ID", line_index: i },
+          { status: 422 },
+        );
+      }
+      if (!sku) {
+        return NextResponse.json(
+          { error: "variant_sku is required on every quote line.", code: "MISSING_VARIANT_SKU", line_index: i },
+          { status: 422 },
+        );
+      }
+      const { data: vRow, error: vErr } = await supabase
+        .schema("catalog_v2")
+        .from("catalog_variants")
+        .select("id, variant_sku, catalog_product_id, is_active")
+        .eq("id", vid)
+        .maybeSingle();
+      if (vErr || !vRow || !vRow.is_active) {
+        return NextResponse.json(
+          { error: "catalog_variant_id is invalid or inactive.", code: "VARIANT_NOT_FOUND", line_index: i },
+          { status: 422 },
+        );
+      }
+      if (String(vRow.variant_sku || "").trim() !== sku) {
+        return NextResponse.json(
+          { error: "variant_sku does not match catalog variant.", code: "VARIANT_SKU_MISMATCH", line_index: i },
+          { status: 422 },
+        );
+      }
+      if (String(vRow.catalog_product_id) !== String(item.product_id)) {
+        return NextResponse.json(
+          { error: "catalog_variant_id does not match product_id.", code: "VARIANT_PARENT_MISMATCH", line_index: i },
+          { status: 422 },
+        );
+      }
+    }
+  }
 
   const idemKey = body.idempotency_key?.trim() || null;
   if (idemKey) {

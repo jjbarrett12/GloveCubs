@@ -33,7 +33,7 @@ const VAR42 = '11111111-1111-4111-8111-111111111111';
 const VAR2 = '22222222-2222-4222-8222-222222222222';
 const VAR1 = '33333333-3333-4333-8333-333333333333';
 
-/** Mirrors GET /api/cart checkout_unit_price resolution. */
+/** Mirrors GET /api/cart checkout_unit_price when PRICING_AUTHORITY_V2_CHECKOUT is off (legacy). */
 function cartCheckoutUnitPrice(user, companyId, product, pricingContext) {
   return commercePricing.resolveLineUnitPriceForCheckout({
     user,
