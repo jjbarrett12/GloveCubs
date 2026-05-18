@@ -15,6 +15,7 @@ export type ResolvedBuyerUnitPrice = {
   resolved_unit_price_minor: number | null;
   currency_code: string;
   pricing_source: string;
+  is_variant_specific_list?: boolean;
   computed_at?: unknown;
 };
 
@@ -52,6 +53,7 @@ export async function resolveBuyerUnitPriceViaRpc(
   const discount_percent = Number(row.discount_percent ?? 0);
   const currency_code = String(row.currency_code ?? "USD");
   const pricing_source = String(row.pricing_source ?? "unknown");
+  const is_variant_specific_list = row.is_variant_specific_list === true;
 
   const list_major = row.list_unit_price_major;
   const res_major = row.resolved_unit_price_major;
@@ -71,6 +73,7 @@ export async function resolveBuyerUnitPriceViaRpc(
       resolved_unit_price_minor: row.resolved_unit_price_minor == null ? null : Number(row.resolved_unit_price_minor),
       currency_code,
       pricing_source,
+      is_variant_specific_list,
       computed_at: row.computed_at,
     },
   };

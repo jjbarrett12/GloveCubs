@@ -36,6 +36,7 @@ describe("prep-line governance (Phase 2C)", () => {
       commercialUseSummary: "Food handling",
       certificationHints: ["FDA", "Food safe"],
       protectionHint: null,
+      activeVariantCount: 1,
     };
     const once = projectPrepLineCardFacts(row);
     const twice = projectPrepLineCardFacts(row);

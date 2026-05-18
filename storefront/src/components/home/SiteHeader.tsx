@@ -16,6 +16,8 @@ import {
   FileText,
   User,
   LogOut,
+  RefreshCw,
+  Tag,
 } from "lucide-react";
 import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
 import { industryNavIconForHref } from "@/config/industryNavIcons";
@@ -127,15 +129,24 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
   }
 
   const navLinkClass =
-    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-[#f06232]";
+    "flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold tracking-wide text-neutral-950 hover:text-brand";
 
   const mobileNavLinkClass =
-    "block py-3 text-[15px] font-semibold text-neutral-950 hover:bg-[#fff8f5] hover:text-[#f06232] lg:py-3";
+    "block py-3 text-[15px] font-semibold text-neutral-950 hover:bg-brand/5 hover:text-brand lg:py-3";
+
+  const mobileSectionLabelClass =
+    "proc-eyebrow mb-1 mt-4 border-t border-neutral-100 pt-4 text-neutral-500 first:mt-0 first:border-t-0 first:pt-0 lg:hidden";
 
   const megaTriggerClass = cn(
     navLinkClass,
-    "border-0 bg-transparent p-0 text-neutral-950 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06232]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
+    "border-0 bg-transparent p-0 text-neutral-950 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-md",
   );
+
+  const procurementDropdownLinkClass =
+    "block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50 hover:text-brand";
+
+  const showReorder = auth.kind === "signed_in" && auth.showWorkspace;
+  const showBuyerWorkspace = auth.kind === "signed_in" && auth.showWorkspace;
 
   const industriesMegaOpen = desktopMega === "industries";
   const brandsMegaOpen = desktopMega === "brands";
@@ -143,7 +154,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
   return (
     <>
       {/* Utility bar — public/index.html */}
-      <div className="overflow-x-hidden border-b border-white/10 bg-[#141414] py-2 text-[13px] font-medium leading-none text-white/90 sm:py-2.5">
+      <div className="overflow-x-hidden border-b border-border-subtle bg-surface-card py-2 text-[13px] font-medium leading-none text-white/90 sm:py-2.5">
         <div className="mx-auto flex min-w-0 max-w-7xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 sm:px-6 lg:px-8">
           <div className="hidden flex-wrap items-center gap-3.5 tracking-wide sm:flex">
             <span>Distributor pricing</span>
@@ -155,15 +166,15 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
             <span>Dedicated rep</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-4 sm:gap-5">
-            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-[#f06232]">
+            <a href={SITE_PHONE_TEL_HREF} className="flex items-center gap-2 hover:text-brand">
               <Phone className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Phone
             </a>
-            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-[#f06232]">
+            <a href={SITE_SALES_MAILTO_HREF} className="flex items-center gap-2 hover:text-brand">
               <Mail className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Email
             </a>
-            <Link href="/contact" className="flex items-center gap-2 hover:text-[#f06232]">
+            <Link href="/contact" className="flex items-center gap-2 hover:text-brand">
               <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
               Contact
             </Link>
@@ -195,17 +206,18 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
               <div className="flex items-center gap-3 lg:hidden">
                 <Link
                   href="/quote-cart"
-                  className="relative flex cursor-pointer items-center text-neutral-800"
-                  aria-label="Quote request cart"
-                  title="Quote request cart"
+                  className="relative flex cursor-pointer items-center gap-1.5 text-neutral-800"
+                  aria-label="Quote request"
+                  title="Quote request"
                   onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                 >
-                  <ShoppingCart className="h-6 w-6" />
+                  <ShoppingCart className="h-6 w-6 shrink-0" aria-hidden />
+                  <span className="text-[12px] font-semibold">Quote</span>
                 </Link>
                 {auth.kind === "anonymous" ? (
                   <Link
                     href="/login"
-                    className="text-[13px] font-semibold text-neutral-800 hover:text-[#f06232]"
+                    className="text-[13px] font-semibold text-neutral-800 hover:text-brand"
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
                     Sign In
@@ -229,7 +241,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
             <div className="flex min-w-0 w-full flex-wrap items-center justify-end gap-3 sm:gap-4 lg:gap-6">
               <form
                 onSubmit={onSearch}
-                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-[#f06232] bg-white focus-within:shadow-[0_0_0_2px_rgba(240, 98, 50,0.2)] lg:order-none lg:max-w-[420px]"
+                className="order-3 flex min-w-0 max-w-full flex-1 basis-[min(100%,420px)] items-center overflow-hidden rounded-lg border-2 border-brand bg-white focus-within:shadow-proc-sm lg:order-none lg:max-w-[420px]"
               >
                 <input
                   value={q}
@@ -240,7 +252,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 />
                 <button
                   type="submit"
-                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-[#f06232] text-white hover:opacity-90"
+                  className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center bg-brand text-white hover:bg-brand-hover"
                 >
                   <Search className="h-[18px] w-[18px]" />
                 </button>
@@ -248,21 +260,21 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
 
               <Link
                 href="/request-pricing"
-                className="order-1 hidden rounded-md border-2 border-[#f06232] bg-transparent px-5 py-2 text-[13px] font-bold text-[#f06232] transition hover:-translate-y-px hover:bg-[#f06232] hover:text-white hover:shadow-[0_4px_14px_rgba(240, 98, 50,0.35)] lg:inline-block"
+                className="order-1 hidden rounded-md border-2 border-brand bg-transparent px-5 py-2 text-[13px] font-bold text-brand transition hover:-translate-y-px hover:bg-brand hover:text-white hover:shadow-proc-md lg:inline-block"
               >
-                Business pricing
+                Request pricing
               </Link>
 
               {auth.kind === "anonymous" ? (
                 <Link
                   href="/login"
-                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] lg:inline"
+                  className="order-2 hidden text-[13px] font-semibold text-neutral-800 hover:text-brand lg:inline"
                 >
                   Sign In
                 </Link>
               ) : (
                 <details className="order-2 relative hidden lg:inline-block">
-                  <summary className="list-none cursor-pointer text-[13px] font-semibold text-neutral-800 hover:text-[#f06232] [&::-webkit-details-marker]:hidden">
+                  <summary className="list-none cursor-pointer text-[13px] font-semibold text-neutral-800 hover:text-brand [&::-webkit-details-marker]:hidden">
                     <span className="inline-flex items-center gap-1">
                       <User className="h-3.5 w-3.5 opacity-80" aria-hidden />
                       Account
@@ -287,10 +299,19 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     >
                       Glove quicklist
                     </Link>
-                    {auth.showWorkspace ? (
+                    {showReorder ? (
+                      <Link
+                        href="/workspace/procurement/reorder"
+                        className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50 hover:text-brand"
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        Reorder
+                      </Link>
+                    ) : null}
+                    {showBuyerWorkspace ? (
                       <Link
                         href="/workspace/procurement"
-                        className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
+                        className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50 hover:text-brand"
                         onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                       >
                         Buyer workspace
@@ -310,11 +331,12 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
 
               <Link
                 href="/quote-cart"
-                className="relative order-2 hidden cursor-pointer items-center gap-1 text-neutral-800 lg:flex"
-                aria-label="Quote request cart"
-                title="Quote request cart"
+                className="relative order-2 hidden cursor-pointer items-center gap-1.5 text-neutral-800 lg:flex"
+                aria-label="Quote request"
+                title="Quote request"
               >
-                <ShoppingCart className="h-6 w-6" />
+                <ShoppingCart className="h-6 w-6 shrink-0" aria-hidden />
+                <span className="text-[13px] font-semibold">Quote request</span>
               </Link>
             </div>
           </div>
@@ -330,9 +352,12 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
           >
             <nav aria-label="Primary">
               <ul className="flex list-none flex-col gap-0 lg:flex-row lg:flex-wrap lg:items-center lg:justify-center lg:gap-x-10 lg:gap-y-2">
+                <li className={mobileSectionLabelClass} aria-hidden>
+                  Shop
+                </li>
                 <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
                   <Link href="/store" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                    Shop Gloves
+                    Catalog
                   </Link>
                 </li>
                 <li
@@ -383,7 +408,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   </button>
                   <ul
                     className={cn(
-                      "mt-0 list-none space-y-0 border-l-2 border-[#f06232]/35 pl-3 lg:hidden",
+                      "mt-0 list-none space-y-0 border-l-2 border-[brand]/35 pl-3 lg:hidden",
                       mobilePanel === "industries" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -396,8 +421,8 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                             className={`${mobileNavLinkClass} flex min-h-[44px] items-center gap-3`}
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#f06232]/25 bg-[#f06232]/[0.07]">
-                              <IndustryIcon className="h-[18px] w-[18px] text-[#f06232]" aria-hidden />
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[brand]/25 bg-[brand]/[0.07]">
+                              <IndustryIcon className="h-[18px] w-[18px] text-[brand]" aria-hidden />
                             </span>
                             <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
                           </Link>
@@ -420,7 +445,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     )}
                   >
                     <div className="p-3 sm:p-4">
-                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">
+                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
                         Shop by industry
                       </h4>
                       <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-6">
@@ -430,10 +455,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                             <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
                               <Link
                                 href={item.href}
-                                className="flex min-h-[40px] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[#f06232] lg:min-h-0 lg:py-1"
+                                className="flex min-h-[40px] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[brand] lg:min-h-0 lg:py-1"
                               >
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#f06232]/25 bg-[#f06232]/[0.07]">
-                                  <IndustryIcon className="h-4 w-4 text-[#f06232]" aria-hidden />
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[brand]/25 bg-[brand]/[0.07]">
+                                  <IndustryIcon className="h-4 w-4 text-[brand]" aria-hidden />
                                 </span>
                                 <span className="min-w-0 flex-1">{item.label}</span>
                               </Link>
@@ -492,7 +517,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   </button>
                   <ul
                     className={cn(
-                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[#f06232]/35 pl-3 lg:hidden",
+                      "mt-1 max-h-64 list-none space-y-0 overflow-y-auto border-l-2 border-[brand]/35 pl-3 lg:hidden",
                       mobilePanel === "brands" ? "max-lg:block" : "max-lg:hidden",
                     )}
                   >
@@ -511,7 +536,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[#f06232]"
+                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[brand]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
                             {logo ? (
@@ -536,14 +561,14 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     )}
                   >
                     <div className="max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain p-3 sm:p-4">
-                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f06232]">
+                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
                         Shop by brand
                       </h4>
                       <ul className="grid list-none grid-cols-1 gap-0.5 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-0.5">
                         <li className="sm:col-span-2">
                           <Link
                             href="/brands"
-                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[#f06232]/20 bg-[#f06232]/8 px-3 py-2 text-sm font-bold text-[#f06232] transition hover:border-[#f06232]/35 hover:bg-[#f06232]/12"
+                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[brand]/20 bg-[brand]/8 px-3 py-2 text-sm font-bold text-[brand] transition hover:border-[brand]/35 hover:bg-[brand]/12"
                           >
                             <span>All brands</span>
                             <span aria-hidden>→</span>
@@ -555,7 +580,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                             <li key={b}>
                               <Link
                                 href={getStoreHrefForBrandDisplayNameSearch(b)}
-                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[#f06232]"
+                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[brand]"
                               >
                                 {logo ? (
                                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
@@ -575,58 +600,128 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     </div>
                   </div>
                 </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link
-                    href="/glove-finder"
-                    className={navLinkClass}
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
-                    Glove Finder
-                  </Link>
+                <li className="relative border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
+                  <p className={mobileSectionLabelClass}>Procurement</p>
+                  <details className="hidden lg:inline-block">
+                    <summary
+                      className={cn(
+                        megaTriggerClass,
+                        "list-none [&::-webkit-details-marker]:hidden inline-flex",
+                      )}
+                    >
+                      Procurement <ChevronDown className="h-3 w-3 opacity-80" aria-hidden />
+                    </summary>
+                    <div className="absolute left-1/2 top-full z-50 mt-2 w-56 -translate-x-1/2 rounded-lg border border-neutral-200 bg-white py-1 text-left text-[13px] shadow-lg">
+                      <Link
+                        href="/request-pricing"
+                        className={procurementDropdownLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Tag className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                          Request pricing
+                        </span>
+                      </Link>
+                      <Link
+                        href="/invoice-savings"
+                        className={procurementDropdownLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                          Upload invoice
+                        </span>
+                      </Link>
+                      {showReorder ? (
+                        <Link
+                          href="/workspace/procurement/reorder"
+                          className={procurementDropdownLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <RefreshCw className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                            Reorder
+                          </span>
+                        </Link>
+                      ) : null}
+                      {showBuyerWorkspace ? (
+                        <Link
+                          href="/workspace/procurement"
+                          className={procurementDropdownLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          Buyer workspace
+                        </Link>
+                      ) : null}
+                    </div>
+                  </details>
+                  <ul className="list-none lg:hidden">
+                    <li>
+                      <Link
+                        href="/quote-cart"
+                        className={`${mobileNavLinkClass} flex items-center gap-2 font-bold text-brand`}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        <ShoppingCart className="h-5 w-5 shrink-0" aria-hidden />
+                        Quote request
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        href="/request-pricing"
+                        className={mobileNavLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        Request pricing
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        href="/invoice-savings"
+                        className={mobileNavLinkClass}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        Upload invoice
+                      </Link>
+                    </li>
+                    {showReorder ? (
+                      <li>
+                        <Link
+                          href="/workspace/procurement/reorder"
+                          className={mobileNavLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          Reorder
+                        </Link>
+                      </li>
+                    ) : null}
+                    {showBuyerWorkspace ? (
+                      <li>
+                        <Link
+                          href="/workspace/procurement"
+                          className={mobileNavLinkClass}
+                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                        >
+                          Buyer workspace
+                        </Link>
+                      </li>
+                    ) : null}
+                  </ul>
                 </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link
-                    href="/request-pricing"
-                    className={navLinkClass}
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
-                    Business pricing
-                  </Link>
-                </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link
-                    href="/faq"
-                    className={navLinkClass}
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
-                    Support
-                  </Link>
-                </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link
-                    href="/resources"
-                    className={navLinkClass}
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
-                    Resources
-                  </Link>
-                </li>
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2">
-                  <Link href="/contact" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                    Contact
-                  </Link>
+                <li className={mobileSectionLabelClass} aria-hidden>
+                  Account
                 </li>
                 {auth.kind === "anonymous" ? (
                   <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
                     <Link href="/login" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                      Sign In
+                      Sign in
                     </Link>
                   </li>
                 ) : (
                   <>
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
                       <Link href="/account" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                        Account
+                        Account home
                       </Link>
                     </li>
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
@@ -638,17 +733,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         Glove quicklist
                       </Link>
                     </li>
-                    {auth.showWorkspace ? (
-                      <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
-                        <Link
-                          href="/workspace/procurement"
-                          className={navLinkClass}
-                          onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                        >
-                          Buyer workspace
-                        </Link>
-                      </li>
-                    ) : null}
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
                       <button
                         type="button"
@@ -663,14 +747,39 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     </li>
                   </>
                 )}
-                <li className="border-b border-neutral-100 py-3 lg:border-0 lg:py-2 lg:ml-4 lg:border-l lg:border-neutral-200 lg:pl-4">
+                <li className={cn(mobileSectionLabelClass, "lg:hidden")} aria-hidden>
+                  Help
+                </li>
+                <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
                   <Link
-                    href="/invoice-savings"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#f06232] px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 lg:w-auto"
+                    href="/glove-finder"
+                    className={`${navLinkClass} text-neutral-600`}
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
-                    <FileText className="h-3.5 w-3.5" />
-                    Upload Invoice
+                    AI glove finder (optional)
+                  </Link>
+                </li>
+                <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                  <Link
+                    href="/faq"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    Support
+                  </Link>
+                </li>
+                <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                  <Link
+                    href="/resources"
+                    className={navLinkClass}
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    Resources
+                  </Link>
+                </li>
+                <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                  <Link href="/contact" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                    Contact
                   </Link>
                 </li>
               </ul>

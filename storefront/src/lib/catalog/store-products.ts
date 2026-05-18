@@ -49,6 +49,8 @@ export type StoreProductRow = {
   certificationHints: string[];
   /** First protection tag if any. */
   protectionHint: string | null;
+  /** Active catalog_variants count for this product (server-derived). */
+  activeVariantCount: number;
 };
 
 export type StoreBrandOption = {
@@ -102,6 +104,15 @@ type CatalogVariant = {
   size_code: string | null;
   metadata: Record<string, unknown> | null;
 };
+
+function activeVariantCountByProduct(variants: CatalogVariant[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const v of variants) {
+    if (!v.is_active) continue;
+    counts.set(v.catalog_product_id, (counts.get(v.catalog_product_id) ?? 0) + 1);
+  }
+  return counts;
+}
 
 type ProductImage = {
   catalog_product_id: string;
@@ -321,11 +332,13 @@ function mapProductsToRows(
   bestPriceByProduct: Map<string, number>,
   commercialByProduct: Map<string, CommercialAttrBucket>
 ): StoreProductRow[] {
+  const variantCounts = activeVariantCountByProduct(variants);
   return products.map((p) => {
     const meta = (p.metadata ?? null) as Record<string, unknown> | null;
     const v = pickDefaultVariant(variants, p.id);
     const vMeta = (v?.metadata ?? null) as Record<string, unknown> | null;
     const card = commercialCardFieldsFromBucket(commercialByProduct.get(p.id));
+    const activeVariantCount = variantCounts.get(p.id) ?? 0;
     return {
       id: p.id,
       name: p.name,
@@ -343,6 +356,7 @@ function mapProductsToRows(
       commercialUseSummary: card.commercialUseSummary,
       certificationHints: card.certificationHints,
       protectionHint: card.protectionHint,
+      activeVariantCount,
     };
   });
 }

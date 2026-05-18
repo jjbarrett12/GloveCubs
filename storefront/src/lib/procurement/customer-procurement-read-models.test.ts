@@ -115,6 +115,7 @@ describe("fetchCustomerApprovedOpportunities stale exclusion", () => {
         commercialUseSummary: null,
         certificationHints: [],
         protectionHint: null,
+        activeVariantCount: 1,
       },
       {
         id: "00000000-0000-4000-8000-000000000002",
@@ -133,6 +134,7 @@ describe("fetchCustomerApprovedOpportunities stale exclusion", () => {
         commercialUseSummary: null,
         certificationHints: [],
         protectionHint: null,
+        activeVariantCount: 1,
       },
     ]);
 

@@ -1,19 +1,22 @@
 import Link from "next/link";
 import { Hand, HardHat, Shield, FileText } from "lucide-react";
 import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
+import { ProcurementSectionShell, SectionEyebrow } from "@/components/procurement";
 
 export function HomeProductFinderSection() {
   return (
-    <section
-      className="border-t border-neutral-200/90 bg-gradient-to-b from-[#fafafa] to-[#f0f0f0] py-24"
-      aria-labelledby="finder-heading"
+    <ProcurementSectionShell
+      tone="base"
+      headingId="finder-heading"
+      className="border-t border-border-subtle bg-gradient-to-b from-neutral-100/95 to-neutral-200/80 py-12 opacity-95 sm:py-14"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center sm:text-left">
-          <h2 id="finder-heading" className="mb-3 text-4xl font-extrabold tracking-tight text-neutral-900">
+      <div className="mx-auto max-w-proc">
+        <SectionEyebrow className="text-neutral-600">Optional — catalog depth</SectionEyebrow>
+        <div className="mb-8 text-center sm:text-left">
+          <h2 id="finder-heading" className="mb-3 text-2xl font-extrabold tracking-tight text-neutral-900 sm:text-3xl">
             Spec shopping—without retail noise
           </h2>
-          <p className="max-w-3xl text-base leading-relaxed text-neutral-700 sm:text-[17px]">
+          <p className="max-w-3xl text-sm leading-relaxed text-neutral-600 sm:text-[15px]">
             Every listing carries the attributes we have on file—mil, texture, use-case tags, and certs where published. Need a
             match from what you already run? Use invoice review or request pricing.
           </p>
@@ -122,27 +125,27 @@ export function HomeProductFinderSection() {
             <div className="mt-2 text-sm text-neutral-600">Upload what you buy today—we match to real options</div>
           </Link>
         </div>
-        <div className="mt-12 flex flex-col items-center gap-4 border-t border-neutral-200/90 pt-10 text-center sm:flex-row sm:justify-center">
+        <div className="mt-8 flex flex-col items-center gap-3 border-t border-neutral-200/90 pt-8 text-center sm:flex-row sm:flex-wrap sm:justify-center">
           <Link
             href="/store"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#f06232] to-[#f06232] px-8 py-3.5 text-base font-bold text-white shadow-[0_4px_14px_rgba(240, 98, 50,0.25)] transition hover:-translate-y-0.5"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-6 py-3 text-sm font-bold text-white shadow-proc-md transition hover:bg-brand-hover"
           >
             Browse full store
           </Link>
           <Link
             href="/request-pricing"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[#f06232] bg-white px-8 py-3.5 text-base font-bold text-[#f06232] transition hover:-translate-y-0.5 hover:bg-[#fff8f3]"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-brand bg-white px-6 py-3 text-sm font-bold text-brand transition hover:bg-[#fff8f3]"
           >
             Request pricing
           </Link>
           <Link
-            href="/#bulk-order"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-neutral-300 bg-neutral-50 px-8 py-3.5 text-base font-semibold text-neutral-900 transition hover:-translate-y-0.5 hover:border-[#f06232]/50"
+            href="/glove-finder"
+            className="inline-flex min-h-11 items-center justify-center px-4 py-3 text-sm font-medium text-neutral-500 transition hover:text-brand"
           >
-            Start bulk order
+            AI glove finder (optional)
           </Link>
         </div>
       </div>
-    </section>
+    </ProcurementSectionShell>
   );
 }

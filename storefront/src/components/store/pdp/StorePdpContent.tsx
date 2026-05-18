@@ -1,37 +1,55 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { StoreProductDetail } from "@/lib/catalog/store-product-detail";
 import { buildStoreProductRowForVariant } from "@/lib/catalog/store-product-detail";
+import { canAddProductRowToQuote } from "@/lib/catalog/store-quote-rules";
 import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { StorePageShell } from "@/components/store/StorePageShell";
 import { PdpStickyMobileCta } from "@/components/store/pdp/PdpStickyMobileCta";
+import { PdpVariantMatrix } from "@/components/store/pdp/PdpVariantMatrix";
+import { PdpVariantPricePanel } from "@/components/store/pdp/PdpVariantPricePanel";
 import { ProductImage } from "@/components/store/ProductImage";
+import {
+  resolvePdpParentFromDisplay,
+  resolvePdpSelectedVariantPricingDisplay,
+} from "@/lib/pricing/pdp-variant-pricing-display";
 
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
+  const initialVariantId = detail.defaultVariant?.id ?? detail.variants[0]?.id ?? null;
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(initialVariantId);
 
-export type BuyerUnitReference = {
-  tierLabel: string;
-  tierCode: string;
-  listUsd: number;
-  yourUsd: number;
-  pricingSource: string;
-};
+  const selectedVariant = useMemo(
+    () => detail.variants.find((v) => v.id === selectedVariantId) ?? detail.defaultVariant ?? detail.variants[0] ?? null,
+    [detail.defaultVariant, detail.variants, selectedVariantId]
+  );
 
-export function StorePdpContent({
-  detail,
-  buyerUnitReference,
-}: {
-  detail: StoreProductDetail;
-  buyerUnitReference?: BuyerUnitReference | null;
-}) {
   const quoteBase = detail.quoteProductRow;
-  const primaryQuoteProduct =
-    quoteBase && detail.defaultVariant
-      ? buildStoreProductRowForVariant(quoteBase, detail.defaultVariant)
-      : quoteBase;
+  const selectedQuoteProduct =
+    quoteBase && selectedVariant ? buildStoreProductRowForVariant(quoteBase, selectedVariant) : quoteBase;
+
+  const parentFrom = useMemo(
+    () => resolvePdpParentFromDisplay(detail.bestPrice, detail.bestPriceScope),
+    [detail.bestPrice, detail.bestPriceScope]
+  );
+
+  const selectedPricing = useMemo(
+    () =>
+      resolvePdpSelectedVariantPricingDisplay(
+        selectedVariant?.id ?? null,
+        detail.variantPricing,
+        detail.buyerUnitReferencesByVariantId
+      ),
+    [selectedVariant?.id, detail.variantPricing, detail.buyerUnitReferencesByVariantId]
+  );
+
+  const showQuoteCta =
+    selectedQuoteProduct != null && canAddProductRowToQuote(selectedQuoteProduct);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] pb-24 font-poppins md:pb-10">
+    <div className="min-h-screen bg-[#0a0a0a] pb-28 font-poppins md:pb-10">
       <header className="border-b border-white/10">
         <StorePageShell>
           <div className="flex items-center justify-between gap-4 py-4">
@@ -60,16 +78,20 @@ export function StorePdpContent({
             <span className="text-white/70">{detail.name}</span>
           </nav>
 
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
             <div className="min-w-0 space-y-6">
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr] lg:grid-cols-[minmax(0,260px)_1fr]">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
                 <div className="space-y-2">
                   {detail.gallery.length > 0 ? (
                     detail.gallery.map((img, i) => (
                       <ProductImage
                         key={`${img.url}-${i}`}
                         src={img.url}
-                        alt={detail.gallery.length > 1 ? `${detail.name} — product image ${i + 1}` : `${detail.name} — product image`}
+                        alt={
+                          detail.gallery.length > 1
+                            ? `${detail.name} — product image ${i + 1}`
+                            : `${detail.name} — product image`
+                        }
                         loading={i === 0 ? "eager" : "lazy"}
                       />
                     ))
@@ -78,19 +100,24 @@ export function StorePdpContent({
                   )}
                 </div>
 
-                <div className="min-w-0 space-y-3">
+                <div className="min-w-0 space-y-4">
                   {detail.brandName ? (
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f06232]/90">{detail.brandName}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#f06232]/90">{detail.brandName}</p>
                   ) : null}
                   <h1 className="text-xl font-black leading-tight tracking-tight text-white sm:text-2xl">{detail.name}</h1>
-                  <dl className="grid gap-1 text-[11px] text-white/55 sm:grid-cols-2">
-                    {detail.defaultVariant?.variant_sku ? (
-                      <>
-                        <dt className="text-white/40">SKU</dt>
-                        <dd className="font-mono text-white/80">{detail.defaultVariant.variant_sku}</dd>
-                      </>
-                    ) : null}
-                  </dl>
+
+                  {selectedVariant ? (
+                    <dl className="grid gap-1 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-[11px] sm:grid-cols-[auto_1fr]">
+                      <dt className="text-white/40">Selected SKU</dt>
+                      <dd className="font-mono font-medium text-white/90">{selectedVariant.variant_sku}</dd>
+                      {selectedVariant.size_code ? (
+                        <>
+                          <dt className="text-white/40">Size</dt>
+                          <dd className="font-mono text-white/80">{selectedVariant.size_code}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                  ) : null}
 
                   {detail.commercialRows.length > 0 ? (
                     <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2.5">
@@ -106,72 +133,26 @@ export function StorePdpContent({
                     </div>
                   ) : null}
 
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      {detail.bestPrice != null ? (
-                        <p className="text-sm font-semibold tabular-nums text-sales">From {usd.format(detail.bestPrice)}</p>
-                      ) : (
-                        <p className="text-[12px] font-medium text-white/45">Request pricing</p>
-                      )}
-                      {buyerUnitReference ? (
-                        <div className="mt-2 max-w-md rounded-md border border-emerald-500/25 bg-emerald-500/[0.07] px-2.5 py-2 text-[11px] leading-snug text-white/80">
-                          <p className="font-semibold text-emerald-200/95">{buyerUnitReference.tierLabel} tier reference</p>
-                          <p className="mt-1 tabular-nums text-white/85">
-                            Site list from {usd.format(buyerUnitReference.listUsd)} · Tier unit reference{" "}
-                            {usd.format(buyerUnitReference.yourUsd)}
-                          </p>
-                          <p className="mt-1 text-[10px] text-white/45">
-                            Server-resolved from published list pricing ({buyerUnitReference.pricingSource}). Quote
-                            responses from our team are separate from this reference.
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="hidden min-w-[200px] flex-1 md:block md:max-w-xs">
-                      {primaryQuoteProduct ? <AddToQuoteButton product={primaryQuoteProduct} /> : null}
-                    </div>
-                  </div>
+                  <PdpVariantPricePanel parentFrom={parentFrom} selectedPricing={selectedPricing} />
 
-                  <div className="hidden md:block">
-                    <ButtonRequestPricingLink />
+                  <div className="hidden gap-2 md:flex">
+                    {showQuoteCta ? (
+                      <AddToQuoteButton product={selectedQuoteProduct} className="h-11 flex-1 text-sm font-bold" />
+                    ) : (
+                      <ButtonRequestPricingLink className="h-11 flex-1" />
+                    )}
+                    {showQuoteCta ? <ButtonRequestPricingLink className="h-11 shrink-0 px-4" /> : null}
                   </div>
                 </div>
               </div>
 
               {detail.variants.length > 0 ? (
-                <section className="rounded-xl border border-white/10 bg-[#141414]">
-                  <div className="border-b border-white/10 px-3 py-2">
-                    <h2 className="text-[12px] font-bold uppercase tracking-wide text-white/80">Variants</h2>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[480px] text-left text-[11px] text-white/75">
-                      <thead className="border-b border-white/10 bg-black/30 text-[10px] uppercase tracking-wide text-white/45">
-                        <tr>
-                          <th className="px-3 py-2 font-semibold">Size</th>
-                          <th className="px-3 py-2 font-semibold">SKU</th>
-                          <th className="px-3 py-2 font-semibold">Quote</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.variants.map((v) => (
-                          <tr key={v.id} className="border-b border-white/[0.06] last:border-0">
-                            <td className="px-3 py-2 font-mono text-white/90">{v.size_code ?? "—"}</td>
-                            <td className="px-3 py-2 font-mono text-white/80">{v.variant_sku}</td>
-                            <td className="px-3 py-2">
-                              {quoteBase ? (
-                                <div className="max-w-[140px]">
-                                  <AddToQuoteButton product={buildStoreProductRowForVariant(quoteBase, v)} />
-                                </div>
-                              ) : (
-                                <span className="text-white/35">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <PdpVariantMatrix
+                  variants={detail.variants}
+                  variantPricing={detail.variantPricing}
+                  selectedVariantId={selectedVariant?.id ?? null}
+                  onSelectVariant={setSelectedVariantId}
+                />
               ) : null}
 
               {detail.specRows.length > 0 ? (
@@ -245,18 +226,28 @@ export function StorePdpContent({
               ) : null}
             </div>
 
-            <aside className="hidden min-w-0 space-y-3 lg:block">
-              <div className="sticky top-24 space-y-3 rounded-xl border border-white/10 bg-[#141414] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Add to quote</p>
-                {primaryQuoteProduct ? <AddToQuoteButton product={primaryQuoteProduct} /> : null}
-                <ButtonRequestPricingLink className="w-full" />
+            <aside className="hidden min-w-0 lg:block">
+              <div className="sticky top-24 space-y-3 rounded-xl border border-white/10 bg-[#141414] p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Quote request</p>
+                {selectedVariant ? (
+                  <p className="font-mono text-[11px] text-white/70">{selectedVariant.variant_sku}</p>
+                ) : null}
+                <PdpVariantPricePanel parentFrom={null} selectedPricing={selectedPricing} compact />
+                {showQuoteCta ? (
+                  <AddToQuoteButton product={selectedQuoteProduct} className="h-11 text-sm font-bold" />
+                ) : (
+                  <ButtonRequestPricingLink className="w-full" />
+                )}
               </div>
             </aside>
           </div>
         </StorePageShell>
       </main>
 
-      <PdpStickyMobileCta product={primaryQuoteProduct} />
+      <PdpStickyMobileCta
+        product={selectedQuoteProduct}
+        showRequestPricingPrimary={!showQuoteCta}
+      />
     </div>
   );
 }

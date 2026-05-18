@@ -1,44 +1,48 @@
 import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 import { HomeHeroExpress } from "@/components/home/HomeHeroExpress";
-import { HomeTrustLine } from "@/components/home/HomeTrustLine";
+import { HomeOperationalProofSection } from "@/components/home/HomeOperationalProofSection";
+import { HomeProcurementPainSection } from "@/components/home/HomeProcurementPainSection";
+import { HomeBulkWorkflowSection } from "@/components/home/HomeBulkWorkflowSection";
+import { HomeConsolidatedTrustSection } from "@/components/home/HomeConsolidatedTrustSection";
 import { HomeShopShortcutsSection } from "@/components/home/HomeShopShortcutsSection";
-import { HomeBusinessBuyerSection } from "@/components/home/HomeBusinessBuyerSection";
 import { HomeFeaturedCatalogSection } from "@/components/home/HomeFeaturedCatalogSection";
+import { HomeWhoSection } from "@/components/home/HomeWhoSection";
+import { HomeReorderStorySection } from "@/components/home/HomeReorderStorySection";
 import {
   HomeHowInvoiceWorksSection,
   HomeRecommendationExplainerSection,
-  HomeReorderSimplificationSection,
   HomeHumanAdvisorSection,
 } from "@/components/home/HomeConversionJourneySections";
-import { HomeTrustTilesSection } from "@/components/home/HomeTrustTilesSection";
-import { HomeWhoSection } from "@/components/home/HomeWhoSection";
+import { HomeBulkPricingSection } from "@/components/home/HomeBulkPricingSection";
 import { HomeProductFinderSection } from "@/components/home/HomeProductFinderSection";
-import { HomeReorderAccountBand } from "@/components/home/HomeReorderAccountBand";
+import { HomeFinalCtaStrip } from "@/components/home/HomeFinalCtaStrip";
 import { ServiceAreaPanel } from "@/components/home/ServiceAreaPanel";
 
 /** Featured strip reads live catalog—avoid baking a build-time snapshot. */
 export const dynamic = "force-dynamic";
 
-/** Supplier-first homepage: catalog proof → trust → optional invoice depth. */
+/** Procurement OS narrative: proof → pain → workflow → catalog → repeat buy → quote paths. */
 export default function HomePage() {
   return (
-    <div className="flex min-h-screen min-w-0 flex-col bg-[#0a0a0a] font-poppins">
+    <div className="flex min-h-screen min-w-0 flex-col bg-surface-base font-poppins">
       <SiteHeaderLoader />
       <HomeHeroExpress />
-      <HomeTrustLine />
+      <HomeOperationalProofSection />
+      <HomeProcurementPainSection />
+      <HomeBulkWorkflowSection />
+      <HomeConsolidatedTrustSection />
       <HomeShopShortcutsSection />
-      <HomeBusinessBuyerSection />
       <HomeFeaturedCatalogSection />
       <HomeWhoSection />
-      <HomeTrustTilesSection />
-      <HomeReorderAccountBand />
-      <HomeReorderSimplificationSection />
+      <HomeReorderStorySection />
       <HomeHowInvoiceWorksSection />
       <HomeRecommendationExplainerSection />
+      <HomeBulkPricingSection />
+      <ServiceAreaPanel />
       <HomeHumanAdvisorSection />
       <HomeProductFinderSection />
-      <ServiceAreaPanel />
+      <HomeFinalCtaStrip />
       <SiteFooter />
     </div>
   );

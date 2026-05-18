@@ -3,20 +3,22 @@
 import { Button } from "@/components/ui/button";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
+import { isStoreProductRowQuotableOnListing } from "@/lib/catalog/store-quote-rules";
 
 export function AddVisiblePageToQuote({ products }: { products: StoreProductRow[] }) {
   const { addItems } = useQuoteCart();
-  if (products.length === 0) return null;
+  const quotable = products.filter(isStoreProductRowQuotableOnListing);
+  if (quotable.length === 0) return null;
 
   return (
     <Button
       type="button"
       variant="outline"
       size="sm"
-      className="shrink-0 border-white/20 text-[11px] text-white hover:bg-white/10"
+      className="min-h-10 shrink-0 border-white/20 px-3 text-[11px] text-white hover:bg-white/10"
       onClick={() => {
         addItems(
-          products.map((p) => ({
+          quotable.map((p) => ({
             product_id: p.id,
             name: p.name,
             slug: p.slug,
@@ -29,7 +31,7 @@ export function AddVisiblePageToQuote({ products }: { products: StoreProductRow[
         );
       }}
     >
-      Add page to quote ({products.length})
+      Add page to quote ({quotable.length})
     </Button>
   );
 }

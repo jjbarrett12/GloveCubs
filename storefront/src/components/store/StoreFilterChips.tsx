@@ -64,14 +64,13 @@ export function StoreFilterChips({
     });
   }
 
-  if (urlState.sort != null && urlState.sort !== "newest") {
+  if (urlState.sort != null && urlState.sort !== "newest" && urlState.sort !== "price_per_glove_asc") {
     const labels: Record<string, string> = {
       name_asc: "Sort: Name A–Z",
       name_desc: "Sort: Name Z–A",
       price_asc: "Sort: Price low → high",
       price_desc: "Sort: Price high → low",
       relevance: "Sort: Relevance",
-      price_per_glove_asc: "Sort: Price per glove",
     };
     chips.push({
       label: labels[urlState.sort] ?? `Sort: ${urlState.sort}`,

@@ -3,6 +3,8 @@
  */
 
 import type { StoreCatalogUrlState } from "./store-filter-types";
+import type { StoreFacetCounts } from "./store-filter-types";
+import type { StoreFacetMeta } from "./store-products";
 import { getAllCatalogFacetKeys } from "./catalog-facet-registry";
 import { GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS } from "./catalog-facet-registry";
 import { mergeStoreCatalogHref } from "./store-url";
@@ -56,6 +58,34 @@ export function orderedFacetKeysForUi(counts: Record<string, { value: string; co
   const rest = Array.from(keys).filter((k) => !withData.includes(k) && (counts[k]?.length ?? 0) > 0);
   rest.sort();
   return [...withData, ...rest].filter((k) => k !== "brand");
+}
+
+/** Sidebar sections grouped by attribute_definitions.display_group when present. */
+export function facetKeysGroupedForUi(
+  counts: StoreFacetCounts,
+  meta: StoreFacetMeta
+): { groupLabel: string; keys: string[] }[] {
+  const keys = orderedFacetKeysForUi(counts);
+  const byGroup = new Map<string, string[]>();
+  for (const key of keys) {
+    const label = meta[key]?.displayGroup?.trim() || "Product specifications";
+    const bucket = byGroup.get(label) ?? [];
+    bucket.push(key);
+    byGroup.set(label, bucket);
+  }
+  const preferredOrder = ["Product specifications", "Use & environment", "Compliance", "Physical"];
+  const out: { groupLabel: string; keys: string[] }[] = [];
+  for (const g of preferredOrder) {
+    const k = byGroup.get(g);
+    if (k?.length) {
+      out.push({ groupLabel: g, keys: k });
+      byGroup.delete(g);
+    }
+  }
+  for (const [groupLabel, groupKeys] of Array.from(byGroup.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+    out.push({ groupLabel, keys: groupKeys });
+  }
+  return out;
 }
 
 export function hiddenFieldsPreservingFilters(

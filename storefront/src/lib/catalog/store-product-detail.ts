@@ -2,6 +2,15 @@ import { cache } from "react";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAttributeDefinitionIdsByKeys } from "@/lib/catalog/store-attribute-defs";
 import { fetchStoreProductRowsByIds, type StoreProductRow } from "@/lib/catalog/store-products";
+import {
+  PDP_BEST_PRICE_SCOPE,
+  fetchBuyerUnitReferencesBatch,
+  fetchVariantCaseEconomicsBatch,
+  fetchVariantPricingRows,
+  type PdpBuyerUnitReference,
+  type PdpVariantCaseEconomics,
+  type PdpVariantPricingRow,
+} from "@/lib/pricing/variant-pricing-contracts";
 
 const CERT_SECTION_KEYS = new Set([
   "certifications",
@@ -64,6 +73,14 @@ export type StoreProductDetail = {
   related: StoreProductRow[];
   /** Default listing row for quote actions (single batched hydrate with `related`). */
   quoteProductRow: StoreProductRow | null;
+  /** Parent-level PLP semantics for `bestPrice` (product_min). */
+  bestPriceScope: typeof PDP_BEST_PRICE_SCOPE;
+  /** Variant-scoped published list rows (catalogos.variant_best_offer_price). */
+  variantPricing: PdpVariantPricingRow[];
+  /** Server-authoritative case/pack economics per variant. */
+  variantCaseEconomics: PdpVariantCaseEconomics[];
+  /** Logged-in company tier references keyed by catalog_variant_id (optional enrich). */
+  buyerUnitReferencesByVariantId?: Record<string, PdpBuyerUnitReference>;
 };
 
 type CatalogProductRow = {
@@ -351,6 +368,12 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
   const quoteProductRow = rowById.get(pid) ?? null;
   const related = relatedIds.map((id) => rowById.get(id)).filter((x): x is StoreProductRow => Boolean(x));
 
+  const variantIds = variants.map((v) => v.id);
+  const [variantPricing, variantCaseEconomics] = await Promise.all([
+    fetchVariantPricingRows(supabase, variantIds),
+    fetchVariantCaseEconomicsBatch(supabase, variantIds),
+  ]);
+
   return {
     id: p.id,
     slug: p.slug,
@@ -370,11 +393,36 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     downloads: downloadsFromMetadata(meta),
     related,
     quoteProductRow,
+    bestPriceScope: PDP_BEST_PRICE_SCOPE,
+    variantPricing,
+    variantCaseEconomics,
   };
 }
 
 /** Dedupes Supabase work when `generateMetadata` and page both request the same slug. */
 export const fetchStoreProductDetail = cache(loadStoreProductDetail);
+
+/** Company-scoped buyer refs — not cached (avoid cross-company leakage). */
+export async function enrichStoreProductDetailBuyerPricing(
+  detail: StoreProductDetail,
+  companyId: string
+): Promise<StoreProductDetail> {
+  if (!isSupabaseConfigured() || !companyId.trim() || detail.variants.length === 0) {
+    return detail;
+  }
+  const supabase = getSupabaseAdmin();
+  const buyerUnitReferencesByVariantId = await fetchBuyerUnitReferencesBatch(
+    supabase,
+    companyId,
+    detail.variants.map((v) => v.id)
+  );
+  return {
+    ...detail,
+    buyerUnitReferencesByVariantId,
+  };
+}
+
+export type { PdpBuyerUnitReference, PdpVariantCaseEconomics, PdpVariantPricingRow };
 
 export function buildStoreProductRowForVariant(
   base: StoreProductRow,
@@ -385,5 +433,7 @@ export function buildStoreProductRowForVariant(
     catalogVariantId: variant.id,
     variantSku: variant.variant_sku,
     sizeCode: variant.size_code,
+    /** Explicit PDP selection — not a silent listing default. */
+    activeVariantCount: 1,
   };
 }
