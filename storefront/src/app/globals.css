@@ -138,7 +138,11 @@
   }
 
   .home-cta-secondary {
-    @apply border border-[#d8d8d5] bg-white text-ink hover:border-[var(--color-accent-orange)]/40;
+    @apply border border-[#d8d8d5] bg-white text-ink;
+  }
+
+  .home-cta-secondary:hover {
+    border-color: color-mix(in srgb, var(--color-accent-orange) 40%, transparent);
   }
 
   .home-cta-secondary-dark {
