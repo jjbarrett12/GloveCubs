@@ -1,27 +1,111 @@
 "use client";
 
 import * as React from "react";
-import { ProcurementSectionShell } from "@/components/procurement";
-import { HOME_PROCUREMENT_REGIONS } from "@/config/homeAuthority";
+import Link from "next/link";
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import {
+  ArrowRight,
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  Factory,
+  Flame,
+  HeartPulse,
+  MapPin,
+  Minus,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Truck,
+  UtensilsCrossed,
+  type LucideIcon,
+} from "lucide-react";
+import { ProcurementSectionShell } from "@/components/procurement";
+import {
+  HomeCtaLink,
   HomeEducationalBadge,
   HomePanelDark,
   HomeSectionIntro,
 } from "@/components/home/authority/HomeAuthorityPrimitives";
+import {
+  GLOVE_USAGE_DISCLAIMER,
+  GLOVE_USAGE_INDEX_LABEL,
+  GLOVE_USAGE_LEADERBOARD,
+  GLOVE_USAGE_METHODOLOGY,
+  NATIONAL_USAGE_INDEX,
+  STATE_NAME_TO_ABBR,
+  getStateByAbbr,
+  getStateByName,
+  usageIndexToFill,
+  type GloveStateUsage,
+} from "@/config/gloveUsageByState";
+import { US_STATES_TOPOLOGY } from "@/config/us-states-topology";
 import { cn } from "@/lib/utils";
 
-const HQ = HOME_PROCUREMENT_REGIONS.find((r) => r.highlight) ?? HOME_PROCUREMENT_REGIONS[5];
+const DEFAULT_STATE = getStateByAbbr("TX")!;
+
+const TRUST_CARDS = [
+  {
+    title: "State-by-state insight",
+    body: "Compare estimated relative usage indexes to see where operating environments may demand heavier glove programs.",
+    icon: MapPin,
+  },
+  {
+    title: "Support smarter planning",
+    body: "Use regional context when sizing inventory, evaluating categories, and aligning procurement with local industry mix.",
+    icon: Target,
+  },
+  {
+    title: "Not AI. Not automated.",
+    body: GLOVE_USAGE_DISCLAIMER,
+    icon: ShieldCheck,
+  },
+] as const;
+
+function factorIcon(label: string): LucideIcon {
+  if (/health|clinical|hospital/i.test(label)) return HeartPulse;
+  if (/food|hospitality|beverage|protein|dairy|seafood/i.test(label)) return UtensilsCrossed;
+  if (/energy|petro|refin|mining|chemical/i.test(label)) return Flame;
+  if (/logistics|port|distribution|transport/i.test(label)) return Truck;
+  if (/manufactur|automotive|industrial|aerospace|assembly/i.test(label)) return Factory;
+  if (/tech|research|biotech|lab|federal/i.test(label)) return Sparkles;
+  return Building2;
+}
+
+function formatVsNational(pct: number): string {
+  if (pct === 0) return "At national average";
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct}% vs national average`;
+}
+
+type UsStateGeo = {
+  rsmKey: string;
+  properties: { name?: string };
+};
 
 export function HomeProcurementMapSection() {
-  const [activeId, setActiveId] = React.useState<string>(HOME_PROCUREMENT_REGIONS[0].id);
-  const active = HOME_PROCUREMENT_REGIONS.find((r) => r.id === activeId) ?? HOME_PROCUREMENT_REGIONS[0];
+  const [selectedAbbr, setSelectedAbbr] = React.useState(DEFAULT_STATE.abbreviation);
+  const [hoveredAbbr, setHoveredAbbr] = React.useState<string | null>(null);
+  const [showMethodology, setShowMethodology] = React.useState(false);
+
+  const displayAbbr = hoveredAbbr ?? selectedAbbr;
+  const selected = getStateByAbbr(selectedAbbr) ?? DEFAULT_STATE;
+  const display = getStateByAbbr(displayAbbr) ?? selected;
+
+  const handleGeoKeyDown = (e: React.KeyboardEvent, abbr: string) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setSelectedAbbr(abbr);
+    }
+  };
 
   return (
     <ProcurementSectionShell
       tone="base"
       borderTop={false}
       headingId="procurement-map-heading"
-      ariaLabel="USA procurement context map"
+      ariaLabel="U.S. glove usage educational map"
       className="proc-section-dark home-authority-grid relative overflow-hidden !py-16 sm:!py-24"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,106,0,0.07)_0%,transparent_55%)]" />
@@ -29,108 +113,300 @@ export function HomeProcurementMapSection() {
       <HomeSectionIntro
         headingId="procurement-map-heading"
         eyebrow="National context"
-        title="How glove procurement varies across the U.S."
-        description="Regional operating environments shape glove programs—explore illustrative context by corridor."
+        title="How glove usage varies across the U.S."
+        description="Explore estimated glove demand by state, shaped by industry mix, regulations, and operating conditions."
         tone="dark"
-        badge={<HomeEducationalBadge>Educational context only</HomeEducationalBadge>}
+        badge={<HomeEducationalBadge>Educational estimate only</HomeEducationalBadge>}
       />
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-10">
-        <div className="home-panel-dark relative min-h-[300px] overflow-hidden sm:min-h-[380px]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_80%,rgba(255,106,0,0.06)_0%,transparent_60%)]" />
-          <svg viewBox="0 0 100 65" className="relative h-full min-h-[300px] w-full sm:min-h-[380px]" role="img" aria-label="Illustrative United States regions">
-            <defs>
-              <filter id="region-glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="1.2" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <path
-              d="M8 30 L14 24 L24 19 L36 16 L48 14 L60 15 L72 19 L84 25 L92 34 L90 46 L84 52 L72 56 L58 58 L44 58 L30 55 L18 48 L10 38 Z"
-              fill="rgb(255 255 255 / 0.03)"
-              stroke="rgb(255 255 255 / 0.1)"
-              strokeWidth="0.6"
-            />
-            <line
-              x1={HQ.x}
-              y1={HQ.y}
-              x2={active.x}
-              y2={active.y}
-              stroke="rgb(255 106 0 / 0.35)"
-              strokeWidth="0.8"
-              strokeDasharray="2 3"
-            />
-            {HOME_PROCUREMENT_REGIONS.map((r) => {
-              const isActive = activeId === r.id;
-              const isHq = r.highlight;
-              return (
-                <g key={r.id}>
-                  {isActive && !isHq ? (
-                    <circle cx={r.x} cy={r.y} r="5" fill="rgb(255 106 0 / 0.2)" filter="url(#region-glow)" />
-                  ) : null}
-                  <circle
-                    cx={r.x}
-                    cy={r.y}
-                    r={isHq ? 3.5 : isActive ? 3 : 2.2}
-                    className={cn(
-                      "cursor-pointer transition-all duration-300 focus:outline-none focus-visible:stroke-[#ff6a00] focus-visible:stroke-[3px]",
-                      isActive || isHq ? "fill-[#ff6a00]" : "fill-white/30 hover:fill-white/50"
-                    )}
-                    onClick={() => setActiveId(r.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setActiveId(r.id);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${r.label} region`}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-          <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
-            <span className="h-2 w-2 rounded-full bg-[var(--color-accent-orange)]" aria-hidden />
-            <span className="text-xs font-medium text-white/70">Salt Lake City · HQ</span>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.12fr_0.88fr] lg:gap-10">
+        <HomePanelDark className="relative min-h-[320px] overflow-hidden p-4 sm:min-h-[420px] sm:p-5">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_90%,rgba(255,106,0,0.08)_0%,transparent_55%)]" />
 
-        <HomePanelDark className="flex flex-col p-6 sm:p-8">
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">
-            {active.label}
-          </p>
-          <h3 className="mb-4 text-xl font-bold leading-snug text-white sm:text-2xl">{active.summary}</h3>
-          <p className="m-0 flex-1 text-[15px] leading-relaxed text-white/68">{active.detail}</p>
-
-          <div className="mt-8 border-t border-white/10 pt-6" role="tablist" aria-label="Regions">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">Select region</p>
-            <div className="flex flex-wrap gap-2">
-              {HOME_PROCUREMENT_REGIONS.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeId === r.id}
-                  onClick={() => setActiveId(r.id)}
-                  className={cn(
-                    "rounded-md px-3 py-2 text-xs font-semibold transition",
-                    activeId === r.id
-                      ? "bg-[var(--color-accent-orange)]/20 text-white ring-1 ring-[var(--color-accent-orange)]/40"
-                      : "text-white/50 hover:bg-white/[0.06] hover:text-white/85"
-                  )}
-                >
-                  {r.label}
-                </button>
-              ))}
+          <div className="relative mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
+              {GLOVE_USAGE_INDEX_LABEL}
+            </p>
+            <div
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5"
+              aria-hidden
+            >
+              <span className="text-[10px] text-white/40">Lower</span>
+              <div
+                className="h-2 w-24 rounded-full"
+                style={{
+                  background: "linear-gradient(90deg, #F3E4CC 0%, #FF6A00 100%)",
+                }}
+              />
+              <span className="text-[10px] text-white/40">Higher</span>
             </div>
           </div>
+
+          <div className="relative mx-auto max-w-full overflow-hidden">
+            <ComposableMap
+              projection="geoAlbersUsa"
+              width={780}
+              height={460}
+              className="h-auto w-full max-w-full"
+              style={{ width: "100%", height: "auto" }}
+            >
+              <Geographies geography={US_STATES_TOPOLOGY}>
+                {({ geographies }) =>
+                  (geographies as UsStateGeo[]).map((geo) => {
+                    const name = geo.properties?.name ?? "";
+                    const abbr = STATE_NAME_TO_ABBR[name];
+                    const state = getStateByName(name);
+                    if (!abbr || !state) {
+                      return (
+                        <Geography
+                          key={geo.rsmKey}
+                          geography={geo}
+                          fill="rgb(255 255 255 / 0.04)"
+                          stroke="rgb(255 255 255 / 0.08)"
+                          strokeWidth={0.4}
+                          tabIndex={-1}
+                          aria-label={`${name}, not included in educational state estimates`}
+                          style={{
+                            default: { outline: "none", pointerEvents: "none" },
+                            hover: { outline: "none", pointerEvents: "none" },
+                            pressed: { outline: "none", pointerEvents: "none" },
+                          }}
+                        />
+                      );
+                    }
+
+                    const isSelected = selectedAbbr === abbr;
+                    const isHovered = hoveredAbbr === abbr;
+                    const isHighlighted = isSelected || isHovered;
+
+                    return (
+                      <Geography
+                        key={geo.rsmKey}
+                        geography={geo}
+                        fill={usageIndexToFill(state.usageIndex)}
+                        stroke={isHighlighted ? "#FF6A00" : "rgb(255 255 255 / 0.18)"}
+                        strokeWidth={isHighlighted ? 1.4 : 0.55}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${state.name}, ${GLOVE_USAGE_INDEX_LABEL} ${state.usageIndex}`}
+                        aria-pressed={isSelected}
+                        onMouseEnter={() => setHoveredAbbr(abbr)}
+                        onMouseLeave={() => setHoveredAbbr(null)}
+                        onFocus={() => setHoveredAbbr(abbr)}
+                        onBlur={() => setHoveredAbbr(null)}
+                        onClick={() => setSelectedAbbr(abbr)}
+                        onKeyDown={(e: React.KeyboardEvent) => handleGeoKeyDown(e, abbr)}
+                        style={{
+                          default: { outline: "none", transition: "stroke-width 150ms, stroke 150ms" },
+                          hover: { outline: "none", cursor: "pointer", fill: usageIndexToFill(state.usageIndex) },
+                          pressed: { outline: "none" },
+                        }}
+                        className="focus-visible:[stroke:#FF6A00] focus-visible:[stroke-width:2px]"
+                      />
+                    );
+                  })
+                }
+              </Geographies>
+            </ComposableMap>
+          </div>
+
+          <div className="absolute bottom-4 right-4 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-black/70 shadow-lg backdrop-blur-sm">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center text-white/50"
+              aria-hidden
+              tabIndex={-1}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <div className="h-px bg-white/10" />
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center text-white/50"
+              aria-hidden
+              tabIndex={-1}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <p className="relative mt-3 text-[11px] leading-relaxed text-white/38">{GLOVE_USAGE_DISCLAIMER}</p>
         </HomePanelDark>
+
+        <StateDetailPanel
+          state={display}
+          isPreview={hoveredAbbr !== null && hoveredAbbr !== selectedAbbr}
+          selectedAbbr={selectedAbbr}
+          showMethodology={showMethodology}
+          onToggleMethodology={() => setShowMethodology((v) => !v)}
+          onSelectAbbr={setSelectedAbbr}
+        />
+      </div>
+
+      <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
+        {TRUST_CARDS.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.title}
+              className="rounded-2xl border border-white/10 bg-[#121212] p-5 sm:p-6"
+            >
+              <Icon className="mb-3 h-5 w-5 text-[var(--color-accent-orange)]" aria-hidden />
+              <h3 className="mb-2 text-sm font-bold text-white">{card.title}</h3>
+              <p className="m-0 text-sm leading-relaxed text-white/58">{card.body}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="m-0 max-w-xl text-sm text-white/45">
+          Billion-dollar procurement starts with context—not assumptions. Indexes are educational planning signals
+          only.
+        </p>
+        <HomeCtaLink href="/glove-finder" icon={ArrowRight}>
+          Explore glove finder
+        </HomeCtaLink>
       </div>
     </ProcurementSectionShell>
+  );
+}
+
+type StateDetailPanelProps = {
+  state: GloveStateUsage;
+  isPreview: boolean;
+  selectedAbbr: string;
+  showMethodology: boolean;
+  onToggleMethodology: () => void;
+  onSelectAbbr: (abbr: string) => void;
+};
+
+function StateDetailPanel({
+  state,
+  isPreview,
+  selectedAbbr,
+  showMethodology,
+  onToggleMethodology,
+  onSelectAbbr,
+}: StateDetailPanelProps) {
+  return (
+    <HomePanelDark className="flex flex-col p-6 sm:p-8">
+      {isPreview ? (
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">Preview</p>
+      ) : null}
+
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">
+        {state.region}
+      </p>
+      <h3 className="mb-2 text-2xl font-black tracking-tight text-white sm:text-[1.65rem]">{state.name}</h3>
+      <p className="mb-6 text-[15px] leading-relaxed text-white/68">{state.shortInsight}</p>
+
+      <div className="grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-black/30 p-4">
+        <div>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white/40">
+            {GLOVE_USAGE_INDEX_LABEL}
+          </p>
+          <p className="text-3xl font-black tabular-nums text-white">{state.usageIndex}</p>
+        </div>
+        <div>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white/40">National context</p>
+          <p className="text-lg font-bold text-[var(--color-accent-orange)]">
+            {formatVsNational(state.vsNationalAverage)}
+          </p>
+          <p className="mt-0.5 text-xs text-white/40">U.S. midpoint ≈ {NATIONAL_USAGE_INDEX}</p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">Top driving factors</p>
+        <ul className="m-0 flex flex-col gap-2.5 p-0">
+          {state.topFactors.map((factor) => {
+            const Icon = factorIcon(factor);
+            return (
+              <li key={factor} className="flex items-start gap-2.5 text-sm text-white/72">
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" aria-hidden />
+                {factor}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="mt-6">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">Common glove types</p>
+        <div className="flex flex-wrap gap-2">
+          {state.gloveTypes.map((type) => (
+            <span
+              key={type}
+              className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/75"
+            >
+              {type}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 border-t border-white/10 pt-6">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">
+          Estimated usage index leaderboard
+        </p>
+        <ol className="m-0 flex flex-col gap-1.5 p-0">
+          {GLOVE_USAGE_LEADERBOARD.map((entry) => {
+            const isActive = entry.abbreviation === selectedAbbr;
+            return (
+              <li key={entry.abbreviation}>
+                <button
+                  type="button"
+                  onClick={() => onSelectAbbr(entry.abbreviation)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition",
+                    isActive
+                      ? "bg-[var(--color-accent-orange)]/15 text-white ring-1 ring-[var(--color-accent-orange)]/35"
+                      : "text-white/55 hover:bg-white/[0.05] hover:text-white/85"
+                  )}
+                >
+                  <span>
+                    <span className="mr-2 font-bold tabular-nums text-white/35">{entry.rank}.</span>
+                    {entry.name}
+                  </span>
+                  <span className="font-bold tabular-nums text-[var(--color-accent-orange)]">{entry.usageIndex}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <button
+          type="button"
+          onClick={onToggleMethodology}
+          className="flex w-full items-center justify-between rounded-lg border border-white/10 px-4 py-3 text-left text-sm font-semibold text-white/80 transition hover:border-[var(--color-accent-orange)]/30 hover:text-white"
+          aria-expanded={showMethodology}
+        >
+          View methodology
+          {showMethodology ? (
+            <ChevronUp className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
+          )}
+        </button>
+        {showMethodology ? (
+          <ul className="mt-3 flex flex-col gap-2 pl-4 text-sm leading-relaxed text-white/55">
+            {GLOVE_USAGE_METHODOLOGY.map((line) => (
+              <li key={line} className="list-disc">
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <Link
+          href="/resources"
+          className="mt-3 inline-block text-xs font-medium text-[var(--color-accent-orange)] hover:underline"
+        >
+          More educational resources →
+        </Link>
+      </div>
+    </HomePanelDark>
   );
 }

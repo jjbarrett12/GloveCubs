@@ -22,7 +22,10 @@
     "openai": "^4.104.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-simple-maps": "^3.0.0",
     "tailwind-merge": "^2.5.4",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -30,6 +33,9 @@
     "@types/nodemailer": "^6.4.14",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/react-simple-maps": "^3.0.6",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
