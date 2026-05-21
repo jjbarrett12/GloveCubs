@@ -87,20 +87,26 @@ const SAFETY_ICON_MAP: Record<string, LucideIcon> = {
 const B2B_CARDS = [
   {
     title: "Quicklists",
-    description: "Save your go-to cart and reorder in one click. Perfect for multi-site and recurring needs.",
+    description: "Save company-assigned variants and add them to quote requests—built for multi-site replenishment.",
     icon: ListOrdered,
+    href: "/account/quicklist",
+    cta: "Open quicklist",
   },
   {
     title: "Role-based purchasing",
-    description: "Let managers and leads order within guardrails—approvals and limits when you need them.",
+    description: "Volume programs and guardrails are set up with your procurement team during onboarding.",
     icon: UserCheck,
+    href: "/request-pricing",
+    cta: "Request business pricing",
   },
   {
-    title: "Invoice-friendly checkout",
-    description: "PO and net terms support so procurement and AP stay in sync.",
+    title: "Invoice-backed quote review",
+    description: "Upload distributor invoices—we map lines to catalog options and return quote-ready context.",
     icon: FileText,
+    href: "/invoice-savings",
+    cta: "Upload invoice",
   },
-];
+] as const;
 
 export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps) {
   const storeHref = getStoreHrefForIntent(`store.landing.${config.key}`);
@@ -159,9 +165,8 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
                 <Button asChild size="lg" variant="default">
                   <Link href={storeHref}>Shop {industryName}</Link>
                 </Button>
-                {/* TODO: auth gating — if not authed, link to /login; else /account/quicklists */}
                 <Button asChild size="lg" variant="secondary">
-                  <Link href="/account/quicklists">Build a Quicklist</Link>
+                  <Link href="/account/quicklist">Build a Quicklist</Link>
                 </Button>
               </div>
             </div>
@@ -255,7 +260,8 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-white mb-4">Buy the way your team buys</h2>
           <p className="text-white/70 mb-10 max-w-2xl">
-            B2B ordering that fits your workflow—Quicklists, role-based purchasing, and invoice-friendly checkout.
+            Quote-first B2B workflows—quicklists, procurement onboarding, and invoice-backed review. Formal pricing and
+            fulfillment are confirmed by our team before anything ships.
           </p>
           <div className="grid md:grid-cols-3 gap-6">
             {B2B_CARDS.map((item, i) => {
@@ -267,6 +273,13 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
                     <CardTitle className="text-white text-lg">{item.title}</CardTitle>
                     <CardDescription className="text-white/70">{item.description}</CardDescription>
                   </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button asChild variant="ghost" size="sm" className="p-0 h-auto text-white/90 hover:text-white">
+                      <Link href={item.href}>
+                        {item.cta} <ChevronRight className="h-4 w-4 inline" />
+                      </Link>
+                    </Button>
+                  </CardContent>
                 </Card>
               );
             })}
@@ -326,18 +339,21 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
       <section className={`py-16 lg:py-20 bg-gradient-to-br ${config.primaryGradientClass}`}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-            Get set up for B2B ordering in 2 minutes
+            Start a procurement account request
           </h2>
           <p className="text-white/80 mb-8">
-            Create an account or go straight to the store with filters applied.
+            Request business pricing for your program—or browse the catalog with {industryName.toLowerCase()} filters
+            while our team confirms case pricing and fulfillment.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            {/* TODO: auth gating — Create account vs Dashboard */}
             <Button asChild size="lg" variant="default">
-              <Link href="/login">Create account</Link>
+              <Link href="/request-pricing">Request business pricing</Link>
             </Button>
             <Button asChild size="lg" variant="secondary">
               <Link href={storeHref}>Shop {industryName}</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-white/25 bg-white/5 text-white hover:bg-white/10">
+              <Link href="/invoice-savings">Upload invoice to start</Link>
             </Button>
           </div>
         </div>

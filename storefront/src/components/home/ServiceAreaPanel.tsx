@@ -11,19 +11,21 @@ export function ServiceAreaPanel() {
 
   return (
     <ProcurementSectionShell tone="light-alt" headingId="map-heading" ariaLabel="Distribution and service area">
-      <div className="mx-auto max-w-[1200px]">
-        <h2 id="map-heading" className="proc-h2-light mb-3 text-center">
-          Built here, servicing everywhere
-        </h2>
-        <p className="proc-body-light mx-auto mb-8 max-w-2xl text-center">
-          Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central location, we
-          efficiently distribute quality gloves to businesses across the United States and beyond.
-        </p>
+      <div className="mx-auto max-w-[1200px] overflow-hidden rounded-2xl border border-neutral-800 bg-[#111111] shadow-proc-sm">
+        <div className="px-6 pb-6 pt-8 text-center sm:px-10 sm:pb-8 sm:pt-10">
+          <h2 id="map-heading" className="proc-h2 mb-3">
+            Built here, servicing everywhere
+          </h2>
+          <p className="proc-body mx-auto max-w-2xl text-white/78">
+            Our headquarters in Salt Lake City, UT serves as the foundation of our operations. From this central location, we
+            efficiently distribute quality gloves to businesses across the United States and beyond.
+          </p>
+        </div>
 
-        <div className="overflow-hidden rounded-xl border border-border-light bg-white shadow-proc-light-md">
+        <div className="mx-4 overflow-hidden rounded-xl border border-white/10 sm:mx-6">
           {showIframe ? (
             <>
-              <div className="relative min-h-[400px] w-full bg-[#111111]">
+              <div className="relative min-h-[400px] w-full bg-[#0a0a0a]">
                 <iframe
                   src={embedSrc}
                   width="100%"
@@ -35,20 +37,20 @@ export function ServiceAreaPanel() {
                   title="Glovecubs headquarters region — Salt Lake City, UT"
                 />
               </div>
-              <p className="border-t border-border-light px-4 py-3 text-center text-sm text-text-muted-light">
+              <p className="border-t border-white/10 bg-[#0d0d0d] px-4 py-3 text-center text-sm text-white/55">
                 Map not loading?{" "}
                 <a
                   href={MAPS_LINK_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-brand hover:underline"
+                  className="font-medium text-brand hover:text-brand-soft hover:underline"
                 >
                   Open in Google Maps
                 </a>
               </p>
             </>
           ) : (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 bg-[#111111] px-6 py-16 text-center">
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 bg-[#0a0a0a] px-6 py-16 text-center">
               <MapPin className="h-12 w-12 text-brand" aria-hidden />
               <p className="max-w-md text-base font-medium text-white/90">
                 Map preview is turned off in this environment, or no embed URL is configured.
@@ -71,6 +73,8 @@ export function ServiceAreaPanel() {
             </div>
           )}
         </div>
+
+        <div className="h-6 sm:h-8" aria-hidden />
       </div>
     </ProcurementSectionShell>
   );

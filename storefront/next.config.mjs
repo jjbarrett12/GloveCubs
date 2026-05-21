@@ -47,8 +47,12 @@ const nextConfig = {
       { source: '/gloves/:segment/:slug', destination: '/store/p/:slug', permanent: true },
       { source: '/gloves/:segment', destination: '/store', permanent: true },
       { source: '/gloves', destination: '/store', permanent: true },
-      /** Legacy guest order links; refine when a dedicated Next route exists. */
-      { source: '/portal-order/:path*', destination: '/', permanent: false },
+      /** Legacy guest order links → honest lookup shell (not homepage). */
+      {
+        source: '/portal-order/:path*',
+        destination: '/order-status?source=legacy-order-link',
+        permanent: false,
+      },
     ];
   },
 };

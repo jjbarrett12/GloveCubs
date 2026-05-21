@@ -1,22 +1,23 @@
-import { ProcurementSectionShell } from "@/components/procurement";
-import { HomeSectionIntro } from "@/components/home/authority/HomeAuthorityPrimitives";
+import { ArrowRight, BookOpen, FileText, GitCompare, Scale, ShieldCheck, Tag } from "lucide-react";
+import { ProcurementSectionShell, SectionEyebrow } from "@/components/procurement";
+import { HomeCtaLink } from "@/components/home/authority/HomeAuthorityPrimitives";
+import { HomeSupplierNetworkComparison } from "@/components/home/HomeSupplierNetworkComparison";
 
-const FRAGMENTS = [
+const VALUE_CARDS = [
   {
-    title: "Fragmented procurement",
-    body: "Spreadsheets, distributor portals, and site-level habits hide true spend—and invite wrong SKUs on reorder.",
+    icon: Scale,
+    title: "Compare before you commit",
+    body: "See multiple options, specs, and pricing context before signing.",
   },
   {
-    title: "Confusing specifications",
-    body: "Mil, material, texture, and compliance claims rarely line up across suppliers. Buyers guess instead of govern.",
+    icon: GitCompare,
+    title: "Source beyond one catalog",
+    body: "Tap into broader supplier pathways—not just one shelf.",
   },
   {
-    title: "Pricing opacity",
-    body: "Case economics get lost in mixed units and line descriptions. Without mapping, you cannot compare honestly.",
-  },
-  {
-    title: "Operational downtime",
-    body: "Wrong glove class slows crews, violates SOPs, and burns trust with safety and quality teams.",
+    icon: BookOpen,
+    title: "Keep glove specs visible",
+    body: "Material, compliance, and use-case fit stay front and center.",
   },
 ] as const;
 
@@ -26,48 +27,77 @@ export function HomeWhyExistsSection() {
       tone="light"
       borderTop={false}
       headingId="why-exists-heading"
-      ariaLabel="Why GloveCubs exists"
-      className="proc-section-light !pt-12 sm:!pt-16"
+      ariaLabel="Supplier network advantage"
+      className="relative overflow-x-hidden !border-t-0 !bg-[#f4f4f2] !py-6 sm:!py-8"
       containerClassName="max-w-proc"
     >
-      <HomeSectionIntro
-        headingId="why-exists-heading"
-        eyebrow="Why we exist"
-        title="Glove procurement should not feel like guesswork"
-        description="GloveCubs is the sourcing intelligence layer for industrial glove programs—how serious operators buy by the case, reconcile invoices, and keep teams on-spec."
-        tone="light"
-      />
+      <div className="relative min-w-0 overflow-hidden rounded-2xl border border-[#ebebea] bg-gradient-to-br from-white via-[#fafaf8] to-[#f4f4f2] p-4 shadow-[0_12px_40px_rgb(0_0_0/0.05)] sm:rounded-[1.5rem] sm:p-5 lg:p-6">
+        <div className="relative mb-5 min-w-0 lg:mb-6">
+          <div className="mb-3 h-1 w-12 bg-[var(--color-accent-orange)]" aria-hidden />
+          <SectionEyebrow tone="light" className="mb-3 justify-start text-[11px] tracking-[0.16em]">
+            Supplier network advantage
+          </SectionEyebrow>
 
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-20">
-        <ol className="space-y-0">
-          {FRAGMENTS.map(({ title, body }, i) => (
+          <h2
+            id="why-exists-heading"
+            className="mb-3 max-w-4xl text-[1.65rem] font-black leading-[1.08] tracking-tight text-[#0a0a0a] sm:text-[1.85rem] lg:text-[2rem]"
+          >
+            Stop signing contracts. Your supplier is controlling your business
+            <span className="text-[var(--color-accent-orange)]">.</span>
+          </h2>
+
+          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-text-muted-light sm:text-[15px]">
+            Compare glove options across supplier networks, quote requests, and invoice context—without
+            being locked to one catalog or reorder habit.
+          </p>
+
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+            <HomeCtaLink
+              href="/request-pricing"
+              icon={Tag}
+              className="min-h-[46px] px-6 text-sm shadow-[0_6px_24px_rgb(255_106_0/0.3)]"
+            >
+              Request pricing
+            </HomeCtaLink>
+            <HomeCtaLink
+              href="/invoice-savings"
+              variant="secondary"
+              icon={FileText}
+              className="min-h-[46px] border-[#d0d0cc] px-6 text-sm shadow-[0_2px_10px_rgb(0_0_0/0.04)]"
+            >
+              Upload invoice
+            </HomeCtaLink>
+            <p className="m-0 flex w-full items-center gap-2 rounded-lg border border-[#ebebea] bg-[#fafaf8] px-3 py-2 text-xs text-neutral-600 sm:ml-1 sm:w-auto sm:text-sm">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" aria-hidden />
+              <span>No commitments. No lock-ins.</span>
+            </p>
+          </div>
+        </div>
+
+        <HomeSupplierNetworkComparison className="mb-5 min-w-0 sm:mb-6" />
+
+        <ul className="relative m-0 mt-5 grid min-w-0 grid-cols-1 gap-2.5 p-0 sm:mt-6 sm:grid-cols-3 sm:gap-3">
+          {VALUE_CARDS.map(({ icon: Icon, title, body }) => (
             <li
               key={title}
-              className="grid grid-cols-[3rem_1fr] gap-4 border-t border-[#ebebea] py-8 first:border-t-0 first:pt-0 sm:grid-cols-[4rem_1fr] sm:gap-6 sm:py-9"
+              className="group list-none overflow-hidden rounded-xl border border-[#ebebea] bg-white shadow-[0_2px_12px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-[0_6px_20px_rgb(0_0_0/0.06)]"
             >
-              <span className="font-mono text-2xl font-light tabular-nums text-neutral-300 sm:text-3xl">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div>
-                <h3 className="mb-2 text-lg font-bold tracking-tight text-ink sm:text-xl">{title}</h3>
-                <p className="m-0 max-w-lg text-base leading-relaxed text-text-muted-light">{body}</p>
+              <div className="flex gap-3 p-3 sm:p-3.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#fff4ec]">
+                  <Icon className="h-4 w-4 text-[var(--color-accent-orange)]" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col pr-0.5">
+                  <h3 className="mb-1 text-sm font-bold leading-snug tracking-tight text-ink">{title}</h3>
+                  <p className="m-0 text-xs leading-relaxed text-text-muted-light">{body}</p>
+                  <ArrowRight
+                    className="mt-2 h-3.5 w-3.5 self-end text-[var(--color-accent-orange)]/55 transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-orange)]"
+                    aria-hidden
+                  />
+                </div>
               </div>
             </li>
           ))}
-        </ol>
-
-        <aside className="flex flex-col justify-end border-t border-[#ebebea] pt-10 lg:border-l lg:border-t-0 lg:pl-12 lg:pt-0">
-          <p className="proc-eyebrow-light mb-5">Our role</p>
-          <blockquote className="m-0 border-l-4 border-[var(--color-accent-orange)] pl-6">
-            <p className="text-2xl font-bold leading-[1.2] tracking-tight text-ink sm:text-[1.65rem]">
-              Procurement simplifier. Sourcing intelligence. Operational partner.
-            </p>
-          </blockquote>
-          <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-text-muted-light">
-            Operating context connected to catalog truth—quote-first commerce, governed alternates, humans on programs that
-            matter. Infrastructure, not a coupon store.
-          </p>
-        </aside>
+        </ul>
       </div>
     </ProcurementSectionShell>
   );

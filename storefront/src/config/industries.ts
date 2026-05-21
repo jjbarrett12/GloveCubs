@@ -44,9 +44,9 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       "Reorder in seconds—no more running out mid-shift",
     ],
     proofStats: [
-      { label: "Sites standardized", value: "500+" },
-      { label: "Avg. spend reduction", value: "18%" },
-      { label: "Reorder lead time", value: "Same-day" },
+      { label: "Multi-site programs", value: "Built for multi-location teams" },
+      { label: "Spend visibility", value: "Spend comparison available" },
+      { label: "Fulfillment", value: "Reviewed by location and volume" },
     ],
     safetyCertifications: [
       { icon: "cut", label: "Cut resistant" },
@@ -102,9 +102,9 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       "Reliable stock—no more last-minute runs to the store",
     ],
     proofStats: [
-      { label: "Hospitality sites supplied", value: "1,200+" },
-      { label: "Case orders/month", value: "15K+" },
-      { label: "In-stock rate", value: "99%" },
+      { label: "Kitchen & hospitality", value: "Built for multi-location teams" },
+      { label: "Case programs", value: "Quote-first case pricing" },
+      { label: "Fulfillment", value: "Reviewed by location and volume" },
     ],
     safetyCertifications: [
       { icon: "food-safe", label: "Food safe" },
@@ -139,7 +139,10 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { q: "Are these gloves food-safe?", a: "We carry gloves intended for food handling. Choose food-safe nitrile or vinyl and change gloves between tasks per your food-safety policy." },
       { q: "Why black nitrile for kitchens?", a: "Black nitrile is popular in back-of-house for appearance and durability. We stock food-safe black nitrile in multiple thicknesses." },
       { q: "Do you offer case pricing for hospitality?", a: "Yes. Case pricing is standard. Multi-location and high-volume accounts can request custom pricing." },
-      { q: "How fast can I get restocked?", a: "We aim for same-day or next-day shipping on in-stock items. Create a Quicklist to reorder your standard items in one click." },
+      {
+        q: "How fast can I get restocked?",
+        a: "Lead times depend on SKU, volume, and ship-to location—confirmed on your quote response, not implied at checkout. Save a Quicklist to rebuild quote requests quickly.",
+      },
       { q: "Nitrile vs vinyl for hospitality?", a: "Nitrile is typically more durable and puncture-resistant; vinyl can be a value option for lower-risk tasks. Many kitchens standardize on nitrile for prep and line." },
       { q: "Can I order for multiple locations?", a: "Yes. You can ship to multiple addresses and use Quicklists or reorder by location." },
     ],
@@ -159,9 +162,9 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       "Dependable supply and case pricing for facilities",
     ],
     proofStats: [
-      { label: "Facilities supplied", value: "800+" },
-      { label: "Powder-free options", value: "50+" },
-      { label: "On-time delivery", value: "99%" },
+      { label: "Clinical programs", value: "Built for multi-location teams" },
+      { label: "SKU attributes", value: "Published specs per variant" },
+      { label: "Fulfillment", value: "Reviewed by location and volume" },
     ],
     safetyCertifications: [
       { icon: "exam", label: "Exam grade" },
@@ -216,9 +219,9 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       "Bulk and case ordering to standardize PPE across the plant",
     ],
     proofStats: [
-      { label: "Plants supplied", value: "400+" },
-      { label: "Cut levels (ANSI)", value: "A3–A8" },
-      { label: "Case orders", value: "10K+/mo" },
+      { label: "Plant programs", value: "Built for multi-location teams" },
+      { label: "Cut levels (ANSI)", value: "A3–A8 on published SKUs" },
+      { label: "Fulfillment", value: "Reviewed by location and volume" },
     ],
     safetyCertifications: [
       { icon: "cut", label: "Cut resistant (ANSI)" },

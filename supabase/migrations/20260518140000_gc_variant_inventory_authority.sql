@@ -1,5 +1,10 @@
 -- Phase 0C: variant-grain reserve / release / deduct (catalog_v2.variant_inventory).
+-- Wrapped in DO/EXECUTE so Supabase CLI statement splitter does not treat *_atomic
+-- function names as BEGIN ATOMIC (SQLSTATE 42601 on trailing statements).
 
+DO $wrap_reserve$
+BEGIN
+  EXECUTE $reserve$
 CREATE OR REPLACE FUNCTION public.gc_reserve_variant_stock_for_order_atomic(
   p_order_id uuid,
   p_user_id uuid,
@@ -9,7 +14,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, gc_commerce, catalog_v2
-AS $$
+AS $fn$
 DECLARE
   elem jsonb;
   v_qty int;
@@ -94,8 +99,14 @@ BEGIN
 
   RETURN jsonb_build_object('ok', true, 'skipped', false);
 END;
-$$;
+$fn$;
+$reserve$;
+END;
+$wrap_reserve$;
 
+DO $wrap_release$
+BEGIN
+  EXECUTE $release$
 CREATE OR REPLACE FUNCTION public.gc_release_variant_stock_for_order_atomic(
   p_order_id uuid,
   p_user_id uuid
@@ -104,7 +115,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, gc_commerce, catalog_v2
-AS $$
+AS $fn$
 DECLARE
   r_item record;
   inv_row catalog_v2.variant_inventory%ROWTYPE;
@@ -178,8 +189,14 @@ BEGIN
 
   RETURN jsonb_build_object('ok', true, 'skipped', false);
 END;
-$$;
+$fn$;
+$release$;
+END;
+$wrap_release$;
 
+DO $wrap_deduct$
+BEGIN
+  EXECUTE $deduct$
 CREATE OR REPLACE FUNCTION public.gc_deduct_variant_stock_for_order_atomic(
   p_order_id uuid,
   p_user_id uuid
@@ -188,7 +205,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, gc_commerce, catalog_v2
-AS $$
+AS $fn$
 DECLARE
   r_item record;
   inv_row catalog_v2.variant_inventory%ROWTYPE;
@@ -267,19 +284,42 @@ BEGIN
 
   RETURN jsonb_build_object('ok', true, 'skipped', false);
 END;
-$$;
+$fn$;
+$deduct$;
+END;
+$wrap_deduct$;
 
+DO $wrap_perms$
+BEGIN
+  EXECUTE $c1$
 COMMENT ON FUNCTION public.gc_reserve_variant_stock_for_order_atomic(uuid, uuid, jsonb) IS
   'Phase 0C: atomic variant_inventory reservation per catalog_variant_id + location_code.';
+$c1$;
+  EXECUTE $c2$
 COMMENT ON FUNCTION public.gc_release_variant_stock_for_order_atomic(uuid, uuid) IS
   'Phase 0C: release variant_inventory reservations for gc order lines.';
+$c2$;
+  EXECUTE $c3$
 COMMENT ON FUNCTION public.gc_deduct_variant_stock_for_order_atomic(uuid, uuid) IS
   'Phase 0C: deduct variant_inventory on_hand + reserved for shipped gc order.';
-
+$c3$;
+  EXECUTE $r1$
 REVOKE ALL ON FUNCTION public.gc_reserve_variant_stock_for_order_atomic(uuid, uuid, jsonb) FROM PUBLIC;
+$r1$;
+  EXECUTE $r2$
 REVOKE ALL ON FUNCTION public.gc_release_variant_stock_for_order_atomic(uuid, uuid) FROM PUBLIC;
+$r2$;
+  EXECUTE $r3$
 REVOKE ALL ON FUNCTION public.gc_deduct_variant_stock_for_order_atomic(uuid, uuid) FROM PUBLIC;
-
+$r3$;
+  EXECUTE $g1$
 GRANT EXECUTE ON FUNCTION public.gc_reserve_variant_stock_for_order_atomic(uuid, uuid, jsonb) TO service_role;
+$g1$;
+  EXECUTE $g2$
 GRANT EXECUTE ON FUNCTION public.gc_release_variant_stock_for_order_atomic(uuid, uuid) TO service_role;
+$g2$;
+  EXECUTE $g3$
 GRANT EXECUTE ON FUNCTION public.gc_deduct_variant_stock_for_order_atomic(uuid, uuid) TO service_role;
+$g3$;
+END;
+$wrap_perms$;

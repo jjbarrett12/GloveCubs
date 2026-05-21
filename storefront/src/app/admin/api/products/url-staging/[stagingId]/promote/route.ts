@@ -57,7 +57,9 @@ export async function POST(
       .slice(0, 300) ||
     "Imported listing";
 
-  const brandName = typeof body.brand_name === "string" ? body.brand_name : "";
+  const brandName =
+    (typeof body.brand_name === "string" ? body.brand_name.trim() : "") ||
+    String(ex.suggested_brand ?? "").trim();
   const material = typeof body.material === "string" ? body.material : "";
   const color = typeof body.color === "string" ? body.color : "";
   const milThickness = typeof body.mil_thickness === "string" ? body.mil_thickness : "";
@@ -71,6 +73,8 @@ export async function POST(
     primaryFromBody || (st.image_url ?? "").trim() || String(ex.suggested_image_from_page ?? "").trim();
 
   const rawVariants = body.variants;
+  const suggestedSku = String(ex.suggested_sku ?? ex.suggested_mpn ?? "").trim();
+
   const variants: ProductWriteInput["variants"] = [];
   if (Array.isArray(rawVariants)) {
     for (const rv of rawVariants) {
@@ -96,7 +100,9 @@ export async function POST(
     primaryImageUrl,
     status: "draft",
     quoteOnly: true,
-    variants: variants.length ? variants : [{ sizeCode: "OS", variantSku: "", listPrice: "" }],
+    variants: variants.length
+      ? variants
+      : [{ sizeCode: "OS", variantSku: suggestedSku, listPrice: "" }],
   };
 
   const res = await promoteStagingToDraftProduct(stagingId, merged, admin.id);

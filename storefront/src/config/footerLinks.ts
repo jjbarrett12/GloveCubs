@@ -67,3 +67,12 @@ export const FOOTER_SOCIAL_LINKS: FooterSocialLink[] = [
 
 export const FOOTER_TAGLINE =
   "Your trusted source for professional-grade disposable and reusable work gloves. Serving businesses nationwide with quality products from top manufacturers.";
+
+/** Footer trust strip — procurement paths (not card checkout). */
+export const FOOTER_PROCUREMENT_TRUST_SIGNALS: { label: string; href: string }[] = [
+  { label: "Case & pallet quotes", href: "/request-pricing" },
+  { label: "Net terms (approved accounts)", href: "/request-pricing" },
+  { label: "Invoice review", href: "/invoice-savings" },
+  { label: "Replenishment planning", href: "/quote-cart" },
+  { label: "Business pricing support", href: "/request-pricing" },
+];

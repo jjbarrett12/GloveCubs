@@ -1,19 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
+import { resolveAdminAccess } from "@/lib/admin/get-admin-user";
 import { listClipboardStaging, createClipboardStaging } from "@/lib/admin/clipboard-url-staging";
+import { probeCatalogosHealth } from "@/lib/admin/catalogos-internal-client";
+import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
 
 export const dynamic = "force-dynamic";
 
+function adminGateResponse(access: Awaited<ReturnType<typeof resolveAdminAccess>>) {
+  if (access.kind === "sign_in_required") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.kind === "not_admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function GET() {
-  const admin = await getAdminUser();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await resolveAdminAccess();
+  const denied = adminGateResponse(access);
+  if (denied) return denied;
   const rows = await listClipboardStaging(100);
   return NextResponse.json(rows);
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await getAdminUser();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await resolveAdminAccess();
+  const denied = adminGateResponse(access);
+  if (denied) return denied;
+  if (access.kind !== "ok") return denied;
+  const admin = { id: access.userId };
 
   let body: unknown;
   try {
@@ -31,7 +47,23 @@ export async function POST(request: NextRequest) {
     createdBy: admin.id,
   });
   if ("error" in res) {
-    return NextResponse.json({ error: res.error }, { status: 400 });
+    const status = res.error.includes("could not be written") ? 503 : 400;
+    return NextResponse.json({ error: res.error }, { status });
   }
-  return NextResponse.json(res, { status: 201 });
+
+  const conn = computeProductsImportConnectionStatus();
+  let catalogosEnrichment: "available" | "unavailable" | "not_configured" = "not_configured";
+  if (conn.status === "online") {
+    const probe = await probeCatalogosHealth();
+    catalogosEnrichment = probe.ok ? "available" : "unavailable";
+  }
+
+  return NextResponse.json(
+    {
+      ...res,
+      staged: true,
+      catalogos_enrichment: catalogosEnrichment,
+    },
+    { status: 201 }
+  );
 }

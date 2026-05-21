@@ -21,8 +21,20 @@ describe("catalogos-internal-client", () => {
     expect(buildCatalogosInternalUrl("https://x.com", "api/foo")).toBe("https://x.com/api/foo");
   });
 
-  it("resolveCatalogosInternalBaseUrl requires CATALOGOS_INTERNAL_URL", () => {
+  it("uses localhost default in non-production when URL env is unset", () => {
+    process.env.NODE_ENV = "development";
     delete process.env.CATALOGOS_INTERNAL_URL;
+    delete process.env.NEXT_PUBLIC_CATALOGOS_URL;
+    const r = resolveCatalogosInternalBaseUrl();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.baseUrl).toBe("http://localhost:3010");
+  });
+
+  it("requires CATALOGOS_INTERNAL_URL in production", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.VERCEL_ENV;
+    delete process.env.CATALOGOS_INTERNAL_URL;
+    delete process.env.NEXT_PUBLIC_CATALOGOS_URL;
     const r = resolveCatalogosInternalBaseUrl();
     expect(r.ok).toBe(false);
   });

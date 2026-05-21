@@ -35,7 +35,7 @@ const BRAND_TO_LOGO_SLUG: Record<string, string> = {
 };
 
 const BRAND_LOGO_FILENAME: Record<string, string> = {
-  Hospeco: "Hospeco.jpg",
+  Hospeco: "Hospeco.png",
   "Global Glove": "Global_Glove.png",
   Safeko: "Safeko.png",
   PIP: "pip-global-safety-logo.png",

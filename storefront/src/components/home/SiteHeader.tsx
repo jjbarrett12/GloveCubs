@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,11 +38,79 @@ const UTILITY_CAPABILITIES = [
   { label: "Nationwide fulfillment", nudge: false },
 ] as const;
 
+/** Left rail: “All industries” + primary industry landings. */
+const INDUSTRY_MEGA_RAIL_COUNT = 5;
+
+const NAV_MEGA_PANEL_SHELL =
+  "w-full overflow-hidden rounded-xl border border-[#e7e7e7]/90 bg-white/95 text-left shadow-[0_24px_60px_rgb(0_0_0/0.14)] backdrop-blur-md";
+
+function navMegaPanelMotion(open: boolean) {
+  return cn(
+    "transition duration-200 ease-out motion-reduce:transition-none",
+    open ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0",
+    open ? "pointer-events-auto" : "pointer-events-none",
+  );
+}
+
+function isMegaHoverTarget(related: Node | null, ...nodes: (HTMLElement | null | undefined)[]) {
+  return related != null && nodes.some((n) => n?.contains(related));
+}
+
+type NavMegaPortalProps = {
+  open: boolean;
+  topPx: number;
+  panelId: string;
+  ariaLabel: string;
+  widthClass: string;
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  slotRef: React.RefObject<HTMLDivElement | null>;
+  onMouseEnter: () => void;
+  onMouseLeave: (e: React.MouseEvent) => void;
+  children: React.ReactNode;
+};
+
+function NavMegaPortal({
+  open,
+  topPx,
+  panelId,
+  ariaLabel,
+  widthClass,
+  panelRef,
+  slotRef,
+  onMouseEnter,
+  onMouseLeave,
+  children,
+}: NavMegaPortalProps) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
+  if (!mounted || !open) return null;
+
+  return createPortal(
+    <div
+      ref={slotRef}
+      className={cn(
+        "fixed left-1/2 z-[100] hidden -translate-x-1/2 pt-2.5 lg:block",
+        widthClass,
+        navMegaPanelMotion(open),
+      )}
+      style={{ top: topPx }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div ref={panelRef} id={panelId} role="region" aria-label={ariaLabel} className={NAV_MEGA_PANEL_SHELL}>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /**
  * Stacking (keep below `components/ui/dialog.tsx` overlay z-50; above page content).
  * - Page / hero: default (0–1).
  * - Sticky header: z-40.
- * - Mega-panels: z-10 inside elevated `li` (z-30 when open/hover) so later nav items do not paint over.
+ * - Mega-panels: fixed + portaled to `body`, centered with `left: 1/2` / `-translate-x-1/2`, z-[100].
  * - Dialogs / modals: z-50+ (canonical overlay).
  * - Legacy mobile drawers (e.g. store): z-[1200] — unchanged.
  */
@@ -63,10 +132,16 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobilePanel, setMobilePanel] = React.useState<"industries" | "programs" | null>(null);
   const [desktopMega, setDesktopMega] = React.useState<"industries" | "programs" | null>(null);
+  const secondaryNavRef = React.useRef<HTMLDivElement | null>(null);
   const industriesMegaRef = React.useRef<HTMLLIElement | null>(null);
   const programsMegaRef = React.useRef<HTMLLIElement | null>(null);
+  const industriesMegaSlotRef = React.useRef<HTMLDivElement | null>(null);
+  const industriesMegaPanelRef = React.useRef<HTMLDivElement | null>(null);
+  const programsMegaSlotRef = React.useRef<HTMLDivElement | null>(null);
+  const programsMegaPanelRef = React.useRef<HTMLDivElement | null>(null);
   /** Browser timer id (`window.setTimeout`); avoid `NodeJS.Timeout` mismatch in Next typecheck. */
   const megaCloseTimerRef = React.useRef<number | null>(null);
+  const [megaMenuTopPx, setMegaMenuTopPx] = React.useState(0);
 
   function cancelMegaCloseTimer() {
     if (megaCloseTimerRef.current != null) {
@@ -105,12 +180,35 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [desktopMega]);
 
+  React.useLayoutEffect(() => {
+    if (desktopMega == null) return;
+
+    const updateTop = () => {
+      const el = secondaryNavRef.current;
+      if (!el) return;
+      setMegaMenuTopPx(el.getBoundingClientRect().bottom);
+    };
+
+    updateTop();
+    const ro = new ResizeObserver(updateTop);
+    if (secondaryNavRef.current) ro.observe(secondaryNavRef.current);
+    window.addEventListener("resize", updateTop);
+    window.addEventListener("scroll", updateTop, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateTop);
+      window.removeEventListener("scroll", updateTop, true);
+    };
+  }, [desktopMega]);
+
   React.useEffect(() => {
     if (desktopMega == null) return;
     function onMouseDown(e: MouseEvent) {
       const t = e.target as Node;
       if (industriesMegaRef.current?.contains(t)) return;
       if (programsMegaRef.current?.contains(t)) return;
+      if (industriesMegaSlotRef.current?.contains(t)) return;
+      if (programsMegaSlotRef.current?.contains(t)) return;
       setDesktopMega(null);
     }
     document.addEventListener("mousedown", onMouseDown);
@@ -171,6 +269,20 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
   const industriesMegaOpen = desktopMega === "industries";
   const programsMegaOpen = desktopMega === "programs";
 
+  const industryRailItems = HEADER_INDUSTRY_NAV_ITEMS.slice(0, INDUSTRY_MEGA_RAIL_COUNT);
+  const industryColumnItems = HEADER_INDUSTRY_NAV_ITEMS.slice(INDUSTRY_MEGA_RAIL_COUNT);
+
+  function handleMegaNavLeave(
+    e: React.MouseEvent,
+    liRef: React.RefObject<HTMLLIElement | null>,
+    panelRef: React.RefObject<HTMLDivElement | null>,
+    slotRef: React.RefObject<HTMLDivElement | null>,
+  ) {
+    const related = e.relatedTarget as Node | null;
+    if (isMegaHoverTarget(related, liRef.current, panelRef.current, slotRef.current)) return;
+    scheduleMegaClose(liRef.current);
+  }
+
   return (
     <div className="header-sticky-bridge sticky top-0 z-40">
       <div className="overflow-x-hidden border-b border-neutral-800 bg-[#141414] py-1 text-[10px] font-medium leading-tight text-neutral-300 sm:py-1.5">
@@ -212,24 +324,36 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
 
       <header className="overflow-visible border-b border-[#e7e7e7] bg-white text-neutral-950 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
         <div className="mx-auto max-w-7xl min-w-0 px-4 py-1.5 sm:px-6 lg:px-8 lg:py-1.5">
-          <div className="overflow-x-clip">
+          <div className="overflow-x-clip lg:overflow-visible">
             <div className="grid min-w-0 grid-cols-1 items-center gap-2 lg:grid-cols-[auto_1fr] lg:gap-4">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-              <Link
-                href="/"
-                className="flex min-w-0 max-w-full items-center bg-transparent no-underline [forced-color-adjust:none]"
-                onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-              >
-                <Image
-                  src="/images/glovecubs-header-logo.png"
-                  alt="GloveCubs"
-                  width={1005}
-                  height={143}
-                  priority
-                  unoptimized
-                  className="h-[50px] w-auto max-w-[min(420px,70vw)] shrink-0 object-contain object-left sm:h-[58px] lg:h-[66px]"
-                />
-              </Link>
+              <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                <Link
+                  href="/"
+                  className="flex min-w-0 max-w-full shrink-0 items-center bg-transparent no-underline [forced-color-adjust:none]"
+                  onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                >
+                  <Image
+                    src="/images/glovecubs-header-logo.png"
+                    alt="GloveCubs"
+                    width={1005}
+                    height={143}
+                    priority
+                    unoptimized
+                    className="h-[34px] w-auto max-w-[min(220px,48vw)] shrink-0 object-contain object-left sm:h-[38px] sm:max-w-[min(260px,55vw)] lg:h-[42px]"
+                  />
+                </Link>
+                <span
+                  className={cn(
+                    "hidden shrink-0 items-center gap-0.5 rounded-full border border-[#0a0a0a]/10",
+                    "bg-[var(--color-accent-orange)] px-1.5 py-px text-[8px] font-bold uppercase tracking-[0.1em] text-[#0a0a0a]",
+                    "shadow-[0_0_8px_rgb(255_106_0/0.22)] sm:inline-flex sm:px-2 sm:py-0.5 sm:text-[9px]"
+                  )}
+                >
+                  <Boxes className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                  Authorized Distributor
+                </span>
+              </div>
 
               <div className="flex items-center gap-3 lg:hidden">
                 <Link
@@ -367,9 +491,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
           </div>
           </div>
 
-          {/* Secondary nav — public/index.html (own row: avoid overflow-x on header clipping mega-menus) */}
+          {/* Secondary nav — mega panels anchor to this row (centered), not to individual <li> */}
           <div
-            className={`border-t border-neutral-300/60 px-4 pb-1 pt-1 sm:px-6 lg:block lg:overflow-visible lg:px-8 ${
+            ref={secondaryNavRef}
+            className={`relative border-t border-neutral-300/60 px-4 pb-1 pt-1 sm:px-6 lg:block lg:overflow-visible lg:px-8 ${
               mobileOpen
                 ? "max-lg:block max-lg:max-h-[min(70vh,calc(100dvh-9rem))] max-lg:overflow-y-auto max-lg:overflow-x-hidden max-lg:overscroll-y-contain"
                 : "max-lg:hidden max-lg:overflow-hidden"
@@ -431,8 +556,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   onMouseEnter={() => {
                     cancelMegaCloseTimer();
                     setDesktopMega("industries");
+                    const el = secondaryNavRef.current;
+                    if (el) setMegaMenuTopPx(el.getBoundingClientRect().bottom);
                   }}
-                  onMouseLeave={() => scheduleMegaClose(industriesMegaRef.current)}
+                  onMouseLeave={(e) => handleMegaNavLeave(e, industriesMegaRef, industriesMegaPanelRef, industriesMegaSlotRef)}
                   onBlur={(e) => {
                     const rt = e.relatedTarget as Node | null;
                     if (rt && (e.currentTarget as HTMLElement).contains(rt)) return;
@@ -459,7 +586,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     aria-haspopup="true"
                     aria-expanded={industriesMegaOpen}
                     aria-controls="nav-mega-industries"
-                    className={cn(megaTriggerClass, "hidden w-full justify-center lg:inline-flex")}
+                    className={cn(
+                      megaTriggerClass,
+                      "header-nav-link hidden w-full justify-center lg:inline-flex",
+                    )}
                     onClick={() => setDesktopMega((m) => (m === "industries" ? null : "industries"))}
                     onFocus={() => {
                       cancelMegaCloseTimer();
@@ -492,44 +622,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       );
                     })}
                   </ul>
-                  <div
-                    id="nav-mega-industries"
-                    role="region"
-                    aria-label="Industries menu"
-                    className={cn(
-                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-2rem),1180px)] max-w-[calc(100vw-2rem)] -translate-x-1/2 lg:block",
-                      "before:pointer-events-auto before:absolute before:left-0 before:right-0 before:top-[-10px] before:z-[1] before:h-2.5 before:content-['']",
-                      "rounded-md border border-[#e7e7e7] bg-white text-left shadow-md transition duration-150 ease-out",
-                      industriesMegaOpen
-                        ? "visible translate-y-0 opacity-100"
-                        : "invisible translate-y-px opacity-0",
-                      industriesMegaOpen ? "pointer-events-auto" : "pointer-events-none",
-                    )}
-                  >
-                    <div className="p-3 sm:p-4">
-                      <h4 className="mb-3 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
-                        Shop by industry
-                      </h4>
-                      <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-6">
-                        {HEADER_INDUSTRY_NAV_ITEMS.map((item) => {
-                          const IndustryIcon = industryNavIconForHref(item.href);
-                          return (
-                            <li key={`d-${item.href}`} className="min-w-0 break-inside-avoid">
-                              <Link
-                                href={item.href}
-                                className="flex min-h-[40px] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[brand] lg:min-h-0 lg:py-1"
-                              >
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[brand]/25 bg-[brand]/[0.07]">
-                                  <IndustryIcon className="h-4 w-4 text-[brand]" aria-hidden />
-                                </span>
-                                <span className="min-w-0 flex-1">{item.label}</span>
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  </div>
                 </li>
                 <li
                   ref={programsMegaRef}
@@ -540,8 +632,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   onMouseEnter={() => {
                     cancelMegaCloseTimer();
                     setDesktopMega("programs");
+                    const el = secondaryNavRef.current;
+                    if (el) setMegaMenuTopPx(el.getBoundingClientRect().bottom);
                   }}
-                  onMouseLeave={() => scheduleMegaClose(programsMegaRef.current)}
+                  onMouseLeave={(e) => handleMegaNavLeave(e, programsMegaRef, programsMegaPanelRef, programsMegaSlotRef)}
                   onBlur={(e) => {
                     const rt = e.relatedTarget as Node | null;
                     if (rt && (e.currentTarget as HTMLElement).contains(rt)) return;
@@ -568,7 +662,10 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     aria-haspopup="true"
                     aria-expanded={programsMegaOpen}
                     aria-controls="nav-mega-brands"
-                    className={cn(megaTriggerClass, "hidden w-full justify-center lg:inline-flex")}
+                    className={cn(
+                      megaTriggerClass,
+                      "header-nav-link hidden w-full justify-center lg:inline-flex",
+                    )}
                     onClick={() => setDesktopMega((m) => (m === "programs" ? null : "programs"))}
                     onFocus={() => {
                       cancelMegaCloseTimer();
@@ -610,57 +707,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       );
                     })}
                   </ul>
-                  <div
-                    id="nav-mega-brands"
-                    role="region"
-                    aria-label="Programs menu"
-                    className={cn(
-                      "absolute left-1/2 top-full z-10 hidden w-[min(calc(100vw-1.5rem),520px)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 lg:block",
-                      "before:pointer-events-auto before:absolute before:left-0 before:right-0 before:top-[-10px] before:z-[1] before:h-2.5 before:content-['']",
-                      "rounded-md border border-[#e7e7e7] bg-white text-left shadow-md transition duration-150 ease-out",
-                      programsMegaOpen ? "visible translate-y-0 opacity-100" : "invisible translate-y-px opacity-0",
-                      programsMegaOpen ? "pointer-events-auto" : "pointer-events-none",
-                    )}
-                  >
-                    <div className="max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain p-3 sm:p-4">
-                      <h4 className="mb-2 border-b border-neutral-200 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
-                        Brands &amp; supply programs
-                      </h4>
-                      <ul className="grid list-none grid-cols-1 gap-0.5 p-0 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-0.5">
-                        <li className="sm:col-span-2">
-                          <Link
-                            href="/brands"
-                            className="flex min-h-[44px] items-center justify-between rounded-lg border border-[brand]/20 bg-[brand]/8 px-3 py-2 text-sm font-bold text-[brand] transition hover:border-[brand]/35 hover:bg-[brand]/12"
-                          >
-                            <span>All brands</span>
-                            <span aria-hidden>→</span>
-                          </Link>
-                        </li>
-                        {HOME_BRAND_LIST.map((b) => {
-                          const logo = getBrandLogoPath(b);
-                          return (
-                            <li key={b}>
-                              <Link
-                                href={getStoreHrefForBrandDisplayNameSearch(b)}
-                                className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[brand]"
-                              >
-                                {logo ? (
-                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
-                                    <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
-                                  </span>
-                                ) : (
-                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
-                                    —
-                                  </span>
-                                )}
-                                <span className="min-w-0 flex-1 leading-snug">{b}</span>
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  </div>
                 </li>
                 <li className="border-b border-neutral-100 py-2.5 lg:border-0 lg:py-0">
                   <Link
@@ -832,6 +878,137 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
           <HeaderTrustStrip />
         </div>
       </header>
+
+      <NavMegaPortal
+        open={industriesMegaOpen}
+        topPx={megaMenuTopPx}
+        panelId="nav-mega-industries"
+        ariaLabel="Industries menu"
+        widthClass="w-[min(1400px,calc(100vw-48px))] max-w-[calc(100vw-48px)]"
+        panelRef={industriesMegaPanelRef}
+        slotRef={industriesMegaSlotRef}
+        onMouseEnter={() => {
+          cancelMegaCloseTimer();
+          setDesktopMega("industries");
+        }}
+        onMouseLeave={(e) => handleMegaNavLeave(e, industriesMegaRef, industriesMegaPanelRef, industriesMegaSlotRef)}
+      >
+        <div className="min-w-0 p-4 sm:p-5">
+          <h4 className="mb-4 border-b border-neutral-200/90 pb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
+            Shop by industry
+          </h4>
+          <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-8">
+            <aside className="min-w-0 border-neutral-200/80 lg:border-r lg:pr-6">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-500">Featured</p>
+              <ul className="m-0 list-none space-y-0.5">
+                {industryRailItems.map((item) => {
+                  const IndustryIcon = industryNavIconForHref(item.href);
+                  const featured = item.href === "/industries";
+                  return (
+                    <li key={`rail-${item.href}`}>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "flex min-h-[44px] items-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-semibold leading-snug transition",
+                          featured
+                            ? "border border-[brand]/25 bg-[brand]/[0.08] text-[brand] hover:border-[brand]/40 hover:bg-[brand]/12"
+                            : "text-neutral-950 hover:bg-neutral-50 hover:text-[brand]",
+                        )}
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[brand]/25 bg-[brand]/[0.07]">
+                          <IndustryIcon className="h-4 w-4 text-[brand]" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </aside>
+            <div className="min-w-0 overflow-x-auto">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-500 lg:sr-only">
+                All categories
+              </p>
+              <ul className="m-0 grid min-w-0 list-none grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                {industryColumnItems.map((item) => {
+                  const IndustryIcon = industryNavIconForHref(item.href);
+                  return (
+                    <li key={`col-${item.href}`} className="min-w-0">
+                      <Link
+                        href={item.href}
+                        className="flex min-h-[40px] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold leading-snug text-neutral-950 transition hover:bg-neutral-50 hover:text-[brand]"
+                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[brand]/25 bg-[brand]/[0.07]">
+                          <IndustryIcon className="h-4 w-4 text-[brand]" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </NavMegaPortal>
+
+      <NavMegaPortal
+        open={programsMegaOpen}
+        topPx={megaMenuTopPx}
+        panelId="nav-mega-brands"
+        ariaLabel="Programs menu"
+        widthClass="w-[min(520px,calc(100vw-48px))] max-w-[calc(100vw-48px)]"
+        panelRef={programsMegaPanelRef}
+        slotRef={programsMegaSlotRef}
+        onMouseEnter={() => {
+          cancelMegaCloseTimer();
+          setDesktopMega("programs");
+        }}
+        onMouseLeave={(e) => handleMegaNavLeave(e, programsMegaRef, programsMegaPanelRef, programsMegaSlotRef)}
+      >
+        <div className="max-h-[min(70vh,520px)] min-w-0 overflow-y-auto overscroll-y-contain p-4 sm:p-5">
+          <h4 className="mb-3 border-b border-neutral-200/90 pb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[brand]">
+            Brands &amp; supply programs
+          </h4>
+          <ul className="m-0 grid list-none grid-cols-1 gap-0.5 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-0.5">
+            <li className="sm:col-span-2">
+              <Link
+                href="/brands"
+                className="flex min-h-[44px] items-center justify-between rounded-lg border border-[brand]/20 bg-[brand]/8 px-3 py-2 text-sm font-bold text-[brand] transition hover:border-[brand]/35 hover:bg-[brand]/12"
+                onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+              >
+                <span>All brands</span>
+                <span aria-hidden>→</span>
+              </Link>
+            </li>
+            {HOME_BRAND_LIST.map((b) => {
+              const logo = getBrandLogoPath(b);
+              return (
+                <li key={b}>
+                  <Link
+                    href={getStoreHrefForBrandDisplayNameSearch(b)}
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[brand]"
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    {logo ? (
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
+                        <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
+                      </span>
+                    ) : (
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
+                        —
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 leading-snug">{b}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </NavMegaPortal>
     </div>
   );
 }

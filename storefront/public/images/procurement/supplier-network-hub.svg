@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(120 82) scale(56)">
+      <stop stop-color="#FF6A00" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#FF6A00" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="240" height="160" fill="#FAFAF8"/>
+  <circle cx="120" cy="82" r="56" fill="url(#glow)"/>
+  <line x1="120" y1="84" x2="120" y2="26" stroke="#FF6A00" stroke-width="1.75" stroke-opacity="0.28" stroke-linecap="round"/>
+  <line x1="120" y1="84" x2="186" y2="48" stroke="#FF6A00" stroke-width="1.75" stroke-opacity="0.28" stroke-linecap="round"/>
+  <line x1="120" y1="84" x2="178" y2="122" stroke="#FF6A00" stroke-width="1.75" stroke-opacity="0.28" stroke-linecap="round"/>
+  <line x1="120" y1="84" x2="62" y2="122" stroke="#FF6A00" stroke-width="1.75" stroke-opacity="0.28" stroke-linecap="round"/>
+  <line x1="120" y1="84" x2="54" y2="48" stroke="#FF6A00" stroke-width="3" stroke-opacity="1" stroke-linecap="round"/>
+  <circle cx="120" cy="26" r="4" fill="#fff" stroke="#FF6A00" stroke-width="2"/>
+  <circle cx="186" cy="48" r="4" fill="#fff" stroke="#FF6A00" stroke-width="2"/>
+  <circle cx="178" cy="122" r="4" fill="#fff" stroke="#FF6A00" stroke-width="2"/>
+  <circle cx="62" cy="122" r="4" fill="#fff" stroke="#FF6A00" stroke-width="2"/>
+  <circle cx="54" cy="48" r="5" fill="#FF6A00" stroke="#fff" stroke-width="2"/>
+  <rect x="94" y="56" width="52" height="52" rx="14" fill="#FF6A00"/>
+  <rect x="104" y="66" width="32" height="22" rx="6" fill="#fff" fill-opacity="0.22"/>
+  <path d="M108 78h24M108 86h16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <g fill="#fff" stroke="#FF6A00" stroke-width="1.75">
+    <rect x="100" y="12" width="40" height="26" rx="6"/>
+    <path d="M100 134h40v-16l-20-12-20 12v16z"/>
+    <rect x="168" y="36" width="40" height="26" rx="6"/>
+    <rect x="160" y="112" width="40" height="26" rx="6"/>
+    <rect x="32" y="112" width="40" height="26" rx="6"/>
+    <rect x="24" y="36" width="40" height="26" rx="6"/>
+  </g>
+  <rect x="108" y="18" width="24" height="6" rx="2" fill="#FF6A00" fill-opacity="0.35"/>
+  <rect x="176" y="42" width="24" height="6" rx="2" fill="#FF6A00" fill-opacity="0.35"/>
+  <rect x="168" y="118" width="24" height="6" rx="2" fill="#FF6A00" fill-opacity="0.35"/>
+  <rect x="40" y="118" width="24" height="6" rx="2" fill="#FF6A00" fill-opacity="0.35"/>
+  <rect x="32" y="42" width="24" height="6" rx="2" fill="#FF6A00" fill-opacity="0.9"/>
+</svg>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bot, FileText, Boxes, Layers, Sparkles, Tag } from "lucide-react";
+import { Bot, FileText, Box, Boxes, Layers, Tag } from "lucide-react";
 import { QuickBulkBuilder } from "@/components/home/QuickBulkBuilder";
 import { CTAClusterTertiaryLink } from "@/components/procurement";
 import { HomeBridge, HomeCtaLink } from "@/components/home/authority/HomeAuthorityPrimitives";
@@ -18,14 +18,22 @@ export function HomeHeroExpress() {
           <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14 xl:items-center">
             <div className="animate-authority-fade-up lg:pr-4">
               <div
-                className="mb-7 inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--color-border-muted)] bg-white/[0.04] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]"
+                className="mb-7 inline-flex max-w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-full border border-[var(--color-accent-orange)] bg-[#0a0a0a] px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)] shadow-[0_0_24px_rgb(255_106_0/0.35),inset_0_0_12px_rgb(255_106_0/0.08)]"
               >
-                <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span>AI-assisted industrial glove procurement</span>
+                <Box className="h-3.5 w-3.5 shrink-0 stroke-[2.25]" aria-hidden />
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span>B2B programs</span>
+                  <span aria-hidden>·</span>
+                  <span>Case &amp; pallet</span>
+                  <span aria-hidden>·</span>
+                  <span>1,000+ SKUs available</span>
+                </span>
               </div>
 
-              <h1 className="proc-display-xl mb-5 max-w-xl">
-                The procurement platform for glove programs
+              <h1 className="proc-display-xl mb-5 max-w-xl text-white">
+                Built for Operators
+                <br />
+                Who Buy by the Case
               </h1>
               <p className="mb-8 max-w-lg text-lg leading-relaxed text-white/78 sm:text-xl">
                 Category expertise, invoice intelligence, and nationwide B2B programs—for operators who buy by the case

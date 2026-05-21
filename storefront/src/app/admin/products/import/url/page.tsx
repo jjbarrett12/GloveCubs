@@ -1,4 +1,4 @@
-import { catalogosInternalRequest } from "@/lib/admin/catalogos-internal-client";
+import { catalogosInternalRequest, probeCatalogosHealth } from "@/lib/admin/catalogos-internal-client";
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
 import { adaptUrlImportJobList, type UrlImportJobSummary } from "@/lib/admin/url-import-adapter";
 import { PageHeader, StatusBadge } from "@/components/admin";
@@ -24,6 +24,8 @@ function connectionVariant(status: "online" | "offline" | "misconfigured"): "suc
 export default async function AdminProductsImportUrlPage() {
   const conn = computeProductsImportConnectionStatus();
   const offline = conn.status !== "online";
+  const catalogosProbe = !offline ? await probeCatalogosHealth() : null;
+  const catalogosUnreachable = catalogosProbe != null && !catalogosProbe.ok;
   const [stagingRows, categories] = await Promise.all([listClipboardStaging(50), fetchAdminCategoriesForProductForm()]);
 
   const jobs = offline
@@ -54,6 +56,12 @@ export default async function AdminProductsImportUrlPage() {
       {offline ? (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <strong className="font-semibold">Catalog sync is offline.</strong> {conn.message} You can still use clipboard staging below.
+        </div>
+      ) : catalogosUnreachable && catalogosProbe ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <strong className="font-semibold">Catalog sync configured but not reachable.</strong> {catalogosProbe.message} Clipboard
+          staging below still works against Supabase. Start CatalogOS at {conn.catalogos_base_url ?? "localhost:3010"} or fix{" "}
+          <code className="rounded bg-amber-100/80 px-1 font-mono text-xs">CATALOGOS_INTERNAL_URL</code>.
         </div>
       ) : null}
 

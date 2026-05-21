@@ -4,7 +4,10 @@
  */
 
 import { NextResponse } from "next/server";
-import type { CatalogosInternalRequestResult } from "@/lib/admin/catalogos-internal-client";
+import type {
+  CatalogosInternalRequestError,
+  CatalogosInternalRequestResult,
+} from "@/lib/admin/catalogos-internal-client";
 
 export type ParsedJsonResult<T = unknown> =
   | { ok: true; value: T }
@@ -48,6 +51,28 @@ export function nonEmptyString(value: unknown, max = 200): { ok: true; value: st
   return { ok: true, value: v };
 }
 
+export function adminCatalogosErrorMessage(err: CatalogosInternalRequestError): string {
+  if (err.kind === "config") {
+    return `${err.message} Set CATALOGOS_INTERNAL_URL in storefront/.env.local (development default: http://localhost:3010 when unset).`;
+  }
+  if (err.kind === "auth") {
+    return `${err.message} Set INTERNAL_API_KEY to match CatalogOS (and CATALOGOS_ADMIN_SECRET if enabled).`;
+  }
+  if (err.kind === "network") {
+    if (err.message === "catalogos_timeout") {
+      return "CatalogOS request timed out. For URL crawls this can take several minutes; confirm CatalogOS is running and reachable.";
+    }
+    return `CatalogOS is unreachable (${err.message}). Start CatalogOS locally or fix CATALOGOS_INTERNAL_URL.`;
+  }
+  if (err.kind === "parse") {
+    return `CatalogOS returned an invalid response (${err.message}).`;
+  }
+  if (err.status === 401 || err.status === 403) {
+    return `CatalogOS rejected the request (HTTP ${err.status}). Align INTERNAL_API_KEY with CatalogOS middleware.`;
+  }
+  return err.message;
+}
+
 export function toCatalogosErrorResponse(
   result: CatalogosInternalRequestResult,
   contextStatus: number = 502
@@ -72,9 +97,10 @@ export function toCatalogosErrorResponse(
             : 502;
   return NextResponse.json(
     {
-      error: err.message,
+      error: adminCatalogosErrorMessage(err),
       kind: err.kind,
       upstream_status: err.status ?? null,
+      upstream_detail: err.message,
     },
     { status }
   );

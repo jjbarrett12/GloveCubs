@@ -4,26 +4,21 @@ import * as React from "react";
 import Link from "next/link";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import {
-  ArrowRight,
   Building2,
   ChevronDown,
   ChevronUp,
   Factory,
   Flame,
   HeartPulse,
-  MapPin,
   Minus,
   Plus,
-  ShieldCheck,
   Sparkles,
-  Target,
   Truck,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 import { ProcurementSectionShell } from "@/components/procurement";
 import {
-  HomeCtaLink,
   HomeEducationalBadge,
   HomePanelDark,
   HomeSectionIntro,
@@ -31,7 +26,6 @@ import {
 import {
   GLOVE_USAGE_DISCLAIMER,
   GLOVE_USAGE_INDEX_LABEL,
-  GLOVE_USAGE_LEADERBOARD,
   GLOVE_USAGE_METHODOLOGY,
   NATIONAL_USAGE_INDEX,
   STATE_NAME_TO_ABBR,
@@ -41,27 +35,8 @@ import {
   type GloveStateUsage,
 } from "@/config/gloveUsageByState";
 import { US_STATES_TOPOLOGY } from "@/config/us-states-topology";
-import { cn } from "@/lib/utils";
 
 const DEFAULT_STATE = getStateByAbbr("TX")!;
-
-const TRUST_CARDS = [
-  {
-    title: "State-by-state insight",
-    body: "Compare estimated relative usage indexes to see where operating environments may demand heavier glove programs.",
-    icon: MapPin,
-  },
-  {
-    title: "Support smarter planning",
-    body: "Use regional context when sizing inventory, evaluating categories, and aligning procurement with local industry mix.",
-    icon: Target,
-  },
-  {
-    title: "Not AI. Not automated.",
-    body: GLOVE_USAGE_DISCLAIMER,
-    icon: ShieldCheck,
-  },
-] as const;
 
 function factorIcon(label: string): LucideIcon {
   if (/health|clinical|hospital/i.test(label)) return HeartPulse;
@@ -119,11 +94,11 @@ export function HomeProcurementMapSection() {
         badge={<HomeEducationalBadge>Educational estimate only</HomeEducationalBadge>}
       />
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.12fr_0.88fr] lg:gap-10">
-        <HomePanelDark className="relative min-h-[320px] overflow-hidden p-4 sm:min-h-[420px] sm:p-5">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_90%,rgba(255,106,0,0.08)_0%,transparent_55%)]" />
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.12fr_0.88fr] lg:items-stretch lg:gap-10">
+        <HomePanelDark className="relative flex h-full flex-col p-4 sm:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_90%,rgba(255,106,0,0.08)_0%,transparent_55%)]" />
 
-          <div className="relative mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
             <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
               {GLOVE_USAGE_INDEX_LABEL}
             </p>
@@ -142,13 +117,14 @@ export function HomeProcurementMapSection() {
             </div>
           </div>
 
-          <div className="relative mx-auto max-w-full overflow-hidden">
+          <div className="relative min-h-[300px] w-full flex-1 lg:min-h-0">
             <ComposableMap
               projection="geoAlbersUsa"
-              width={780}
-              height={460}
-              className="h-auto w-full max-w-full"
-              style={{ width: "100%", height: "auto" }}
+              projectionConfig={{ scale: 1050 }}
+              width={900}
+              height={530}
+              preserveAspectRatio="xMidYMid meet"
+              className="h-full w-full max-h-full"
             >
               <Geographies geography={US_STATES_TOPOLOGY}>
                 {({ geographies }) =>
@@ -208,9 +184,8 @@ export function HomeProcurementMapSection() {
                 }
               </Geographies>
             </ComposableMap>
-          </div>
 
-          <div className="absolute bottom-4 right-4 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-black/70 shadow-lg backdrop-blur-sm">
+            <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-black/70 shadow-lg backdrop-blur-sm">
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center text-white/50"
@@ -228,45 +203,18 @@ export function HomeProcurementMapSection() {
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
+            </div>
           </div>
 
-          <p className="relative mt-3 text-[11px] leading-relaxed text-white/38">{GLOVE_USAGE_DISCLAIMER}</p>
+          <p className="relative mt-3 shrink-0 text-[11px] leading-relaxed text-white/38">{GLOVE_USAGE_DISCLAIMER}</p>
         </HomePanelDark>
 
         <StateDetailPanel
           state={display}
           isPreview={hoveredAbbr !== null && hoveredAbbr !== selectedAbbr}
-          selectedAbbr={selectedAbbr}
           showMethodology={showMethodology}
           onToggleMethodology={() => setShowMethodology((v) => !v)}
-          onSelectAbbr={setSelectedAbbr}
         />
-      </div>
-
-      <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
-        {TRUST_CARDS.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.title}
-              className="rounded-2xl border border-white/10 bg-[#121212] p-5 sm:p-6"
-            >
-              <Icon className="mb-3 h-5 w-5 text-[var(--color-accent-orange)]" aria-hidden />
-              <h3 className="mb-2 text-sm font-bold text-white">{card.title}</h3>
-              <p className="m-0 text-sm leading-relaxed text-white/58">{card.body}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="m-0 max-w-xl text-sm text-white/45">
-          Billion-dollar procurement starts with context—not assumptions. Indexes are educational planning signals
-          only.
-        </p>
-        <HomeCtaLink href="/glove-finder" icon={ArrowRight}>
-          Explore glove finder
-        </HomeCtaLink>
       </div>
     </ProcurementSectionShell>
   );
@@ -275,22 +223,13 @@ export function HomeProcurementMapSection() {
 type StateDetailPanelProps = {
   state: GloveStateUsage;
   isPreview: boolean;
-  selectedAbbr: string;
   showMethodology: boolean;
   onToggleMethodology: () => void;
-  onSelectAbbr: (abbr: string) => void;
 };
 
-function StateDetailPanel({
-  state,
-  isPreview,
-  selectedAbbr,
-  showMethodology,
-  onToggleMethodology,
-  onSelectAbbr,
-}: StateDetailPanelProps) {
+function StateDetailPanel({ state, isPreview, showMethodology, onToggleMethodology }: StateDetailPanelProps) {
   return (
-    <HomePanelDark className="flex flex-col p-6 sm:p-8">
+    <HomePanelDark className="flex h-full flex-col p-6 sm:p-8">
       {isPreview ? (
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">Preview</p>
       ) : null}
@@ -344,37 +283,6 @@ function StateDetailPanel({
             </span>
           ))}
         </div>
-      </div>
-
-      <div className="mt-8 border-t border-white/10 pt-6">
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">
-          Estimated usage index leaderboard
-        </p>
-        <ol className="m-0 flex flex-col gap-1.5 p-0">
-          {GLOVE_USAGE_LEADERBOARD.map((entry) => {
-            const isActive = entry.abbreviation === selectedAbbr;
-            return (
-              <li key={entry.abbreviation}>
-                <button
-                  type="button"
-                  onClick={() => onSelectAbbr(entry.abbreviation)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition",
-                    isActive
-                      ? "bg-[var(--color-accent-orange)]/15 text-white ring-1 ring-[var(--color-accent-orange)]/35"
-                      : "text-white/55 hover:bg-white/[0.05] hover:text-white/85"
-                  )}
-                >
-                  <span>
-                    <span className="mr-2 font-bold tabular-nums text-white/35">{entry.rank}.</span>
-                    {entry.name}
-                  </span>
-                  <span className="font-bold tabular-nums text-[var(--color-accent-orange)]">{entry.usageIndex}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
       </div>
 
       <div className="mt-6 border-t border-white/10 pt-5">

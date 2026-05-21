@@ -44,15 +44,23 @@ export async function middleware(req: NextRequest) {
   if (!isAdminApi && !isDashboard && !isAdminPage) return NextResponse.next();
 
   const secret = process.env.CATALOGOS_ADMIN_SECRET;
+  const internalKey = process.env.INTERNAL_API_KEY?.trim() || "dev-internal-key";
   if (!secret) {
     return NextResponse.next();
   }
 
-  const token =
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ??
-    req.cookies.get("catalogos_admin")?.value;
+  const bearer =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+  const cookieToken = req.cookies.get("catalogos_admin")?.value ?? "";
+  const apiKey = req.headers.get("x-api-key")?.trim() ?? "";
 
-  if (token !== secret) {
+  const authorized =
+    bearer === secret ||
+    cookieToken === secret ||
+    apiKey === internalKey ||
+    bearer === internalKey;
+
+  if (!authorized) {
     if (isAdminApi) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

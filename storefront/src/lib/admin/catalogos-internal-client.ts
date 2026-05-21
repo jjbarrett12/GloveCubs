@@ -4,6 +4,8 @@
  */
 
 const DEFAULT_DEV_KEY = "dev-internal-key";
+/** Documented CatalogOS dev port — see docs/PRODUCTION_DEPLOYMENT.md */
+export const CATALOGOS_DEV_DEFAULT_BASE_URL = "http://localhost:3010";
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
 
@@ -44,11 +46,17 @@ export type CatalogosInternalBaseUrlResult =
 
 /** Base URL for server-to-CatalogOS calls (no trailing slash). */
 export function resolveCatalogosInternalBaseUrl(): CatalogosInternalBaseUrlResult {
-  const raw = process.env.CATALOGOS_INTERNAL_URL?.trim() ?? "";
-  if (!raw) {
-    return { ok: false, reason: "CATALOGOS_INTERNAL_URL is not set" };
+  const explicit =
+    process.env.CATALOGOS_INTERNAL_URL?.trim() ||
+    process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim() ||
+    "";
+  if (explicit) {
+    return { ok: true, baseUrl: explicit.replace(/\/+$/, "") };
   }
-  return { ok: true, baseUrl: raw.replace(/\/+$/, "") };
+  if (!isProductionLike()) {
+    return { ok: true, baseUrl: CATALOGOS_DEV_DEFAULT_BASE_URL };
+  }
+  return { ok: false, reason: "CATALOGOS_INTERNAL_URL is not set" };
 }
 
 /**
@@ -142,6 +150,7 @@ export async function catalogosInternalRequest<T = unknown>(
         headers: {
           "Content-Type": "application/json",
           "x-api-key": key.key,
+          Authorization: `Bearer ${key.key}`,
         },
         body: options.method === "POST" && options.body !== undefined ? JSON.stringify(options.body) : undefined,
         signal: ac.signal,
@@ -197,4 +206,70 @@ export async function catalogosInternalRequest<T = unknown>(
     ok: false,
     error: { kind: "http", message: "catalogos_exhausted_retries", status: lastStatus },
   };
+}
+
+export type CatalogosHealthProbe = {
+  ok: boolean;
+  baseUrl: string | null;
+  message: string;
+  latencyMs?: number;
+};
+
+/**
+ * Lightweight GET /api/health on CatalogOS (no admin crawl side effects).
+ */
+export async function probeCatalogosHealth(timeoutMs = 4_000): Promise<CatalogosHealthProbe> {
+  const base = resolveCatalogosInternalBaseUrl();
+  if (!base.ok) {
+    return { ok: false, baseUrl: null, message: base.reason };
+  }
+
+  const key = resolveCatalogosInternalApiKey();
+  if (!key.ok) {
+    return { ok: false, baseUrl: base.baseUrl, message: key.reason };
+  }
+
+  const url = buildCatalogosInternalUrl(base.baseUrl, "/api/health");
+  const started = Date.now();
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "x-api-key": key.key,
+        Authorization: `Bearer ${key.key}`,
+      },
+      signal: ac.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timer);
+    const latencyMs = Date.now() - started;
+    if (!res.ok) {
+      return {
+        ok: false,
+        baseUrl: base.baseUrl,
+        message: `CatalogOS health returned HTTP ${res.status}`,
+        latencyMs,
+      };
+    }
+    return {
+      ok: true,
+      baseUrl: base.baseUrl,
+      message: "CatalogOS is reachable",
+      latencyMs,
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    const aborted = e instanceof Error && e.name === "AbortError";
+    return {
+      ok: false,
+      baseUrl: base.baseUrl,
+      message: aborted
+        ? `CatalogOS health timed out after ${timeoutMs}ms — is it running at ${base.baseUrl}?`
+        : `CatalogOS health request failed — is it running at ${base.baseUrl}?`,
+      latencyMs: Date.now() - started,
+    };
+  }
 }

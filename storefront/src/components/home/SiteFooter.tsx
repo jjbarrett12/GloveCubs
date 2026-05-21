@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Facebook, Twitter, Linkedin, Instagram, Phone, Mail, MapPin, Clock } from "lucide-react";
 import {
   FOOTER_CONTACT_LINKS,
+  FOOTER_PROCUREMENT_TRUST_SIGNALS,
   FOOTER_QUICK_LINKS,
   FOOTER_SOCIAL_LINKS,
   FOOTER_TAGLINE,
@@ -95,13 +96,13 @@ export function SiteFooter() {
                     key={b.slug}
                     href={b.href}
                     title={b.name}
-                    className="flex min-h-[60px] items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] p-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:-translate-y-0.5 hover:border-[#f06232]/35 hover:bg-white/[0.09]"
+                    className="flex min-h-[60px] items-center justify-center rounded-lg border border-[#e3e3e0] bg-white p-2.5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#f06232]/45 hover:shadow-md"
                   >
                     <span className="flex flex-col items-center gap-1">
                       {logo ? (
                         <img src={logo} alt="" className="max-h-7 max-w-[80px] object-contain" loading="lazy" />
                       ) : null}
-                      <span className="text-center text-[11px] font-semibold leading-tight text-white/90">{b.name}</span>
+                      <span className="text-center text-[11px] font-bold leading-tight text-[#0a0a0a]">{b.name}</span>
                     </span>
                   </Link>
                 );
@@ -150,14 +151,18 @@ export function SiteFooter() {
             &copy; {new Date().getFullYear()} Glovecubs. All rights reserved.
           </p>
           <div
-            className="flex flex-wrap justify-center gap-x-5 gap-y-2 sm:justify-end"
-            aria-label="Accepted payment methods"
+            className="flex flex-wrap justify-center gap-x-4 gap-y-2 sm:justify-end"
+            aria-label="Business procurement support"
           >
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Visa</span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Mastercard</span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Amex</span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Discover</span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">PayPal</span>
+            {FOOTER_PROCUREMENT_TRUST_SIGNALS.map((signal) => (
+              <Link
+                key={signal.label}
+                href={signal.href}
+                className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35 transition hover:text-white/70"
+              >
+                {signal.label}
+              </Link>
+            ))}
           </div>
         </div>
       </div>

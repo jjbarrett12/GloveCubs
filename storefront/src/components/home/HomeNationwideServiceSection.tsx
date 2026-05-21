@@ -13,6 +13,7 @@ export function HomeNationwideServiceSection() {
 
   return (
     <>
+      <HomeBridge variant="gray-to-dark" />
       <ProcurementSectionShell
         tone="raised"
         borderTop={false}
@@ -29,7 +30,7 @@ export function HomeNationwideServiceSection() {
               headingId="nationwide-service-heading"
               eyebrow="National infrastructure"
               eyebrowIcon={MapPin}
-              title="Built in Salt Lake City. Servicing everywhere."
+              title="Built Here. Servicing everywhere."
               description="Headquarters anchors fulfillment intelligence and B2B glove programs reaching operators across the United States—from single sites to multi-location procurement."
               tone="dark"
               className="mb-0 sm:mb-0 lg:mb-0"
@@ -40,41 +41,6 @@ export function HomeNationwideServiceSection() {
           </div>
 
           <div className="home-panel-dark relative min-h-[340px] overflow-hidden sm:min-h-[400px]">
-            <div className="pointer-events-none absolute inset-0 z-[2]">
-              <svg viewBox="0 0 400 280" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
-                <defs>
-                  <linearGradient id="slc-route-a" x1="0%" y1="50%" x2="100%" y2="30%">
-                    <stop offset="0%" stopColor="#ff6a00" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="#ff6a00" stopOpacity="0.15" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M 95 155 Q 160 95 250 110 T 355 85"
-                  fill="none"
-                  stroke="url(#slc-route-a)"
-                  strokeWidth="2.5"
-                  strokeDasharray="8 10"
-                  className="animate-authority-route-pulse"
-                />
-                <path
-                  d="M 95 155 Q 140 175 210 185 T 330 195"
-                  fill="none"
-                  stroke="rgb(255 255 255 / 0.12)"
-                  strokeWidth="1.5"
-                  strokeDasharray="5 8"
-                />
-                <path
-                  d="M 95 155 Q 120 200 180 220 T 280 235"
-                  fill="none"
-                  stroke="rgb(255 255 255 / 0.08)"
-                  strokeWidth="1"
-                  strokeDasharray="4 6"
-                />
-                <circle cx="95" cy="155" r="10" fill="#ff6a00" />
-                <circle cx="95" cy="155" r="22" fill="#ff6a00" fillOpacity="0.12" className="animate-authority-route-pulse" />
-              </svg>
-            </div>
-
             {showIframe ? (
               <iframe
                 src={embedSrc}
@@ -107,7 +73,7 @@ export function HomeNationwideServiceSection() {
           </div>
         </div>
       </ProcurementSectionShell>
-      <HomeBridge variant="to-light" />
+      <HomeBridge variant="to-dark" />
     </>
   );
 }

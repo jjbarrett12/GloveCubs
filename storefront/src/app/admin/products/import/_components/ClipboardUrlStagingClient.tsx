@@ -205,6 +205,14 @@ export function ClipboardUrlStagingClient({
                       </div>
                       <dl className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                         <div>
+                          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested brand</dt>
+                          <dd className="text-slate-800">{String(ex.suggested_brand ?? "—")}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested SKU / MPN</dt>
+                          <dd className="font-mono text-slate-800">{String(ex.suggested_sku ?? ex.suggested_mpn ?? "—")}</dd>
+                        </div>
+                        <div>
                           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested image (page)</dt>
                           <dd className="truncate text-slate-800">{String(ex.suggested_image_from_page ?? "—")}</dd>
                         </div>

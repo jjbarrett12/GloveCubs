@@ -12,14 +12,30 @@ describe("computeProductsImportConnectionStatus", () => {
     process.env = { ...snapshot };
   });
 
-  it("returns offline when CATALOGOS_INTERNAL_URL is missing", () => {
+  it("returns offline in production when CATALOGOS_INTERNAL_URL is missing", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.VERCEL_ENV;
     delete process.env.CATALOGOS_INTERNAL_URL;
+    delete process.env.NEXT_PUBLIC_CATALOGOS_URL;
     delete process.env.INTERNAL_API_KEY;
     const s = computeProductsImportConnectionStatus();
     expect(s.status).toBe("offline");
     expect(s.configured).toBe(false);
     expect(s.catalogos_url_configured).toBe(false);
     expect(s.message.toLowerCase()).toContain("ingestion offline");
+  });
+
+  it("returns online in development with dev default URL when env is unset", () => {
+    process.env.NODE_ENV = "development";
+    process.env.VERCEL_ENV = "development";
+    delete process.env.CATALOGOS_INTERNAL_URL;
+    delete process.env.NEXT_PUBLIC_CATALOGOS_URL;
+    delete process.env.INTERNAL_API_KEY;
+    const s = computeProductsImportConnectionStatus();
+    expect(s.status).toBe("online");
+    expect(s.configured).toBe(true);
+    expect(s.using_dev_default_url).toBe(true);
+    expect(s.catalogos_base_url).toBe("http://localhost:3010");
   });
 
   it("returns online in development when URL is set even if INTERNAL_API_KEY is unset", () => {

@@ -117,12 +117,19 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
   const supabase = getSupabaseCatalogos(true);
   const { data: job, error: jobErr } = await supabase
     .from("url_import_jobs")
-    .select("id, start_url, allowed_domain, crawl_mode, max_pages")
+    .select("id, supplier_id, start_url, allowed_domain, crawl_mode, max_pages")
     .eq("id", jobId)
     .single();
 
   if (jobErr || !job) throw new Error("URL import job not found");
-  const j = job as { id: string; start_url: string; allowed_domain: string; crawl_mode: string; max_pages: number };
+  const j = job as {
+    id: string;
+    supplier_id: string;
+    start_url: string;
+    allowed_domain: string;
+    crawl_mode: string;
+    max_pages: number;
+  };
   const allowedDomains = [j.allowed_domain.toLowerCase().replace(/^www\./, "")];
   if (allowedDomains[0] === "") allowedDomains[0] = new URL(j.start_url).hostname.replace(/^www\./, "");
   const config: AllowedDomainConfig = { allowedDomains, allowedPathPatterns: [] };
@@ -597,6 +604,17 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
       warnings,
     })
     .eq("id", jobId);
+
+  const { syncDeepCrawlJobToUnifiedStaging } = await import("@/lib/ingestion/unified-staging/deep-crawl-hook");
+  const unifiedSync = await syncDeepCrawlJobToUnifiedStaging({
+    urlImportJobId: jobId,
+    supplierId: j.supplier_id,
+  });
+  if (unifiedSync.errors.length > 0) {
+    warnings.push(
+      `unified_staging: ${unifiedSync.written} written, ${unifiedSync.skipped} skipped, ${unifiedSync.errors.length} errors`
+    );
+  }
 
   return {
     jobId,

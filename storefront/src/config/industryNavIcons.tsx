@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
 import {
   LayoutGrid,
   Stethoscope,
@@ -31,13 +32,22 @@ import {
   Package,
 } from "lucide-react";
 
-/** Lucide icon per `HEADER_INDUSTRY_NAV_ITEMS[].href` (exact string match). */
+const STORE_HEALTHCARE = buildStoreCatalogHref({ industries: ["healthcare"] });
+const STORE_FOOD_SERVICE = buildStoreCatalogHref({ industries: ["food_service"] });
+const STORE_JANITORIAL = buildStoreCatalogHref({ industries: ["janitorial"] });
+const STORE_INDUSTRIAL = buildStoreCatalogHref({ industries: ["industrial"] });
+
+/** Lucide icon per industry nav/catalog href (exact string match). */
 const INDUSTRY_NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
   "/industries": LayoutGrid,
   "/industries/healthcare": Stethoscope,
+  [STORE_HEALTHCARE]: Stethoscope,
   "/industries/hospitality": UtensilsCrossed,
+  [STORE_FOOD_SERVICE]: UtensilsCrossed,
   "/industries/janitorial": Brush,
+  [STORE_JANITORIAL]: Brush,
   "/industries/industrial": Factory,
+  [STORE_INDUSTRIAL]: Factory,
   "/store?industries=automotive": Car,
   "/store?industries=dental": Smile,
   "/store?industries=veterinary": PawPrint,
