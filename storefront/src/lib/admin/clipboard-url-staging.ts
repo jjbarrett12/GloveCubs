@@ -2,7 +2,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { assertUrlSafeForServerFetch } from "@/lib/admin/url-fetch-guard";
 import { extractPageEvidence, fetchHtmlEvidence, jsonLdProductHints } from "@/lib/admin/html-evidence";
 import { validateHttpUrl } from "@/lib/admin/products-import-proxy";
-import { isLegacyClipboardMirrorEnabled, isUnifiedStagingWriteEnabled } from "../../../../lib/unified-ingestion/config";
+import { isLegacyClipboardMirrorEnabled, isUnifiedStagingWriteEnabled } from "@/lib/unified-ingestion/config";
 import { writeQuickDraftUnifiedStaging } from "@/lib/admin/unified-staging-quick";
 
 /** Map raw PostgREST/Postgres errors to operator-safe copy; log the original server-side. */

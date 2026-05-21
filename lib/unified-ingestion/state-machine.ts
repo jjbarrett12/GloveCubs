@@ -1,15 +1,19 @@
 import type { IngestionJobStatus } from "./types";
 
+const transitionSet = (
+  statuses: readonly IngestionJobStatus[],
+): ReadonlySet<IngestionJobStatus> => new Set<IngestionJobStatus>(statuses);
+
 const ALLOWED_TRANSITIONS: Record<IngestionJobStatus, ReadonlySet<IngestionJobStatus>> = {
-  queued: new Set(["fetching", "failed", "blocked"]),
-  fetching: new Set(["extracting", "failed", "blocked"]),
-  extracting: new Set(["normalized", "failed", "blocked"]),
-  normalized: new Set(["review_ready", "awaiting_human", "failed", "blocked"]),
-  awaiting_human: new Set(["review_ready", "failed", "blocked"]),
-  review_ready: new Set(["publish_ready", "failed", "blocked"]),
-  publish_ready: new Set(["failed"]),
-  blocked: new Set(["failed"]),
-  failed: new Set(),
+  queued: transitionSet(["fetching", "failed", "blocked"]),
+  fetching: transitionSet(["extracting", "failed", "blocked"]),
+  extracting: transitionSet(["normalized", "failed", "blocked"]),
+  normalized: transitionSet(["review_ready", "awaiting_human", "failed", "blocked"]),
+  awaiting_human: transitionSet(["review_ready", "failed", "blocked"]),
+  review_ready: transitionSet(["publish_ready", "failed", "blocked"]),
+  publish_ready: transitionSet(["failed"]),
+  blocked: transitionSet(["failed"]),
+  failed: transitionSet([]),
 };
 
 export function canTransitionIngestionJob(from: IngestionJobStatus, to: IngestionJobStatus): boolean {

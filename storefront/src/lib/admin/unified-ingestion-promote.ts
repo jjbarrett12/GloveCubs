@@ -9,7 +9,7 @@ import {
 } from "@/lib/admin/product-write";
 import type { FieldEvidenceSummary } from "@/lib/admin/unified-ingestion-review-queue";
 import { canPromoteUnifiedStaging } from "@/lib/admin/unified-ingestion-promote-guards";
-import type { IngestionJobStatus } from "../../../../lib/unified-ingestion/types";
+import type { IngestionJobStatus } from "@/lib/unified-ingestion/types";
 
 function strEvidence(
   evidence: Record<string, FieldEvidenceSummary>,

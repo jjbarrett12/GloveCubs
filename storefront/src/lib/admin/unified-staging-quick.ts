@@ -3,13 +3,13 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isUnifiedStagingWriteEnabled } from "../../../../lib/unified-ingestion/config";
+import { isUnifiedStagingWriteEnabled } from "@/lib/unified-ingestion/config";
 import {
   evidenceFromQuickExtracted,
   pickNormalizedBrand,
   pickNormalizedName,
-} from "../../../../lib/unified-ingestion/evidence-mappers";
-import { writeUnifiedStagingArtifacts } from "../../../../lib/unified-ingestion/writer";
+} from "@/lib/unified-ingestion/evidence-mappers";
+import { writeUnifiedStagingArtifacts } from "@/lib/unified-ingestion/writer";
 
 export type QuickUnifiedStagingInput = {
   productPageUrl: string;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { listUnifiedReviewQueue } from "@/lib/admin/unified-ingestion-review-queue";
-import type { IngestionJobStatus, IngestionMode } from "../../../../../../../../lib/unified-ingestion/types";
+import type { IngestionJobStatus, IngestionMode } from "@/lib/unified-ingestion/types";
 
 export const dynamic = "force-dynamic";
 

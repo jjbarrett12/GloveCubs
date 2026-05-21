@@ -16,9 +16,11 @@ function faqSlug(category: string, question: string): string {
     .slice(0, 80);
 }
 
+type FaqCategory = (typeof HOME_FAQ_CATEGORIES)[number]["category"];
+
 export function HomeFaqSection() {
   const [openKey, setOpenKey] = React.useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = React.useState(HOME_FAQ_CATEGORIES[0].category);
+  const [activeCategory, setActiveCategory] = React.useState<FaqCategory>(HOME_FAQ_CATEGORIES[0].category);
 
   const activeGroup = HOME_FAQ_CATEGORIES.find((c) => c.category === activeCategory);
   const categoryPanelId = `faq-category-${faqSlug(activeCategory, "panel")}`;

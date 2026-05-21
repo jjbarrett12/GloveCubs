@@ -8,7 +8,7 @@ import {
 } from "@/lib/admin/unified-ingestion-review-queue";
 import { fetchAdminCategoriesForProductForm, type AdminCategoryOption } from "@/lib/admin/product-form-options";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { isUnifiedReviewQueueEnabled } from "../../../../../../lib/unified-ingestion/config";
+import { isUnifiedReviewQueueEnabled } from "@/lib/unified-ingestion/config";
 import { ProductReviewQueueClient } from "./_components/ProductReviewQueueClient";
 
 export const dynamic = "force-dynamic";

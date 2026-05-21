@@ -1,6 +1,6 @@
-import type { IngestionJobStatus } from "../../../../lib/unified-ingestion/types";
+import type { IngestionJobStatus } from "@/lib/unified-ingestion/types";
 
-const PROMOTABLE_JOB_STATUSES: ReadonlySet<IngestionJobStatus> = new Set([
+const PROMOTABLE_JOB_STATUSES: ReadonlySet<IngestionJobStatus> = new Set<IngestionJobStatus>([
   "review_ready",
   "awaiting_human",
 ]);

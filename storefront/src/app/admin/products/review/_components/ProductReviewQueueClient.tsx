@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
 import type { UnifiedReviewQueueRow } from "@/lib/admin/unified-ingestion-review-queue";
-import type { IngestionMode } from "../../../../../../lib/unified-ingestion/types";
+import type { IngestionMode } from "@/lib/unified-ingestion/types";
 import type { AdminCategoryOption } from "@/lib/admin/product-form-options";
 import { TableCard } from "@/components/admin";
 

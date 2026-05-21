@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
   const access = await resolveAdminAccess();
   const denied = adminGateResponse(access);
   if (denied) return denied;
-  if (access.kind !== "ok") return denied;
+  if (access.kind !== "ok") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const admin = { id: access.userId };
 
   let body: unknown;

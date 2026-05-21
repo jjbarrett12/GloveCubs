@@ -3,7 +3,7 @@
  */
 
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import type { IngestionJobStatus, IngestionMode } from "../../../../lib/unified-ingestion/types";
+import type { IngestionJobStatus, IngestionMode } from "@/lib/unified-ingestion/types";
 
 export type FieldEvidenceSummary = {
   value: unknown;
@@ -61,7 +61,7 @@ export function aggregateEvidenceByField(rows: EvidenceRow[]): Map<string, Field
     }
   }
   const out = new Map<string, FieldEvidenceSummary>();
-  for (const [key, row] of byField) {
+  Array.from(byField.entries()).forEach(([key, row]) => {
     out.set(key, {
       value: row.extracted_value,
       confidence: Number(row.confidence) || 0,
@@ -69,7 +69,7 @@ export function aggregateEvidenceByField(rows: EvidenceRow[]): Map<string, Field
       sourceRef: row.source_ref,
       extractionMethod: row.extraction_method,
     });
-  }
+  });
   return out;
 }
 
@@ -83,7 +83,7 @@ export function dedupeUnifiedQueueRows(rows: UnifiedReviewQueueRow[]): UnifiedRe
       byFp.set(fp, row);
     }
   }
-  return [...byFp.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return Array.from(byFp.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export function modeLabel(mode: IngestionMode): string {

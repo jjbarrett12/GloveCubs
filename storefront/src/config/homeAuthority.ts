@@ -283,7 +283,7 @@ export function deriveGloveEducationGuidance(c: GloveEducationCriteria): {
 
   return {
     headline: `Directional guidance for ${industryLabel}`,
-    materials: [...new Set(materials)],
+    materials: Array.from(new Set(materials)),
     guidance,
     procurementNote:
       "Rule-based educational guidance only—not live AI or automated SKU picks. Confirm final selection against published attributes and your facility policies. For catalog-backed paths, use request pricing or /glove-finder.",

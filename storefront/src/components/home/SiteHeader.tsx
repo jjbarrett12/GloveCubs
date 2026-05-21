@@ -62,8 +62,8 @@ type NavMegaPortalProps = {
   panelId: string;
   ariaLabel: string;
   widthClass: string;
-  panelRef: React.RefObject<HTMLDivElement | null>;
-  slotRef: React.RefObject<HTMLDivElement | null>;
+  panelRef: React.Ref<HTMLDivElement>;
+  slotRef: React.Ref<HTMLDivElement>;
   onMouseEnter: () => void;
   onMouseLeave: (e: React.MouseEvent) => void;
   children: React.ReactNode;
