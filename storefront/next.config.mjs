@@ -20,6 +20,10 @@ const nextConfig = {
     }
     const storefrontNodeModules = path.resolve(__dirname, "node_modules");
     config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@supabase/supabase-js": path.join(storefrontNodeModules, "@supabase/supabase-js"),
+    };
     const existing = Array.isArray(config.resolve.modules)
       ? config.resolve.modules
       : [];
