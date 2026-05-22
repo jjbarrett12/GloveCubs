@@ -25,6 +25,7 @@ import { HomeEducationalBadge } from "@/components/home/authority/HomeAuthorityP
 import { cn } from "@/lib/utils";
 import {
   type LabMode,
+  type LabIndustry,
   type PerfLevel,
   type DispMaterial,
   type DispThickness,
@@ -51,7 +52,9 @@ import {
   REUSE_TEXTURE_GUIDE,
   REUSE_PERF,
   REUSE_BOTTOM,
-  TRUST_CARDS,
+  LAB_INDUSTRY_DEFAULT,
+  LAB_INDUSTRY_OPTIONS,
+  LAB_INDUSTRY_CONTEXTS,
   SCIENCE_DISCLAIMER,
   SCIENCE_PERF_FOOTNOTE,
   PERF_LEVEL_LABELS,
@@ -460,6 +463,129 @@ function ReuseCategoryGlance({ activeId, onSelect }: { activeId: ReuseCategory; 
   );
 }
 
+const MATERIAL_HERO_FALLBACK_DISPOSABLE = "/images/education/glove-science/materials/nitrile.webp";
+const MATERIAL_HERO_FALLBACK_REUSABLE = "/images/education/glove-science/reusable/dipped.webp";
+const INDUSTRY_IMAGE_FALLBACK = "/images/education/glove-science/industry/general.webp";
+
+function useResolvedImageSrc(primarySrc: string, fallbackSrc: string) {
+  const [src, setSrc] = React.useState(primarySrc);
+
+  React.useEffect(() => {
+    setSrc(primarySrc);
+  }, [primarySrc]);
+
+  const onError = React.useCallback(() => {
+    setSrc((current) => (current === fallbackSrc ? current : fallbackSrc));
+  }, [fallbackSrc]);
+
+  return { src, onError };
+}
+
+function MaterialHeroPanel({
+  visual,
+  fallbackSrc,
+  profileTitle,
+  profileSubtitle,
+  imageAlt,
+}: {
+  visual: string;
+  fallbackSrc: string;
+  profileTitle: string;
+  profileSubtitle: string;
+  imageAlt: string;
+}) {
+  const { src, onError } = useResolvedImageSrc(visual, fallbackSrc);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111] shadow-[0_12px_40px_rgb(0_0_0/0.35)]">
+      <div className="relative aspect-[4/5] w-full min-h-[280px] sm:min-h-[320px] lg:min-h-[360px]">
+        <Image
+          src={src}
+          alt={imageAlt}
+          fill
+          className="object-cover object-center transition-opacity duration-200 motion-reduce:transition-none"
+          sizes="(max-width: 1024px) 100vw, 420px"
+          priority
+          onError={onError}
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0a0a0a]/90 via-[#0a0a0a]/20 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">Selected glove profile</p>
+          <p className="mt-1 text-lg font-extrabold leading-tight text-white sm:text-xl">{profileTitle}</p>
+          <p className="mt-1 text-sm text-white/55">{profileSubtitle}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IndustryApplicationPanel({
+  industry,
+  onSelect,
+}: {
+  industry: LabIndustry;
+  onSelect: (id: LabIndustry) => void;
+}) {
+  const ctx = LAB_INDUSTRY_CONTEXTS[industry];
+  const { src, onError } = useResolvedImageSrc(ctx.visual, INDUSTRY_IMAGE_FALLBACK);
+
+  return (
+    <section
+      className="relative isolate rounded-2xl border border-white/10 bg-white/[0.04] p-5 pb-8 sm:p-6 md:pb-10"
+      aria-labelledby="science-industry-heading"
+    >
+      <h3
+        id="science-industry-heading"
+        className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]"
+      >
+        Industry application
+      </h3>
+      <p className="mb-3 text-xs text-white/45">Context for how this glove profile is typically evaluated — directional only.</p>
+      <div
+        className="mb-4 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
+        role="group"
+        aria-label="Industry context"
+      >
+        {LAB_INDUSTRY_OPTIONS.map((opt) => {
+          const active = industry === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(opt.id)}
+              className={cn(
+                "shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-semibold leading-tight transition sm:rounded-lg",
+                active
+                  ? "border-[var(--color-accent-orange)]/80 bg-[var(--color-accent-orange)]/10 text-white"
+                  : "border-white/8 bg-transparent text-white/45 hover:border-white/15 hover:text-white/70"
+              )}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-start lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div>
+          <h4 className="text-lg font-extrabold text-white sm:text-xl">{ctx.title}</h4>
+          <p className="mt-2 text-sm leading-relaxed text-white/65">{ctx.description}</p>
+        </div>
+        <div className="relative z-[1] mx-auto aspect-[4/3] w-full max-w-[220px] shrink-0 overflow-hidden rounded-xl border border-white/10 sm:mx-0 sm:max-w-none md:mb-2 md:justify-self-end">
+          <Image
+            src={src}
+            alt={ctx.title}
+            fill
+            className="object-cover transition-opacity duration-200 motion-reduce:transition-none"
+            sizes="220px"
+            onError={onError}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const BOTTOM_ICONS = {
   thickness: Ruler,
   material: Beaker,
@@ -473,6 +599,7 @@ export function HomeScienceOfGlovesSection() {
   const [mode, setMode] = React.useState<LabMode>("disposable");
   const [disp, setDisp] = React.useState(DISP_DEFAULT);
   const [reuse, setReuse] = React.useState(REUSE_DEFAULT);
+  const [labIndustry, setLabIndustry] = React.useState<LabIndustry>(LAB_INDUSTRY_DEFAULT);
 
   const dispProfile = React.useMemo(() => deriveDisposableProfile(disp), [disp]);
   const reuseProfile = React.useMemo(() => deriveReusableProfile(reuse), [reuse]);
@@ -489,11 +616,17 @@ export function HomeScienceOfGlovesSection() {
   };
 
   const reset = () => {
+    setLabIndustry(LAB_INDUSTRY_DEFAULT);
     if (mode === "disposable") setDisp(DISP_DEFAULT);
     else setReuse(REUSE_DEFAULT);
   };
 
   const materialLabel = DISP_MATERIALS.find((m) => m.id === disp.material)?.label ?? "Nitrile";
+  const categoryLabel =
+    mode === "disposable"
+      ? materialLabel
+      : (REUSE_CATEGORIES.find((c) => c.id === reuse.category)?.label ?? "Work glove");
+  const heroImageAlt = `${categoryLabel} glove — educational profile preview`;
 
   return (
     <ProcurementSectionShell
@@ -504,10 +637,9 @@ export function HomeScienceOfGlovesSection() {
     >
       <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0a0a] px-6 py-10 shadow-[0_16px_48px_rgb(0_0_0/0.35)] sm:px-10 sm:py-12 lg:px-12 lg:py-14">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(255,106,0,0.09)_0%,transparent_50%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgb(255_255_255/0.02)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.02)_1px,transparent_1px)] bg-[length:24px_24px]" />
 
         <header className="relative mb-10 lg:mb-12">
-          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-[1fr_1.05fr] md:gap-12">
             <div>
               <ScienceEyebrow />
               <h2
@@ -521,22 +653,15 @@ export function HomeScienceOfGlovesSection() {
                 confidence.
               </p>
             </div>
-            <ul className="m-0 grid grid-cols-1 gap-4 p-0 sm:grid-cols-3 lg:grid-cols-1 lg:gap-5">
-              {TRUST_CARDS.map(({ title, body }, i) => {
-                const Icon = [Sparkles, Scale, Shield][i]!;
-                return (
-                  <li key={title} className="flex list-none gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#FFF8F0]/10">
-                      <Icon className="h-4 w-4 text-[var(--color-accent-orange)]" aria-hidden />
-                    </div>
-                    <div>
-                      <p className="text-sm font-extrabold text-white">{title}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-white/50">{body}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <MaterialHeroPanel
+              visual={profile.visual}
+              fallbackSrc={
+                mode === "disposable" ? MATERIAL_HERO_FALLBACK_DISPOSABLE : MATERIAL_HERO_FALLBACK_REUSABLE
+              }
+              profileTitle={profile.profileTitle}
+              profileSubtitle={profile.profileSubtitle}
+              imageAlt={heroImageAlt}
+            />
           </div>
         </header>
 
@@ -585,8 +710,11 @@ export function HomeScienceOfGlovesSection() {
           />
         )}
 
-        <div className="relative grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6" aria-live="polite">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+        <div
+          className="relative grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-6"
+          aria-live="polite"
+        >
+          <div className="max-md:order-2 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
             <div className="mb-1 flex items-center justify-between gap-3">
               <ColumnHeading step={1} title="Build your glove profile" />
               <button
@@ -740,7 +868,7 @@ export function HomeScienceOfGlovesSection() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+          <div className="max-md:order-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
             <ColumnHeading step={2} title="Performance impact" />
             <p className="-mt-2 mb-6 text-xs text-white/45">{SCIENCE_PERF_FOOTNOTE}</p>
             <div className="space-y-4">
@@ -750,23 +878,14 @@ export function HomeScienceOfGlovesSection() {
             </div>
           </div>
 
-          <div className="flex flex-col overflow-hidden rounded-2xl border border-[var(--color-accent-orange)]/25 bg-[#111] lg:row-span-1">
+          <div className="max-md:order-4 flex flex-col overflow-hidden rounded-2xl border border-[var(--color-accent-orange)]/25 bg-[#111] md:row-span-1">
             <div className="flex flex-1 flex-col p-5 sm:p-6">
               <ColumnHeading step={3} title="Buyer takeaway" />
               <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-400">
                 <Check className="h-3.5 w-3.5" aria-hidden />
                 Best fit
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
-                <div>
-                  <h3 className="text-xl font-extrabold leading-tight text-white sm:text-2xl">{profile.profileTitle}</h3>
-                  <p className="mt-1 text-sm font-medium text-white/55">{profile.profileSubtitle}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-white/72">{profile.summary}</p>
-                </div>
-                <div className="relative mx-auto h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-white/10 sm:mx-0 sm:h-32 sm:w-32">
-                  <Image src={profile.visual} alt="" fill className="object-cover" sizes="128px" unoptimized />
-                </div>
-              </div>
+              <p className="text-sm leading-relaxed text-white/72">{profile.summary}</p>
               <div className="mt-5 space-y-4 border-t border-white/10 pt-5">
                 <div>
                   <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-400/90">
@@ -792,6 +911,10 @@ export function HomeScienceOfGlovesSection() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="relative mt-6 md:scroll-mb-28 lg:mt-8">
+          <IndustryApplicationPanel industry={labIndustry} onSelect={setLabIndustry} />
         </div>
 
         <div className="relative mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:mt-8">

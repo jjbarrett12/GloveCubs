@@ -1,0 +1,42 @@
+name: Storefront UI verify
+
+on:
+  pull_request:
+    paths:
+      - "storefront/**"
+      - ".github/workflows/storefront-ui-verify.yml"
+  push:
+    branches: [main]
+    paths:
+      - "storefront/**"
+      - ".github/workflows/storefront-ui-verify.yml"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: storefront
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: storefront/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify UI (lint, CSS lint, build)
+        run: npm run verify:ui
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Homepage smoke test
+        run: npm run test:smoke:ci
+        env:
+          CI: "true"

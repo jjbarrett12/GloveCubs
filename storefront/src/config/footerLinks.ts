@@ -32,6 +32,7 @@ export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
   { label: "All Products", href: "/store" },
   { label: "Industries", href: "/industries" },
   { label: "Resources", href: "/resources" },
+  { label: "Glove Science", href: "/glove-science" },
   { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
   { label: "B2B Program", href: "/request-pricing" },

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -21,7 +20,9 @@ import {
   Tag,
   Boxes,
 } from "lucide-react";
-import { HOME_BRAND_LIST, getBrandLogoPath } from "@/config/homeBrands";
+import { HOME_BRAND_LIST } from "@/config/homeBrands";
+import { HeaderWordmark } from "@/components/home/HeaderWordmark";
+import { HomeBrandLogo } from "@/components/home/HomeBrandLogo";
 import { industryNavIconForHref } from "@/config/industryNavIcons";
 import { HEADER_INDUSTRY_NAV_ITEMS } from "@/config/publicNav";
 import { SITE_PHONE_TEL_HREF, SITE_SALES_MAILTO_HREF } from "@/config/siteContact";
@@ -328,21 +329,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
             <div className="grid min-w-0 grid-cols-1 items-center gap-2 lg:grid-cols-[auto_1fr] lg:gap-4">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                <Link
-                  href="/"
-                  className="flex min-w-0 max-w-full shrink-0 items-center bg-transparent no-underline [forced-color-adjust:none]"
-                  onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                >
-                  <Image
-                    src="/images/glovecubs-header-logo.png"
-                    alt="GloveCubs"
-                    width={1005}
-                    height={143}
-                    priority
-                    unoptimized
-                    className="h-[34px] w-auto max-w-[min(220px,48vw)] shrink-0 object-contain object-left sm:h-[38px] sm:max-w-[min(260px,55vw)] lg:h-[42px]"
-                  />
-                </Link>
+                <HeaderWordmark onNavigate={() => closeMobileNav(setMobileOpen, setMobilePanel)} />
                 <span
                   className={cn(
                     "hidden shrink-0 items-center gap-0.5 rounded-full border border-[#0a0a0a]/10",
@@ -689,23 +676,22 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         All brands
                       </Link>
                     </li>
-                    {HOME_BRAND_LIST.map((b) => {
-                      const logo = getBrandLogoPath(b);
-                      return (
+                    {HOME_BRAND_LIST.map((b) => (
                         <li key={b} className="border-t border-neutral-200">
                           <Link
                             href={getStoreHrefForBrandDisplayNameSearch(b)}
-                            className="flex min-h-[44px] items-center gap-2 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[brand]"
+                            className="flex min-h-[44px] items-center gap-2.5 py-2.5 pl-0 text-[15px] font-semibold text-neutral-950 hover:text-[var(--color-accent-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-orange)]"
                             onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                           >
-                            {logo ? (
-                              <img src={logo} alt="" className="h-7 w-7 shrink-0 object-contain" loading="lazy" />
-                            ) : null}
+                            <HomeBrandLogo
+                              brand={b}
+                              className="h-8 w-[88px] shrink-0"
+                              imgClassName="h-7 w-auto max-w-[88px]"
+                            />
                             {b}
                           </Link>
                         </li>
-                      );
-                    })}
+                      ))}
                   </ul>
                 </li>
                 <li className="border-b border-neutral-100 py-2.5 lg:border-0 lg:py-0">
@@ -983,29 +969,20 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 <span aria-hidden>→</span>
               </Link>
             </li>
-            {HOME_BRAND_LIST.map((b) => {
-              const logo = getBrandLogoPath(b);
-              return (
+            {HOME_BRAND_LIST.map((b) => (
                 <li key={b}>
                   <Link
                     href={getStoreHrefForBrandDisplayNameSearch(b)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[brand]"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-neutral-950 transition hover:border-neutral-200/90 hover:bg-neutral-50 hover:text-[var(--color-accent-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-orange)]"
                     onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                   >
-                    {logo ? (
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white">
-                        <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
-                      </span>
-                    ) : (
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50 text-[10px] font-bold text-neutral-400">
-                        —
-                      </span>
-                    )}
+                    <span className="flex h-9 w-[88px] shrink-0 items-center justify-center rounded-md border border-neutral-200/70 bg-white px-1">
+                      <HomeBrandLogo brand={b} className="h-8 w-full" imgClassName="h-7 w-auto max-w-[80px]" />
+                    </span>
                     <span className="min-w-0 flex-1 leading-snug">{b}</span>
                   </Link>
                 </li>
-              );
-            })}
+              ))}
           </ul>
         </div>
       </NavMegaPortal>

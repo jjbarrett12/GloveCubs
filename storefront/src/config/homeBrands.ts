@@ -39,7 +39,7 @@ const BRAND_LOGO_FILENAME: Record<string, string> = {
   "Global Glove": "Global_Glove.png",
   Safeko: "Safeko.png",
   PIP: "pip-global-safety-logo.png",
-  "Growl Gloves": "Growl Gloves.webp",
+  "Growl Gloves": "growl-gloves.svg",
   Ansell: "Ansell.png",
   SHOWA: "SHOWA.png",
   "Semper Guard": "Semper.png",
@@ -47,10 +47,18 @@ const BRAND_LOGO_FILENAME: Record<string, string> = {
   Tradex: "Tradex.png",
 };
 
+function logoPublicPath(filename: string): string {
+  return `/images/logos/${encodeURIComponent(filename)}`;
+}
+
+export function getBrandLogoSlugPath(brand: string): string | null {
+  const slug = BRAND_TO_LOGO_SLUG[brand];
+  return slug ? `/images/logos/${slug}.svg` : null;
+}
+
 export function getBrandLogoPath(brand: string): string | null {
   if (!brand) return null;
   const exact = BRAND_LOGO_FILENAME[brand];
-  if (exact) return `/images/logos/${exact}`;
-  const slug = BRAND_TO_LOGO_SLUG[brand];
-  return slug ? `/images/logos/${slug}.svg` : null;
+  if (exact) return logoPublicPath(exact);
+  return getBrandLogoSlugPath(brand);
 }

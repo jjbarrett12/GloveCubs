@@ -81,9 +81,8 @@ export function HomeProcurementMapSection() {
       borderTop={false}
       headingId="procurement-map-heading"
       ariaLabel="U.S. glove usage educational map"
-      className="proc-section-dark home-authority-grid relative overflow-hidden !py-16 sm:!py-24"
+      className="proc-section-dark home-authority-surface-muted home-authority-surface-vignette relative isolate overflow-hidden !py-16 sm:!py-24 [&>div]:relative [&>div]:z-[1]"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,106,0,0.07)_0%,transparent_55%)]" />
 
       <HomeSectionIntro
         headingId="procurement-map-heading"

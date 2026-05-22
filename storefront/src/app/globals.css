@@ -114,11 +114,30 @@
     @apply bg-[var(--color-industrial-gray)] text-neutral-900;
   }
 
-  .home-authority-grid {
+  /* Premium dark homepage surfaces — no grid/checkerboard lines */
+  .home-authority-surface {
+    background-color: #050505;
     background-image:
-      linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
-    background-size: 48px 48px;
+      radial-gradient(circle at 22% 35%, rgb(249 93 35 / 22%), transparent 34%),
+      radial-gradient(circle at 75% 20%, rgb(255 255 255 / 4.5%), transparent 28%),
+      linear-gradient(135deg, #120b07 0%, #090909 42%, #050505 100%);
+  }
+
+  .home-authority-surface-muted {
+    background-color: #050505;
+    background-image:
+      radial-gradient(circle at 28% 18%, rgb(249 93 35 / 12%), transparent 42%),
+      radial-gradient(circle at 82% 12%, rgb(255 255 255 / 3.5%), transparent 32%),
+      linear-gradient(135deg, #0f0a08 0%, #090909 48%, #050505 100%);
+  }
+
+  .home-authority-surface-vignette::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 120% 85% at 50% 45%, transparent 38%, rgb(0 0 0 / 42%) 100%);
   }
 
   .home-intro {

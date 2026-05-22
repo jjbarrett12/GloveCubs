@@ -4,12 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3005",
-    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true});\" && next dev -p 3005",
+    "dev:reset": "node ./scripts/dev-reset.mjs",
+    "clean:next": "node ./scripts/clean-next.mjs",
+    "clean:dev": "npm run clean:next && npm run dev",
+    "dev:clean": "npm run clean:dev",
+    "prebuild": "node ./scripts/guard-next-cache.mjs",
     "build": "next build",
-    "start": "next start",
+    "build:clean": "npm run clean:next && npm run build",
+    "start": "next start -p 3005",
+    "start:e2e": "next start -p 3010",
     "lint": "next lint",
+    "lint:css": "stylelint \"src/**/*.{css,scss}\"",
+    "verify:ui": "npm run lint && npm run lint:css && npm run build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:smoke": "playwright test e2e/smoke",
+    "test:smoke:ci": "npm run build && cross-env CI=true playwright test e2e/smoke",
+    "playwright:install": "playwright install chromium"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -29,6 +40,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@types/node": "^20.0.0",
     "@types/nodemailer": "^6.4.14",
     "@types/react": "^18.2.0",
@@ -37,9 +49,12 @@
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.47",
+    "stylelint": "^16.12.0",
+    "stylelint-config-standard": "^36.0.1",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"

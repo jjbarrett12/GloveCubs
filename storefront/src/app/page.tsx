@@ -20,12 +20,15 @@ export const dynamic = "force-dynamic";
  */
 export default function HomePage() {
   return (
-    <div className="home-authority flex min-h-screen min-w-0 flex-col font-poppins">
+    <div
+      data-ui-root="homepage"
+      className="home-authority flex min-h-screen min-w-0 flex-col font-poppins"
+    >
       <SiteHeaderLoader />
       <main>
         <HomeHeroExpress />
         <section
-          className="home-authority-grid border-b border-[#ebebea] bg-white py-6 sm:py-8"
+          className="border-b border-[#ebebea] bg-white py-6 sm:py-8"
           aria-label="Authorized distributor brands"
         >
           <BrandCarousel compact />

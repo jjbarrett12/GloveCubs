@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { QuoteCartProvider } from "@/components/quote/QuoteCartProvider";
 import { StickyQuoteTray } from "@/components/store/StickyQuoteTray";
 import { MobileQuoteFab } from "@/components/store/MobileQuoteFab";
+import { DevUiStabilityWatchdog } from "@/components/dev/DevUiStabilityWatchdog";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <div className="min-w-0 pb-16 md:pb-20">{children}</div>
       <StickyQuoteTray />
       <MobileQuoteFab />
+      <DevUiStabilityWatchdog />
     </QuoteCartProvider>
   );
 }

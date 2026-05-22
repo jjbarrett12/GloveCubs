@@ -9,6 +9,12 @@ const CARDS = [
     cta: "Open store",
   },
   {
+    title: "Science of Gloves",
+    body: "Materials, mil, texture, certifications, and risk-based guidance—built for procurement buyers.",
+    href: "/glove-science",
+    cta: "Explore glove science",
+  },
+  {
     title: "AI Glove Finder",
     body: "Wizard-led recommender for task, risk, and material—built for buyers, not consumers.",
     href: "/glove-finder",

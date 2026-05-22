@@ -8,12 +8,10 @@ export function HomeHeroExpress() {
   return (
     <>
       <section
-        className="home-authority-grid relative overflow-hidden bg-[#0a0a0a] px-0 pb-0 pt-10 sm:pt-14 lg:pt-16"
+        data-ui-section="hero"
+        className="home-authority-surface home-authority-surface-vignette relative overflow-hidden px-0 pb-0 pt-10 sm:pt-14 lg:pt-16"
         aria-label="Hero"
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_20%_0%,rgba(255,106,0,0.14)_0%,transparent_50%)]" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_100%_50%,rgba(255,106,0,0.05)_0%,transparent_60%)]" />
-
         <div className="relative z-[1] mx-auto max-w-proc px-4 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-24">
           <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14 xl:items-center">
             <div className="animate-authority-fade-up lg:pr-4">

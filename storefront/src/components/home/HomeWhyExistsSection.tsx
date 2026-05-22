@@ -46,7 +46,7 @@ export function HomeWhyExistsSection() {
             <span className="text-[var(--color-accent-orange)]">.</span>
           </h2>
 
-          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-text-muted-light sm:text-[15px]">
+          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-neutral-700 sm:text-[15px]">
             Compare glove options across supplier networks, quote requests, and invoice context—without
             being locked to one catalog or reorder habit.
           </p>
@@ -67,7 +67,7 @@ export function HomeWhyExistsSection() {
             >
               Upload invoice
             </HomeCtaLink>
-            <p className="m-0 flex w-full items-center gap-2 rounded-lg border border-[#ebebea] bg-[#fafaf8] px-3 py-2 text-xs text-neutral-600 sm:ml-1 sm:w-auto sm:text-sm">
+            <p className="m-0 flex w-full items-center gap-2 rounded-lg border border-[#ebebea] bg-[#fafaf8] px-3 py-2 text-xs text-neutral-700 sm:ml-1 sm:w-auto sm:text-sm">
               <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" aria-hidden />
               <span>No commitments. No lock-ins.</span>
             </p>
@@ -88,7 +88,7 @@ export function HomeWhyExistsSection() {
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col pr-0.5">
                   <h3 className="mb-1 text-sm font-bold leading-snug tracking-tight text-ink">{title}</h3>
-                  <p className="m-0 text-xs leading-relaxed text-text-muted-light">{body}</p>
+                  <p className="m-0 text-xs leading-relaxed text-neutral-600">{body}</p>
                   <ArrowRight
                     className="mt-2 h-3.5 w-3.5 self-end text-[var(--color-accent-orange)]/55 transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-orange)]"
                     aria-hidden

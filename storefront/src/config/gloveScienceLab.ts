@@ -102,8 +102,82 @@ export const DISP_PERF = [
   { key: "chemical", label: "Chemical holdout" },
   { key: "puncture", label: "Puncture resistance" },
   { key: "comfort", label: "Comfort" },
-  { key: "cost", label: "Cost efficiency" },
+  { key: "cost", label: "Cost $$$" },
 ] as const;
+
+/* ─── Lab industry context (presentation only) ─── */
+
+export type LabIndustry =
+  | "general"
+  | "healthcare"
+  | "foodservice"
+  | "janitorial"
+  | "automotive"
+  | "warehouse"
+  | "industrial";
+
+export const LAB_INDUSTRY_DEFAULT: LabIndustry = "general";
+
+export const LAB_INDUSTRY_OPTIONS = [
+  { id: "general", label: "General" },
+  { id: "healthcare", label: "Healthcare" },
+  { id: "foodservice", label: "Foodservice" },
+  { id: "janitorial", label: "Cleaning / Janitorial" },
+  { id: "automotive", label: "Automotive" },
+  { id: "warehouse", label: "Warehouse" },
+  { id: "industrial", label: "Industrial" },
+] as const;
+
+export type LabIndustryContext = {
+  title: string;
+  description: string;
+  visual: string;
+};
+
+export const LAB_INDUSTRY_CONTEXTS: Record<LabIndustry, LabIndustryContext> = {
+  general: {
+    title: "General application",
+    description:
+      "Use this view when you are comparing glove profiles across mixed tasks, teams, or facilities.",
+    visual: "/images/education/glove-science/industry/general.webp",
+  },
+  healthcare: {
+    title: "Healthcare application",
+    description:
+      "Exam use, patient care, labs, cleaning, and biohazard-adjacent tasks where fit, compliance, and frequent changes matter.",
+    visual: "/images/education/glove-science/industry/healthcare.webp",
+  },
+  foodservice: {
+    title: "Foodservice application",
+    description:
+      "Food prep, handling, sanitation, and cross-contamination control where comfort, color, grip, and change frequency matter.",
+    visual: "/images/education/glove-science/industry/foodservice.webp",
+  },
+  janitorial: {
+    title: "Cleaning / janitorial application",
+    description:
+      "Sanitation, wet work, degreasers, chemicals, trash handling, and repeated glove changes across facilities.",
+    visual: "/images/education/glove-science/industry/janitorial.webp",
+  },
+  automotive: {
+    title: "Automotive application",
+    description:
+      "Oils, grease, tools, parts handling, solvents, abrasion, and longer wear periods where grip and durability matter.",
+    visual: "/images/education/glove-science/industry/automotive.webp",
+  },
+  warehouse: {
+    title: "Warehouse application",
+    description:
+      "Picking, packing, cardboard, pallets, equipment handling, and repetitive tasks where grip, durability, and dexterity matter.",
+    visual: "/images/education/glove-science/industry/warehouse.webp",
+  },
+  industrial: {
+    title: "Industrial application",
+    description:
+      "Maintenance, assembly, rough materials, machinery-adjacent tasks, and higher-abrasion environments where task-specific protection matters.",
+    visual: "/images/education/glove-science/industry/industrial.webp",
+  },
+};
 
 export const DISP_GLOVE_CLASSES_BY_MATERIAL: Record<DispMaterial, { id: DispGloveClass; label: string }[]> = {
   nitrile: [
@@ -238,17 +312,17 @@ export const REUSE_BOTTOM = [
 ];
 
 export const REUSE_VISUALS: Record<ReuseCategory, string> = {
-  leather: `https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=400&h=400&q=80`,
-  dipped: `https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=400&h=400&q=80`,
-  cotton: `https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&h=400&q=80`,
-  "knit-cut": `https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=400&h=400&q=80`,
+  leather: "/images/education/glove-science/reusable/leather.webp",
+  dipped: "/images/education/glove-science/reusable/dipped.webp",
+  cotton: "/images/education/glove-science/reusable/cotton.webp",
+  "knit-cut": "/images/education/glove-science/reusable/knit-cut.webp",
 };
 
 export const DISP_VISUALS: Record<DispMaterial, string> = {
-  nitrile: `https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=400&h=400&q=80`,
-  vinyl: `https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=400&h=400&q=80`,
-  poly: `https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=400&h=400&q=80`,
-  "synthetic-blended": `https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=400&h=400&q=80`,
+  nitrile: "/images/education/glove-science/materials/nitrile.webp",
+  vinyl: "/images/education/glove-science/materials/vinyl.webp",
+  poly: "/images/education/glove-science/materials/poly.webp",
+  "synthetic-blended": "/images/education/glove-science/materials/synthetic-blended.webp",
 };
 
 export const SCIENCE_DISCLAIMER =
