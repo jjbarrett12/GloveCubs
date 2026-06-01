@@ -1,4 +1,4 @@
-/* Glove Intelligence honeycomb — 5 / 6 (hub) / 5 connected flat-top hex layout */
+/* Glove Intelligence honeycomb — tessellated flat-top hex grid (5 / 6 hub / 5) */
 
 .sectionInner {
   display: flex;
@@ -20,6 +20,17 @@
     100% 100%,
     42px 42px,
     42px 42px;
+  animation: honeycombGridPulse 8s ease-in-out infinite;
+}
+
+@keyframes honeycombGridPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.92;
+  }
 }
 
 .sectionLayout {
@@ -125,75 +136,48 @@
   align-items: center;
   justify-content: center;
   overflow: visible;
-  padding-inline: 0;
+  padding-inline: clamp(0.25rem, 1.5vw, 0.75rem);
 }
 
 .honeycomb {
-  --hex-w: clamp(168px, 13.2vw, 210px);
-  --hex-h: calc(var(--hex-w) * 0.8660254);
-  --hex-border: 2px;
+  /* Flat-top tessellation — slot grid 4.75 × 2.165 (width × height in hex units) */
+  --hex-width: clamp(168px, 13.2vw, 210px);
+  --hex-height: calc(var(--hex-width) * 0.8660254);
+  --hex-border: 1.5px;
   --hex-border-color: var(--color-accent-orange, #ff6a00);
-  /* Flat-top tessellation: centers 3/4 width & height apart — edges meet, boxes do not stack */
-  --hex-pitch-x: calc(var(--hex-w) * 0.75);
-  --hex-pitch-y: calc(var(--hex-h) * 0.75);
-  --hex-pull-x: calc(var(--hex-pitch-x) - var(--hex-w));
-  --hex-row-shift: calc(var(--hex-w) * 0.375);
-  --hex-row-lift: calc(var(--hex-pitch-y) - var(--hex-h));
   --hex-clip: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: max-content;
-  max-width: 100%;
+  position: relative;
+  width: calc(4.75 * var(--hex-width));
+  height: calc(2.16506435 * var(--hex-width));
   margin-inline: auto;
-  padding-block: 0;
 }
 
-.hexRow {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: center;
-  width: 100%;
+.hexSlot {
+  position: absolute;
+  width: calc(100% / 4.75);
+  /* one hex tall = 40% of grid (2.5 row-pitches × 40% = 100%) */
+  height: 40%;
 }
 
-.hexRowMiddle {
-  margin-top: var(--hex-row-lift);
-}
-
-.hexRowMiddle > :first-child {
-  margin-left: var(--hex-row-shift);
-}
-
-.hexRowBottom {
-  margin-top: var(--hex-row-lift);
-}
-
-/* Orange border shell — same accent as .benefitIcon; tessellated edge-to-edge */
 .hexShell {
   position: relative;
   z-index: 0;
-  flex: none;
-  width: var(--hex-w);
-  height: var(--hex-h);
-  min-width: var(--hex-w);
-  min-height: var(--hex-h);
-  max-width: var(--hex-w);
-  max-height: var(--hex-h);
-  margin-left: var(--hex-pull-x);
-  padding: var(--hex-border);
-  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
   background: var(--hex-border-color);
   clip-path: var(--hex-clip);
   text-decoration: none;
   outline: none;
   transition:
     filter 0.22s ease,
-    z-index 0s;
+    z-index 0s,
+    transform 0.22s ease;
 }
 
-.hexRow > :first-child {
-  margin-left: 0;
+.hexShellHub {
+  background: linear-gradient(165deg, rgb(255 130 40) 0%, var(--color-accent-orange, #ff6a00) 48%, rgb(220 88 0) 100%);
 }
 
 .hexShell:hover,
@@ -207,11 +191,21 @@
     drop-shadow(0 0 12px rgb(255 106 0 / 35%));
 }
 
+.hexShell:not(.hexShellHub):hover {
+  transform: scale(1.02);
+}
+
 .hexShell:focus-visible {
   filter:
     drop-shadow(0 0 0 2px #fff)
     drop-shadow(0 0 0 4px var(--hex-border-color))
     drop-shadow(0 0 14px rgb(255 106 0 / 40%));
+}
+
+.hexShellHub:hover {
+  filter:
+    drop-shadow(0 0 4px rgb(255 106 0 / 80%))
+    drop-shadow(0 0 20px rgb(255 106 0 / 42%));
 }
 
 .hexInner {
@@ -223,6 +217,8 @@
   isolation: isolate;
   background-color: #101010;
   clip-path: var(--hex-clip);
+  transform: scale(0.982);
+  transform-origin: center;
 }
 
 .hexTileMedia {
@@ -240,7 +236,7 @@
   height: 100%;
   object-fit: cover;
   object-position: center;
-  filter: brightness(1.14) contrast(1.05) saturate(0.96);
+  filter: brightness(0.82) contrast(1.08) saturate(1.05);
   transition: transform 0.45s ease;
 }
 
@@ -252,12 +248,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(
-    180deg,
-    rgb(0 0 0 / 10%) 0%,
-    rgb(0 0 0 / 24%) 48%,
-    rgb(0 0 0 / 32%) 100%
-  );
+  background: linear-gradient(to top, rgb(0 0 0 / 72%), rgb(0 0 0 / 18%));
   pointer-events: none;
 }
 
@@ -306,16 +297,6 @@
   text-shadow: 0 1px 8px rgb(0 0 0 / 80%);
 }
 
-.hexShellHub {
-  background: linear-gradient(165deg, rgb(255 130 40) 0%, var(--color-accent-orange, #ff6a00) 48%, rgb(220 88 0) 100%);
-}
-
-.hexShellHub:hover {
-  filter:
-    drop-shadow(0 0 4px rgb(255 106 0 / 80%))
-    drop-shadow(0 0 20px rgb(255 106 0 / 42%));
-}
-
 .hexInnerHub {
   background:
     radial-gradient(circle at 50% 46%, rgb(255 106 0 / 28%), rgb(12 12 12 / 98%) 64%),
@@ -338,7 +319,8 @@
   width: clamp(2.1rem, 4vw, 3rem);
   height: clamp(2.1rem, 4vw, 3rem);
   object-fit: contain;
-  filter: drop-shadow(0 0 12px rgb(255 106 0 / 55%));
+  background: transparent;
+  filter: drop-shadow(0 0 10px rgb(255 106 0 / 45%));
 }
 
 .hexHubLabel {
@@ -427,10 +409,9 @@
   box-shadow: 0 0 6px rgb(255 106 0 / 40%);
 }
 
-/* Tablet — scaled 5 / 6 / 5 honeycomb */
 @media (max-width: 1100px) and (min-width: 641px) {
   .honeycomb {
-    --hex-w: clamp(108px, 14.5vw, 148px);
+    --hex-width: clamp(108px, 14.5vw, 148px);
     --hex-border: 1.5px;
   }
 
@@ -439,7 +420,6 @@
   }
 }
 
-/* Mobile — compact stacked honeycomb */
 @media (max-width: 640px) {
   .sectionLayout {
     gap: 1.25rem;
@@ -449,23 +429,17 @@
     max-width: none;
   }
 
+  .honeycombWrap {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .honeycomb {
-    --hex-w: 140px;
+    --hex-width: clamp(88px, 22vw, 108px);
     --hex-border: 1.5px;
-    --hex-pitch-x: calc(var(--hex-w) * 0.75);
-    --hex-pitch-y: calc(var(--hex-h) * 0.75);
-    --hex-pull-x: calc(var(--hex-pitch-x) - var(--hex-w));
-    --hex-row-lift: calc(var(--hex-pitch-y) - var(--hex-h));
-    width: 100%;
-    max-width: 21rem;
-  }
-
-  .hexRowMiddle > :first-child,
-  .hexRowBottom > :first-child {
-    margin-left: 0;
-  }
-
-  .hexRowMiddle > :first-child {
-    margin-left: var(--hex-row-shift);
+    flex-shrink: 0;
   }
 }

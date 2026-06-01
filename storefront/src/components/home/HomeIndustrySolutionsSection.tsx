@@ -12,13 +12,17 @@ import {
   type HomeHoneycombIndustryTile,
   type HomeHoneycombTile,
 } from "@/config/homeIndustryHoneycomb";
+import hubPawIcon from "@/app/icon.png";
 import { ProcurementSectionShell } from "@/components/procurement";
 import { cn } from "@/lib/utils";
 import styles from "./homeIndustrySolutionsSection.module.css";
-
-const HUB_MARK_SRC = "/images/glovecubs-header-mark-transparent.png";
 const INDUSTRY_IMAGE_FALLBACK =
   "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&h=900&q=82";
+
+/** Flat-top hex grid extent in hex-width units (5/6/5 layout). */
+const HONEYCOMB_GRID_W = 4.75;
+const HONEYCOMB_GRID_H = 2.16506435;
+const HONEYCOMB_ROW_PITCH = 0.64951905;
 
 function IndustryHexTile({ tile }: { tile: HomeHoneycombIndustryTile }) {
   const Icon = industryNavIconForHref(tile.href);
@@ -70,11 +74,11 @@ function HubHexTile() {
         <div className={styles.hexHubInner}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={HUB_MARK_SRC}
+          src={hubPawIcon.src}
           alt=""
           className={styles.hexHubMark}
-          width={46}
-          height={46}
+          width={hubPawIcon.width}
+          height={hubPawIcon.height}
           decoding="async"
         />
         <p className={styles.hexHubLabel}>Glove Intelligence</p>
@@ -125,25 +129,29 @@ export function HomeIndustrySolutionsSection() {
         </div>
 
         <div className={styles.honeycombWrap} aria-label="Industries honeycomb grid">
-          <div className={styles.honeycomb}>
-            <div className={styles.hexRow} role="list">
-              {HOME_HONEYCOMB_ROW_TOP.map((tile) => (
-                <HoneycombTile key={tile.href} tile={tile} />
-              ))}
-            </div>
-            <div className={cn(styles.hexRow, styles.hexRowMiddle)} role="list">
-              {HOME_HONEYCOMB_ROW_MIDDLE.map((tile) => (
-                <HoneycombTile
-                  key={tile.kind === "hub" ? "hub" : tile.href}
-                  tile={tile}
-                />
-              ))}
-            </div>
-            <div className={cn(styles.hexRow, styles.hexRowBottom)} role="list">
-              {HOME_HONEYCOMB_ROW_BOTTOM.map((tile) => (
-                <HoneycombTile key={tile.href} tile={tile} />
-              ))}
-            </div>
+          <div className={styles.honeycomb} role="list">
+            {[
+              { tiles: HOME_HONEYCOMB_ROW_TOP, row: 0, wide: false },
+              { tiles: HOME_HONEYCOMB_ROW_MIDDLE, row: 1, wide: true },
+              { tiles: HOME_HONEYCOMB_ROW_BOTTOM, row: 2, wide: false },
+            ].flatMap(({ tiles, row, wide }) =>
+              tiles.map((tile, col) => {
+                const xFactor = col * 0.75 + (wide ? 0 : 0.375);
+                const yFactor = row * HONEYCOMB_ROW_PITCH;
+                return (
+                  <div
+                    key={tile.kind === "hub" ? "hub" : tile.number}
+                    className={styles.hexSlot}
+                    style={{
+                      left: `${(xFactor / HONEYCOMB_GRID_W) * 100}%`,
+                      top: `${(yFactor / HONEYCOMB_GRID_H) * 100}%`,
+                    }}
+                  >
+                    <HoneycombTile tile={tile} />
+                  </div>
+                );
+              }),
+            )}
           </div>
         </div>
       </div>

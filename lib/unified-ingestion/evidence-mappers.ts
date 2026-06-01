@@ -19,7 +19,65 @@ function field(
   };
 }
 
-export function evidenceFromQuickExtracted(
+type DraftLike = {
+  source_url?: string;
+  product_name?: string | null;
+  description?: string | null;
+  brand?: string | null;
+  sku?: string | null;
+  mpn?: string | null;
+  gtin?: string | null;
+  image_url?: string | null;
+  material?: string | null;
+  color?: string | null;
+  thickness_mil?: number | null;
+  case_pack?: string | null;
+  units_per_case?: number | null;
+  powder_free?: boolean | null;
+  latex_free?: boolean | null;
+  exam_grade?: boolean | null;
+  size?: string | null;
+  confidence?: { overall?: number; fields?: Record<string, number> };
+  field_provenance?: Record<string, { confidence?: number }>;
+};
+
+function draftFromExtracted(extracted: Record<string, unknown>): DraftLike | null {
+  const d = extracted.draft;
+  if (!d || typeof d !== "object" || Array.isArray(d)) return null;
+  if ((d as { schema_version?: number }).schema_version !== 1) return null;
+  return d as DraftLike;
+}
+
+function confFromDraft(draft: DraftLike, key: string, fallback: number): number {
+  return draft.field_provenance?.[key]?.confidence ?? draft.confidence?.fields?.[key] ?? fallback;
+}
+
+function evidenceFromDraft(draft: DraftLike): FieldEvidenceInput[] {
+  const ref = draft.source_url ?? "";
+  const base = draft.confidence?.overall ?? 0.5;
+  const rows: (FieldEvidenceInput | null)[] = [
+    field("name", draft.product_name, confFromDraft(draft, "product_name", base), "extractor", ref),
+    field("description", draft.description, confFromDraft(draft, "description", base * 0.9), "extractor", ref),
+    field("brand", draft.brand, confFromDraft(draft, "brand", base), "extractor", ref),
+    field("sku", draft.sku, confFromDraft(draft, "sku", base), "extractor", ref),
+    field("mpn", draft.mpn, confFromDraft(draft, "mpn", base), "extractor", ref),
+    field("gtin", draft.gtin, confFromDraft(draft, "gtin", base), "extractor", ref),
+    field("image_url", draft.image_url, confFromDraft(draft, "image_url", base), "page", ref),
+    field("canonical_url", draft.source_url, 1, "page", ref),
+    field("material", draft.material, confFromDraft(draft, "material", base), "extractor", ref),
+    field("color", draft.color, confFromDraft(draft, "color", base), "extractor", ref),
+    field("thickness_mil", draft.thickness_mil, confFromDraft(draft, "thickness_mil", base), "extractor", ref),
+    field("case_pack", draft.case_pack, confFromDraft(draft, "case_pack", base), "extractor", ref),
+    field("units_per_case", draft.units_per_case, confFromDraft(draft, "units_per_case", base), "extractor", ref),
+    field("powder_free", draft.powder_free, confFromDraft(draft, "powder_free", base), "extractor", ref),
+    field("latex_free", draft.latex_free, confFromDraft(draft, "latex_free", base), "extractor", ref),
+    field("exam_grade", draft.exam_grade, confFromDraft(draft, "exam_grade", base), "extractor", ref),
+    field("size", draft.size, confFromDraft(draft, "size", base), "extractor", ref),
+  ];
+  return rows.filter((r): r is FieldEvidenceInput => r != null);
+}
+
+function legacyEvidenceFromExtracted(
   extracted: Record<string, unknown>,
   sourceUrl: string
 ): FieldEvidenceInput[] {
@@ -46,6 +104,15 @@ export function evidenceFromQuickExtracted(
   return rows.filter((r): r is FieldEvidenceInput => r != null);
 }
 
+export function evidenceFromQuickExtracted(
+  extracted: Record<string, unknown>,
+  sourceUrl: string
+): FieldEvidenceInput[] {
+  const draft = draftFromExtracted(extracted);
+  if (draft) return evidenceFromDraft(draft);
+  return legacyEvidenceFromExtracted(extracted, sourceUrl);
+}
+
 export function evidenceFromDeepNormalized(
   normalized: Record<string, unknown>,
   sourceUrl: string,
@@ -68,11 +135,15 @@ export function evidenceFromDeepNormalized(
 }
 
 export function pickNormalizedName(extracted: Record<string, unknown>): string | null {
+  const draft = draftFromExtracted(extracted);
+  if (draft?.product_name) return draft.product_name.slice(0, 300);
   const n = extracted.suggested_name ?? extracted.name ?? extracted.page_title;
   return typeof n === "string" && n.trim() ? n.trim().slice(0, 300) : null;
 }
 
 export function pickNormalizedBrand(extracted: Record<string, unknown>): string | null {
+  const draft = draftFromExtracted(extracted);
+  if (draft?.brand) return draft.brand.slice(0, 120);
   const b = extracted.suggested_brand ?? extracted.brand;
   return typeof b === "string" && b.trim() ? b.trim().slice(0, 120) : null;
 }

@@ -1,9 +1,16 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { assertUrlSafeForServerFetch } from "@/lib/admin/url-fetch-guard";
-import { extractPageEvidence, fetchHtmlEvidence, jsonLdProductHints } from "@/lib/admin/html-evidence";
+import { fetchHtmlForImport } from "@/lib/admin/import-draft-fetch";
+import {
+  buildStagingExtractedPayload,
+  draftNeedsHumanReview,
+  toImportDraftProductV1,
+} from "@/lib/admin/import-draft-mapper";
+import { extractProductFromHtml } from "@/lib/admin/productExtraction";
 import { validateHttpUrl } from "@/lib/admin/products-import-proxy";
 import { isLegacyClipboardMirrorEnabled, isUnifiedStagingWriteEnabled } from "@/lib/unified-ingestion/config";
 import { writeQuickDraftUnifiedStaging } from "@/lib/admin/unified-staging-quick";
+import type { StagingExtractedPayloadV1 } from "@/lib/admin/import-draft-types";
 
 /** Map raw PostgREST/Postgres errors to operator-safe copy; log the original server-side. */
 export function mapClipboardStagingWriteError(raw: string): string {
@@ -72,37 +79,41 @@ export async function createClipboardStaging(input: {
   if (imageUrlParsed) assertUrlSafeForServerFetch(imageUrlParsed);
 
   let fetchError: string | null = null;
-  let evidence: Record<string, unknown> = {
-    source_product_page_url: pageUrl.url.toString(),
-    source_image_url: imageUrlParsed?.toString() ?? null,
-  };
+  let evidence: StagingExtractedPayloadV1 | Record<string, unknown>;
 
   try {
-    const { html, truncated } = await fetchHtmlEvidence(pageUrl.url.toString());
-    const parsed = extractPageEvidence(html);
-    const hints = jsonLdProductHints(parsed.jsonLdProduct);
-    evidence = {
-      ...evidence,
-      html_truncated: truncated,
-      suggested_name: hints.name ?? parsed.ogTitle ?? parsed.title ?? null,
-      suggested_description: hints.description ?? parsed.ogDescription ?? null,
-      suggested_image_from_page: hints.image ?? parsed.ogImage ?? null,
-      suggested_brand: hints.brand,
-      suggested_sku: hints.sku,
-      suggested_mpn: hints.mpn,
-      suggested_gtin: hints.gtin,
-      page_title: parsed.title,
-      canonical_url: parsed.canonicalUrl,
-      json_ld_product: parsed.jsonLdProduct,
-      extraction_confidence: parsed.jsonLdProduct ? 0.72 : 0.45,
-    };
+    const { html, truncated } = await fetchHtmlForImport(pageUrl.url.toString());
+    const extraction = extractProductFromHtml(html, pageUrl.url.toString());
+    const draft = toImportDraftProductV1(extraction, pageUrl.url.toString());
+    if (imageUrlParsed && !draft.image_url) {
+      draft.image_url = imageUrlParsed.toString();
+    }
+    evidence = buildStagingExtractedPayload({
+      draft,
+      sourceProductPageUrl: pageUrl.url.toString(),
+      sourceImageUrl: imageUrlParsed?.toString() ?? null,
+      htmlTruncated: truncated,
+    });
   } catch (e) {
     fetchError = e instanceof Error ? e.message : String(e);
-    evidence = {
-      ...evidence,
-      fetch_error: fetchError,
-    };
+    const failedExtraction = extractProductFromHtml(
+      `<html><head><title>Fetch failed</title></head><body></body></html>`,
+      pageUrl.url.toString()
+    );
+    failedExtraction.reasoning.warnings.push(fetchError);
+    const emptyDraft = toImportDraftProductV1(failedExtraction, pageUrl.url.toString());
+    evidence = buildStagingExtractedPayload({
+      draft: emptyDraft,
+      sourceProductPageUrl: pageUrl.url.toString(),
+      sourceImageUrl: imageUrlParsed?.toString() ?? null,
+      fetchError,
+    });
   }
+
+  const extractedRecord = evidence as Record<string, unknown>;
+  const needsReview =
+    fetchError != null ||
+    draftNeedsHumanReview((evidence as StagingExtractedPayloadV1).draft);
 
   if (!isSupabaseConfigured()) {
     return { error: "Supabase is not configured." };
@@ -122,7 +133,7 @@ export async function createClipboardStaging(input: {
       .insert({
         product_page_url: pageUrl.url.toString(),
         image_url: imageUrlParsed?.toString() ?? null,
-        extracted: evidence,
+        extracted: extractedRecord,
         review_status: "needs_review",
         created_by: input.createdBy,
       })
@@ -140,9 +151,10 @@ export async function createClipboardStaging(input: {
     const unified = await writeQuickDraftUnifiedStaging(supabase, {
       productPageUrl: pageUrl.url.toString(),
       imageUrl: imageUrlParsed?.toString() ?? null,
-      extracted: evidence,
+      extracted: extractedRecord,
       createdBy: input.createdBy,
       clipboardStagingId: clipboardId,
+      requireHumanReview: needsReview,
     });
     if (!unified.ok) {
       if (!mirrorClipboard) {
@@ -161,7 +173,7 @@ export async function createClipboardStaging(input: {
     }
     return {
       id: unifiedVariantId,
-      extracted: evidence,
+      extracted: extractedRecord,
       clipboardStagingId: null,
       unifiedStagingVariantId: unifiedVariantId,
       catalogosEnrichment: "not_requested",
@@ -174,7 +186,7 @@ export async function createClipboardStaging(input: {
 
   return {
     id: clipboardId,
-    extracted: evidence,
+    extracted: extractedRecord,
     clipboardStagingId: clipboardId,
     unifiedStagingVariantId: unifiedVariantId,
     catalogosEnrichment: "not_requested",

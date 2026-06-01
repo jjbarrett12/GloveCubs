@@ -34,6 +34,15 @@ describe("clipboard URL staging policy", () => {
     expect(s).not.toMatch(/publish\(/i);
   });
 
+  it("createClipboardStaging uses productExtraction import draft pipeline", () => {
+    const s = readFileSync(helper, "utf8");
+    expect(s).toContain("extractProductFromHtml");
+    expect(s).toContain("toImportDraftProductV1");
+    expect(s).toContain("buildStagingExtractedPayload");
+    expect(s).not.toContain("extractPageEvidence");
+    expect(s).not.toContain("jsonLdProductHints");
+  });
+
   it("POST route gates platform admin and does not block on CatalogOS for staging write", () => {
     const s = readFileSync(route, "utf8");
     expect(s).toContain("resolveAdminAccess");

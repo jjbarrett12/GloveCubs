@@ -1,3 +1,7 @@
+import type { ImportDraftProductV1, StagingExtractedPayloadV1 } from "@/lib/admin/import-draft-types";
+import type { AttributeDefinitionRow } from "@/lib/admin/product-attribute-sync";
+import { fetchCategoryAttributeDefinitions, productAttributesFromRows } from "@/lib/admin/product-attribute-sync";
+import { detectLegacyMetadataFields, type LegacyMetadataField } from "@/lib/admin/legacy-metadata-migration";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { sanitizeSearchTerm } from "@/lib/catalog/store-catalog-constraints";
 import {
@@ -109,6 +113,14 @@ export type AdminProductDetailResult = {
   storefrontVisible?: boolean;
   storefrontPdpPath?: string | null;
   pendingMatchReviewCount?: number;
+  editor?: {
+    attributeDefinitions: AttributeDefinitionRow[];
+    productAttributes: Record<string, string | string[]>;
+    legacyMetadataFields: LegacyMetadataField[];
+    importDraft: ImportDraftProductV1 | null;
+    importStagingId: string | null;
+    parserVersion: string | null;
+  };
 };
 
 function parseBool(v: string | string[] | undefined): boolean {
@@ -1033,6 +1045,39 @@ export async function fetchAdminProductDetail(productId: string): Promise<AdminP
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
 
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  const importStagingId =
+    typeof meta.import_staging_id === "string" && meta.import_staging_id.trim()
+      ? meta.import_staging_id.trim()
+      : null;
+  const parserVersion =
+    typeof meta.import_parser_version === "string" ? meta.import_parser_version : null;
+
+  let importDraft: ImportDraftProductV1 | null = null;
+  if (importStagingId) {
+    const { data: stagingRow } = await supabase
+      .schema("catalog_v2")
+      .from("admin_url_clipboard_staging")
+      .select("extracted")
+      .eq("id", importStagingId)
+      .maybeSingle();
+    const extracted = (stagingRow as { extracted?: unknown } | null)?.extracted;
+    if (extracted && typeof extracted === "object") {
+      const payload = extracted as StagingExtractedPayloadV1;
+      if (payload.draft?.schema_version === 1) importDraft = payload.draft;
+    }
+  }
+
+  const attributeDefinitions = categoryId ? await fetchCategoryAttributeDefinitions(categoryId) : [];
+  const productAttributes = productAttributesFromRows(
+    (attrs ?? []).map((r: { attribute_definition_id: string; value_text: string | null }) => ({
+      attributeDefinitionId: r.attribute_definition_id,
+      valueText: r.value_text,
+    })),
+    keyByDefId
+  );
+  const legacyMetadataFields = detectLegacyMetadataFields(meta, productAttributes);
+
   return {
     configured: true,
     product: {
@@ -1088,5 +1133,13 @@ export async function fetchAdminProductDetail(productId: string): Promise<AdminP
     storefrontVisible,
     storefrontPdpPath,
     pendingMatchReviewCount: pendingCount,
+    editor: {
+      attributeDefinitions,
+      productAttributes,
+      legacyMetadataFields,
+      importDraft,
+      importStagingId,
+      parserVersion,
+    },
   };
 }

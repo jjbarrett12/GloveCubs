@@ -84,8 +84,8 @@ export const HOME_INDUSTRY_FEATURED_META: Record<string, Omit<HomeIndustryFeatur
     descriptor: "Chemical-aware gloves for disinfection and facility care.",
     hazardHint: "Quats · bleach · surfactants",
     applicationCue: "Cleaning · disinfection · restroom care",
-    imageUrl: `https://images.unsplash.com/photo-1521791136064-7986c2920216?${IMAGE_PARAMS}`,
-    imagePosition: "object-[center_35%]",
+    imageUrl: `https://images.unsplash.com/photo-1581578731548-c64695cc6952?${IMAGE_PARAMS}`,
+    imagePosition: "object-[center_42%]",
   },
   automotive: {
     title: "Automotive & Collision",

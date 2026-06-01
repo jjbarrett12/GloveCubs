@@ -1,280 +1,973 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+
 import { randomBytes } from "crypto";
 
-export type ProductWriteInput = {
-  name: string;
-  brandName: string;
-  categoryId: string;
-  material: string;
-  color: string;
-  milThickness: string;
-  casePack: string;
-  description: string;
-  primaryImageUrl: string;
-  status: "draft" | "active";
-  quoteOnly: boolean;
-  variants: Array<{ sizeCode: string; variantSku: string; listPrice: string }>;
+import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
+
+import { IMPORT_DRAFT_PARSER_VERSION, IMPORT_DRAFT_SCHEMA_VERSION } from "@/lib/admin/import-draft-types";
+
+import {
+  fetchCategoryAttributeDefinitions,
+  syncProductAttributesFromEditor,
+  attributesFromImportDraft,
+} from "@/lib/admin/product-attribute-sync";
+
+
+
+export type ProductEditorVariantInput = {
+
+  id?: string;
+
+  sizeCode: string;
+
+  variantSku: string;
+
+  listPrice: string;
+
 };
 
+
+
+export type ProductWriteInput = {
+
+  name: string;
+
+  brandName: string;
+
+  categoryId: string;
+
+  description: string;
+
+  primaryImageUrl: string;
+
+  status: "draft" | "active";
+
+  quoteOnly: boolean;
+
+  variants: ProductEditorVariantInput[];
+
+  /** Storefront filter truth — written to catalogos.product_attributes only. */
+
+  attributes: Record<string, string | string[]>;
+
+  /** When set, seeds import/provenance metadata on insert. */
+
+  importDraft?: ImportDraftProductV1 | null;
+
+  importStagingId?: string | null;
+
+};
+
+
+
+const PRESERVED_METADATA_KEYS = new Set([
+
+  "import_schema_version",
+
+  "import_parser_version",
+
+  "import_source_url",
+
+  "import_staging_id",
+
+  "import_parsed_at",
+
+  "import_field_provenance",
+
+]);
+
+
+
+const LEGACY_FILTER_METADATA_KEYS = ["material", "color", "mil_thickness", "mil"] as const;
+
+
+
 function slugifyBase(name: string): string {
+
   return name
+
     .trim()
+
     .toLowerCase()
+
     .replace(/[^a-z0-9]+/g, "-")
+
     .replace(/^-+|-+$/g, "")
+
     .slice(0, 80) || "product";
+
 }
+
+
 
 async function pickDefaultProductTypeId(supabase: any): Promise<string | null> {
+
   const { data } = await supabase
+
     .schema("catalog_v2")
+
     .from("catalog_product_types")
+
     .select("id")
+
     .eq("is_active", true)
+
     .order("sort_order", { ascending: true })
+
     .limit(1)
+
     .maybeSingle();
+
   return (data as { id: string } | null)?.id ?? null;
+
 }
+
+
 
 async function resolveBrandId(supabase: any, brandName: string): Promise<string | null> {
+
   const t = brandName.trim();
+
   if (!t) return null;
+
   const { data } = await supabase
+
     .schema("catalogos")
+
     .from("brands")
+
     .select("id")
+
     .ilike("name", t)
+
     .limit(1)
+
     .maybeSingle();
+
   return (data as { id: string } | null)?.id ?? null;
+
 }
+
+
 
 async function uniqueSlug(supabase: any, base: string): Promise<string> {
+
   for (let i = 0; i < 8; i++) {
+
     const suffix = i === 0 ? "" : `-${randomBytes(2).toString("hex")}`;
+
     const slug = `${base}${suffix}`.slice(0, 120);
+
     const { data } = await supabase.schema("catalog_v2").from("catalog_products").select("id").eq("slug", slug).maybeSingle();
+
     if (!data) return slug;
+
   }
+
   return `${base}-${randomBytes(4).toString("hex")}`.slice(0, 120);
+
 }
+
+
 
 async function uniqueVariantSku(supabase: any, base: string): Promise<string> {
+
   const b = base.slice(0, 80);
+
   for (let i = 0; i < 8; i++) {
+
     const sku = i === 0 ? b : `${b}-${randomBytes(2).toString("hex")}`;
+
     const { data } = await supabase.schema("catalog_v2").from("catalog_variants").select("id").eq("variant_sku", sku).maybeSingle();
+
     if (!data) return sku;
+
   }
+
   return `${b}-${randomBytes(4).toString("hex")}`.slice(0, 120);
+
 }
 
-function buildMetadata(input: ProductWriteInput, brandNameUnmatched: boolean): Record<string, unknown> {
-  const meta: Record<string, unknown> = {
-    quote_only: input.quoteOnly,
+
+
+function buildImportMetadataSeed(
+
+  draft: ImportDraftProductV1,
+
+  stagingId?: string | null
+
+): Record<string, unknown> {
+
+  const seed: Record<string, unknown> = {
+
+    import_schema_version: IMPORT_DRAFT_SCHEMA_VERSION,
+
+    import_parser_version: IMPORT_DRAFT_PARSER_VERSION,
+
+    import_source_url: draft.source_url,
+
+    import_parsed_at: new Date().toISOString(),
+
   };
-  if (input.categoryId.trim()) {
-    meta.category_id = input.categoryId.trim();
+
+  if (stagingId?.trim()) seed.import_staging_id = stagingId.trim();
+
+  if (draft.units_per_case != null && Number.isFinite(draft.units_per_case)) {
+
+    seed.units_per_case = draft.units_per_case;
+
   }
-  if (input.material.trim()) meta.material = input.material.trim();
-  if (input.color.trim()) meta.color = input.color.trim();
-  if (input.milThickness.trim()) meta.mil_thickness = input.milThickness.trim();
-  if (input.casePack.trim()) meta.case_pack = input.casePack.trim();
-  if (brandNameUnmatched && input.brandName.trim()) {
-    meta.brand_name_hint = input.brandName.trim();
+
+  if (draft.case_pack) seed.case_pack = draft.case_pack;
+
+  if (draft.powder_free === true) seed.powder_free = true;
+
+  if (draft.exam_grade === true) seed.exam_grade = true;
+
+  const prov = draft.field_provenance;
+
+  if (prov && Object.keys(prov).length > 0) {
+
+    seed.import_field_provenance = prov;
+
   }
-  return meta;
+
+  return seed;
+
 }
 
-export async function insertCatalogProduct(input: ProductWriteInput): Promise<{ id: string } | { error: string }> {
-  if (!isSupabaseConfigured()) return { error: "Supabase is not configured." };
-  const supabase = getSupabaseAdmin() as any;
 
-  const typeId = await pickDefaultProductTypeId(supabase);
-  if (!typeId) return { error: "No active catalog_product_types row found." };
 
-  const brandId = await resolveBrandId(supabase, input.brandName);
-  const brandUnmatched = Boolean(input.brandName.trim()) && !brandId;
+function applyImportDraftSupportFields(
 
-  const slug = await uniqueSlug(supabase, slugifyBase(input.name));
-  const internalSku = `GC-${randomBytes(3).toString("hex").toUpperCase()}`;
+  meta: Record<string, unknown>,
 
-  const status = input.status;
-  const metadata = buildMetadata(input, brandUnmatched);
+  draft: ImportDraftProductV1 | null | undefined
 
-  const { data: product, error: pErr } = await supabase
-    .schema("catalog_v2")
-    .from("catalog_products")
-    .insert({
-      product_type_id: typeId,
-      brand_id: brandId,
-      slug,
-      internal_sku: internalSku,
-      name: input.name.trim(),
-      description: input.description.trim() || null,
-      status: "draft",
-      metadata,
-    })
-    .select("id")
-    .single();
+): void {
 
-  if (pErr || !product) {
-    return { error: pErr?.message ?? "Failed to create product." };
+  if (!draft) return;
+
+  if (draft.units_per_case != null && Number.isFinite(draft.units_per_case)) {
+
+    meta.units_per_case = draft.units_per_case;
+
   }
-  const productId = (product as { id: string }).id;
 
-  const variants = input.variants.length
-    ? input.variants
-    : [{ sizeCode: "OS", variantSku: `${slug}-os`.toUpperCase(), listPrice: "" }];
+  if (draft.case_pack) meta.case_pack = draft.case_pack;
+
+  if (draft.powder_free === true) meta.powder_free = true;
+
+  else if (draft.powder_free === false) meta.powder_free = false;
+
+  if (draft.exam_grade === true) meta.exam_grade = true;
+
+}
+
+
+
+/** Merge editor fields into metadata — provenance/support only; no filter dual-write. */
+
+export function mergeProductMetadata(
+
+  existing: Record<string, unknown> | null | undefined,
+
+  input: ProductWriteInput,
+
+  brandNameUnmatched: boolean
+
+): Record<string, unknown> {
+
+  const base = { ...(existing ?? {}) };
+
+
+
+  for (const key of LEGACY_FILTER_METADATA_KEYS) {
+
+    if (key in base) delete base[key];
+
+  }
+
+
+
+  base.quote_only = input.quoteOnly;
+
+  if (input.categoryId.trim()) {
+
+    base.category_id = input.categoryId.trim();
+
+  }
+
+
+
+  if (brandNameUnmatched && input.brandName.trim()) {
+
+    base.brand_name_hint = input.brandName.trim();
+
+  } else if (!input.brandName.trim() && "brand_name_hint" in base) {
+
+    delete base.brand_name_hint;
+
+  }
+
+
+
+  applyImportDraftSupportFields(base, input.importDraft);
+
+
+
+  return base;
+
+}
+
+
+
+function buildMetadataForInsert(input: ProductWriteInput, brandNameUnmatched: boolean): Record<string, unknown> {
+
+  const meta = mergeProductMetadata(null, input, brandNameUnmatched);
+
+  if (input.importDraft) {
+
+    Object.assign(meta, buildImportMetadataSeed(input.importDraft, input.importStagingId));
+
+  }
+
+  return meta;
+
+}
+
+
+
+function defaultVariantsFallback(internalSku: string): ProductWriteInput["variants"] {
+
+  return [{ sizeCode: "UNKNOWN", variantSku: `${internalSku}-unknown`.toUpperCase(), listPrice: "" }];
+
+}
+
+
+
+function normSize(code: string): string {
+
+  return code.trim().toUpperCase() || "UNKNOWN";
+
+}
+
+
+
+async function mergeVariantsForProduct(
+
+  supabase: any,
+
+  productId: string,
+
+  internalSku: string,
+
+  input: ProductWriteInput
+
+): Promise<{ error?: string }> {
+
+  const { data: existingRows } = await supabase
+
+    .schema("catalog_v2")
+
+    .from("catalog_variants")
+
+    .select("id, variant_sku, size_code, metadata, sort_order")
+
+    .eq("catalog_product_id", productId);
+
+
+
+  const existing = (existingRows ?? []) as Array<{
+
+    id: string;
+
+    variant_sku: string;
+
+    size_code: string | null;
+
+    metadata: Record<string, unknown> | null;
+
+    sort_order: number | null;
+
+  }>;
+
+
+
+  const existingById = new Map(existing.map((r) => [r.id, r]));
+
+  const existingBySize = new Map<string, typeof existing[0]>();
+
+  for (const r of existing) {
+
+    const k = normSize(r.size_code ?? "");
+
+    if (!existingBySize.has(k)) existingBySize.set(k, r);
+
+  }
+
+
+
+  const variants = input.variants.length ? input.variants : [{ sizeCode: "UNKNOWN", variantSku: "", listPrice: "" }];
+
+  const touchedIds = new Set<string>();
 
   let sort = 0;
+
+
+
   for (const v of variants) {
-    const skuBase = v.variantSku.trim() || `${internalSku}-${v.sizeCode || "SZ"}`.toUpperCase();
-    const variantSku = await uniqueVariantSku(supabase, skuBase);
+
+    const sizeKey = normSize(v.sizeCode);
+
     const priceRaw = v.listPrice.trim();
+
     const listPrice = priceRaw === "" ? null : Number.parseFloat(priceRaw);
+
     const vmeta: Record<string, unknown> = {};
+
     if (!input.quoteOnly && listPrice != null && Number.isFinite(listPrice)) vmeta.list_price = listPrice;
 
-    const { error: vErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
-      catalog_product_id: productId,
-      variant_sku: variantSku,
-      sort_order: sort++,
-      is_active: true,
-      size_code: v.sizeCode.trim() || null,
-      metadata: vmeta,
-    });
-    if (vErr) {
-      await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", productId);
-      return { error: vErr.message };
+
+
+    let rowId = v.id?.trim();
+
+    let prev = rowId ? existingById.get(rowId) : existingBySize.get(sizeKey);
+
+
+
+    if (prev) {
+
+      rowId = prev.id;
+
+      touchedIds.add(rowId);
+
+      const sku = v.variantSku.trim() || prev.variant_sku;
+
+      const mergedMeta = { ...(prev.metadata ?? {}), ...vmeta };
+
+      const { error } = await supabase
+
+        .schema("catalog_v2")
+
+        .from("catalog_variants")
+
+        .update({
+
+          variant_sku: sku,
+
+          size_code: v.sizeCode.trim() || null,
+
+          sort_order: sort++,
+
+          is_active: true,
+
+          metadata: mergedMeta,
+
+        })
+
+        .eq("id", rowId);
+
+      if (error) return { error: error.message };
+
+    } else {
+
+      const skuBase = v.variantSku.trim() || `${internalSku}-${sizeKey}`.toUpperCase();
+
+      const variantSku = await uniqueVariantSku(supabase, skuBase);
+
+      const { data: inserted, error } = await supabase
+
+        .schema("catalog_v2")
+
+        .from("catalog_variants")
+
+        .insert({
+
+          catalog_product_id: productId,
+
+          variant_sku: variantSku,
+
+          sort_order: sort++,
+
+          is_active: true,
+
+          size_code: v.sizeCode.trim() || null,
+
+          metadata: vmeta,
+
+        })
+
+        .select("id")
+
+        .single();
+
+      if (error) return { error: error.message };
+
+      if (inserted) touchedIds.add((inserted as { id: string }).id);
+
     }
+
   }
 
-  const img = input.primaryImageUrl.trim();
-  if (img) {
-    const { error: iErr } = await supabase.schema("catalog_v2").from("catalog_product_images").insert({
-      catalog_product_id: productId,
-      url: img,
-      is_primary: true,
-      sort_order: 0,
-      metadata: {
-        image_provenance: "editorial",
-        source: "admin_product_form",
-      },
-    });
-    if (iErr) {
-      await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", productId);
-      return { error: iErr.message };
-    }
+
+
+  for (const r of existing) {
+
+    if (touchedIds.has(r.id)) continue;
+
+    await supabase.schema("catalog_v2").from("catalog_variants").update({ is_active: false }).eq("id", r.id);
+
   }
 
-  if (status === "active") {
-    const { error: uErr } = await supabase.schema("catalog_v2").from("catalog_products").update({ status: "active" }).eq("id", productId);
-    if (uErr) {
-      return { error: uErr.message };
-    }
-  }
 
-  return { id: productId };
+
+  return {};
+
 }
 
-export async function updateCatalogProduct(
+
+
+async function syncPrimaryImage(
+
+  supabase: any,
+
   productId: string,
+
+  primaryImageUrl: string
+
+): Promise<{ error?: string }> {
+
+  const img = primaryImageUrl.trim();
+
+  const { data: imgs } = await supabase
+
+    .schema("catalog_v2")
+
+    .from("catalog_product_images")
+
+    .select("id, url, is_primary")
+
+    .eq("catalog_product_id", productId);
+
+
+
+  const rows = (imgs ?? []) as Array<{ id: string; url: string; is_primary: boolean }>;
+
+  const primary = rows.find((r) => r.is_primary) ?? rows[0];
+
+
+
+  if (!img) {
+
+    if (primary) {
+
+      await supabase.schema("catalog_v2").from("catalog_product_images").delete().eq("id", primary.id);
+
+    }
+
+    return {};
+
+  }
+
+
+
+  if (primary && primary.url === img) return {};
+
+
+
+  if (primary) {
+
+    await supabase.schema("catalog_v2").from("catalog_product_images").delete().eq("catalog_product_id", productId);
+
+  }
+
+
+
+  const { error } = await supabase.schema("catalog_v2").from("catalog_product_images").insert({
+
+    catalog_product_id: productId,
+
+    url: img,
+
+    is_primary: true,
+
+    sort_order: 0,
+
+    metadata: { image_provenance: "editorial", source: "admin_product_editor" },
+
+  });
+
+  if (error) return { error: error.message };
+
+  return {};
+
+}
+
+
+
+async function resolveAttributesForWrite(
+  categoryId: string,
   input: ProductWriteInput
-): Promise<{ ok: true } | { error: string }> {
+): Promise<Record<string, string | string[]>> {
+  let attrs = { ...input.attributes };
+  if (input.importDraft && categoryId.trim()) {
+    const fromDraft = await attributesFromImportDraft(categoryId, input.importDraft);
+    attrs = { ...fromDraft, ...attrs };
+  }
+  return attrs;
+}
+
+async function syncAttributes(
+
+  productId: string,
+
+  categoryId: string,
+
+  attributes: Record<string, string | string[]>
+
+): Promise<{ error?: string }> {
+
+  const defs = await fetchCategoryAttributeDefinitions(categoryId);
+
+  const { errors } = await syncProductAttributesFromEditor(productId, categoryId, attributes, defs);
+
+  if (errors.length > 0) return { error: errors.join("; ") };
+
+  return {};
+
+}
+
+
+
+export async function insertCatalogProduct(input: ProductWriteInput): Promise<{ id: string } | { error: string }> {
+
   if (!isSupabaseConfigured()) return { error: "Supabase is not configured." };
+
   const supabase = getSupabaseAdmin() as any;
 
+
+
+  const typeId = await pickDefaultProductTypeId(supabase);
+
+  if (!typeId) return { error: "No active catalog_product_types row found." };
+
+
+
   const brandId = await resolveBrandId(supabase, input.brandName);
+
   const brandUnmatched = Boolean(input.brandName.trim()) && !brandId;
-  const metadata = buildMetadata(input, brandUnmatched);
+
+
+
+  const slug = await uniqueSlug(supabase, slugifyBase(input.name));
+
+  const internalSku = `GC-${randomBytes(3).toString("hex").toUpperCase()}`;
+
+
+
+  const status = input.status;
+
+  const metadata = buildMetadataForInsert(input, brandUnmatched);
+
+
+
+  const { data: product, error: pErr } = await supabase
+
+    .schema("catalog_v2")
+
+    .from("catalog_products")
+
+    .insert({
+
+      product_type_id: typeId,
+
+      brand_id: brandId,
+
+      slug,
+
+      internal_sku: internalSku,
+
+      name: input.name.trim(),
+
+      description: input.description.trim() || null,
+
+      status: "draft",
+
+      metadata,
+
+    })
+
+    .select("id")
+
+    .single();
+
+
+
+  if (pErr || !product) {
+
+    return { error: pErr?.message ?? "Failed to create product." };
+
+  }
+
+  const productId = (product as { id: string }).id;
+
+
+
+  const variants = input.variants.length ? input.variants : defaultVariantsFallback(internalSku);
+
+  let sort = 0;
+
+  for (const v of variants) {
+
+    const skuBase = v.variantSku.trim() || `${internalSku}-${v.sizeCode || "SZ"}`.toUpperCase();
+
+    const variantSku = await uniqueVariantSku(supabase, skuBase);
+
+    const priceRaw = v.listPrice.trim();
+
+    const listPrice = priceRaw === "" ? null : Number.parseFloat(priceRaw);
+
+    const vmeta: Record<string, unknown> = {};
+
+    if (!input.quoteOnly && listPrice != null && Number.isFinite(listPrice)) vmeta.list_price = listPrice;
+
+
+
+    const { error: vErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
+
+      catalog_product_id: productId,
+
+      variant_sku: variantSku,
+
+      sort_order: sort++,
+
+      is_active: true,
+
+      size_code: v.sizeCode.trim() || null,
+
+      metadata: vmeta,
+
+    });
+
+    if (vErr) {
+
+      await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", productId);
+
+      return { error: vErr.message };
+
+    }
+
+  }
+
+
+
+  const imgRes = await syncPrimaryImage(supabase, productId, input.primaryImageUrl);
+
+  if (imgRes.error) {
+
+    await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", productId);
+
+    return { error: imgRes.error };
+
+  }
+
+
+
+  if (input.categoryId.trim()) {
+
+    const attrs = await resolveAttributesForWrite(input.categoryId, input);
+    const attrRes = await syncAttributes(productId, input.categoryId, attrs);
+
+    if (attrRes.error) {
+
+      await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", productId);
+
+      return { error: attrRes.error };
+
+    }
+
+  }
+
+
+
+  if (status === "active") {
+
+    const { error: uErr } = await supabase.schema("catalog_v2").from("catalog_products").update({ status: "active" }).eq("id", productId);
+
+    if (uErr) return { error: uErr.message };
+
+  }
+
+
+
+  return { id: productId };
+
+}
+
+
+
+export async function updateCatalogProduct(
+
+  productId: string,
+
+  input: ProductWriteInput
+
+): Promise<{ ok: true } | { error: string }> {
+
+  if (!isSupabaseConfigured()) return { error: "Supabase is not configured." };
+
+  const supabase = getSupabaseAdmin() as any;
+
+
+
+  const { data: existingRow } = await supabase
+
+    .schema("catalog_v2")
+
+    .from("catalog_products")
+
+    .select("metadata, internal_sku")
+
+    .eq("id", productId)
+
+    .maybeSingle();
+
+
+
+  const existingMeta = (existingRow as { metadata?: Record<string, unknown>; internal_sku?: string } | null)?.metadata ?? null;
+
+  const internalSku = (existingRow as { internal_sku?: string } | null)?.internal_sku ?? `GC-${productId.slice(0, 8)}`;
+
+
+
+  const brandId = await resolveBrandId(supabase, input.brandName);
+
+  const brandUnmatched = Boolean(input.brandName.trim()) && !brandId;
+
+  const metadata = mergeProductMetadata(existingMeta, input, brandUnmatched);
+
+
 
   const targetStatus = input.status;
 
+
+
   const { error: pErr } = await supabase
+
     .schema("catalog_v2")
+
     .from("catalog_products")
+
     .update({
+
       name: input.name.trim(),
+
       description: input.description.trim() || null,
+
       brand_id: brandId,
+
       metadata,
+
       status: "draft",
+
     })
+
     .eq("id", productId);
+
+
 
   if (pErr) return { error: pErr.message };
 
-  await supabase.schema("catalog_v2").from("catalog_variants").delete().eq("catalog_product_id", productId);
 
-  const variants = input.variants.length
-    ? input.variants
-    : [{ sizeCode: "OS", variantSku: "", listPrice: "" }];
 
-  let sort = 0;
-  for (const v of variants) {
-    const skuBase = v.variantSku.trim() || `SKU-${productId.slice(0, 8)}-${sort}`.toUpperCase();
-    const variantSku = await uniqueVariantSku(supabase, skuBase);
-    const priceRaw = v.listPrice.trim();
-    const listPrice = priceRaw === "" ? null : Number.parseFloat(priceRaw);
-    const vmeta: Record<string, unknown> = {};
-    if (!input.quoteOnly && listPrice != null && Number.isFinite(listPrice)) vmeta.list_price = listPrice;
+  const varRes = await mergeVariantsForProduct(supabase, productId, internalSku, input);
 
-    const { error: vErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
-      catalog_product_id: productId,
-      variant_sku: variantSku,
-      sort_order: sort++,
-      is_active: true,
-      size_code: v.sizeCode.trim() || null,
-      metadata: vmeta,
-    });
-    if (vErr) return { error: vErr.message };
+  if (varRes.error) return { error: varRes.error };
+
+
+
+  const imgRes = await syncPrimaryImage(supabase, productId, input.primaryImageUrl);
+
+  if (imgRes.error) return { error: imgRes.error };
+
+
+
+  if (input.categoryId.trim()) {
+
+    const attrs = await resolveAttributesForWrite(input.categoryId, input);
+    const attrRes = await syncAttributes(productId, input.categoryId, attrs);
+
+    if (attrRes.error) return { error: attrRes.error };
+
   }
 
-  await supabase.schema("catalog_v2").from("catalog_product_images").delete().eq("catalog_product_id", productId);
 
-  const img = input.primaryImageUrl.trim();
-  if (img) {
-    const { error: iErr } = await supabase.schema("catalog_v2").from("catalog_product_images").insert({
-      catalog_product_id: productId,
-      url: img,
-      is_primary: true,
-      sort_order: 0,
-      metadata: {
-        image_provenance: "editorial",
-        source: "admin_product_form",
-      },
-    });
-    if (iErr) return { error: iErr.message };
-  }
 
   if (targetStatus === "active") {
+
     const { error: uErr } = await supabase.schema("catalog_v2").from("catalog_products").update({ status: "active" }).eq("id", productId);
+
     if (uErr) return { error: uErr.message };
+
   }
 
+
+
   return { ok: true };
+
 }
+
+
 
 export async function promoteStagingToDraftProduct(
+
   stagingId: string,
+
   input: ProductWriteInput,
+
   createdBy: string | null
+
 ): Promise<{ productId: string } | { error: string }> {
-  const created = await insertCatalogProduct({ ...input, status: "draft" });
+
+  const created = await insertCatalogProduct({
+
+    ...input,
+
+    status: "draft",
+
+    importStagingId: stagingId,
+
+  });
+
   if ("error" in created) return created;
 
+
+
   const supabase = getSupabaseAdmin() as any;
+
   await supabase
+
     .schema("catalog_v2")
+
     .from("admin_url_clipboard_staging")
+
     .update({
+
       review_status: "converted_to_draft",
+
       created_catalog_product_id: created.id,
+
     })
+
     .eq("id", stagingId);
 
+
+
   void createdBy;
+
   return { productId: created.id };
+
 }
+
+

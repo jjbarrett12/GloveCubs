@@ -70,19 +70,20 @@ export function ProductEditorForm({
     setVariants((v) => v.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   }
 
-  function buildPayload(): Record<string, unknown> {
+  function buildPayload(statusOverride?: "draft" | "active"): Record<string, unknown> {
+    const attrs: Record<string, string> = {};
+    if (material.trim()) attrs.material = material.trim();
+    if (color.trim()) attrs.color = color.trim();
+    if (milThickness.trim()) attrs.thickness_mil = milThickness.trim();
     return {
       name,
       brand_name: brandName,
       category_id: categoryId,
-      material,
-      color,
-      mil_thickness: milThickness,
-      case_pack: casePack,
       description,
       primary_image_url: primaryImageUrl,
-      status,
+      status: statusOverride ?? status,
       quote_only: quoteOnly,
+      attributes: attrs,
       variants: variants.map((r) => ({
         size_code: r.sizeCode,
         variant_sku: r.variantSku,

@@ -3,6 +3,8 @@ import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseJsonBody, nonEmptyString } from "@/lib/admin/products-import-proxy";
 import { promoteStagingToDraftProduct, type ProductWriteInput } from "@/lib/admin/product-write";
+import { parseImportDraftFromExtracted } from "@/lib/admin/import-draft-mapper";
+import { importDraftToProductWriteInput } from "@/lib/admin/import-draft-promote";
 
 export const dynamic = "force-dynamic";
 
@@ -48,62 +50,45 @@ export async function POST(
     return NextResponse.json({ error: "Staging row is not awaiting review." }, { status: 409 });
   }
 
-  const ex = st.extracted ?? {};
-  const nameFromBody = typeof body.name === "string" ? body.name.trim() : "";
-  const name =
-    nameFromBody ||
-    String(ex.suggested_name ?? ex.page_title ?? "Imported listing")
-      .trim()
-      .slice(0, 300) ||
-    "Imported listing";
+  const draft = parseImportDraftFromExtracted(st.extracted ?? {}, st.product_page_url);
+  if (!draft) {
+    return NextResponse.json({ error: "Staging row has no import draft to promote." }, { status: 400 });
+  }
 
-  const brandName =
-    (typeof body.brand_name === "string" ? body.brand_name.trim() : "") ||
-    String(ex.suggested_brand ?? "").trim();
-  const material = typeof body.material === "string" ? body.material : "";
-  const color = typeof body.color === "string" ? body.color : "";
-  const milThickness = typeof body.mil_thickness === "string" ? body.mil_thickness : "";
-  const casePack = typeof body.case_pack === "string" ? body.case_pack : "";
-  const descriptionExtra = typeof body.description === "string" ? body.description : "";
-  const baseDesc = String(ex.suggested_description ?? "").trim();
-  const description = [baseDesc, descriptionExtra, `Source: ${st.product_page_url}`].filter(Boolean).join("\n\n").slice(0, 12000);
-
-  const primaryFromBody = typeof body.primary_image_url === "string" ? body.primary_image_url.trim() : "";
-  const primaryImageUrl =
-    primaryFromBody || (st.image_url ?? "").trim() || String(ex.suggested_image_from_page ?? "").trim();
-
-  const rawVariants = body.variants;
-  const suggestedSku = String(ex.suggested_sku ?? ex.suggested_mpn ?? "").trim();
-
-  const variants: ProductWriteInput["variants"] = [];
-  if (Array.isArray(rawVariants)) {
-    for (const rv of rawVariants) {
+  const operatorVariants: ProductWriteInput["variants"] = [];
+  if (Array.isArray(body.variants)) {
+    for (const rv of body.variants) {
       if (!rv || typeof rv !== "object") continue;
       const o = rv as Record<string, unknown>;
-      variants.push({
+      operatorVariants.push({
         sizeCode: typeof o.size_code === "string" ? o.size_code : "",
         variantSku: typeof o.variant_sku === "string" ? o.variant_sku : "",
-        listPrice: typeof o.list_price === "string" ? o.list_price : typeof o.list_price === "number" ? String(o.list_price) : "",
+        listPrice:
+          typeof o.list_price === "string"
+            ? o.list_price
+            : typeof o.list_price === "number"
+              ? String(o.list_price)
+              : "",
       });
     }
   }
 
-  const merged: ProductWriteInput = {
-    name,
-    brandName,
-    categoryId: categoryId.value,
-    material,
-    color,
-    milThickness,
-    casePack,
-    description,
-    primaryImageUrl,
-    status: "draft",
-    quoteOnly: true,
-    variants: variants.length
-      ? variants
-      : [{ sizeCode: "OS", variantSku: suggestedSku, listPrice: "" }],
-  };
+  const merged = importDraftToProductWriteInput(
+    draft,
+    {
+      category_id: categoryId.value,
+      name: typeof body.name === "string" ? body.name : undefined,
+      brand_name: typeof body.brand_name === "string" ? body.brand_name : undefined,
+      material: typeof body.material === "string" ? body.material : undefined,
+      color: typeof body.color === "string" ? body.color : undefined,
+      mil_thickness: typeof body.mil_thickness === "string" ? body.mil_thickness : undefined,
+      case_pack: typeof body.case_pack === "string" ? body.case_pack : undefined,
+      description: typeof body.description === "string" ? body.description : undefined,
+      primary_image_url: typeof body.primary_image_url === "string" ? body.primary_image_url : undefined,
+      variants: operatorVariants.length > 0 ? operatorVariants : undefined,
+    },
+    { stagingImageUrl: st.image_url }
+  );
 
   const res = await promoteStagingToDraftProduct(stagingId, merged, admin.id);
   if ("error" in res) {

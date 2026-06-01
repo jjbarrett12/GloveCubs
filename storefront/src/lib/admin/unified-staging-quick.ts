@@ -10,6 +10,7 @@ import {
   pickNormalizedName,
 } from "@/lib/unified-ingestion/evidence-mappers";
 import { writeUnifiedStagingArtifacts } from "@/lib/unified-ingestion/writer";
+import { parseImportDraftFromExtracted } from "@/lib/admin/import-draft-mapper";
 
 export type QuickUnifiedStagingInput = {
   productPageUrl: string;
@@ -18,6 +19,7 @@ export type QuickUnifiedStagingInput = {
   createdBy?: string | null;
   clipboardStagingId?: string | null;
   supplierId?: string | null;
+  requireHumanReview?: boolean;
 };
 
 export async function writeQuickDraftUnifiedStaging(
@@ -29,14 +31,41 @@ export async function writeQuickDraftUnifiedStaging(
   }
 
   const sourceUrl = input.productPageUrl;
-  const evidence = evidenceFromQuickExtracted(input.extracted, sourceUrl);
+  const draft = parseImportDraftFromExtracted(input.extracted, sourceUrl);
   const imageUrl =
     input.imageUrl ??
     (typeof input.extracted.source_image_url === "string"
       ? input.extracted.source_image_url
       : typeof input.extracted.suggested_image_from_page === "string"
         ? input.extracted.suggested_image_from_page
-        : null);
+        : draft?.image_url ?? null);
+
+  const variantDrafts =
+    draft && draft.variants.length > 0
+      ? draft.variants
+      : [
+          {
+            size_label: null,
+            normalized_size_code: "UNKNOWN",
+            sku: draft?.sku ?? null,
+            mpn: draft?.mpn ?? null,
+            gtin: null,
+            list_price: null,
+          },
+        ];
+
+  const stagingVariants = variantDrafts.map((v, idx) => {
+    const variantKey = "normalized_size_code" in v ? v.normalized_size_code || `variant-${idx}` : `variant-${idx}`;
+    const evidence = evidenceFromQuickExtracted(input.extracted, sourceUrl);
+    return {
+      sourceUrl,
+      primaryImageUrl: imageUrl,
+      variantKey,
+      proposedVariantSku: v.sku ?? v.mpn ?? draft?.sku ?? null,
+      rawPayload: input.extracted,
+      evidence,
+    };
+  });
 
   const result = await writeUnifiedStagingArtifacts(
     {
@@ -52,17 +81,10 @@ export async function writeQuickDraftUnifiedStaging(
         normalizedBrand: pickNormalizedBrand(input.extracted),
         rawPayload: input.extracted,
       },
-      variants: [
-        {
-          sourceUrl,
-          primaryImageUrl: imageUrl,
-          variantKey: "default",
-          rawPayload: input.extracted,
-          evidence,
-        },
-      ],
+      variants: stagingVariants,
       requireHumanReview:
-        typeof input.extracted.fetch_error === "string" && input.extracted.fetch_error.length > 0,
+        Boolean(input.requireHumanReview) ||
+        (typeof input.extracted.fetch_error === "string" && input.extracted.fetch_error.length > 0),
     },
     supabase
   );

@@ -3,21 +3,12 @@
  */
 
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import {
-  insertCatalogProduct,
-  type ProductWriteInput,
-} from "@/lib/admin/product-write";
+import { insertCatalogProduct, type ProductWriteInput } from "@/lib/admin/product-write";
 import type { FieldEvidenceSummary } from "@/lib/admin/unified-ingestion-review-queue";
 import { canPromoteUnifiedStaging } from "@/lib/admin/unified-ingestion-promote-guards";
 import type { IngestionJobStatus } from "@/lib/unified-ingestion/types";
-
-function strEvidence(
-  evidence: Record<string, FieldEvidenceSummary>,
-  key: string
-): string {
-  const v = evidence[key]?.value;
-  return typeof v === "string" ? v.trim() : v != null ? String(v) : "";
-}
+import { parseImportDraftFromExtracted } from "@/lib/admin/import-draft-mapper";
+import { importDraftToProductWriteInput } from "@/lib/admin/import-draft-promote";
 
 export type PromoteUnifiedStagingInput = {
   stagingVariantId: string;
@@ -51,6 +42,7 @@ export async function promoteUnifiedStagingVariant(
       proposed_variant_sku,
       status,
       promoted_catalog_variant_id,
+      raw_payload,
       catalog_staging_products!inner (
         id,
         review_status,
@@ -58,6 +50,7 @@ export async function promoteUnifiedStagingVariant(
         normalized_brand,
         source_url,
         promoted_catalog_product_id,
+        raw_payload,
         ingestion_jobs!inner ( id, status, blocked_reason )
       )
     `
@@ -85,81 +78,35 @@ export async function promoteUnifiedStagingVariant(
     return { error: guard.error, status: guard.status };
   }
 
-  const { data: evidenceRows } = await supabase
-    .schema("catalog_v2")
-    .from("ingestion_field_evidence")
-    .select("field_key, extracted_value, confidence, source_type, source_ref, extraction_method, created_at")
-    .eq("staging_variant_id", input.stagingVariantId);
+  const sourceUrl = String(v.source_url ?? product.source_url ?? "");
+  const rawPayload =
+    (v.raw_payload && typeof v.raw_payload === "object" ? (v.raw_payload as Record<string, unknown>) : null) ??
+    (product.raw_payload && typeof product.raw_payload === "object"
+      ? (product.raw_payload as Record<string, unknown>)
+      : {});
 
-  const evidenceByField: Record<string, FieldEvidenceSummary> = {};
-  const latestAt: Record<string, string> = {};
-  for (const er of evidenceRows ?? []) {
-    const row = er as {
-      field_key: string;
-      extracted_value: unknown;
-      confidence: number;
-      source_type: string;
-      source_ref: string | null;
-      extraction_method: string;
-      created_at: string;
-    };
-    const prevAt = latestAt[row.field_key];
-    if (!prevAt || row.created_at > prevAt) {
-      latestAt[row.field_key] = row.created_at;
-      evidenceByField[row.field_key] = {
-        value: row.extracted_value,
-        confidence: Number(row.confidence) || 0,
-        sourceType: row.source_type,
-        sourceRef: row.source_ref,
-        extractionMethod: row.extraction_method,
-      };
-    }
+  const draft = parseImportDraftFromExtracted(rawPayload, sourceUrl);
+  if (!draft) {
+    return { error: "Staging variant has no import draft to promote.", status: 400 };
   }
 
-  const sourceUrl = String(v.source_url ?? product.source_url ?? "");
-  const name =
-    input.name?.trim() ||
-    strEvidence(evidenceByField, "name") ||
-    String(product.normalized_name ?? "").trim() ||
-    "Imported listing";
-
-  const brandName =
-    input.brandName?.trim() ||
-    strEvidence(evidenceByField, "brand") ||
-    String(product.normalized_brand ?? "").trim();
-
-  const baseDesc = strEvidence(evidenceByField, "description");
-  const description = [baseDesc, input.description?.trim(), sourceUrl ? `Source: ${sourceUrl}` : ""]
-    .filter(Boolean)
-    .join("\n\n")
-    .slice(0, 12000);
-
-  const primaryImageUrl =
-    input.primaryImageUrl?.trim() ||
-    String(v.primary_image_url ?? "").trim() ||
-    strEvidence(evidenceByField, "image_url");
-
-  const suggestedSku =
-    strEvidence(evidenceByField, "sku") ||
-    strEvidence(evidenceByField, "mpn") ||
-    String(v.proposed_variant_sku ?? "").trim();
-
-  const merged: ProductWriteInput = {
-    name: name.slice(0, 300),
-    brandName,
-    categoryId: input.categoryId,
-    material: "",
-    color: "",
-    milThickness: "",
-    casePack: "",
-    description,
-    primaryImageUrl,
-    status: "draft",
-    quoteOnly: true,
-    variants: input.variants?.length
-      ? input.variants
-      : [{ sizeCode: "OS", variantSku: suggestedSku, listPrice: "" }],
-  };
+  const merged = importDraftToProductWriteInput(
+    draft,
+    {
+      category_id: input.categoryId,
+      name: input.name,
+      brand_name: input.brandName,
+      description: input.description,
+      primary_image_url: input.primaryImageUrl,
+      variants: input.variants,
+    },
+    {
+      stagingImageUrl:
+        input.primaryImageUrl?.trim() ||
+        String(v.primary_image_url ?? "").trim() ||
+        null,
+    }
+  );
 
   const created = await insertCatalogProduct(merged);
   if ("error" in created) {

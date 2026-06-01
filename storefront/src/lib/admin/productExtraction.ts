@@ -119,6 +119,59 @@ const COLOR_PATTERNS: Record<string, RegExp[]> = {
   clear: [/\bclear\b/i, /\btransparent\b/i],
 };
 
+/** Multi-token color phrases (longest first for greedy match). */
+const COLOR_PHRASES: string[] = [
+  "Blue Violet",
+  "Light Blue",
+  "Dark Gray",
+  "Dark Grey",
+  "Forest Green",
+  "Royal Blue",
+  "Navy Blue",
+  "Sky Blue",
+  "Light Gray",
+  "Light Grey",
+  "Dark Green",
+  "Dark Blue",
+].sort((a, b) => b.length - a.length);
+
+const TITLE_BRAND_STOP_WORDS = new Set([
+  "nitrile",
+  "vinyl",
+  "latex",
+  "neoprene",
+  "poly",
+  "polyethylene",
+  "exam",
+  "examination",
+  "medical",
+  "industrial",
+  "glove",
+  "gloves",
+  "powder",
+  "free",
+  "powder-free",
+  "powdered",
+  "disposable",
+  "synthetic",
+  "rubber",
+  "grade",
+  "food",
+  "service",
+  "proworks",
+  "medium",
+  "small",
+  "large",
+  "xlarge",
+  "xxl",
+  "xs",
+  "xl",
+  "lg",
+  "sm",
+  "med",
+  "mil",
+]);
+
 const SPEC_TABLE_KEYS: Record<string, string[]> = {
   item_number: ['item', 'item number', 'item #', 'item no', 'product code', 'part number', 'part #', 'catalog'],
   sku: ['sku', 'stock keeping unit', 'stock number'],
@@ -473,7 +526,7 @@ function mapSpecValue(
       break;
     case 'color':
       if (!extracted.color) {
-        extracted.color = value;
+        extracted.color = extractColorPhrase(value) ?? value.trim();
         scores.color = 0.9;
       }
       break;
@@ -684,6 +737,81 @@ function normalizeSize(value: string): string {
   return value.toUpperCase();
 }
 
+/** Infer brand from leading title tokens before product-type descriptors. */
+export function inferBrandFromTitle(title: string): string | null {
+  const cleaned = title
+    .replace(/[®™©]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+
+  const head = cleaned.split(/\s*[-–|]\s*/)[0] ?? cleaned;
+  const tokens = head.split(/\s+/).filter(Boolean);
+  const brandTokens: string[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i]!;
+    if (i > 0 && extractColorPhraseAtStart(tokens.slice(i).join(" "))) break;
+
+    const normalized = tok.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!normalized || TITLE_BRAND_STOP_WORDS.has(normalized)) break;
+    if (/^\d/.test(tok)) break;
+    brandTokens.push(tok);
+    if (brandTokens.length >= 4) break;
+  }
+
+  if (brandTokens.length === 0) return null;
+  const brand = brandTokens
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+  return brand.length >= 2 ? brand : null;
+}
+
+function titleCasePhrase(phrase: string): string {
+  return phrase
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Color phrase anchored at the start of text (for brand vs color boundary). */
+export function extractColorPhraseAtStart(text: string): string | null {
+  const t = text.trim();
+  if (!t) return null;
+
+  for (const phrase of COLOR_PHRASES) {
+    const re = new RegExp(`^${phrase.replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (re.test(t)) return titleCasePhrase(phrase);
+  }
+
+  const first = t.split(/\s+/)[0] ?? "";
+  for (const [slug, patterns] of Object.entries(COLOR_PATTERNS)) {
+    if (patterns.some((p) => p.test(first))) {
+      return slug === "purple" && /\bviolet\b/i.test(t) ? "Violet" : titleCasePhrase(slug);
+    }
+  }
+
+  return null;
+}
+
+/** Extract multi-token or single color phrases from text (title, spec, meta). */
+export function extractColorPhrase(text: string): string | null {
+  if (!text.trim()) return null;
+
+  for (const phrase of COLOR_PHRASES) {
+    const re = new RegExp(`\\b${phrase.replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (re.test(text)) return titleCasePhrase(phrase);
+  }
+
+  for (const [slug, patterns] of Object.entries(COLOR_PATTERNS)) {
+    if (patterns.some((p) => p.test(text))) {
+      return slug === "purple" && /\bviolet\b/i.test(text) ? "Violet" : titleCasePhrase(slug);
+    }
+  }
+
+  return null;
+}
+
 function normalizeExtractedData(extracted: ExtractedProductData): void {
   // Clean up strings
   if (extracted.title) {
@@ -692,12 +820,25 @@ function normalizeExtractedData(extracted: ExtractedProductData): void {
   if (extracted.description) {
     extracted.description = extracted.description.trim().substring(0, 2000);
   }
-  
+
+  if (!extracted.brand && !extracted.manufacturer && extracted.title) {
+    const inferred = inferBrandFromTitle(extracted.title);
+    if (inferred) extracted.brand = inferred;
+  }
+
+  if (!extracted.color) {
+    const colorBlob = [extracted.title, extracted.description, JSON.stringify(extracted.spec_table ?? {})].join(
+      "\n"
+    );
+    const colorPhrase = extractColorPhrase(colorBlob);
+    if (colorPhrase) extracted.color = colorPhrase;
+  }
+
   // Normalize material
   if (extracted.material) {
     extracted.material = normalizeMaterial(extracted.material);
   }
-  
+
   // Normalize size
   if (extracted.size) {
     extracted.size = normalizeSize(extracted.size);
