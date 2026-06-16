@@ -1,6 +1,29 @@
-# Route ownership (Phase A)
+# Route ownership (Phase 1A — Next.js canonical platform)
 
-Canonical policy: **Next.js storefront owns all public/customer HTML**. **Express** owns **`/api/*`**, webhooks, integrations, and **static files** under `public/`. The **legacy SPA shell** (`public/index.html`) is **disabled for customer routes by default** in local dev; it is only served for those routes when **`ALLOW_LEGACY_SPA_HTML=1`** is set (escape hatch).
+## Architectural decision
+
+| Layer | Role |
+|-------|------|
+| **Next.js** (`storefront/`) | **Canonical application platform** — public HTML, buyer account/workspace, admin/operator UI, BFF route handlers (`src/app/api/*`). All new product work goes here. |
+| **Express** (`server.js`) | **Transitional legacy API** — frozen route surface; drain cart/auth/orders/webhooks to Next over time. **No new Express routes** (`scripts/check-express-freeze.js`). **No new customer/admin/product features.** |
+| **CatalogOS** (`catalogos/`) | **Internal ingest/publish tooling only** — staging, publish to `catalog_v2`, operator ingest UI on internal host. Not a buyer-facing app. |
+| **Postgres (Supabase)** | **Canonical data** — `catalog_v2`, `catalogos`, `gc_commerce`. |
+
+## HTML ownership
+
+- **Next.js** owns public/customer HTML, buyer `/account`, `/workspace`, and **admin/operator UI** at `/admin/*` (target state).
+- **Express** must **not** serve the legacy customer SPA (`public/index.html`, `public/js/app.js`) in **production**. Boot **exits** if `NODE_ENV=production` and `ALLOW_LEGACY_SPA_HTML=1`.
+- **Express** must **not** serve legacy **admin** HTML (`/admin*` → `index.html` + `admin-app.js`) in **production**. GET/HEAD `/admin` and `/admin/*` **HTTP 308** to Next when `STOREFRONT_PUBLIC_ORIGIN` is set (Phase 1B).
+
+## API ownership (transition)
+
+Express still serves **`/api/*`**, webhooks, and integrations while APIs are drained to Next route handlers. Browser clients use **`NEXT_PUBLIC_GLOVECUBS_API`** for commerce APIs until migration completes.
+
+---
+
+# Route ownership (Phase A redirect rules)
+
+Canonical redirect policy: **Next.js storefront owns all public/customer HTML**. **Express** owns **`/api/*`**, webhooks, integrations, and **static files** under `public/`. The **legacy SPA shell** (`public/index.html`) is **disabled for customer routes by default** in local dev; it is only served for those routes when **`ALLOW_LEGACY_SPA_HTML=1`** is set (**development escape hatch only**).
 
 ## Express (`server.js`, default port **3004**)
 
@@ -9,7 +32,7 @@ Canonical policy: **Next.js storefront owns all public/customer HTML**. **Expres
 | **`/api/*`** | Express | JSON APIs: cart, auth, checkout, admin JSON, integrations. |
 | **`/api/admin/*`** | Express | Unchanged (Phase A). |
 | **Static assets** | Express `public/` | Files with a normal static extension on the last path segment are not treated as HTML navigations (no redirect). |
-| **`/admin*` (browser)** | Legacy SPA (temporary) | **Phase A exception:** GET/HEAD to `/admin` and subpaths are **not** redirected to Next until admin parity is verified. Still served from Express (not gated like customer routes). |
+| **`/admin*` (browser)** | **Next (redirect from Express)** | **Phase 1B:** GET/HEAD on Express **308** to `{STOREFRONT_PUBLIC_ORIGIN}{originalUrl}`. Legacy admin SPA blocked in production. JSON **`/api/admin/*`** unchanged on Express. |
 | **Customer HTML** (listed paths) | **Redirect → Next** | When `STOREFRONT_PUBLIC_ORIGIN` is set and valid, GET/HEAD for those paths respond with **HTTP 308** to `{origin}{originalUrl}`. If the origin is missing in **API-only** dev (`GLOVECUBS_DEV_API_ONLY=1`), Express returns **503** + instructions instead of `index.html` unless `ALLOW_LEGACY_SPA_HTML=1`. |
 
 ## Next.js storefront (`storefront/`, local dev default **3005**)
@@ -25,7 +48,8 @@ Browser clients should use **`NEXT_PUBLIC_GLOVECUBS_API`** pointing at the Expre
 
 - **Status code:** **308 Permanent Redirect** for all Express-initiated public HTML handoffs to the storefront origin (RFC 7538). Same practical effect as 301 for GET/HEAD.
 - **Preserve path and query:** `Location` is `normalize(origin) + req.originalUrl`.
-- **No redirect:** `/api/*`, asset-like paths (last segment contains `.`), **`/admin*`** (temporary).
+- **No redirect:** `/api/*`, asset-like paths (last segment contains `.`).
+- **Redirect includes:** customer paths (listed below) **and** `/admin`, `/admin/*` (Phase 1B).
 - **Non-production boot:** If `STOREFRONT_PUBLIC_ORIGIN` is unset and **`GLOVECUBS_DEV_API_ONLY` is not set**, Express applies **`http://localhost:3005`** as the storefront origin (logged at boot). If **`GLOVECUBS_DEV_API_ONLY=1`**, no default origin is applied; customer routes get **503** unless you set `STOREFRONT_PUBLIC_ORIGIN` or `ALLOW_LEGACY_SPA_HTML=1`.
 - **Production:** Invalid or missing `STOREFRONT_PUBLIC_ORIGIN` → process **exits** on boot.
 
@@ -51,9 +75,9 @@ Normalize to `http(s)://host` only (trailing slash stripped on boot).
 | `ALLOW_LEGACY_SPA_HTML` | Customer routes (same path list as redirects) |
 |-------------------------|--------------------------------------------------|
 | **Unset / not `1`** | **Never** served `index.html` when redirect is not in effect (503 dev gate instead). |
-| **`1`** | Legacy SPA may be served (escape hatch for rare debugging). |
+| **`1`** (non-production only) | Legacy SPA may be served (escape hatch for rare debugging). **Forbidden when `NODE_ENV=production`.** |
 
-Admin `/admin*` is unchanged: not redirected to Next and not subject to this customer-route gate.
+Admin `/admin*` on Express: **308 to Next** when `STOREFRONT_PUBLIC_ORIGIN` is set; **503** (never `index.html`) in production if redirect is not in effect. Non-production legacy admin SPA only when `ALLOW_LEGACY_SPA_HTML=1` and redirect inactive.
 
 ## Next.js redirects (`storefront/next.config.mjs`)
 
@@ -180,20 +204,68 @@ Expect **308** to storefront for the first three when `STOREFRONT_PUBLIC_ORIGIN`
 
 ---
 
-## Phase A — Operator surfaces (no full admin migration)
+## Phase 1C-auth — Operator identity (canonical allowlist)
+
+| Concern | Owner | Notes |
+|---------|--------|--------|
+| **Who is an operator** | `public.admin_users` | `id` = `auth.users.id`, `is_active = true`. Single canonical allowlist. |
+| **Next `/admin/**` gate** | Supabase session + `admin_users` | `storefront/src/lib/admin/get-admin-user.ts` |
+| **Express `/api/admin/*` gate** | Express JWT (transitional) + **`admin_users` canonical** | `services/usersService.isAdmin()` — checks `admin_users.is_active` first; `app_admins` compat fallback until backfill complete everywhere |
+| **`public.app_admins`** | **Transitional mirror only** | Do not grant operators here alone. Grants use `lib/admin-identity.js` → `grantCanonicalAdminOperator` (writes `admin_users` then compat `app_admins`). Scheduled for removal after Express admin drain. |
+| **Express JWT (`localStorage.token`)** | Transitional for legacy SPA/API clients | Buyer cart/checkout auth unchanged. Admin browser HTML moves to Supabase session on www. |
+
+### Migration sequencing (Phase 1C-auth)
+
+1. Apply `supabase/migrations/20260602120000_admin_users_canonical_allowlist.sql` (backfill from `app_admins`).
+2. Deploy `usersService.isAdmin` + grant/bootstrap script changes.
+3. Run `node scripts/audit-admin-identity.js` (strict: `GC_ADMIN_IDENTITY_AUDIT_STRICT=1`).
+4. Grant stragglers: `storefront/scripts/grant-admin-user-once.mjs <email>`.
+5. **Production preflight (required before proving redirect):** apply migration → strict audit passes → operators confirmed on Supabase login at **www** `/admin`.
+
+### Phase 1B — Admin HTML redirect (production preflight)
+
+**Required before enabling/proving production admin redirect:**
+
+1. Apply `supabase/migrations/20260602120000_admin_users_canonical_allowlist.sql`
+2. `GC_ADMIN_IDENTITY_AUDIT_STRICT=1 node scripts/audit-admin-identity.js` — must exit 0
+3. `STOREFRONT_PUBLIC_ORIGIN` set to final www storefront URL in Express production env
+4. Smoke: `curl -sI https://<API_HOST>/admin` → **308** `Location: https://<WWW>/admin`
+5. Smoke: `curl -sI https://<API_HOST>/api/admin/orders` → **not** 308 (401/403/405 acceptable)
+
+Audit SQL: `scripts/audit-admin-identity.sql` · Runner: `scripts/audit-admin-identity.js`
+
+---
+
+## Phase B — Operator surfaces
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| **Next procurement admin** | `/admin/procurement/*` on the **storefront** origin | Supabase-backed operator UI; gate via `ADMIN_LEADS_SECRET` / middleware in prod. |
-| **Next admin misc** | `/admin/*` (e.g. leads, product-import read-only) | Same origin; not customer-facing. |
-| **Express legacy admin SPA** | **`/admin*` HTML on the Express host** | Still served when requests hit Express (not 308’d). JSON under **`/api/admin/*`**. |
-| **Customer workspace** | **`/workspace` and `/workspace/` → `/workspace/procurement`** (Next redirect) | Authenticated procurement session enforced in `workspace/procurement/layout.tsx`; anonymous users land on `/` after redirect. |
+| **Next admin (canonical HTML)** | **`/admin/*` on the storefront origin (www)** | Supabase session + `public.admin_users`. All operator HTML. |
+| **Express `/api/admin/*`** | API host | Transitional JSON only; frozen route surface. Express JWT + `admin_users` allowlist. |
+| **Express legacy admin SPA** | ~~`/admin*` on API host~~ | **Deprecated (Phase 1B):** 308 → www. Not served in production. |
+| **CatalogOS** | Internal host | Ingest/publish tooling — not www admin HTML. |
+| **Customer workspace** | **`/workspace` → `/workspace/procurement`** (Next) | Buyer-facing procurement session. |
 
-Operators should prefer **www** + `/admin/...` for new procurement work; legacy commerce admin may still require the **Express** `/admin` SPA until Phase B+.
+Operators use **www** + `/admin/...` for all admin HTML. Commerce JSON may still call **api** `/api/admin/*` until drained.
+
+### Phase 1C-ops — Next BFF → Express admin mutations (order fulfillment)
+
+| Concern | Owner | Notes |
+|---------|--------|--------|
+| **Browser** | Next `/admin/api/orders/*` only | Never receives Express JWT. |
+| **Server bridge** | `storefront/src/lib/admin/express-admin-bridge.ts` | Mints **5m** HS256 JWT with `JWT_SECRET` (must match Express) + `Authorization: Bearer` to `NEXT_PUBLIC_GLOVECUBS_API`. Operator `id` = Supabase `admin_users.id`. |
+| **Express logic** | Unchanged `PUT/POST /api/admin/orders/*` | `adminOrderGuards`, inventory deduct, AR payment, create-po validation remain on Express. |
+| **Audit** | `[admin-order-mutation]` JSON logs | `operator_id`, `action`, `order_id`, success/failure. |
+
+**Storefront env (mutations):** `JWT_SECRET`, `NEXT_PUBLIC_GLOVECUBS_API`, plus existing Supabase admin gate vars.
+
+**Slice 2 (inventory + PO):** Next `/admin/inventory`, `/admin/purchase-orders` + `/admin/api/inventory/*`, `/admin/api/purchase-orders/*` — same bridge; list reads server-side via `expressAdminFetch`; adjust/send/receive mutate through Express frozen routes.
+
+**Slice 3 (people + finance gates):** `/admin/users`, `/admin/net-terms` → Express `/api/admin/users*`, `/api/admin/net-terms/*` via bridge. `/admin/messages` → direct Supabase `contact_messages` read (same table as storefront contact form); no mark-handled API exists.
 
 ### Procurement operator trust (current)
 
-- **Who can act:** `getAdminUser` (`storefront/src/lib/admin/get-admin-user.ts`) treats any **active** `public.admin_users` Supabase auth principal as a **trusted global operator** for Next `/admin/**` and `/admin/api/**` routes. **Per-company ACLs are not implemented** — cross-company visibility is intentional for this internal surface until a stricter model ships.
+- **Who can act:** `getAdminUser` (`storefront/src/lib/admin/get-admin-user.ts`) and Express `requireAdmin` both converge on **`public.admin_users`** (Phase 1C-auth). Any **active** row for the current Supabase auth user is a **trusted global operator** for Next `/admin/**` and `/admin/api/**`. Express `/api/admin/*` still accepts transitional Express JWT while the legacy SPA drains; allowlist truth is `admin_users`, not JWT type alone.
 - **Semantics:** `lifecycle_stage` values such as `quote_linked` reflect **durable spine linkage** (e.g. `quote_request_id` present / cart intake), not proof of customer email delivery or PO receipt. Use `sales_follow_up` when commercial follow-up is required (e.g. after `notification_failed` on intake email).
 
 ### Phase A — optional live redirect smoke
