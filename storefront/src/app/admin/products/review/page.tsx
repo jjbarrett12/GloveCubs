@@ -25,6 +25,10 @@ export default async function AdminProductsReviewPage({
 }) {
   const conn = computeProductsImportConnectionStatus();
   const catalogOsOffline = conn.status !== "online";
+  const catalogosBaseUrl =
+    process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/+$/, "") ||
+    conn.catalogos_base_url?.replace(/\/+$/, "") ||
+    "";
   const configured = isSupabaseConfigured();
   const useUnifiedQueue = isUnifiedReviewQueueEnabled();
 
@@ -102,8 +106,13 @@ export default async function AdminProductsReviewPage({
       )}
 
       {batchId && useUnifiedQueue ? (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-          <strong>batchId:</strong> <span className="font-mono text-xs">{batchId}</span>
+        <div className="mb-6 rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-4 text-sm text-slate-800">
+          <strong className="text-[#c2410c]">CatalogOS URL import batch</strong>
+          <span className="font-mono text-xs"> {batchId}</span>
+          <p className="mt-2 leading-relaxed text-slate-700">
+            This URL import should be reviewed and published in CatalogOS. Storefront review queue is visibility only —
+            use CatalogOS review, wizard, and publish guards for canonical publish.
+          </p>
         </div>
       ) : null}
 
@@ -114,6 +123,8 @@ export default async function AdminProductsReviewPage({
         categories={categories}
         supabaseConfigured={configured}
         modeLabel={modeLabel}
+        catalogosBaseUrl={catalogosBaseUrl}
+        batchId={batchId}
       />
     </div>
   );

@@ -59,7 +59,18 @@ describe("resolvePostLoginRedirectPath", () => {
     ).toBe("/admin");
   });
 
-  it("sends non-admins to /account when no explicit next", () => {
+  it("sends linked buyers to quote history when buyerDefaultPath is set", () => {
+    expect(
+      resolvePostLoginRedirectPath({
+        hasExplicitNext: false,
+        safeNextPath: "/account",
+        isActiveAdmin: false,
+        buyerDefaultPath: "/account/quotes",
+      }),
+    ).toBe("/account/quotes");
+  });
+
+  it("sends non-admins to /account when no explicit next and no buyerDefaultPath override", () => {
     expect(
       resolvePostLoginRedirectPath({
         hasExplicitNext: false,

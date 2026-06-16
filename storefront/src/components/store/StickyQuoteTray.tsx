@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 
 /** Desktop procurement entry — dense summary + review CTA. */
 export function StickyQuoteTray() {
+  const pathname = usePathname();
   const { lineCount, totalCount, hydrated } = useQuoteCart();
+
+  if (pathname?.startsWith("/admin")) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 hidden md:block">

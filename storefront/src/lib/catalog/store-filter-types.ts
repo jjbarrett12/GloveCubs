@@ -21,8 +21,12 @@ export interface StorefrontFilterParams {
   texture?: string[];
   cuff_style?: string[];
   hand_orientation?: string[];
-  packaging?: string[];
   sterility?: string[];
+  units_per_case?: string[];
+  cases_per_pallet?: string[];
+  pallet_pricing_available?: string[];
+  /** @deprecated Internal packaging spec — not a customer purchase-unit filter. */
+  packaging?: string[];
   cut_level_ansi?: string[];
   puncture_level?: string[];
   abrasion_level?: string[];

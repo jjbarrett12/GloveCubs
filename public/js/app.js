@@ -46,7 +46,7 @@ var BRAND_LOGO_FILENAME = {
     'Global Glove': 'Global_Glove.png',
     'Safeko': 'Safeko.png',
     'PIP': 'pip-global-safety-logo.png',
-    'Growl Gloves': 'Growl Gloves.webp',
+    'Growl Gloves': 'growl-gloves.png',
     'Ansell': 'Ansell.png',
     'SHOWA': 'SHOWA.png',
     'Semper Guard': 'Semper.png',

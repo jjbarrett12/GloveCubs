@@ -529,26 +529,7 @@ export default function InvoiceSavingsPage() {
   const specialistMailtoHref = contract != null ? buildSpecialistInvoiceMailtoHref(contract) : "";
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="text-lg font-semibold text-white hover:text-white/90">
-            GloveCubs
-          </Link>
-          <nav className="flex flex-wrap items-center justify-end gap-4 text-sm">
-            <Link href="/" className="text-white/70 hover:text-white">
-              Home
-            </Link>
-            <Link href="/contact" className="text-white/70 hover:text-white">
-              Contact
-            </Link>
-            <Link href="/glove-finder" className="text-white/50 hover:text-white/80">
-              Glove finder
-            </Link>
-          </nav>
-        </div>
-      </header>
-
+    <div>
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <h1 className="mb-3 text-2xl font-semibold text-white">Upload your invoice</h1>
         <ol className="mb-6 max-w-2xl list-decimal space-y-2 pl-5 text-sm leading-relaxed text-white/80">

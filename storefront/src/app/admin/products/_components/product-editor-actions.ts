@@ -3,6 +3,8 @@
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { insertCatalogProduct, updateCatalogProduct, type ProductWriteInput } from "@/lib/admin/product-write";
 import { ADMIN_PRODUCT_UUID_RE } from "@/lib/admin/product-operations";
+import type { CommercePackagingV1 } from "@commerce-packaging/types";
+import { normalizeCommercePackaging } from "@commerce-packaging/labels";
 
 function parseAttributes(body: Record<string, unknown>): Record<string, string | string[]> {
   const raw = body.attributes;
@@ -51,9 +53,18 @@ function parseProductWrite(body: Record<string, unknown>): { ok: true; value: Pr
         sizeCode: typeof o.size_code === "string" ? o.size_code : "",
         variantSku: typeof o.variant_sku === "string" ? o.variant_sku : "",
         listPrice: typeof o.list_price === "string" ? o.list_price : typeof o.list_price === "number" ? String(o.list_price) : "",
+        manufacturerSku: typeof o.manufacturer_sku === "string" ? o.manufacturer_sku : null,
       });
     }
   }
+
+  let commercePackaging: CommercePackagingV1 | null = null;
+  const cpRaw = body.commerce_packaging;
+  if (cpRaw && typeof cpRaw === "object" && !Array.isArray(cpRaw)) {
+    commercePackaging = normalizeCommercePackaging(cpRaw as CommercePackagingV1);
+  }
+
+  const internalSku = typeof body.internal_sku === "string" ? body.internal_sku.trim() : "";
 
   return {
     ok: true,
@@ -67,6 +78,8 @@ function parseProductWrite(body: Record<string, unknown>): { ok: true; value: Pr
       quoteOnly,
       variants,
       attributes,
+      commercePackaging,
+      internalSku: internalSku || null,
     },
   };
 }

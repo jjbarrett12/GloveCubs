@@ -260,8 +260,11 @@ async function getAllUsers() {
   return out;
 }
 
+const { resolveAdminAllowlistDecision } = require('../lib/admin-identity');
+
 /**
- * Admin authorization: public.app_admins.auth_user_id only.
+ * Admin authorization (Phase 1C-auth): public.admin_users.is_active is canonical.
+ * public.app_admins remains a transitional fallback until all envs are backfilled.
  */
 async function isAdmin(userIdOrEmail) {
   const s = String(userIdOrEmail || '').trim();
@@ -273,15 +276,12 @@ async function isAdmin(userIdOrEmail) {
   const user = await getUserById(s);
   if (!user) return false;
 
-  const { data: adm } = await supabase
-    .from('app_admins')
-    .select('auth_user_id')
-    .eq('auth_user_id', s)
-    .limit(1)
-    .maybeSingle();
-  if (adm) return true;
+  const [{ data: adminUser }, { data: appAdmin }] = await Promise.all([
+    supabase.from('admin_users').select('id, is_active').eq('id', s).maybeSingle(),
+    supabase.from('app_admins').select('auth_user_id').eq('auth_user_id', s).maybeSingle(),
+  ]);
 
-  return false;
+  return resolveAdminAllowlistDecision({ adminUser, appAdmin }).allowed;
 }
 
 async function listAppAdminsForCockpit() {

@@ -29,13 +29,15 @@ export type FooterSocialLink = {
 };
 
 export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
-  { label: "All Products", href: "/store" },
+  { label: "Request pricing", href: "/request-pricing" },
+  { label: "Quote request cart", href: "/quote-cart" },
+  { label: "Invoice review", href: "/invoice-savings" },
+  { label: "Catalog", href: "/store" },
   { label: "Industries", href: "/industries" },
-  { label: "Resources", href: "/resources" },
   { label: "Glove Science", href: "/glove-science" },
+  { label: "Resources", href: "/resources" },
   { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
-  { label: "B2B Program", href: "/request-pricing" },
 ];
 
 export const FOOTER_TOP_BRANDS: FooterTopBrand[] = [
@@ -67,13 +69,13 @@ export const FOOTER_SOCIAL_LINKS: FooterSocialLink[] = [
 ];
 
 export const FOOTER_TAGLINE =
-  "Your trusted source for professional-grade disposable and reusable work gloves. Serving businesses nationwide with quality products from top manufacturers.";
+  "Quote-first B2B glove procurement—governed catalog, invoice review, and formal pricing before fulfillment.";
 
 /** Footer trust strip — procurement paths (not card checkout). */
 export const FOOTER_PROCUREMENT_TRUST_SIGNALS: { label: string; href: string }[] = [
   { label: "Case & pallet quotes", href: "/request-pricing" },
   { label: "Net terms (approved accounts)", href: "/request-pricing" },
   { label: "Invoice review", href: "/invoice-savings" },
-  { label: "Replenishment planning", href: "/quote-cart" },
+  { label: "Quote request cart", href: "/quote-cart" },
   { label: "Business pricing support", href: "/request-pricing" },
 ];

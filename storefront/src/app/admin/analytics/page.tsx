@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { fetchAdminHomeSnapshot } from "@/lib/admin/admin-home-snapshot";
-import { PageHeader, StatCard, StatGrid } from "@/components/admin";
+import { ContaminationExclusionNotice, PageHeader, StatCard, StatGrid } from "@/components/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,12 @@ export default async function AdminAnalyticsPage() {
       <PageHeader
         title="Activity"
         description="Operational volume across quotes, companies, catalog, and pipeline. Revenue, margin, payments, and checkout metrics are intentionally omitted until backed by trusted order and payment data."
+      />
+
+      <ContaminationExclusionNotice
+        excludedTotal={snap.contamination.flaggedVisibleTotal}
+        kpiExcludedTotal={snap.contamination.kpiExcludedTotal}
+        partialScan={snap.contamination.partialScan}
       />
 
       <StatGrid columns={3} className="mb-4">

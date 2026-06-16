@@ -34,10 +34,12 @@ function walkTsFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe("import pipeline policy", () => {
-  it("clipboard staging uses productExtraction import draft path", () => {
+  it("clipboard staging prefers CatalogOS extract with local fallback", () => {
     const s = readFileSync(join(ROOT, "src/lib/admin/clipboard-url-staging.ts"), "utf8");
+    expect(s).toContain("extractClipboardViaCatalogosUrl");
+    expect(s).toContain("isClipboardCatalogosExtractConfigured");
     expect(s).toContain("extractProductFromHtml");
-    expect(s).toContain("toImportDraftProductV1");
+    expect(s).toContain("local_fallback");
     expect(s).not.toContain("extractPageEvidence");
   });
 

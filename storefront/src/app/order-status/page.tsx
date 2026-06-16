@@ -27,7 +27,7 @@ export default function OrderStatusPage({ searchParams }: PageProps) {
       title="Order lookup"
       subtitle={
         fromLegacy
-          ? "We could not automatically load that order link. GloveCubs is quote-first today—use the paths below so our team can locate your order or start a replenishment request."
+          ? "We could not automatically load that order link. GloveCubs is quote-first today—use the paths below so our team can locate your order or start a repeat quote request."
           : "Order self-service lookup is not available on this path yet. Use quote history, your account, or contact procurement for help with an existing order."
       }
       mainClassName="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8"
@@ -60,7 +60,7 @@ export default function OrderStatusPage({ searchParams }: PageProps) {
                 Upload invoice for review
               </Link>
               <span className="mt-0.5 block text-xs text-white/50">
-                Match lines to catalog options and refresh replenishment context.
+                Match lines to catalog options and refresh repeat-procurement context.
               </span>
             </li>
           </ul>

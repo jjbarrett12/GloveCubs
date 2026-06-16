@@ -104,6 +104,7 @@ function RequestPricingFormInner() {
 
     const hasBuilderParams =
       source === "homepage_bulk_builder" ||
+      source === "glove_science_lab" ||
       industry != null ||
       type != null ||
       material != null ||
@@ -117,6 +118,14 @@ function RequestPricingFormInner() {
     const qs = searchParams.toString();
     if (appliedQueryRef.current === qs) return;
     appliedQueryRef.current = qs;
+
+    if (source === "glove_science_lab" && product) {
+      setMessage(product);
+      setInquiryType("help_choosing");
+      return () => {
+        appliedQueryRef.current = null;
+      };
+    }
 
     const industryFacetLabel = industry
       ? STORE_INDUSTRY_FACET_ROWS.find((r) => r.value === industry)?.label

@@ -32,6 +32,24 @@ describe("quoteCartCatalogMergeMatch", () => {
     });
     expect(quoteCartCatalogMergeMatch(v1, v2)).toBe(false);
   });
+
+  it("merges same product/variant/sell_unit", () => {
+    const a = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, sell_unit: "case" });
+    const b = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null });
+    expect(quoteCartCatalogMergeMatch(a, b)).toBe(true);
+  });
+
+  it("does not merge different sell_unit", () => {
+    const caseLine = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, sell_unit: "case" });
+    const palletLine = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, sell_unit: "pallet" });
+    expect(quoteCartCatalogMergeMatch(caseLine, palletLine)).toBe(false);
+  });
+
+  it("defaults missing sell_unit to case for merge", () => {
+    const legacy = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null });
+    const explicitCase = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, sell_unit: "case" });
+    expect(quoteCartCatalogMergeMatch(legacy, explicitCase)).toBe(true);
+  });
 });
 
 describe("quoteCartLinesMatch", () => {

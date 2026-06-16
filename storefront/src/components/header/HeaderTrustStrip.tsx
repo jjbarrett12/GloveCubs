@@ -1,10 +1,10 @@
 import { Check } from "lucide-react";
 
 const TRUST_ITEMS = [
-  "Dedicated procurement reps",
-  "Net terms for qualified buyers",
+  "Quote review on every request",
+  "Net terms (application required)",
   "Case & pallet programs",
-  "Fast nationwide fulfillment",
+  "Nationwide programs — lead times per quote",
 ] as const;
 
 export function HeaderTrustStrip() {

@@ -56,3 +56,27 @@ export function buyerPipelineStageSortIndex(stage: string): number {
   if (idx >= 0) return idx;
   return BUYER_LIFECYCLE_STAGE_ORDER.length + 1;
 }
+
+/** Buyer-safe labels for catalogos.quote_requests.status — never expose raw operator queue names in UI. */
+export function buyerQuoteStatusLabel(status: string): string {
+  switch (status) {
+    case "new":
+      return "Received";
+    case "reviewing":
+      return "Under review";
+    case "contacted":
+      return "Follow-up in progress";
+    case "quoted":
+      return "Formal pricing shared";
+    case "won":
+      return "Closed — accepted";
+    case "lost":
+      return "Closed — not proceeding";
+    case "expired":
+      return "Closed — expired";
+    case "closed":
+      return "Closed";
+    default:
+      return "In progress";
+  }
+}

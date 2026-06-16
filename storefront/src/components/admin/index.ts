@@ -20,3 +20,4 @@ export { CustomerDetailMetrics } from "./CustomerDetailMetrics";
 export { OnboardingCard } from "./OnboardingCard";
 export { SetupChecklist } from "./SetupChecklist";
 export { CustomerAccountCard } from "./CustomerAccountCard";
+export { ContaminationExclusionNotice } from "./ContaminationExclusionNotice";

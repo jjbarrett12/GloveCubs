@@ -24,7 +24,7 @@ export function HomeHeroExpress() {
                   <span aria-hidden>·</span>
                   <span>Case &amp; pallet</span>
                   <span aria-hidden>·</span>
-                  <span>1,000+ SKUs available</span>
+                  <span>Catalog-backed SKUs</span>
                 </span>
               </div>
 
@@ -34,14 +34,14 @@ export function HomeHeroExpress() {
                 Who Buy by the Case
               </h1>
               <p className="mb-8 max-w-lg text-lg leading-relaxed text-white/78 sm:text-xl">
-                Category expertise, invoice intelligence, and nationwide B2B programs—for operators who buy by the case
-                and pallet.
+                Category expertise, invoice intelligence, and nationwide B2B programs—lead times and formal pricing confirmed
+                per quote for operators who buy by the case and pallet.
               </p>
 
               <ul className="mb-9 grid grid-cols-1 gap-2.5 text-sm text-white/60 sm:grid-cols-3 sm:gap-3">
                 <li className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
                   <Bot className="h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" aria-hidden />
-                  Sourcing intelligence
+                  Procurement intelligence
                 </li>
                 <li className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
                   <Layers className="h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" aria-hidden />

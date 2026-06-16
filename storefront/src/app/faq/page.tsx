@@ -11,8 +11,8 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
     a: "Use Request pricing / RFQ with your monthly case volume and application. We route high-volume inquiries to a rep for scoped pricing.",
   },
   {
-    q: "What is the AI Glove Finder?",
-    a: "It is our in-house wizard at /glove-finder. It recommends SKUs from your task, materials, and risk profile—then you can add selections to your quote request flow.",
+    q: "What is the Guided Glove Finder?",
+    a: "It is our in-house wizard at /glove-finder. It narrows SKUs from your task, materials, and risk profile—starting points for quote review, not compliance approval. Add selections to your quote request when ready.",
   },
   {
     q: "How does invoice upload work?",
@@ -30,7 +30,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
 
 export const metadata = {
   title: "FAQ | GloveCubs",
-  description: "Common questions about B2B ordering, the AI Glove Finder, and invoice analysis.",
+  description: "Common questions about B2B quote requests, the Guided Glove Finder, and invoice review.",
 };
 
 export default function FaqPage() {

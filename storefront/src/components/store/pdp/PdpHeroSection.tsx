@@ -7,6 +7,9 @@ import type { StoreProductDetail } from "@/lib/catalog/store-product-detail";
 import type { PdpEducationModel } from "@/lib/catalog/pdp-education";
 import { ProductImage } from "@/components/store/ProductImage";
 import { PdpVariantPricePanel } from "@/components/store/pdp/PdpVariantPricePanel";
+import { PdpSellUnitToggle } from "@/components/store/pdp/PdpSellUnitToggle";
+import type { PdpCommercePackaging } from "@/lib/catalog/store-product-commerce";
+import type { SellUnit } from "@commerce-packaging/types";
 import type { PdpSelectedVariantPricingDisplay } from "@/lib/pricing/pdp-variant-pricing-display";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +22,11 @@ type Props = {
   selectedVariantSize: string | null;
   parentFrom: ReturnType<typeof import("@/lib/pricing/pdp-variant-pricing-display").resolvePdpParentFromDisplay>;
   selectedPricing: PdpSelectedVariantPricingDisplay;
+  commerce: PdpCommercePackaging;
+  sellUnit: SellUnit;
+  onSellUnitChange: (unit: SellUnit) => void;
+  quantity: number;
+  onQuantityChange: (qty: number) => void;
   quoteCta: React.ReactNode;
   requestPricingCta: React.ReactNode;
 };
@@ -30,6 +38,11 @@ export function PdpHeroSection({
   selectedVariantSize,
   parentFrom,
   selectedPricing,
+  commerce,
+  sellUnit,
+  onSellUnitChange,
+  quantity,
+  onQuantityChange,
   quoteCta,
   requestPricingCta,
 }: Props) {
@@ -117,7 +130,14 @@ export function PdpHeroSection({
             </dl>
           ) : null}
 
-          <PdpVariantPricePanel parentFrom={parentFrom} selectedPricing={selectedPricing} />
+          <PdpVariantPricePanel parentFrom={parentFrom} selectedPricing={selectedPricing} compact />
+          <PdpSellUnitToggle
+            commerce={commerce}
+            sellUnit={sellUnit}
+            onSellUnitChange={onSellUnitChange}
+            quantity={quantity}
+            onQuantityChange={onQuantityChange}
+          />
         </div>
 
         <aside className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-24 xl:self-start">

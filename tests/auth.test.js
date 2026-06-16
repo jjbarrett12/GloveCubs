@@ -1,7 +1,7 @@
 /**
  * Auth and authorization tests.
  * Run: node --test tests/auth.test.js
- * Requires: .env with SUPABASE_* and a test admin user in app_admins.
+ * Requires: .env with SUPABASE_* and a test admin user in admin_users (or app_admins compat).
  * Skips integration tests if env not configured.
  */
 
@@ -44,7 +44,11 @@ describe('Auth hardening', () => {
         const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
         const supabase = getSupabaseAdmin();
         const { data: admins } = await supabase.from('app_admins').select('auth_user_id, email').limit(50);
-        const adminAuth = new Set((admins || []).map((a) => String(a.auth_user_id)));
+        const { data: adminUsers } = await supabase.from('admin_users').select('id').eq('is_active', true).limit(50);
+        const adminAuth = new Set([
+          ...(admins || []).map((a) => String(a.auth_user_id)),
+          ...(adminUsers || []).map((u) => String(u.id)),
+        ]);
         const { data: users } = await supabase.from('users').select('id, email, is_approved').limit(50);
         if (!users || users.length === 0) return;
         for (const u of users) {

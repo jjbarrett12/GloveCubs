@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireCustomerProcurementSession } from "@/lib/procurement/customer-procurement-session";
 import { fetchCustomerReorderRows } from "@/lib/procurement/customer-procurement-read-models";
@@ -13,11 +14,21 @@ export default async function CustomerReorderWorkspacePage() {
   return (
     <div className="text-sm">
       <p className="mb-4 text-white/55">
-        Items listed here come from approved sourcing updates. Anything removed from the list is hidden. Last verified
-        basis values are illustrative—not final pricing.
+        Repeat procurement shortcuts from approved sourcing updates. Basis values are illustrative — build a quote request
+        to confirm formal pricing.
       </p>
       {rows.length === 0 ? (
-        <p className="text-white/45">No active reorder items.</p>
+        <p className="text-white/45">
+          No repeat-quote shortcuts yet.{" "}
+          <Link href="/account/quotes" className="text-sky-400 hover:underline">
+            View quote history
+          </Link>{" "}
+          or{" "}
+          <Link href="/quote-cart" className="text-sky-400 hover:underline">
+            build a quote request
+          </Link>
+          .
+        </p>
       ) : (
         <table className="w-full border-collapse text-left text-xs">
           <thead>

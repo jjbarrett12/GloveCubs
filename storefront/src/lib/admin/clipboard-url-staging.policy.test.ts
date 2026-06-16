@@ -25,16 +25,36 @@ describe("clipboard URL staging policy", () => {
     expect(s).not.toContain("createBrowserClient");
   });
 
-  it("createClipboardStaging does not publish or call CatalogOS", () => {
+  it("createClipboardStaging does not publish or set active status", () => {
     const s = readFileSync(helper, "utf8");
     expect(s).toContain("review_status");
     expect(s).toContain('"needs_review"');
-    expect(s).not.toMatch(/catalogosInternalRequest|probeCatalogosHealth/i);
     expect(s).not.toMatch(/status:\s*[\"']active[\"']/);
+    expect(s).not.toMatch(/\brunPublish\b/i);
     expect(s).not.toMatch(/publish\(/i);
   });
 
-  it("createClipboardStaging uses productExtraction import draft pipeline", () => {
+  it("createClipboardStaging prefers CatalogOS URL import extraction", () => {
+    const s = readFileSync(helper, "utf8");
+    expect(s).toContain("extractClipboardViaCatalogosUrl");
+    expect(s).toContain("isClipboardCatalogosExtractConfigured");
+    expect(s).toContain("catalogos_v2");
+    expect(s).toContain("local_fallback");
+  });
+
+  it("clipboard CatalogOS extract module delegates to catalogosInternalRequest", () => {
+    const extract = join(__dirname, "clipboard-url-catalogos-extract.ts");
+    const s = readFileSync(extract, "utf8");
+    expect(s).toContain("catalogosInternalRequest");
+    expect(s).toContain("/api/admin/url-import");
+    expect(s).toContain("single_product");
+    expect(s).not.toMatch(/\brunPublish\b/i);
+    expect(s).not.toMatch(/status:\s*[\"']active[\"']/);
+    expect(s).not.toContain("from \"@/lib/admin/productExtraction\"");
+    expect(s).not.toContain("extractProductFromHtml");
+  });
+
+  it("local fallback still uses productExtraction import draft pipeline", () => {
     const s = readFileSync(helper, "utf8");
     expect(s).toContain("extractProductFromHtml");
     expect(s).toContain("toImportDraftProductV1");
@@ -56,10 +76,31 @@ describe("clipboard URL staging policy", () => {
   });
 
   it("client posts to admin API only (no direct Supabase writes)", () => {
+    const listClient = join(__dirname, "../../app/admin/products/_components/ProductListRowActions.tsx");
     const s = readFileSync(client, "utf8");
+    const list = readFileSync(listClient, "utf8");
     expect(s).toContain('"/admin/api/products/url-staging"');
+    expect(s).toContain("/admin/api/products/url-staging/delete");
+    expect(s).toContain("removeStagingImports");
+    expect(s).toContain("Remove import");
+    expect(list).toContain("/delete-draft");
+    const table = readFileSync(join(__dirname, "../../app/admin/products/_components/ProductListTable.tsx"), "utf8");
+    expect(table).toContain("/admin/api/products/delete-drafts");
+    expect(table).toContain("Delete selected");
     expect(s).not.toContain("createClient");
     expect(s).not.toContain("supabase");
+  });
+
+  it("discardClipboardStagingDraft delegates deletion to product-write", () => {
+    const s = readFileSync(helper, "utf8");
+    const write = readFileSync(join(__dirname, "product-write.ts"), "utf8");
+    expect(s).toContain("discardClipboardStagingDraft");
+    expect(s).toContain("deleteCatalogProduct");
+    expect(write).toContain("DELETABLE_CATALOG_PRODUCT_STATUSES");
+    expect(write).toContain('"active"');
+    expect(write).toContain("purgeCatalogProductDependencies");
+    expect(write).toContain('from("sellable_products")');
+    expect(write).toContain('from("company_quicklist_items")');
   });
 });
 

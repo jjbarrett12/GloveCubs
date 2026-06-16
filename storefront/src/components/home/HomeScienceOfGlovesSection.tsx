@@ -2,31 +2,30 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
-  AlertTriangle,
-  Beaker,
-  Calculator,
-  Check,
+  ArrowRight,
+  Car,
   ChevronDown,
+  CircleDollarSign,
   Factory,
-  Hand,
-  Info,
+  FileText,
+  FlaskConical,
+  HardHat,
   Layers,
-  Lock,
-  RefreshCw,
-  Ruler,
-  Scale,
-  Shield,
+  Package,
   Sparkles,
+  SprayCan,
+  Target,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { ProcurementSectionShell } from "@/components/procurement";
-import { HomeEducationalBadge } from "@/components/home/authority/HomeAuthorityPrimitives";
 import { cn } from "@/lib/utils";
 import {
   type LabMode,
-  type LabIndustry,
   type PerfLevel,
+  type ScienceJobContext,
   type DispMaterial,
   type DispThickness,
   type DispTexture,
@@ -35,577 +34,152 @@ import {
   type ReuseCategory,
   type DippedCoating,
   type KnitShell,
-  type CutLevel,
-  type ReuseTexture,
-  type GripEnv,
   type ReuseTask,
-  DISP_DEFAULT,
-  REUSE_DEFAULT,
-  DISP_MATERIALS,
-  DISP_THICKNESS_GUIDE,
-  DISP_TEXTURE_GUIDE,
-  DISP_PERF,
+  type ReuseCuff,
+  type GripEnv,
   DISP_GLOVE_CLASSES_BY_MATERIAL,
-  DISP_BOTTOM,
+  DISP_MATERIALS,
+  DISP_TEXTURE_GUIDE,
   REUSE_CATEGORIES,
   REUSE_CUT_GUIDE,
+  REUSE_CUFF_OPTIONS,
   REUSE_TEXTURE_GUIDE,
-  REUSE_PERF,
-  REUSE_BOTTOM,
-  LAB_INDUSTRY_DEFAULT,
-  LAB_INDUSTRY_OPTIONS,
-  LAB_INDUSTRY_CONTEXTS,
-  SCIENCE_DISCLAIMER,
+  SCIENCE_HEADER_VALUES,
+  SCIENCE_JOB_DEFAULT,
+  SCIENCE_JOB_OPTIONS,
+  SCIENCE_LEARN_GUIDES,
+  SCIENCE_MOCKUP_PERF,
   SCIENCE_PERF_FOOTNOTE,
+  SCIENCE_REUSABLE_DISCLAIMER,
   PERF_LEVEL_LABELS,
+  applyScienceJobPreset,
+  defaultGloveClassForMaterial,
   deriveDisposableProfile,
   deriveReusableProfile,
-  defaultGloveClassForMaterial,
+  mapDisposableToMockupPerf,
+  mapReusableToMockupPerf,
 } from "@/config/gloveScienceLab";
+import { buildGloveScienceRfqHref } from "@/lib/education/glove-science-rfq";
+import styles from "@/components/home/homeScienceOfGlovesSection.module.css";
 
-function ScienceEyebrow() {
-  return (
-    <div className="mb-5 flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-3">
-        <span className="h-px w-8 shrink-0 bg-[var(--color-accent-orange)]" aria-hidden />
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--color-accent-orange)]">Category education</p>
-      </div>
-      <HomeEducationalBadge>Educational guidance only</HomeEducationalBadge>
-    </div>
-  );
-}
+const HEADER_LOGO_SRC = "/images/glovecubs-header-logo.png";
 
-function ColumnHeading({ step, title }: { step: 1 | 2 | 3; title: string }) {
-  return (
-    <p className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent-orange)]/20 text-[10px] text-[var(--color-accent-orange)]">
-        {step}
-      </span>
-      {title}
-    </p>
-  );
-}
+const JOB_ICONS: Record<ScienceJobContext, LucideIcon> = {
+  construction: HardHat,
+  "cleaning-janitorial": SprayCan,
+  automotive: Car,
+  warehouse: Package,
+  manufacturing: Factory,
+  "chemical-handling": FlaskConical,
+};
+
+const HEADER_VALUE_ICONS = [Sparkles, TrendingUp, CircleDollarSign] as const;
+
+const STEPS = [
+  { id: 1, label: "Choose Job" },
+  { id: 2, label: "Build Profile" },
+  { id: 3, label: "See Impact" },
+  { id: 4, label: "Buyer Takeaway" },
+] as const;
+
+const GUIDE_ICONS = [Layers, Target, Sparkles, CircleDollarSign] as const;
+
+const REUSE_TASK_GRIP_ENV: Record<ReuseTask, GripEnv> = {
+  construction: "abrasion",
+  warehouse: "dry",
+  automotive: "oil",
+  manufacturing: "oil",
+  "oil-gas": "oil",
+  agriculture: "wet",
+};
 
 function PerfBar({ label, level }: { label: string; level: PerfLevel }) {
+  const width = level === 0 ? "33%" : level === 1 ? "66%" : "100%";
   return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-white/75">{label}</span>
-        <span
-          className={cn(
-            "text-[10px] font-bold uppercase tracking-wide",
-            level === 2 ? "text-[var(--color-accent-orange)]" : level === 1 ? "text-white/55" : "text-white/35"
-          )}
-        >
-          {PERF_LEVEL_LABELS[level]}
-        </span>
+    <div className={styles.perfRow}>
+      <div className={styles.perfHead}>
+        <span className={styles.perfLabel}>{label}</span>
+        <span className={cn(styles.perfValue, level === 2 && styles.perfValueHigh)}>{PERF_LEVEL_LABELS[level]}</span>
       </div>
-      <div className="mb-1 flex justify-between text-[9px] font-semibold uppercase tracking-wider text-white/30">
+      <div className={styles.perfScale}>
         <span>Low</span>
         <span>High</span>
       </div>
-      <div className="flex h-2.5 gap-1" role="img" aria-label={`${label}: ${PERF_LEVEL_LABELS[level]}`}>
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className={cn(
-              "h-full flex-1 rounded-sm transition-colors duration-300",
-              i <= level ? "bg-[var(--color-accent-orange)]" : "bg-white/10"
-            )}
-          />
-        ))}
+      <div className={styles.perfTrack} role="img" aria-label={`${label}: ${PERF_LEVEL_LABELS[level]}`}>
+        <div className={styles.perfFill} style={{ width }} />
       </div>
     </div>
   );
 }
 
-function ProfileRow<T extends string>({
-  icon: Icon,
+function ProfileSelect<T extends string>({
   label,
-  options,
   value,
+  options,
   onChange,
-  locked,
-  lockedHint,
 }: {
-  icon: LucideIcon;
   label: string;
-  options: { id: T; label: string }[];
   value: T;
+  options: { id: T; label: string }[];
   onChange: (id: T) => void;
-  locked?: boolean;
-  lockedHint?: string;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const selected = options.find((o) => o.id === value);
-
-  if (locked) {
-    return (
-      <div className="flex items-center gap-3 border-b border-white/[0.06] py-3 last:border-0">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
-          <Lock className="h-4 w-4 text-white/30" aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[10px] font-bold uppercase tracking-wide text-white/40">{label}</span>
-          <span className="block text-sm text-white/40">{lockedHint ?? "Select a material first"}</span>
-        </span>
-      </div>
-    );
-  }
+  const selectId = React.useId();
 
   return (
-    <div className="border-b border-white/[0.06] py-3 last:border-0">
-      <button type="button" className="flex w-full items-center gap-3 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
-          <Icon className="h-4 w-4 text-[var(--color-accent-orange)]" aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[10px] font-bold uppercase tracking-wide text-white/40">{label}</span>
-          <span className="block text-sm font-semibold text-white/90">{selected?.label ?? value}</span>
-        </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/40 transition", open && "rotate-180")} aria-hidden />
-      </button>
-      {open ? (
-        <div className="mt-2 flex flex-wrap gap-1.5 pl-12">
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => {
-                onChange(opt.id);
-                setOpen(false);
-              }}
-              aria-pressed={value === opt.id}
-              className={cn(
-                "rounded-md border px-2.5 py-1.5 text-xs font-semibold transition",
-                value === opt.id
-                  ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/15 text-white"
-                  : "border-white/10 bg-white/[0.03] text-white/55 hover:text-white/85"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function MaterialSubTabs<T extends string>({
-  items,
-  activeId,
-  onSelect,
-  ariaLabel,
-}: {
-  items: { id: T; label: string }[];
-  activeId: T;
-  onSelect: (id: T) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={ariaLabel}>
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          role="tab"
-          aria-selected={activeId === item.id}
-          onClick={() => onSelect(item.id)}
-          className={cn(
-            "rounded-lg border px-3 py-2 text-xs font-bold uppercase tracking-wide transition",
-            activeId === item.id
-              ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/12 text-white"
-              : "border-white/10 text-white/50 hover:border-white/20 hover:text-white/80"
-          )}
+    <div className={styles.field}>
+      <label className={styles.fieldLabel} htmlFor={selectId}>
+        {label}
+      </label>
+      <div className={styles.selectWrap}>
+        <select
+          id={selectId}
+          className={styles.select}
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
         >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ThicknessHandRow({
-  activeMil,
-  materialLabel,
-  onSelect,
-}: {
-  activeMil: DispThickness;
-  materialLabel: string;
-  onSelect: (mil: DispThickness) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5 lg:col-span-1">
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">
-        Thickness comparison
-      </p>
-      <p className="mb-4 text-[10px] text-white/40">({materialLabel})</p>
-      <div className="grid grid-cols-5 gap-2">
-        {DISP_THICKNESS_GUIDE.map(({ mil, tagline, duty, highlight }) => {
-          const active = activeMil === mil;
-          return (
-            <button
-              key={mil}
-              type="button"
-              onClick={() => onSelect(mil)}
-              aria-pressed={active}
-              className={cn(
-                "flex flex-col items-center rounded-lg border p-2 text-center transition",
-                active
-                  ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10"
-                  : "border-white/10 hover:border-white/25"
-              )}
-            >
-              <HandIcon mil={mil} active={active} />
-              <span className={cn("mt-2 text-xs font-extrabold", active ? "text-[var(--color-accent-orange)]" : "text-white/70")}>
-                {mil} mil
-              </span>
-              <span className="mt-0.5 text-[9px] font-semibold leading-tight text-white/50">{tagline}</span>
-              <span className="mt-0.5 text-[8px] text-white/35">{duty}</span>
-              {highlight ? (
-                <span className="mt-1 rounded bg-[var(--color-accent-orange)]/20 px-1 py-0.5 text-[7px] font-bold uppercase text-[var(--color-accent-orange)]">
-                  Popular
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+          {options.map((o) => (
+            <option key={o.id} value={o.id} className={styles.selectOption}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className={styles.selectIcon} aria-hidden />
       </div>
     </div>
   );
 }
-
-function HandIcon({ mil, active }: { mil: number; active: boolean }) {
-  const stroke = mil <= 3 ? 1 : mil <= 5 ? 1.5 : mil <= 6 ? 2 : 2.5;
-  return (
-    <svg viewBox="0 0 24 32" className="h-10 w-8" aria-hidden>
-      <path
-        d="M10 4 C7 4 5 8 5 14 L4 24 C3 28 6 30 10 30 C13 29 15 26 15 22 L16 14 L17 8 C18 4 14 4 10 4 Z"
-        fill="none"
-        stroke={active ? "var(--color-accent-orange)" : "rgb(255 255 255 / 0.35)"}
-        strokeWidth={stroke}
-      />
-    </svg>
-  );
-}
-
-function PolymerGlanceCard({ activeId, onSelect }: { activeId: DispMaterial; onSelect: (id: DispMaterial) => void }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-      <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">Polymer at a glance</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
-        {DISP_MATERIALS.map((mat) => {
-          const active = activeId === mat.id;
-          return (
-            <button
-              key={mat.id}
-              type="button"
-              onClick={() => onSelect(mat.id)}
-              aria-pressed={active}
-              className={cn(
-                "rounded-lg border p-3 text-left transition",
-                active ? "border-[var(--color-accent-orange)]/60 bg-[var(--color-accent-orange)]/[0.08]" : "border-white/10 hover:border-white/20"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: mat.color }} aria-hidden />
-                <span className={cn("text-sm font-extrabold", active ? "text-white" : "text-white/70")}>{mat.label}</span>
-              </div>
-              <ul className="mt-2 space-y-0.5">
-                {mat.traits.map((t) => (
-                  <li key={t} className="text-[10px] leading-snug text-white/45">
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function TextureGuideCard({
-  items,
-  activeId,
-  onSelect,
-}: {
-  items: { id: string; label: string; detail: string }[];
-  activeId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-      <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">Texture guide</p>
-      <div className="space-y-2">
-        {items.map((tex) => {
-          const active = activeId === tex.id;
-          return (
-            <button
-              key={tex.id}
-              type="button"
-              onClick={() => onSelect(tex.id)}
-              aria-pressed={active}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
-                active ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10" : "border-white/10 hover:border-white/20"
-              )}
-            >
-              <TextureSwatch id={tex.id} />
-              <div>
-                <p className="text-sm font-extrabold text-white/90">{tex.label}</p>
-                <p className="text-[10px] text-white/45">{tex.detail}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function TextureSwatch({ id }: { id: string }) {
-  const base = "h-10 w-10 shrink-0 rounded-md border border-white/15";
-  if (id === "smooth" || id === "smooth-coat") {
-    return <div className={cn(base, "bg-white/[0.08]")} aria-hidden />;
-  }
-  if (id === "fingertip" || id === "microfoam") {
-    return (
-      <div
-        className={cn(base, "bg-white/[0.06]")}
-        style={{
-          backgroundImage: "radial-gradient(circle, rgb(255 255 255 / 0.25) 1px, transparent 1px)",
-          backgroundSize: "4px 4px",
-        }}
-        aria-hidden
-      />
-    );
-  }
-  return (
-    <div
-      className={cn(base, "bg-white/[0.06]")}
-      style={{
-        backgroundImage:
-          "linear-gradient(45deg, rgb(255 255 255 / 0.12) 25%, transparent 25%), linear-gradient(-45deg, rgb(255 255 255 / 0.12) 25%, transparent 25%)",
-        backgroundSize: "6px 6px",
-      }}
-      aria-hidden
-    />
-  );
-}
-
-function CutLevelGuideCard({ activeLevel, onSelect }: { activeLevel: CutLevel; onSelect: (l: CutLevel) => void }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">Cut level comparison</p>
-      <p className="mb-4 text-[10px] text-white/40">ANSI/ISEA 105 — directional grams</p>
-      <div className="space-y-1.5">
-        {REUSE_CUT_GUIDE.map(({ level, grams, taskFit }) => {
-          const active = activeLevel === level;
-          return (
-            <button
-              key={level}
-              type="button"
-              onClick={() => onSelect(level)}
-              aria-pressed={active}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition",
-                active ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10" : "border-white/10 hover:border-white/20"
-              )}
-            >
-              <span
-                className={cn(
-                  "w-8 shrink-0 text-sm font-black",
-                  active ? "text-[var(--color-accent-orange)]" : "text-white/55"
-                )}
-              >
-                {level}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[10px] font-semibold text-white/50">{grams} cut force</span>
-                <span className="block text-xs text-white/75">{taskFit}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ReuseCategoryGlance({ activeId, onSelect }: { activeId: ReuseCategory; onSelect: (id: ReuseCategory) => void }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-      <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">Work glove types</p>
-      <div className="space-y-2">
-        {REUSE_CATEGORIES.map((cat) => {
-          const active = activeId === cat.id;
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => onSelect(cat.id)}
-              aria-pressed={active}
-              className={cn(
-                "w-full rounded-lg border p-3 text-left transition",
-                active ? "border-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10" : "border-white/10 hover:border-white/20"
-              )}
-            >
-              <p className="text-sm font-extrabold text-white/90">{cat.label}</p>
-              <p className="mt-0.5 text-[10px] text-white/45">{cat.description}</p>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const MATERIAL_HERO_FALLBACK_DISPOSABLE = "/images/education/glove-science/materials/nitrile.webp";
-const MATERIAL_HERO_FALLBACK_REUSABLE = "/images/education/glove-science/reusable/dipped.webp";
-const INDUSTRY_IMAGE_FALLBACK = "/images/education/glove-science/industry/general.webp";
-
-function useResolvedImageSrc(primarySrc: string, fallbackSrc: string) {
-  const [src, setSrc] = React.useState(primarySrc);
-
-  React.useEffect(() => {
-    setSrc(primarySrc);
-  }, [primarySrc]);
-
-  const onError = React.useCallback(() => {
-    setSrc((current) => (current === fallbackSrc ? current : fallbackSrc));
-  }, [fallbackSrc]);
-
-  return { src, onError };
-}
-
-function MaterialHeroPanel({
-  visual,
-  fallbackSrc,
-  profileTitle,
-  profileSubtitle,
-  imageAlt,
-}: {
-  visual: string;
-  fallbackSrc: string;
-  profileTitle: string;
-  profileSubtitle: string;
-  imageAlt: string;
-}) {
-  const { src, onError } = useResolvedImageSrc(visual, fallbackSrc);
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111] shadow-[0_12px_40px_rgb(0_0_0/0.35)]">
-      <div className="relative aspect-[4/5] w-full min-h-[280px] sm:min-h-[320px] lg:min-h-[360px]">
-        <Image
-          src={src}
-          alt={imageAlt}
-          fill
-          className="object-cover object-center transition-opacity duration-200 motion-reduce:transition-none"
-          sizes="(max-width: 1024px) 100vw, 420px"
-          priority
-          onError={onError}
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0a0a0a]/90 via-[#0a0a0a]/20 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">Selected glove profile</p>
-          <p className="mt-1 text-lg font-extrabold leading-tight text-white sm:text-xl">{profileTitle}</p>
-          <p className="mt-1 text-sm text-white/55">{profileSubtitle}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IndustryApplicationPanel({
-  industry,
-  onSelect,
-}: {
-  industry: LabIndustry;
-  onSelect: (id: LabIndustry) => void;
-}) {
-  const ctx = LAB_INDUSTRY_CONTEXTS[industry];
-  const { src, onError } = useResolvedImageSrc(ctx.visual, INDUSTRY_IMAGE_FALLBACK);
-
-  return (
-    <section
-      className="relative isolate rounded-2xl border border-white/10 bg-white/[0.04] p-5 pb-8 sm:p-6 md:pb-10"
-      aria-labelledby="science-industry-heading"
-    >
-      <h3
-        id="science-industry-heading"
-        className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]"
-      >
-        Industry application
-      </h3>
-      <p className="mb-3 text-xs text-white/45">Context for how this glove profile is typically evaluated — directional only.</p>
-      <div
-        className="mb-4 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-wrap md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
-        role="group"
-        aria-label="Industry context"
-      >
-        {LAB_INDUSTRY_OPTIONS.map((opt) => {
-          const active = industry === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onSelect(opt.id)}
-              className={cn(
-                "shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-semibold leading-tight transition sm:rounded-lg",
-                active
-                  ? "border-[var(--color-accent-orange)]/80 bg-[var(--color-accent-orange)]/10 text-white"
-                  : "border-white/8 bg-transparent text-white/45 hover:border-white/15 hover:text-white/70"
-              )}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-start lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div>
-          <h4 className="text-lg font-extrabold text-white sm:text-xl">{ctx.title}</h4>
-          <p className="mt-2 text-sm leading-relaxed text-white/65">{ctx.description}</p>
-        </div>
-        <div className="relative z-[1] mx-auto aspect-[4/3] w-full max-w-[220px] shrink-0 overflow-hidden rounded-xl border border-white/10 sm:mx-0 sm:max-w-none md:mb-2 md:justify-self-end">
-          <Image
-            src={src}
-            alt={ctx.title}
-            fill
-            className="object-cover transition-opacity duration-200 motion-reduce:transition-none"
-            sizes="220px"
-            onError={onError}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const BOTTOM_ICONS = {
-  thickness: Ruler,
-  material: Beaker,
-  cost: Calculator,
-  cut: Shield,
-  coating: Layers,
-  durability: Scale,
-} as const;
 
 export function HomeScienceOfGlovesSection() {
-  const [mode, setMode] = React.useState<LabMode>("disposable");
-  const [disp, setDisp] = React.useState(DISP_DEFAULT);
-  const [reuse, setReuse] = React.useState(REUSE_DEFAULT);
-  const [labIndustry, setLabIndustry] = React.useState<LabIndustry>(LAB_INDUSTRY_DEFAULT);
+  const initialPreset = React.useMemo(() => applyScienceJobPreset(SCIENCE_JOB_DEFAULT, "reusable"), []);
+
+  const [mode, setMode] = React.useState<LabMode>("reusable");
+  const [job, setJob] = React.useState<ScienceJobContext>(SCIENCE_JOB_DEFAULT);
+  const [disp, setDisp] = React.useState(initialPreset.disposable);
+  const [reuse, setReuse] = React.useState(initialPreset.reusable);
 
   const dispProfile = React.useMemo(() => deriveDisposableProfile(disp), [disp]);
   const reuseProfile = React.useMemo(() => deriveReusableProfile(reuse), [reuse]);
   const profile = mode === "disposable" ? dispProfile : reuseProfile;
-  const perfKeys = mode === "disposable" ? DISP_PERF : REUSE_PERF;
-  const bottomCards = mode === "disposable" ? DISP_BOTTOM : REUSE_BOTTOM;
+
+  const mockupPerf = React.useMemo(
+    () =>
+      mode === "disposable"
+        ? mapDisposableToMockupPerf(dispProfile.performance, disp.texture)
+        : mapReusableToMockupPerf(reuseProfile.performance),
+    [mode, dispProfile.performance, disp.texture, reuseProfile.performance]
+  );
+
+  const rfqHref = React.useMemo(
+    () => buildGloveScienceRfqHref({ mode, job, disposable: disp, reusable: reuse }),
+    [mode, job, disp, reuse]
+  );
+
+  const selectJob = (nextJob: ScienceJobContext) => {
+    setJob(nextJob);
+    const preset = applyScienceJobPreset(nextJob, mode);
+    setDisp(preset.disposable);
+    setReuse(preset.reusable);
+  };
 
   const setDispMaterial = (material: DispMaterial) => {
     setDisp((s) => ({
@@ -615,65 +189,92 @@ export function HomeScienceOfGlovesSection() {
     }));
   };
 
-  const reset = () => {
-    setLabIndustry(LAB_INDUSTRY_DEFAULT);
-    if (mode === "disposable") setDisp(DISP_DEFAULT);
-    else setReuse(REUSE_DEFAULT);
+  const reusableCoatingOptions: { id: ReuseCategory; label: string }[] = REUSE_CATEGORIES.map((c) => ({
+    id: c.id,
+    label: c.label,
+  }));
+
+  const reusableLinerOptions = React.useMemo(() => {
+    if (reuse.category === "knit-cut") {
+      return [
+        { id: "hppe" as KnitShell, label: "HPPE shell" },
+        { id: "nylon" as KnitShell, label: "Nylon shell" },
+        { id: "polyester" as KnitShell, label: "Polyester shell" },
+        { id: "aramid-blend" as KnitShell, label: "Aramid blend shell" },
+      ];
+    }
+    if (reuse.category === "dipped") {
+      return [
+        { id: "nitrile" as DippedCoating, label: "Nitrile dip" },
+        { id: "latex" as DippedCoating, label: "Latex dip" },
+        { id: "pu" as DippedCoating, label: "PU dip" },
+        { id: "pvc" as DippedCoating, label: "PVC dip" },
+        { id: "foam-nitrile" as DippedCoating, label: "Foam nitrile dip" },
+      ];
+    }
+    return [{ id: reuse.category as ReuseCategory, label: REUSE_CATEGORIES.find((c) => c.id === reuse.category)?.label ?? "Standard liner" }];
+  }, [reuse.category]);
+
+  const reusableLinerValue =
+    reuse.category === "knit-cut" ? reuse.knitShell : reuse.category === "dipped" ? reuse.dippedCoating : reuse.category;
+
+  const onReusableLinerChange = (id: string) => {
+    if (reuse.category === "knit-cut") {
+      setReuse((s) => ({ ...s, knitShell: id as KnitShell }));
+      return;
+    }
+    if (reuse.category === "dipped") {
+      setReuse((s) => ({ ...s, dippedCoating: id as DippedCoating }));
+    }
   };
 
-  const materialLabel = DISP_MATERIALS.find((m) => m.id === disp.material)?.label ?? "Nitrile";
-  const categoryLabel =
-    mode === "disposable"
-      ? materialLabel
-      : (REUSE_CATEGORIES.find((c) => c.id === reuse.category)?.label ?? "Work glove");
-  const heroImageAlt = `${categoryLabel} glove — educational profile preview`;
+  const subtitle =
+    mode === "reusable"
+      ? "Reusable gloves: match grip, protection, durability, and comfort to the real job."
+      : "Disposable gloves: match barrier, dexterity, and change frequency to the real job.";
 
   return (
     <ProcurementSectionShell
       tone="base"
       headingId="science-gloves-heading"
-      ariaLabel="The science behind the right glove"
+      ariaLabel="The science behind the glove"
       className="proc-section-dark !py-16 sm:!py-20"
     >
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0a0a] px-6 py-10 shadow-[0_16px_48px_rgb(0_0_0/0.35)] sm:px-10 sm:py-12 lg:px-12 lg:py-14">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(255,106,0,0.09)_0%,transparent_50%)]" />
+      <div className={styles.sectionCard}>
+        <div className={styles.glow} aria-hidden />
 
-        <header className="relative mb-10 lg:mb-12">
-          <div className="grid grid-cols-1 gap-10 md:grid-cols-[1fr_1.05fr] md:gap-12">
-            <div>
-              <ScienceEyebrow />
-              <h2
-                id="science-gloves-heading"
-                className="text-[2rem] font-black leading-[1.02] tracking-tight text-white sm:text-[2.75rem] lg:text-[3.25rem]"
-              >
-                The science behind the right glove<span className="text-[var(--color-accent-orange)]">.</span>
-              </h2>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-white/55 sm:text-lg">
-                Compare materials, thicknesses, and designs to understand how gloves perform so you can standardize with
-                confidence.
-              </p>
-            </div>
-            <MaterialHeroPanel
-              visual={profile.visual}
-              fallbackSrc={
-                mode === "disposable" ? MATERIAL_HERO_FALLBACK_DISPOSABLE : MATERIAL_HERO_FALLBACK_REUSABLE
-              }
-              profileTitle={profile.profileTitle}
-              profileSubtitle={profile.profileSubtitle}
-              imageAlt={heroImageAlt}
-            />
+        <header className={styles.headerGrid}>
+          <div>
+            <Image src={HEADER_LOGO_SRC} alt="GloveCubs" width={260} height={42} unoptimized className={styles.logo} />
+            <h2 id="science-gloves-heading" className={styles.title}>
+              The Science Behind the Glove
+            </h2>
+            <p className={styles.subtitle}>{subtitle}</p>
+          </div>
+
+          <div className={styles.valueList} aria-label="Why this matters">
+            {SCIENCE_HEADER_VALUES.map((item, i) => {
+              const Icon = HEADER_VALUE_ICONS[i] ?? Sparkles;
+              return (
+                <div key={item.title} className={styles.valueItem}>
+                  <span className={styles.valueIcon}>
+                    <Icon className="h-3.5 w-3.5" aria-hidden />
+                  </span>
+                  <span>
+                    <p className={styles.valueTitle}>{item.title}</p>
+                    <p className={styles.valueBody}>{item.body}</p>
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </header>
 
-        <div
-          className="relative mb-8 flex border-b border-white/10"
-          role="tablist"
-          aria-label="Glove type"
-        >
+        <div className={styles.modeToggle} role="tablist" aria-label="Glove type">
           {(
             [
-              { id: "disposable" as const, label: "Disposable gloves" },
-              { id: "reusable" as const, label: "Reusable (work) gloves" },
+              { id: "disposable" as const, label: "Disposable Gloves" },
+              { id: "reusable" as const, label: "Reusable (Work) Gloves" },
             ] as const
           ).map((tab) => (
             <button
@@ -681,291 +282,238 @@ export function HomeScienceOfGlovesSection() {
               type="button"
               role="tab"
               aria-selected={mode === tab.id}
-              onClick={() => setMode(tab.id)}
-              className={cn(
-                "flex-1 border-b-2 px-4 py-3.5 text-xs font-bold uppercase tracking-[0.12em] transition sm:flex-none sm:px-8 sm:text-sm",
-                mode === tab.id
-                  ? "border-[var(--color-accent-orange)] text-[var(--color-accent-orange)]"
-                  : "border-transparent text-white/45 hover:text-white/70"
-              )}
+              className={cn(styles.modeBtn, mode === tab.id && styles.modeBtnActive)}
+              onClick={() => {
+                setMode(tab.id);
+                const preset = applyScienceJobPreset(job, tab.id);
+                setDisp(preset.disposable);
+                setReuse(preset.reusable);
+              }}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {mode === "disposable" ? (
-          <MaterialSubTabs
-            items={DISP_MATERIALS.map((m) => ({ id: m.id, label: m.label }))}
-            activeId={disp.material}
-            onSelect={setDispMaterial}
-            ariaLabel="Disposable glove material"
-          />
-        ) : (
-          <MaterialSubTabs
-            items={REUSE_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
-            activeId={reuse.category}
-            onSelect={(id) => setReuse((s) => ({ ...s, category: id }))}
-            ariaLabel="Reusable glove category"
-          />
-        )}
-
-        <div
-          className="relative grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-6"
-          aria-live="polite"
-        >
-          <div className="max-md:order-2 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-            <div className="mb-1 flex items-center justify-between gap-3">
-              <ColumnHeading step={1} title="Build your glove profile" />
-              <button
-                type="button"
-                onClick={reset}
-                className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-white/45 transition hover:text-white/75"
-              >
-                <RefreshCw className="h-3 w-3" aria-hidden />
-                Reset to defaults
-              </button>
+        <div className={styles.stepper} aria-label="Lab workflow">
+          {STEPS.map((step) => (
+            <div key={step.id} className={styles.step}>
+              <span className={cn(styles.stepDot, step.id === 1 && styles.stepDotActive)}>{step.id}</span>
+              <span className={cn(styles.stepLabel, step.id === 1 && styles.stepLabelActive)}>{step.label}</span>
             </div>
+          ))}
+        </div>
+
+        <div>
+          <p className={styles.panelHeading}>Step 1: Choose Job Context</p>
+          <div className={styles.jobRow} role="listbox" aria-label="Job context">
+            {SCIENCE_JOB_OPTIONS.map((opt) => {
+              const Icon = JOB_ICONS[opt.id];
+              const active = job === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={cn(styles.jobTile, active && styles.jobTileActive)}
+                  onClick={() => selectJob(opt.id)}
+                >
+                  <span className={styles.jobIcon}>
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className={styles.jobLabel}>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={styles.connector} aria-hidden>
+          <ChevronDown className="h-5 w-5" />
+        </div>
+
+        <div className={styles.columns} aria-live="polite">
+          <div className={styles.panel}>
+            <p className={styles.panelHeading}>Build Glove Profile</p>
 
             {mode === "disposable" ? (
               <>
-                <ProfileRow
-                  icon={Hand}
-                  label="Material"
-                  options={DISP_MATERIALS.map((m) => ({ id: m.id, label: m.label }))}
+                <ProfileSelect
+                  label="Glove Material / Coating"
                   value={disp.material}
+                  options={DISP_MATERIALS.map((m) => ({ id: m.id, label: m.label }))}
                   onChange={setDispMaterial}
                 />
-                <ProfileRow
-                  icon={Layers}
-                  label="Thickness"
-                  options={([3, 4, 5, 6, 8] as const).map((m) => ({ id: String(m), label: `${m} mil` }))}
+                <ProfileSelect
+                  label="Liner / Shell"
                   value={String(disp.thickness)}
+                  options={([3, 4, 5, 6, 8] as const).map((m) => ({ id: String(m), label: `${m} mil gauge` }))}
                   onChange={(id) => setDisp((s) => ({ ...s, thickness: Number(id) as DispThickness }))}
                 />
-                <ProfileRow
-                  icon={Sparkles}
-                  label="Texture"
-                  options={DISP_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label }))}
+                <ProfileSelect
+                  label="Grip Finish"
                   value={disp.texture}
+                  options={DISP_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label }))}
                   onChange={(id) => setDisp((s) => ({ ...s, texture: id }))}
                 />
-                <ProfileRow
-                  icon={Shield}
-                  label="Cuff"
-                  options={[
-                    { id: "standard" as DispCuff, label: "Standard" },
-                    { id: "extended" as DispCuff, label: "Extended" },
-                  ]}
+                <ProfileSelect
+                  label="Cuff Style"
                   value={disp.cuff}
+                  options={[
+                    { id: "standard" as DispCuff, label: "Standard cuff" },
+                    { id: "extended" as DispCuff, label: "Extended cuff" },
+                  ]}
                   onChange={(id) => setDisp((s) => ({ ...s, cuff: id }))}
                 />
-                <ProfileRow
-                  icon={Factory}
-                  label="Task / environment"
+                <ProfileSelect
+                  label="Protection Need"
+                  value={disp.gloveClass}
+                  options={DISP_GLOVE_CLASSES_BY_MATERIAL[disp.material].map((c) => ({ id: c.id, label: c.label }))}
+                  onChange={(id) => setDisp((s) => ({ ...s, gloveClass: id }))}
+                />
+                <ProfileSelect
+                  label="Reusability / Use Pattern"
+                  value={disp.task}
                   options={[
-                    { id: "food-prep" as DispTask, label: "Food prep" },
-                    { id: "cleaning" as DispTask, label: "Cleaning" },
-                    { id: "assembly" as DispTask, label: "Assembly" },
+                    { id: "food-prep" as DispTask, label: "Food prep — frequent changes" },
+                    { id: "cleaning" as DispTask, label: "Cleaning / janitorial" },
+                    { id: "assembly" as DispTask, label: "Assembly / handling" },
                     { id: "chemical" as DispTask, label: "Chemical handling" },
                     { id: "exam" as DispTask, label: "Exam / patient care" },
                   ]}
-                  value={disp.task}
                   onChange={(id) => setDisp((s) => ({ ...s, task: id }))}
-                />
-                <ProfileRow
-                  icon={Shield}
-                  label="Glove class"
-                  options={DISP_GLOVE_CLASSES_BY_MATERIAL[disp.material].map((c) => ({ id: c.id, label: c.label }))}
-                  value={disp.gloveClass}
-                  onChange={(id) => setDisp((s) => ({ ...s, gloveClass: id }))}
                 />
               </>
             ) : (
               <>
-                {reuse.category === "dipped" ? (
-                  <ProfileRow
-                    icon={Layers}
-                    label="Dip coating"
-                    options={[
-                      { id: "nitrile" as DippedCoating, label: "Nitrile" },
-                      { id: "latex" as DippedCoating, label: "Latex" },
-                      { id: "pu" as DippedCoating, label: "PU" },
-                      { id: "pvc" as DippedCoating, label: "PVC" },
-                      { id: "foam-nitrile" as DippedCoating, label: "Foam nitrile" },
-                    ]}
-                    value={reuse.dippedCoating}
-                    onChange={(id) => setReuse((s) => ({ ...s, dippedCoating: id }))}
-                  />
-                ) : null}
-                {reuse.category === "knit-cut" ? (
-                  <ProfileRow
-                    icon={Hand}
-                    label="Shell material"
-                    options={[
-                      { id: "hppe" as KnitShell, label: "HPPE" },
-                      { id: "nylon" as KnitShell, label: "Nylon" },
-                      { id: "polyester" as KnitShell, label: "Polyester" },
-                      { id: "aramid-blend" as KnitShell, label: "Aramid blend" },
-                    ]}
-                    value={reuse.knitShell}
-                    onChange={(id) => setReuse((s) => ({ ...s, knitShell: id }))}
-                  />
-                ) : null}
-                {reuse.category === "cotton" ? (
-                  <ProfileRow
-                    icon={Shield}
-                    label="Cut level (ANSI)"
-                    options={[]}
-                    value={reuse.cutLevel}
-                    onChange={() => {}}
-                    locked
-                    lockedHint="Cotton/canvas is typically un-rated — use knit/cut class for ANSI A1–A5"
-                  />
-                ) : (
-                  <ProfileRow
-                    icon={Shield}
-                    label="Cut level (ANSI)"
-                    options={REUSE_CUT_GUIDE.map((c) => ({ id: c.level, label: `${c.level} · ${c.grams}` }))}
-                    value={reuse.cutLevel}
-                    onChange={(id) => setReuse((s) => ({ ...s, cutLevel: id }))}
-                  />
-                )}
-                <ProfileRow
-                  icon={Sparkles}
-                  label="Texture / finish"
-                  options={REUSE_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label }))}
+                <ProfileSelect
+                  label="Glove Material / Coating"
+                  value={reuse.category}
+                  options={reusableCoatingOptions}
+                  onChange={(id) => setReuse((s) => ({ ...s, category: id }))}
+                />
+                <ProfileSelect
+                  label="Liner / Shell"
+                  value={reusableLinerValue}
+                  options={reusableLinerOptions}
+                  onChange={onReusableLinerChange}
+                />
+                <ProfileSelect
+                  label="Grip Finish"
                   value={reuse.texture}
+                  options={REUSE_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label }))}
                   onChange={(id) => setReuse((s) => ({ ...s, texture: id }))}
                 />
-                <ProfileRow
-                  icon={Factory}
-                  label="Grip environment"
-                  options={[
-                    { id: "dry" as GripEnv, label: "Dry" },
-                    { id: "wet" as GripEnv, label: "Wet" },
-                    { id: "oil" as GripEnv, label: "Oil" },
-                    { id: "abrasion" as GripEnv, label: "Abrasion" },
-                  ]}
-                  value={reuse.gripEnv}
-                  onChange={(id) => setReuse((s) => ({ ...s, gripEnv: id }))}
+                <ProfileSelect
+                  label="Cuff Style"
+                  value={reuse.cuff}
+                  options={REUSE_CUFF_OPTIONS}
+                  onChange={(id) => setReuse((s) => ({ ...s, cuff: id }))}
                 />
-                <ProfileRow
-                  icon={Factory}
-                  label="Task / environment"
-                  options={[
-                    { id: "construction" as ReuseTask, label: "Construction" },
-                    { id: "warehouse" as ReuseTask, label: "Warehouse" },
-                    { id: "automotive" as ReuseTask, label: "Automotive" },
-                    { id: "manufacturing" as ReuseTask, label: "Manufacturing" },
-                    { id: "oil-gas" as ReuseTask, label: "Oil & gas" },
-                    { id: "agriculture" as ReuseTask, label: "Agriculture" },
-                  ]}
+                <ProfileSelect
+                  label="Protection Need"
+                  value={reuse.cutLevel}
+                  options={REUSE_CUT_GUIDE.map((c) => ({ id: c.level, label: `${c.level} · ${c.grams}` }))}
+                  onChange={(id) => setReuse((s) => ({ ...s, cutLevel: id }))}
+                />
+                <ProfileSelect
+                  label="Reusability / Use Pattern"
                   value={reuse.task}
-                  onChange={(id) => setReuse((s) => ({ ...s, task: id }))}
+                  options={[
+                    { id: "construction" as ReuseTask, label: "Construction — heavy abrasion" },
+                    { id: "warehouse" as ReuseTask, label: "Warehouse — mixed handling" },
+                    { id: "automotive" as ReuseTask, label: "Automotive — oily grip" },
+                    { id: "manufacturing" as ReuseTask, label: "Manufacturing — industrial" },
+                    { id: "oil-gas" as ReuseTask, label: "Oil / gas — harsh environments" },
+                    { id: "agriculture" as ReuseTask, label: "Agriculture — seasonal wear" },
+                  ]}
+                  onChange={(id) =>
+                    setReuse((s) => ({ ...s, task: id, gripEnv: REUSE_TASK_GRIP_ENV[id] }))
+                  }
                 />
               </>
             )}
+
+            <p className={styles.panelFootnote}>
+              {mode === "reusable"
+                ? "Reusable filters adapt to the selected job context."
+                : "Disposable filters adapt to the selected job context."}
+            </p>
           </div>
 
-          <div className="max-md:order-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-            <ColumnHeading step={2} title="Performance impact" />
-            <p className="-mt-2 mb-6 text-xs text-white/45">{SCIENCE_PERF_FOOTNOTE}</p>
-            <div className="space-y-4">
-              {perfKeys.map(({ key, label }) => (
-                <PerfBar key={key} label={label} level={profile.performance[key as keyof typeof profile.performance]} />
-              ))}
+          <div className={styles.panel}>
+            <p className={styles.panelHeading}>Performance Impact</p>
+            {SCIENCE_MOCKUP_PERF.map(({ key, label }) => (
+              <PerfBar key={key} label={label} level={mockupPerf[key]} />
+            ))}
+            <p className={styles.panelFootnote}>{SCIENCE_PERF_FOOTNOTE}</p>
+          </div>
+
+          <div className={cn(styles.panel, styles.panelAccent)}>
+            <p className={styles.panelHeading}>Buyer Takeaway</p>
+
+            <div className={styles.takeawayBlock}>
+              <p className={styles.takeawayLabel}>Best Fit</p>
+              <p className={styles.takeawayText}>{profile.profileTitle}</p>
+              <p className={cn(styles.takeawayText, "mt-1 text-white/55")}>{profile.summary}</p>
+            </div>
+
+            <div className={styles.takeawayBlock}>
+              <p className={styles.takeawayLabel}>Best For</p>
+              <p className={styles.takeawayText}>{profile.takeaway.best}</p>
+            </div>
+
+            <div className={styles.takeawayBlock}>
+              <p className={styles.takeawayLabel}>Watch Out For</p>
+              <p className={styles.takeawayText}>{profile.takeaway.watch}</p>
+            </div>
+
+            <div className={styles.takeawayBlock}>
+              <p className={styles.takeawayLabel}>Procurement Note</p>
+              <p className={styles.takeawayText}>{profile.takeaway.note}</p>
+            </div>
+
+            <div className={styles.rfqBox}>
+              <p className={styles.rfqTitle}>RFQ-Ready Spec Summary</p>
+              <p className={styles.rfqBody}>All selections compiled into a spec you can send to suppliers.</p>
+              <Link href={rfqHref} className={styles.rfqBtn}>
+                <FileText className="h-4 w-4" aria-hidden />
+                Use this as RFQ spec
+              </Link>
             </div>
           </div>
+        </div>
 
-          <div className="max-md:order-4 flex flex-col overflow-hidden rounded-2xl border border-[var(--color-accent-orange)]/25 bg-[#111] md:row-span-1">
-            <div className="flex flex-1 flex-col p-5 sm:p-6">
-              <ColumnHeading step={3} title="Buyer takeaway" />
-              <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-400">
-                <Check className="h-3.5 w-3.5" aria-hidden />
-                Best fit
-              </div>
-              <p className="text-sm leading-relaxed text-white/72">{profile.summary}</p>
-              <div className="mt-5 space-y-4 border-t border-white/10 pt-5">
-                <div>
-                  <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-400/90">
-                    <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Best for
-                  </p>
-                  <p className="text-sm text-white/80">{profile.takeaway.best}</p>
-                </div>
-                <div>
-                  <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-400/90">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Watch out for
-                  </p>
-                  <p className="text-sm text-white/80">{profile.takeaway.watch}</p>
-                </div>
-                <div>
-                  <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-white/45">
-                    <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Procurement note
-                  </p>
-                  <p className="text-sm text-white/65">{profile.takeaway.note}</p>
-                </div>
-              </div>
-            </div>
+        <div>
+          <p className={cn(styles.panelHeading, "mt-6")}>Learn the Science</p>
+          <div className={styles.guideGrid}>
+            {SCIENCE_LEARN_GUIDES.map((guide, i) => {
+              const Icon = GUIDE_ICONS[i] ?? Layers;
+              return (
+                <Link key={guide.title} href={guide.href} className={styles.guideCard}>
+                  <span className="flex min-w-0 items-start gap-3">
+                    <span className={styles.valueIcon}>
+                      <Icon className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <p className={styles.guideTitle}>{guide.title}</p>
+                      <p className={styles.guideBody}>{guide.body}</p>
+                    </span>
+                  </span>
+                  <ArrowRight className={cn("h-4 w-4", styles.guideArrow)} aria-hidden />
+                </Link>
+              );
+            })}
           </div>
         </div>
 
-        <div className="relative mt-6 md:scroll-mb-28 lg:mt-8">
-          <IndustryApplicationPanel industry={labIndustry} onSelect={setLabIndustry} />
+        <div className={styles.footerRow}>
+          <p className={styles.disclaimer}>
+            {mode === "reusable" ? SCIENCE_REUSABLE_DISCLAIMER : "Disposable filters: material, mil gauge, texture, cuff, and glove class — not mechanical cut ratings."}
+          </p>
+          <Image src={HEADER_LOGO_SRC} alt="" width={180} height={28} unoptimized className={styles.footerLogo} aria-hidden />
         </div>
-
-        <div className="relative mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:mt-8">
-          {mode === "disposable" ? (
-            <>
-              <ThicknessHandRow
-                activeMil={disp.thickness}
-                materialLabel={materialLabel}
-                onSelect={(mil) => setDisp((s) => ({ ...s, thickness: mil }))}
-              />
-              <PolymerGlanceCard activeId={disp.material} onSelect={setDispMaterial} />
-              <TextureGuideCard
-                items={DISP_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label, detail: `${t.grip} · ${t.dexterity}` }))}
-                activeId={disp.texture}
-                onSelect={(id) => setDisp((s) => ({ ...s, texture: id as DispTexture }))}
-              />
-            </>
-          ) : (
-            <>
-              <CutLevelGuideCard activeLevel={reuse.cutLevel} onSelect={(l) => setReuse((s) => ({ ...s, cutLevel: l }))} />
-              <ReuseCategoryGlance activeId={reuse.category} onSelect={(id) => setReuse((s) => ({ ...s, category: id }))} />
-              <TextureGuideCard
-                items={REUSE_TEXTURE_GUIDE.map((t) => ({ id: t.id, label: t.label, detail: `${t.grip} · ${t.environments}` }))}
-                activeId={reuse.texture}
-                onSelect={(id) => setReuse((s) => ({ ...s, texture: id as ReuseTexture }))}
-              />
-            </>
-          )}
-        </div>
-
-        <div className="relative mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5 lg:mt-10">
-          {bottomCards.map((card, i) => {
-            const Icon = BOTTOM_ICONS[card.icon];
-            return (
-              <article key={card.title} className="flex gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-accent-orange)]/30 bg-[var(--color-accent-orange)]/10 text-sm font-black text-[var(--color-accent-orange)]">
-                  {i + 1}
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-[var(--color-accent-orange)]" aria-hidden />
-                    <h3 className="text-sm font-extrabold text-white">{card.title}</h3>
-                  </div>
-                  <p className="text-sm leading-relaxed text-white/55">{card.body}</p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-
-        <p className="relative mt-8 text-center text-[11px] leading-relaxed text-white/38 sm:mt-10">{SCIENCE_DISCLAIMER}</p>
       </div>
     </ProcurementSectionShell>
   );

@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { SellUnit } from "@commerce-packaging/types";
 import type { StoreProductDetail } from "@/lib/catalog/store-product-detail";
 import { buildStoreProductRowForVariant } from "@/lib/catalog/store-product-detail";
 import { buildPdpEducationModel } from "@/lib/catalog/pdp-education";
 import { canAddProductRowToQuote } from "@/lib/catalog/store-quote-rules";
-import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
+import { pdpCommerceFromProductMetadata } from "@/lib/catalog/store-product-commerce";
+import { AddToQuoteButton, buildPdpQuoteCommerce } from "@/components/quote/AddToQuoteButton";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { StorePageShell } from "@/components/store/StorePageShell";
 import { PdpStickyMobileCta } from "@/components/store/pdp/PdpStickyMobileCta";
@@ -21,6 +23,8 @@ import {
 export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
   const initialVariantId = detail.defaultVariant?.id ?? detail.variants[0]?.id ?? null;
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(initialVariantId);
+  const [sellUnit, setSellUnit] = useState<SellUnit>("case");
+  const [quantity, setQuantity] = useState(1);
 
   const education = useMemo(() => buildPdpEducationModel(detail), [detail]);
 
@@ -48,12 +52,39 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
     [selectedVariant?.id, detail.variantPricing, detail.buyerUnitReferencesByVariantId]
   );
 
+  const variantListPriceFallback = useMemo(() => {
+    if (selectedPricing.kind === "list_only") return selectedPricing.listUsd;
+    if (selectedPricing.kind === "tier_reference") return selectedPricing.listUsd;
+    return detail.bestPrice;
+  }, [selectedPricing, detail.bestPrice]);
+
+  const commerce = useMemo(
+    () => pdpCommerceFromProductMetadata(detail.metadata, variantListPriceFallback),
+    [detail.metadata, variantListPriceFallback]
+  );
+
+  useEffect(() => {
+    if (sellUnit === "pallet" && !commerce.palletBuyingEnabled) {
+      setSellUnit("case");
+    }
+  }, [commerce.palletBuyingEnabled, sellUnit]);
+
+  const quoteCommerce = useMemo(
+    () => buildPdpQuoteCommerce(commerce, sellUnit, quantity, variantListPriceFallback),
+    [commerce, sellUnit, quantity, variantListPriceFallback]
+  );
+
   const showQuoteCta =
     selectedQuoteProduct != null && canAddProductRowToQuote(selectedQuoteProduct);
 
   const quoteCta =
     showQuoteCta && selectedQuoteProduct ? (
-      <AddToQuoteButton product={selectedQuoteProduct} className="h-11 w-full text-sm font-bold" />
+      <AddToQuoteButton
+        product={selectedQuoteProduct}
+        quantity={quantity}
+        commerce={quoteCommerce}
+        className="h-11 w-full text-sm font-bold"
+      />
     ) : (
       <ButtonRequestPricingLink className="h-11 w-full" />
     );
@@ -61,25 +92,7 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
   const requestPricingCta = showQuoteCta ? <ButtonRequestPricingLink className="h-10 w-full" /> : null;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] pb-28 font-poppins md:pb-10">
-      <header className="border-b border-white/10">
-        <StorePageShell>
-          <div className="flex items-center justify-between gap-4 py-4">
-            <Link href="/" className="text-xl font-semibold text-white">
-              GloveCubs
-            </Link>
-            <nav className="flex flex-wrap items-center justify-end gap-3 text-sm">
-              <Link href="/store" className="text-white/80 hover:text-white">
-                Store
-              </Link>
-              <Link href="/quote-cart" className="text-white/80 hover:text-white">
-                Quote request cart
-              </Link>
-            </nav>
-          </div>
-        </StorePageShell>
-      </header>
-
+    <div className="pb-28 font-poppins md:pb-10">
       <main className="py-6 sm:py-8">
         <StorePageShell>
           <nav className="mb-4 text-[11px] text-white/45">
@@ -98,6 +111,14 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
               selectedVariantSize={selectedVariant?.size_code ?? null}
               parentFrom={parentFrom}
               selectedPricing={selectedPricing}
+              commerce={commerce}
+              sellUnit={sellUnit}
+              onSellUnitChange={setSellUnit}
+              quantity={quantity}
+              onQuantityChange={(n) => {
+                const floored = Math.floor(n);
+                setQuantity(!Number.isFinite(floored) || floored < 1 ? 1 : Math.min(99999, floored));
+              }}
               quoteCta={quoteCta}
               requestPricingCta={requestPricingCta}
             />
@@ -172,7 +193,12 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
         </StorePageShell>
       </main>
 
-      <PdpStickyMobileCta product={selectedQuoteProduct} showRequestPricingPrimary={!showQuoteCta} />
+      <PdpStickyMobileCta
+        product={selectedQuoteProduct}
+        showRequestPricingPrimary={!showQuoteCta}
+        quantity={quantity}
+        commerce={quoteCommerce}
+      />
     </div>
   );
 }

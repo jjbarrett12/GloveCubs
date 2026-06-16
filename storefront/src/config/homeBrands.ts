@@ -39,7 +39,7 @@ const BRAND_LOGO_FILENAME: Record<string, string> = {
   "Global Glove": "Global_Glove.png",
   Safeko: "Safeko.png",
   PIP: "pip-global-safety-logo.png",
-  "Growl Gloves": "growl-gloves.svg",
+  "Growl Gloves": "growl-gloves.png",
   Ansell: "Ansell.png",
   SHOWA: "SHOWA.png",
   "Semper Guard": "Semper.png",

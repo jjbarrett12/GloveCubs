@@ -12,6 +12,7 @@ export type AdminOrderListFilters = {
   dateFrom?: string;
   dateTo?: string;
   provenance?: "all" | "migrated" | "unknown";
+  paymentIntegrityHold?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -30,6 +31,7 @@ export type AdminOrderListRow = {
   provenance: OrderProvenance;
   has_payment_record: boolean;
   has_fulfillment_record: boolean;
+  payment_integrity_hold: boolean;
 };
 
 export type AdminOrderHeaderDto = {
@@ -144,7 +146,7 @@ export async function fetchAdminOrderList(
     .schema("gc_commerce")
     .from("orders")
     .select(
-      "id, company_id, order_number, status, placed_at, created_at, currency_code, total_minor, metadata, stripe_payment_intent_id, payment_confirmed_at, inventory_reserved_at, inventory_released_at, inventory_deducted_at",
+      "id, company_id, order_number, status, placed_at, created_at, currency_code, total_minor, metadata, stripe_payment_intent_id, payment_confirmed_at, payment_integrity_hold, inventory_reserved_at, inventory_released_at, inventory_deducted_at",
       { count: "exact" }
     );
 
@@ -162,6 +164,9 @@ export async function fetchAdminOrderList(
   }
   if (filters.dateTo?.trim()) {
     query = query.lte("placed_at", filters.dateTo.trim());
+  }
+  if (filters.paymentIntegrityHold === true) {
+    query = query.eq("payment_integrity_hold", true);
   }
 
   if (filters.provenance === "migrated") {
@@ -214,6 +219,7 @@ export async function fetchAdminOrderList(
       provenance: provenanceFromRow(hasMap, meta),
       has_payment_record: hasPaymentRecord(r),
       has_fulfillment_record: hasFulfillmentRecord(r),
+      payment_integrity_hold: r.payment_integrity_hold === true,
     };
   });
 

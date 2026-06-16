@@ -3,13 +3,30 @@
 import Link from "next/link";
 import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
+import type { QuoteCartItem } from "@/lib/quote-cart/types";
+
+type CommerceExtras = Pick<
+  QuoteCartItem,
+  | "sell_unit"
+  | "unit_price_major"
+  | "units_per_case"
+  | "cases_per_pallet"
+  | "units_per_pallet"
+  | "unit_noun"
+  | "commerce_summary"
+  | "line_unit_label"
+>;
 
 export function PdpStickyMobileCta({
   product,
   showRequestPricingPrimary,
+  quantity = 1,
+  commerce,
 }: {
   product: StoreProductRow | null;
   showRequestPricingPrimary?: boolean;
+  quantity?: number;
+  commerce?: CommerceExtras;
 }) {
   const quotePrimary = product && !showRequestPricingPrimary;
 
@@ -25,7 +42,12 @@ export function PdpStickyMobileCta({
         <div className="flex gap-2">
           {quotePrimary ? (
             <div className="min-w-0 flex-1">
-              <AddToQuoteButton product={product} className="h-11 text-sm font-bold" />
+              <AddToQuoteButton
+                product={product}
+                quantity={quantity}
+                commerce={commerce}
+                className="h-11 text-sm font-bold"
+              />
             </div>
           ) : showRequestPricingPrimary ? (
             <Link

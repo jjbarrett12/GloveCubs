@@ -23,7 +23,20 @@ describe("Phase 2a admin orders (read-only, honest copy)", () => {
     for (const w of banned) {
       expect(s).not.toContain(w);
     }
-    expect(s).toContain("read-only");
+    expect(s).toContain("orderoperatoractions");
+    expect(s).toContain("express admin api");
+  });
+
+  it("admin order list supports payment integrity hold filter", () => {
+    const s = read("../../app/admin/orders/page.tsx");
+    expect(s).toContain("payment_integrity_hold");
+    expect(s).toContain("paymentIntegrityHold");
+  });
+
+  it("admin orders read model can filter payment integrity hold", () => {
+    const s = read("admin-orders-read-model.ts");
+    expect(s).toContain("paymentIntegrityHold");
+    expect(s).toContain('eq("payment_integrity_hold", true)');
   });
 
   it("admin orders read model stays schema-read-only", () => {

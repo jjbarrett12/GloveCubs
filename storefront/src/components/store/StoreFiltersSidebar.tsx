@@ -63,7 +63,7 @@ function FacetSectionBlock({
               }`}
               onClick={() => onNavigate?.()}
             >
-              <span className="min-w-0 truncate" title={row.value}>
+              <span className="min-w-0 truncate" title={row.label ?? row.value}>
                 {row.label ?? row.value}
               </span>
               <span className="shrink-0 tabular-nums text-[11px] text-white/40">{row.count}</span>
@@ -78,7 +78,7 @@ function FacetSectionBlock({
 export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, dense, onNavigate }: Props) {
   const pad = dense ? "pr-1" : "pr-2";
   const hiddenForSearch = hiddenFieldsPreservingFilters(urlState, { resetPage: true });
-  const facetGroups = facetKeysGroupedForUi(facetCounts, facetMeta);
+  const facetGroups = facetKeysGroupedForUi(facetCounts, facetMeta, urlState.category);
 
   return (
     <div className={`space-y-4 ${pad}`}>

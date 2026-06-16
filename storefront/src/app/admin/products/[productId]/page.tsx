@@ -51,6 +51,11 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
 
   const p = data.product;
   const catalogosBase = process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/$/, "") ?? "";
+  const productMeta = (p.metadata ?? {}) as Record<string, unknown>;
+  const catalogosJobId =
+    typeof productMeta.catalogos_url_import_job_id === "string"
+      ? productMeta.catalogos_url_import_job_id.trim()
+      : "";
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
@@ -240,6 +245,18 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
           <ul className="list-inside list-disc space-y-2 text-sm text-slate-700">
             {catalogosBase ? (
               <>
+                {catalogosJobId ? (
+                  <li>
+                    <a
+                      href={`${catalogosBase}/dashboard/url-import/${encodeURIComponent(catalogosJobId)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
+                    >
+                      Open CatalogOS URL import job (canonical review)
+                    </a>
+                  </li>
+                ) : null}
                 <li>
                   <a
                     href={`${catalogosBase}/dashboard/url-import`}

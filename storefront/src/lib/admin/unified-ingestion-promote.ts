@@ -9,6 +9,7 @@ import { canPromoteUnifiedStaging } from "@/lib/admin/unified-ingestion-promote-
 import type { IngestionJobStatus } from "@/lib/unified-ingestion/types";
 import { parseImportDraftFromExtracted } from "@/lib/admin/import-draft-mapper";
 import { importDraftToProductWriteInput } from "@/lib/admin/import-draft-promote";
+import { parseIngestionJobLineage } from "@/lib/admin/review-queue-catalogos-handoff";
 
 export type PromoteUnifiedStagingInput = {
   stagingVariantId: string;
@@ -51,7 +52,7 @@ export async function promoteUnifiedStagingVariant(
         source_url,
         promoted_catalog_product_id,
         raw_payload,
-        ingestion_jobs!inner ( id, status, blocked_reason )
+        ingestion_jobs!inner ( id, status, blocked_reason, lineage )
       )
     `
     )
@@ -66,6 +67,7 @@ export async function promoteUnifiedStagingVariant(
   const product = v.catalog_staging_products as Record<string, unknown>;
   const job = product.ingestion_jobs as Record<string, unknown>;
   const jobStatus = String(job.status) as IngestionJobStatus;
+  const lineage = parseIngestionJobLineage(job.lineage);
 
   const reviewStatus = String(product.review_status);
   const guard = canPromoteUnifiedStaging({
@@ -73,6 +75,7 @@ export async function promoteUnifiedStagingVariant(
     reviewStatus,
     alreadyPromoted: Boolean(product.promoted_catalog_product_id || v.promoted_catalog_variant_id),
     confirmAwaitingHuman: Boolean(input.confirmAwaitingHuman),
+    catalogosUrlImportJobId: lineage.url_import_job_id ?? null,
   });
   if (!guard.ok) {
     return { error: guard.error, status: guard.status };

@@ -19,8 +19,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ProcurementSectionShell } from "@/components/procurement";
-import { HomeBridge, HomeCtaLink, HomePanelLight } from "@/components/home/authority/HomeAuthorityPrimitives";
+import { HomeCtaLink, HomePanelLight } from "@/components/home/authority/HomeAuthorityPrimitives";
+import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { buildSurveyIndustryOptions, scoringIndustryBucket } from "@/config/gloveEducationSurvey";
+import { DEFAULT_SURVEY_INTAKE, type SurveyIntakeState } from "@/lib/education-hub/intake-types";
+import type { EducationHubCatalogCandidate } from "@/lib/education-hub/survey-catalog-matches";
+import {
+  intakeToStoreCatalogFilters,
+  rankCatalogCandidatesForIntake,
+} from "@/lib/education-hub/survey-catalog-matches";
+import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
 import { cn } from "@/lib/utils";
 
 const DISCLAIMER =
@@ -42,32 +50,6 @@ const PROGRAM_THUMBNAILS: Record<string, string> = {
 
 const STEP_COUNT = 10;
 const SURVEY_INDUSTRY_OPTIONS = buildSurveyIndustryOptions();
-
-type IntakeState = {
-  industry: string;
-  task: string;
-  exposureRisks: string[];
-  dexterity: "standard" | "high";
-  thickness: "light" | "standard" | "heavy";
-  foodSafe: boolean;
-  chemicalExposure: boolean;
-  wearDuration: "short" | "extended";
-  powderFree: boolean;
-  programPriority: "value" | "durability";
-};
-
-const DEFAULT_INTAKE: IntakeState = {
-  industry: "/industries/hospitality",
-  task: "food-handling",
-  exposureRisks: ["wet-oily"],
-  dexterity: "high",
-  thickness: "standard",
-  foodSafe: true,
-  chemicalExposure: false,
-  wearDuration: "short",
-  powderFree: true,
-  programPriority: "durability",
-};
 
 type StepOption = { value: string; label: string; hint?: string; icon?: LucideIcon };
 
@@ -185,8 +167,8 @@ const TRUST_ITEMS = [
     icon: Factory,
   },
   {
-    title: "AI-assisted guidance",
-    body: "Our engine evaluates use cases and glove attributes in seconds.",
+    title: "Guided selection",
+    body: "Wizard maps operational context, hazards, and glove attributes to published catalog listings.",
     icon: Brain,
   },
   {
@@ -328,7 +310,7 @@ type ScoredProgram = {
 /** Upper bound of positive points in `scoreProgram` — used to normalize match % (rule-based, not ML). */
 const SCORE_RUBRIC_MAX = 16;
 
-function deriveGloveClass(s: IntakeState): { className: string; summary: string } {
+function deriveGloveClass(s: SurveyIntakeState): { className: string; summary: string } {
   const industryBucket = scoringIndustryBucket(s.industry);
   if (s.foodSafe || industryBucket === "food-service" || s.task === "food-handling") {
     return {
@@ -365,7 +347,7 @@ function deriveGloveClass(s: IntakeState): { className: string; summary: string 
   };
 }
 
-function deriveReasons(s: IntakeState): string[] {
+function deriveReasons(s: SurveyIntakeState): string[] {
   const reasons: string[] = [];
   if (s.foodSafe) reasons.push("Food-safe materials");
   if (texturedGripFromState(s)) reasons.push("Textured grip");
@@ -378,11 +360,11 @@ function deriveReasons(s: IntakeState): string[] {
   return reasons.slice(0, 4);
 }
 
-function texturedGripFromState(s: IntakeState): boolean {
+function texturedGripFromState(s: SurveyIntakeState): boolean {
   return s.exposureRisks.includes("wet-oily") || s.exposureRisks.includes("abrasion");
 }
 
-function scoreProgram(p: ProgramFit, s: IntakeState): number {
+function scoreProgram(p: ProgramFit, s: SurveyIntakeState): number {
   let score = 0;
   const haystack = `${p.name} ${p.gloveClass} ${p.texture} ${p.bestFor} ${p.compliance.join(" ")}`.toLowerCase();
 
@@ -406,7 +388,7 @@ function scoreProgram(p: ProgramFit, s: IntakeState): number {
   return Math.max(0, score);
 }
 
-function deriveScoredPrograms(s: IntakeState): ScoredProgram[] {
+function deriveScoredPrograms(s: SurveyIntakeState): ScoredProgram[] {
   return PROGRAM_FITS.map((program) => ({ program, score: scoreProgram(program, s) })).sort((a, b) => b.score - a.score);
 }
 
@@ -513,9 +495,46 @@ function QuizOptionRow({
   );
 }
 
-function HomeGloveEducationHubSection() {
+function CatalogProductThumbnail({
+  imageUrl,
+  name,
+  className,
+}: {
+  imageUrl: string | null | undefined;
+  name: string;
+  className?: string;
+}) {
+  if (imageUrl) {
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0a0a0a]",
+          className
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={name}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover object-center brightness-[0.92] saturate-[0.9]"
+        />
+      </div>
+    );
+  }
+  return <ProgramThumbnail programId="gen-standard" className={className} />;
+}
+
+function HomeGloveEducationHubClient({
+  catalogCandidates,
+  catalogUnavailable,
+}: {
+  catalogCandidates: EducationHubCatalogCandidate[];
+  catalogUnavailable: boolean;
+}) {
   const [step, setStep] = React.useState(0);
-  const [intake, setIntake] = React.useState<IntakeState>(DEFAULT_INTAKE);
+  const [intake, setIntake] = React.useState<SurveyIntakeState>(DEFAULT_SURVEY_INTAKE);
   const [surveyComplete, setSurveyComplete] = React.useState(false);
   const resultsRef = React.useRef<HTMLDivElement>(null);
 
@@ -530,8 +549,16 @@ function HomeGloveEducationHubSection() {
     () => deriveMatchScorePercent(winnerScore, allScores),
     [winnerScore, allScores]
   );
-  const catalogPrograms = React.useMemo(() => scoredPrograms.slice(0, 6).map((s) => s.program), [scoredPrograms]);
-  const programListKey = catalogPrograms.map((p) => p.id).join(",");
+  const matchedProducts = React.useMemo(
+    () => rankCatalogCandidatesForIntake(catalogCandidates, intake, 8),
+    [catalogCandidates, intake]
+  );
+  const matchedProductsKey = matchedProducts.map((p) => p.id).join(",");
+  const storeBrowseHref = React.useMemo(
+    () => buildStoreCatalogHref(intakeToStoreCatalogFilters(intake)),
+    [intake]
+  );
+  const topMatchedProduct = matchedProducts[0];
 
   const currentStep = STEPS[step];
   const progress = ((step + 1) / STEP_COUNT) * 100;
@@ -550,19 +577,19 @@ function HomeGloveEducationHubSection() {
           return { ...prev, exposureRisks: risks.length ? risks : [value] };
         }
         case "dexterity":
-          return { ...prev, dexterity: value as IntakeState["dexterity"] };
+          return { ...prev, dexterity: value as SurveyIntakeState["dexterity"] };
         case "thickness":
-          return { ...prev, thickness: value as IntakeState["thickness"] };
+          return { ...prev, thickness: value as SurveyIntakeState["thickness"] };
         case "foodSafe":
           return { ...prev, foodSafe: value === "yes" };
         case "chemical":
           return { ...prev, chemicalExposure: value === "yes" };
         case "duration":
-          return { ...prev, wearDuration: value as IntakeState["wearDuration"] };
+          return { ...prev, wearDuration: value as SurveyIntakeState["wearDuration"] };
         case "powder":
           return { ...prev, powderFree: value === "yes" };
         case "priority":
-          return { ...prev, programPriority: value as IntakeState["programPriority"] };
+          return { ...prev, programPriority: value as SurveyIntakeState["programPriority"] };
         default:
           return prev;
       }
@@ -632,7 +659,7 @@ function HomeGloveEducationHubSection() {
     <ProcurementSectionShell
       tone="light-alt"
       headingId="education-hub-heading"
-      ariaLabel="AI-guided glove recommendation intake"
+      ariaLabel="Guided glove selection intake"
       className="overflow-x-hidden bg-[var(--color-industrial-gray)] !py-10 sm:!py-12"
       containerClassName="max-w-proc"
     >
@@ -649,8 +676,8 @@ function HomeGloveEducationHubSection() {
                 <span className="text-[var(--color-accent-orange)]">.</span>
               </h2>
               <p className="mt-3 max-w-xl text-base leading-relaxed text-neutral-500 sm:mt-4 sm:text-[1.0625rem]">
-                Our recommendation engine evaluates operational context, hazards, dexterity needs, and glove preferences
-                to guide you toward appropriate glove classes and program options—AI-assisted, rule-informed guidance.
+                Our recommendation flow evaluates operational context, hazards, dexterity needs, and glove preferences
+                to guide you toward appropriate glove classes and published listings—guided selection for quote review.
               </p>
             </div>
 
@@ -770,7 +797,7 @@ function HomeGloveEducationHubSection() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
               <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]">
-                AI recommendation preview
+                Guided selection preview
               </span>
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
                 Preview — not a final safety determination
@@ -801,7 +828,11 @@ function HomeGloveEducationHubSection() {
                 </div>
 
                 <div className="flex flex-col items-center sm:items-stretch">
-                  <ProgramThumbnail programId={winner.id} className="aspect-square w-full max-w-[9rem] sm:mx-auto" />
+                  <CatalogProductThumbnail
+                    imageUrl={topMatchedProduct?.imageUrl}
+                    name={topMatchedProduct?.name ?? winner.name}
+                    className="aspect-square w-full max-w-[9rem] sm:mx-auto"
+                  />
                   <div
                     className="mt-3 w-full text-center sm:text-left"
                     aria-label={`Rule-based alignment score ${matchScorePercent} percent for ${winner.name}`}
@@ -819,42 +850,68 @@ function HomeGloveEducationHubSection() {
         </div>
 
         <div ref={resultsRef} className="mt-8 min-w-0 scroll-mt-24 lg:mt-9" aria-live="polite">
-          <div className="mb-4">
-            <h4 className="text-lg font-extrabold text-ink sm:text-xl">Recommended operational fits</h4>
-            <p className="mt-1.5 text-sm text-neutral-500">
-              Based on your answers, these are common starting points for evaluation.
-            </p>
-          </div>
-          <div
-            key={programListKey}
-            className="-mx-1 flex gap-4 overflow-x-auto pb-2 pl-1 [scrollbar-width:thin] lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:pb-0 xl:grid-cols-3"
-          >
-            {catalogPrograms.map((prog) => (
-              <article
-                key={prog.id}
-                className="w-[min(100%,280px)] shrink-0 overflow-hidden rounded-xl border border-[#e3e3e0] bg-white shadow-sm lg:w-auto"
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h4 className="text-lg font-extrabold text-ink sm:text-xl">Recommended operational fits</h4>
+              <p className="mt-1.5 text-sm text-neutral-500">
+                Published catalog listings ranked from your answers—open any card for specs, variants, and add-to-quote.
+              </p>
+            </div>
+            {matchedProducts.length > 0 ? (
+              <Link
+                href={storeBrowseHref}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#e3e3e0] px-4 py-2 text-sm font-semibold text-ink transition hover:border-[var(--color-accent-orange)]/40 hover:bg-[#fafaf8]"
               >
-                <ProgramThumbnail programId={prog.id} className="aspect-[5/3] w-full rounded-none" />
-                <div className="p-3.5">
-                  <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-accent-orange)]">
-                    {prog.gloveClass}
-                  </p>
-                  <h5 className="mb-2 text-sm font-bold leading-snug text-ink">{prog.name}</h5>
-                  <p className="mb-3 text-xs text-neutral-600">
-                    <span className="font-semibold text-neutral-700">Best for:</span> {prog.bestFor}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Link href="/glove-finder" className="text-xs font-semibold text-[var(--color-accent-orange)] hover:underline">
-                      View specs
-                    </Link>
-                    <Link href="/request-pricing" className="text-xs font-semibold text-neutral-600 hover:text-ink">
-                      Request pricing
-                    </Link>
-                  </div>
-                </div>
-              </article>
-            ))}
+                Browse more in store →
+              </Link>
+            ) : null}
           </div>
+
+          {catalogUnavailable ? (
+            <div className="rounded-xl border border-[#e3e3e0] bg-white p-5 text-sm text-neutral-600">
+              Catalog listings are temporarily unavailable. Open the store when ready, or request pricing for programs not yet
+              on the grid.
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link
+                  href="/store"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--color-accent-orange)] px-4 py-2 text-sm font-bold text-white hover:brightness-105"
+                >
+                  Browse store
+                </Link>
+                <Link
+                  href="/request-pricing"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#e3e3e0] px-4 py-2 text-sm font-semibold text-ink hover:bg-[#fafaf8]"
+                >
+                  Request pricing
+                </Link>
+              </div>
+            </div>
+          ) : matchedProducts.length === 0 ? (
+            <div className="rounded-xl border border-[#e3e3e0] bg-white p-5 text-sm text-neutral-600">
+              No published listings match your answers yet. Browse the store as operators publish more, or request pricing for
+              your program.
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link
+                  href="/store"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--color-accent-orange)] px-4 py-2 text-sm font-bold text-white hover:brightness-105"
+                >
+                  Browse store
+                </Link>
+                <Link
+                  href="/request-pricing"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#e3e3e0] px-4 py-2 text-sm font-semibold text-ink hover:bg-[#fafaf8]"
+                >
+                  Request pricing
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div key={matchedProductsKey} className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+              {matchedProducts.map((product) => (
+                <StoreProductCard key={product.id} product={product} surface="light" />
+              ))}
+            </div>
+          )}
         </div>
 
         <ul className="m-0 mt-6 grid grid-cols-1 gap-2 rounded-xl border border-[#e3e3e0] bg-white p-3 sm:grid-cols-2 lg:mt-7 lg:grid-cols-4">
@@ -887,11 +944,4 @@ function HomeGloveEducationHubSection() {
   );
 }
 
-export function HomeGloveEducationHubWithBridge() {
-  return (
-    <>
-      <HomeGloveEducationHubSection />
-      <HomeBridge variant="gray-to-dark" />
-    </>
-  );
-}
+export { HomeGloveEducationHubClient };

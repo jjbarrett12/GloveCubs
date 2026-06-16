@@ -42,12 +42,12 @@ interface IndustryLandingTemplateProps {
 const PROCUREMENT_TABS = [
   {
     key: "reorder",
-    label: "Fast Reorder",
+    label: "Repeat quotes",
     icon: Zap,
     bullets: [
-      "Save your standard SKUs in a Quicklist and reorder in one click.",
-      "Same products, same case pricing—no hunting through the catalog.",
-      "Optional recurring orders so you never run out.",
+      "Save your standard SKUs in a Quicklist and build a repeat quote request.",
+      "Same variants, same case context—formal pricing confirmed on review.",
+      "Humans confirm lead times and fulfillment before anything ships.",
     ],
   },
   {
@@ -113,28 +113,23 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
   const industryName = config.name;
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <header className="border-b border-white/10 sticky top-0 z-40 bg-[hsl(var(--background))]/90 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-          <Link href="/" className="text-lg font-semibold text-white">
-            GloveCubs
-          </Link>
-          <nav className="flex items-center gap-4 text-sm">
-            {INDUSTRY_KEYS.map((k) => (
-              <Link
-                key={k}
-                href={`/industries/${k}`}
-                className={`text-white/70 hover:text-white ${k === config.key ? "text-white font-medium" : ""}`}
-              >
-                {INDUSTRIES[k].name.split(" ")[0]}
-              </Link>
-            ))}
-            <Link href={storeHref} className="text-white/80 hover:text-white">
-              Store
+    <>
+      <nav className="border-b border-white/10 bg-black/20" aria-label="Industry sections">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-sm sm:px-6 lg:px-8">
+          {INDUSTRY_KEYS.map((k) => (
+            <Link
+              key={k}
+              href={`/industries/${k}`}
+              className={`text-white/70 hover:text-white ${k === config.key ? "font-medium text-white" : ""}`}
+            >
+              {INDUSTRIES[k].name.split(" ")[0]}
             </Link>
-          </nav>
+          ))}
+          <Link href={storeHref} className="text-[#f06232] hover:underline">
+            Catalog
+          </Link>
         </div>
-      </header>
+      </nav>
       {/* 1) Hero — above the fold on laptop */}
       <section className="relative overflow-hidden border-b border-white/10">
         <div
@@ -368,6 +363,6 @@ export function IndustryLandingTemplate({ config }: IndustryLandingTemplateProps
           </div>
         </section>
       )}
-    </div>
+    </>
   );
 }

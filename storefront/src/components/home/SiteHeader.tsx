@@ -35,8 +35,8 @@ import { HeaderTrustStrip } from "@/components/header/HeaderTrustStrip";
 
 const UTILITY_CAPABILITIES = [
   { label: "Case & pallet pricing", nudge: true },
-  { label: "Net terms available", nudge: false },
-  { label: "Nationwide fulfillment", nudge: false },
+  { label: "Net terms (application required)", nudge: false },
+  { label: "Nationwide programs — lead times per quote", nudge: false },
 ] as const;
 
 /** Left rail: “All industries” + primary industry landings. */
@@ -437,6 +437,13 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       Account home
                     </Link>
                     <Link
+                      href="/account/quotes"
+                      className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
+                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                    >
+                      Quote history
+                    </Link>
+                    <Link
                       href="/account/quicklist"
                       className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50"
                       onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
@@ -449,7 +456,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         className="block px-3 py-2 font-medium text-neutral-900 hover:bg-neutral-50 hover:text-brand"
                         onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                       >
-                        Reorder
+                        Repeat quotes
                       </Link>
                     ) : null}
                     {showBuyerWorkspace ? (
@@ -694,14 +701,51 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       ))}
                   </ul>
                 </li>
-                <li className="border-b border-neutral-100 py-2.5 lg:border-0 lg:py-0">
-                  <Link
-                    href="/invoice-savings"
-                    className="header-nav-link max-lg:block max-lg:py-2.5"
-                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                  >
-                    Invoice analysis
-                  </Link>
+                <li className="relative border-b border-neutral-100 py-2.5 lg:border-0 lg:py-0">
+                  <details className="hidden lg:inline-block">
+                    <summary
+                      className={cn(megaTriggerClass, "list-none [&::-webkit-details-marker]:hidden inline-flex")}
+                    >
+                      Tools <ChevronDown className="h-3 w-3 opacity-80" aria-hidden />
+                    </summary>
+                    <div className="absolute left-0 top-full z-50 mt-2 w-52 rounded-md border border-[#e7e7e7] bg-white py-1 text-left text-[13px] shadow-md">
+                      <Link href="/glove-finder" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Guided Glove Finder
+                      </Link>
+                      <Link href="/invoice-savings" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Invoice review
+                      </Link>
+                      <Link href="/glove-science" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Glove Science
+                      </Link>
+                      <Link href="/resources" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Resources
+                      </Link>
+                    </div>
+                  </details>
+                  <span className={cn(navLinkClass, "lg:hidden")}>Tools</span>
+                  <ul className="mt-1 list-none border-l border-neutral-300/80 pl-3 lg:hidden">
+                    <li>
+                      <Link href="/glove-finder" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Guided Glove Finder
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/invoice-savings" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Invoice review
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/glove-science" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Glove Science
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/resources" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Resources
+                      </Link>
+                    </li>
+                  </ul>
                 </li>
                 <li className="relative border-b border-neutral-100 py-2.5 lg:border-0 lg:py-0">
                   <details className="hidden lg:inline-block">
@@ -732,7 +776,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                         >
                           <span className="inline-flex items-center gap-2">
                             <RefreshCw className="h-3.5 w-3.5 opacity-70" aria-hidden />
-                            Reorder
+                            Repeat quotes
                           </span>
                         </Link>
                       ) : null}
@@ -756,7 +800,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                           className={mobileNavLinkClass}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
-                          Reorder
+                          Repeat quotes
                         </Link>
                       </li>
                     ) : null}
@@ -791,11 +835,12 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       </Link>
                     </li>
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
-                      <Link
-                        href="/account/quicklist"
-                        className={navLinkClass}
-                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                      >
+                      <Link href="/account/quotes" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Quote history
+                      </Link>
+                    </li>
+                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                      <Link href="/account/quicklist" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Glove quicklist
                       </Link>
                     </li>
@@ -829,13 +874,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       </Link>
                       <Link href="/contact" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Contact
-                      </Link>
-                      <Link
-                        href="/glove-finder"
-                        className={cn(dropdownLinkClass, "text-neutral-500")}
-                        onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                      >
-                        AI glove finder (optional)
                       </Link>
                     </div>
                   </details>

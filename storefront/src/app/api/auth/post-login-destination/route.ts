@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { resolveUserForPostLoginDestination } from "@/lib/auth/post-login-session";
+import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 
 export const dynamic = "force-dynamic";
 
@@ -88,8 +89,17 @@ export async function GET(req: Request) {
   const adminRowFound = Boolean(adminUser);
   const adminActive = adminRowFound;
 
+  let buyerDefaultPath: "/account/quotes" | "/account" = "/account";
+  if (!adminUser) {
+    const gate = await resolveCustomerProcurementGate(svc);
+    if (gate.kind === "ready") {
+      buyerDefaultPath = "/account/quotes";
+    }
+  }
+
   return NextResponse.json({
     path,
+    buyer_default_path: adminUser ? "/account" : buyerDefaultPath,
     ...(DEBUG_POST_LOGIN
       ? {
           authDebug: adminUser ? ("active_admin_row" as const) : ("no_admin_row_for_auth_uid" as const),

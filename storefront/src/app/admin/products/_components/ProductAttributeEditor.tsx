@@ -4,11 +4,32 @@ import * as React from "react";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
 import type { AttributeDefinitionRow } from "@/lib/admin/product-attribute-sync";
 import { GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS } from "@/lib/catalog/catalog-facet-registry";
+import {
+  DISPOSABLE_CERTIFICATION_SLUGS,
+  SAFETY_CERTIFICATION_SLUGS,
+  formatAttributeValueLabel,
+} from "@/lib/catalog/attribute-value-labels";
+import {
+  getFoodSafeYesNo,
+  getLatexFreeYesNo,
+  getMedicalGradeYesNo,
+  getPowderFreeYesNo,
+  setFoodSafeYesNo,
+  setLatexFreeYesNo,
+  setMedicalGradeYesNo,
+  setPowderFreeYesNo,
+} from "@/lib/admin/disposable-attribute-controls";
 import type { LegacyMetadataField } from "@/lib/admin/legacy-metadata-migration";
 
 const lbl = "text-xs font-semibold text-slate-600";
 const field =
   "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
+const fieldBlocking =
+  "mt-1 w-full rounded-lg border-2 border-red-400 bg-red-50/40 px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200";
+const wrapBlocking = "rounded-lg border-2 border-red-400 bg-red-50/40 p-2.5";
+const wrapMissing = "rounded-lg border border-amber-300 bg-amber-50/60 p-2.5";
+
+const DISPOSABLE_CATEGORY_SLUG = "disposable_gloves";
 
 function isMulti(key: string): boolean {
   return (GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS as readonly string[]).includes(key);
@@ -16,24 +37,186 @@ function isMulti(key: string): boolean {
 
 type Props = {
   categoryId: string;
+  categorySlug?: string | null;
   definitions: AttributeDefinitionRow[];
   values: Record<string, string | string[]>;
   legacyFields: LegacyMetadataField[];
   missingFilterKeys?: string[];
+  blockingKeys?: string[];
   onChange: (values: Record<string, string | string[]>) => void;
   onMigrateLegacy: () => void;
 };
 
+function YesNoSelect({
+  label,
+  value,
+  onChange,
+  blocked,
+}: {
+  label: string;
+  value: "yes" | "no" | "";
+  onChange: (v: "yes" | "no" | "") => void;
+  blocked?: boolean;
+}) {
+  return (
+    <label className={`block ${blocked ? wrapBlocking : ""}`}>
+      <span className={lbl}>
+        {label}
+        {blocked ? <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span> : null}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as "yes" | "no" | "")}
+        className={blocked ? fieldBlocking : field}
+      >
+        <option value="">—</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+    </label>
+  );
+}
+
+function DisposableQuickControls({
+  values,
+  onChange,
+  blockingKeys,
+}: {
+  values: Record<string, string | string[]>;
+  onChange: (values: Record<string, string | string[]>) => void;
+  blockingKeys: Set<string>;
+}) {
+  return (
+    <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Quick specs</p>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+        <YesNoSelect
+          label="Powder Free"
+          value={getPowderFreeYesNo(values)}
+          onChange={(choice) => {
+            if (choice === "yes" || choice === "no") onChange(setPowderFreeYesNo(values, choice));
+          }}
+          blocked={blockingKeys.has("powder")}
+        />
+        <YesNoSelect
+          label="Latex Free"
+          value={getLatexFreeYesNo(values)}
+          onChange={(choice) => {
+            if (choice === "yes" || choice === "no") onChange(setLatexFreeYesNo(values, choice));
+          }}
+          blocked={blockingKeys.has("certifications") && getLatexFreeYesNo(values) !== "yes"}
+        />
+        <YesNoSelect
+          label="Medical Grade"
+          value={getMedicalGradeYesNo(values)}
+          onChange={(choice) => {
+            if (choice === "yes" || choice === "no") onChange(setMedicalGradeYesNo(values, choice));
+          }}
+          blocked={blockingKeys.has("grade")}
+        />
+        <YesNoSelect
+          label="Food Safe"
+          value={getFoodSafeYesNo(values)}
+          onChange={(choice) => {
+            if (choice === "yes" || choice === "no") onChange(setFoodSafeYesNo(values, choice));
+          }}
+          blocked={blockingKeys.has("certifications") && getFoodSafeYesNo(values) !== "yes"}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CertificationChipGroups({
+  def,
+  values,
+  isMissingFilter,
+  isBlocking,
+  onToggle,
+}: {
+  def: AttributeDefinitionRow;
+  values: Record<string, string | string[]>;
+  isMissingFilter: boolean;
+  isBlocking: boolean;
+  onToggle: (token: string) => void;
+}) {
+  const raw = values[def.attributeKey];
+  const selected = new Set(Array.isArray(raw) ? raw : raw ? [String(raw)] : []);
+
+  const disposableSet = new Set<string>(DISPOSABLE_CERTIFICATION_SLUGS);
+  const safetySet = new Set<string>(SAFETY_CERTIFICATION_SLUGS);
+
+  const groups: { title: string; slugs: string[] }[] = [
+    {
+      title: "Disposable / Medical / Food Contact",
+      slugs: def.allowedValues.filter((v) => disposableSet.has(v)),
+    },
+    {
+      title: "Safety / Reusable",
+      slugs: def.allowedValues.filter((v) => safetySet.has(v)),
+    },
+    {
+      title: "Other",
+      slugs: def.allowedValues.filter((v) => !disposableSet.has(v) && !safetySet.has(v)),
+    },
+  ].filter((g) => g.slugs.length > 0);
+
+  function renderChip(v: string) {
+    const on = selected.has(v);
+    return (
+      <button
+        key={v}
+        type="button"
+        onClick={() => onToggle(v)}
+        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+          on
+            ? "border-[#f06232]/40 bg-[#fff7f2] text-[#c2410c]"
+            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+        }`}
+      >
+        {formatAttributeValueLabel(def.attributeKey, v)}
+      </button>
+    );
+  }
+
+  return (
+    <div className={`sm:col-span-2 ${isBlocking ? wrapBlocking : isMissingFilter ? wrapMissing : ""}`}>
+      <span className={lbl}>
+        {def.label}
+        {def.isRequired ? <span className="text-red-600"> *</span> : null}
+        {isBlocking ? (
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+        ) : isMissingFilter ? (
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
+        ) : null}
+      </span>
+      <div className="mt-2 space-y-3">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{g.title}</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">{g.slugs.map(renderChip)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ProductAttributeEditor({
   categoryId,
+  categorySlug,
   definitions,
   values,
   legacyFields,
   missingFilterKeys = [],
+  blockingKeys = [],
   onChange,
   onMigrateLegacy,
 }: Props) {
   const missingSet = React.useMemo(() => new Set(missingFilterKeys), [missingFilterKeys]);
+  const blockingSet = React.useMemo(() => new Set(blockingKeys), [blockingKeys]);
+  const isDisposable = categorySlug === DISPOSABLE_CATEGORY_SLUG;
+
   const grouped = React.useMemo(() => {
     const map = new Map<string, AttributeDefinitionRow[]>();
     for (const d of definitions) {
@@ -74,6 +257,10 @@ export function ProductAttributeEditor({
     setValue(key, arr);
   }
 
+  function shouldSkipDef(key: string): boolean {
+    return isDisposable && key === "powder";
+  }
+
   return (
     <PremiumSectionCard
       title="Storefront filter attributes"
@@ -96,6 +283,10 @@ export function ProductAttributeEditor({
         </div>
       ) : null}
 
+      {isDisposable ? (
+        <DisposableQuickControls values={values} onChange={onChange} blockingKeys={blockingSet} />
+      ) : null}
+
       <div className="space-y-5">
         {grouped.map(([group, defs]) => (
           <div key={group}>
@@ -103,19 +294,38 @@ export function ProductAttributeEditor({
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {defs.map((def) => {
                 const key = def.attributeKey;
+                if (shouldSkipDef(key)) return null;
+
                 const raw = values[key];
                 const isMissingFilter = missingSet.has(key);
+                const isBlocking = blockingSet.has(key);
+
+                if (key === "certifications" && isMulti(key)) {
+                  return (
+                    <CertificationChipGroups
+                      key={key}
+                      def={def}
+                      values={values}
+                      isMissingFilter={isMissingFilter}
+                      isBlocking={isBlocking}
+                      onToggle={(token) => toggleMulti(key, token)}
+                    />
+                  );
+                }
+
                 if (isMulti(key)) {
                   const selected = new Set(Array.isArray(raw) ? raw : raw ? [String(raw)] : []);
                   return (
                     <div
                       key={key}
-                      className={`sm:col-span-2 ${isMissingFilter ? "rounded-lg border border-amber-300 bg-amber-50/60 p-2.5" : ""}`}
+                      className={`sm:col-span-2 ${isBlocking ? wrapBlocking : isMissingFilter ? wrapMissing : ""}`}
                     >
                       <span className={lbl}>
                         {def.label}
                         {def.isRequired ? <span className="text-red-600"> *</span> : null}
-                        {isMissingFilter ? (
+                        {isBlocking ? (
+                          <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                        ) : isMissingFilter ? (
                           <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
                         ) : null}
                       </span>
@@ -133,7 +343,7 @@ export function ProductAttributeEditor({
                                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                               }`}
                             >
-                              {v.replace(/_/g, " ")}
+                              {formatAttributeValueLabel(key, v)}
                             </button>
                           );
                         })}
@@ -141,27 +351,31 @@ export function ProductAttributeEditor({
                     </div>
                   );
                 }
+
+                const selectValue = Array.isArray(raw) ? raw[0] ?? "" : (raw ?? "");
                 return (
                   <label
                     key={key}
-                    className={`block ${isMissingFilter ? "rounded-lg border border-amber-300 bg-amber-50/60 p-2.5" : ""}`}
+                    className={`block ${isBlocking ? wrapBlocking : isMissingFilter ? wrapMissing : ""}`}
                   >
                     <span className={lbl}>
                       {def.label}
                       {def.isRequired ? <span className="text-red-600"> *</span> : null}
-                      {isMissingFilter ? (
+                      {isBlocking ? (
+                        <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                      ) : isMissingFilter ? (
                         <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
                       ) : null}
                     </span>
                     <select
-                      value={Array.isArray(raw) ? raw[0] ?? "" : (raw ?? "")}
+                      value={selectValue}
                       onChange={(e) => setValue(key, e.target.value)}
-                      className={field}
+                      className={isBlocking ? fieldBlocking : field}
                     >
                       <option value="">—</option>
                       {def.allowedValues.map((v) => (
                         <option key={v} value={v}>
-                          {v.replace(/_/g, " ")}
+                          {formatAttributeValueLabel(key, v)}
                         </option>
                       ))}
                     </select>

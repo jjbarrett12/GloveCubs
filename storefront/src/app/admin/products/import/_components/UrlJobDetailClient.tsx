@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { ImportStatusBadge } from "./ImportStatusBadge";
 import {
   adaptUrlImportJobDetail,
@@ -10,6 +9,7 @@ import {
   type UrlImportJobDetail,
 } from "@/lib/admin/url-import-adapter";
 import { StatCard, StatGrid, EmptyState } from "@/components/admin";
+import { UrlImportBridgeSuccessBanner } from "./UrlImportBridgeSuccessBanner";
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -276,7 +276,15 @@ function BridgeActionBar({
   );
 }
 
-export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial: UrlImportJobDetail | null }) {
+export function UrlJobDetailClient({
+  jobId,
+  initial,
+  catalogosBaseUrl = "",
+}: {
+  jobId: string;
+  initial: UrlImportJobDetail | null;
+  catalogosBaseUrl?: string;
+}) {
   const [detail, setDetail] = React.useState<UrlImportJobDetail | null>(initial);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -474,24 +482,12 @@ export function UrlJobDetailClient({ jobId, initial }: { jobId: string; initial:
       </div>
 
       {bridge.kind === "ok" ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-          Sent to catalog sync review.
-          {bridge.batchId ? (
-            <span className="ml-1">
-              Batch <span className="font-mono">{bridge.batchId}</span>
-              {bridge.normalizedCount != null ? (
-                <span> · {bridge.normalizedCount} normalized</span>
-              ) : null}
-              .{" "}
-              <Link
-                href={`/admin/products/review?batchId=${encodeURIComponent(bridge.batchId)}`}
-                className="font-semibold text-[#c2410c] underline hover:text-[#e5582d]"
-              >
-                Open review queue
-              </Link>
-            </span>
-          ) : null}
-        </div>
+        <UrlImportBridgeSuccessBanner
+          batchId={bridge.batchId}
+          normalizedCount={bridge.normalizedCount}
+          catalogosBaseUrl={catalogosBaseUrl}
+          jobId={jobId}
+        />
       ) : null}
 
       {bridge.kind === "error" ? (

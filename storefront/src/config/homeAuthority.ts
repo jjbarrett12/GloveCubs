@@ -185,20 +185,20 @@ export const HOME_FAQ_CATEGORIES = [
     ],
   },
   {
-    category: "AI & invoice analysis",
+    category: "Guided selection & invoice analysis",
     items: [
       {
         q: "What does invoice upload actually do?",
         a: "You send a PDF or photo at /invoice-savings. We extract line items and map them to catalog options where possible—optional governed alternates, not random substitutes.",
       },
       {
-        q: "Is the glove finder AI?",
-        a: "/glove-finder is our guided wizard—it recommends from task, materials, and constraints using catalog-backed logic. It supports quotes; it does not replace your compliance review.",
+        q: "Is the glove finder automated AI?",
+        a: "/glove-finder is our guided wizard—it narrows from task, materials, and constraints using catalog-backed logic. It supports quotes; it does not replace your compliance review.",
       },
     ],
   },
   {
-    category: "Recurring ordering",
+    category: "Repeat procurement",
     items: [
       {
         q: "How do repeat buyers reorder?",

@@ -5,12 +5,15 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import {
   hasDraftSaveBlockers,
   hasPublishBlockers,
+  readinessDetail,
   readinessLabel,
   type EditorReadinessResult,
 } from "@/lib/admin/product-editor-readiness";
 
 type Props = {
   name: string;
+  primaryImageUrl?: string;
+  imageRequired?: boolean;
   status: "draft" | "active";
   quoteOnly: boolean;
   parserVersion: string | null;
@@ -24,6 +27,8 @@ type Props = {
 
 export function ProductCommandHeader({
   name,
+  primaryImageUrl,
+  imageRequired,
   status,
   quoteOnly,
   parserVersion,
@@ -37,13 +42,36 @@ export function ProductCommandHeader({
   const publishBlocked = hasPublishBlockers(readiness);
   const draftSaveBlocked = hasDraftSaveBlockers(readiness);
   const readinessText = readinessLabel(readiness);
+  const readinessTooltip = readinessDetail(readiness);
 
   return (
     <header className="sticky top-0 z-20 -mx-5 border-b border-slate-200/90 bg-white/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/90 sm:-mx-8 sm:px-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-slate-900">{name || "Untitled product"}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div
+            className={`relative shrink-0 overflow-hidden rounded-lg border bg-slate-50 ${
+              imageRequired ? "border-2 border-red-400 ring-2 ring-red-100" : "border-slate-200"
+            }`}
+            title={imageRequired ? "Primary image required to publish" : undefined}
+          >
+            {primaryImageUrl?.trim() ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={primaryImageUrl.trim()}
+                alt=""
+                className="h-28 w-28 object-contain sm:h-32 sm:w-32"
+              />
+            ) : (
+              <div className="flex h-28 w-28 flex-col items-center justify-center px-1 text-center sm:h-32 sm:w-32">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">No image</span>
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="line-clamp-2 text-lg font-semibold tracking-tight text-slate-900 sm:line-clamp-none sm:truncate">
+              {name || "Untitled product"}
+            </h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
             {quoteOnly ? (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">Quote only</span>
@@ -55,12 +83,14 @@ export function ProductCommandHeader({
               className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                 publishBlocked ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"
               }`}
+              title={readinessTooltip}
             >
               {readinessText}
             </span>
             {dirty ? (
               <span className="text-[11px] font-medium text-[#c2410c]">Unsaved changes</span>
             ) : null}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -87,7 +117,7 @@ export function ProductCommandHeader({
             type="button"
             disabled={pending || publishBlocked}
             onClick={onPublish}
-            title={publishBlocked ? readinessText : undefined}
+            title={publishBlocked ? readinessTooltip : undefined}
             className="rounded-lg bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#e5582d] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Publish

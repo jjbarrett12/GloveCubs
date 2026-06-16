@@ -3,7 +3,7 @@ import { SiteFooter } from "@/components/home/SiteFooter";
 import { HomeHeroExpress } from "@/components/home/HomeHeroExpress";
 import { BrandCarousel } from "@/components/home/BrandCarousel";
 import { HomeWhyExistsSection } from "@/components/home/HomeWhyExistsSection";
-import { HomeGloveEducationHubWithBridge } from "@/components/home/HomeGloveEducationHub";
+import { HomeGloveEducationHubWithBridge } from "@/components/home/HomeGloveEducationHubBridge";
 import { HomeProcurementMapSection } from "@/components/home/HomeProcurementMapSection";
 import { HomeNationwideServiceSection } from "@/components/home/HomeNationwideServiceSection";
 import { HomeIndustrySolutionsSection } from "@/components/home/HomeIndustrySolutionsSection";
@@ -38,10 +38,10 @@ export default function HomePage() {
         <HomeProcurementMapSection />
         <HomeIndustrySolutionsSection />
         <HomeScienceOfGlovesSection />
-        <HomeBridge variant="to-light" />
-        <HomeFaqSection />
         <HomeNationwideServiceSection />
         <HomeFinalCtaStrip />
+        <HomeBridge variant="to-light" />
+        <HomeFaqSection />
       </main>
       <SiteFooter />
     </div>

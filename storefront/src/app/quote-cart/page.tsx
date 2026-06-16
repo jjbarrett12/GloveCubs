@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuoteCart } from "@/components/quote/QuoteCartProvider";
 import { quoteCartLineReactKey } from "@/lib/quote-cart/line-utils";
+import { formatQuoteCartLinePrimary, formatQuoteCartLineSecondary } from "@/lib/quote-cart/commerce-line";
 import { clearReorderSource, readReorderSource, type ReorderSourcePayload } from "@/lib/quote-cart/reorder-source-session";
 import {
   clearQuicklistQuoteSourceNote,
@@ -154,6 +155,14 @@ export default function QuoteCartPage() {
             catalog_variant_id: i.catalog_variant_id ?? null,
             variant_sku: i.variant_sku ?? null,
             size_code: i.size_code ?? null,
+            sell_unit: i.sell_unit ?? "case",
+            unit_price_major: i.unit_price_major ?? null,
+            units_per_case: i.units_per_case ?? null,
+            cases_per_pallet: i.cases_per_pallet ?? null,
+            units_per_pallet: i.units_per_pallet ?? null,
+            unit_noun: i.unit_noun ?? null,
+            commerce_summary: i.commerce_summary ?? null,
+            line_unit_label: i.line_unit_label ?? null,
           })),
         }),
       });
@@ -268,7 +277,7 @@ export default function QuoteCartPage() {
           className="pointer-events-none fixed left-[-2400px] top-0 h-px w-px opacity-0"
         />
 
-        {!hydrated && <p className="text-white/50 text-sm">Loading cart…</p>}
+        {!hydrated && <p className="text-white/50 text-sm">Loading quote request…</p>}
 
         {hydrated && done && quoteRequestId && (
           <div className="text-sm mb-6 border border-emerald-500/30 rounded-lg px-4 py-3 space-y-3">
@@ -290,6 +299,20 @@ export default function QuoteCartPage() {
             <p className="text-white/50 text-xs">
               If you do not hear from us within a couple of business days, reach out with your quote reference above.
             </p>
+            <div className="flex flex-wrap gap-3 pt-1">
+              <Link
+                href="/account/quotes"
+                className="inline-flex rounded-lg bg-[#f06232] px-4 py-2 text-xs font-semibold text-white hover:bg-[#f06232]/90"
+              >
+                View quote history
+              </Link>
+              <Link href="/account" className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-xs font-semibold text-white/90 hover:border-[#f06232]/50">
+                Account home
+              </Link>
+              <Link href="/quote-cart" className="inline-flex text-xs font-semibold text-[#f06232] underline">
+                Start another quote request
+              </Link>
+            </div>
           </div>
         )}
 
@@ -330,6 +353,14 @@ export default function QuoteCartPage() {
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
+                      ) : null}
+                      {formatQuoteCartLinePrimary(i) ? (
+                        <p className="text-[12px] font-semibold tabular-nums text-[#f06232]/95 mt-2">
+                          {formatQuoteCartLinePrimary(i)}
+                        </p>
+                      ) : null}
+                      {formatQuoteCartLineSecondary(i) ? (
+                        <p className="text-[11px] text-white/55 mt-0.5">{formatQuoteCartLineSecondary(i)}</p>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

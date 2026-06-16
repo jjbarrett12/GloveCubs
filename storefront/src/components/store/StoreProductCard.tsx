@@ -12,9 +12,9 @@ import {
   productRequiresSizeSelection,
   storeProductPdpVariantsAnchor,
 } from "@/lib/catalog/store-quote-rules";
+import { formatUnitsPerCaseLine } from "@/lib/catalog/store-product-commerce";
+import { CommercePriceLine } from "@/components/store/CommercePriceLine";
 import { cn } from "@/lib/utils";
-
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 export type StoreProductCardSurface = "dark" | "light";
 
@@ -81,9 +81,57 @@ export function StoreProductCard({
 }) {
   const isLight = surface === "light";
 
+  const displayCasePrice = product.casePrice ?? product.bestPrice;
+  const showFromPrefix =
+    product.casePrice == null && product.bestPrice != null && product.activeVariantCount > 1;
+  const unitsLine = formatUnitsPerCaseLine(product.unitsPerCase, product.unitNoun);
+
   const priceLine =
-    product.bestPrice != null ? (
-      <div className="text-[13px] font-bold tabular-nums text-sales">From {usd.format(product.bestPrice)}</div>
+    displayCasePrice != null ? (
+      <div className="space-y-1">
+        <CommercePriceLine
+          listPrice={product.caseListPrice}
+          salePrice={displayCasePrice}
+          onSale={product.caseOnSale}
+          unitLabel="case"
+          compact
+          light={isLight}
+        />
+        {showFromPrefix ? (
+          <p className={cn("text-[10px] font-semibold", isLight ? "text-neutral-500" : "text-white/45")}>
+            From selected size
+          </p>
+        ) : null}
+        {unitsLine ? (
+          <p className={cn("text-[11px] font-medium", isLight ? "text-neutral-600" : "text-white/60")}>{unitsLine}</p>
+        ) : (
+          <p className={cn("text-[11px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>
+            Case quantity pending
+          </p>
+        )}
+        {product.palletPricingAvailable && product.palletPrice != null ? (
+          <CommercePriceLine
+            listPrice={product.palletListPrice}
+            salePrice={product.palletPrice}
+            onSale={product.palletOnSale}
+            unitLabel="pallet"
+            compact
+            light={isLight}
+            className="mt-1"
+          />
+        ) : product.palletPricingAvailable ? (
+          <span
+            className={cn(
+              "inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              isLight
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+            )}
+          >
+            Pallet pricing available
+          </span>
+        ) : null}
+      </div>
     ) : (
       <div className={cn("text-[11px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>Request pricing</div>
     );

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buyerLifecycleStageLabel,
   buyerPipelineStageSortIndex,
+  buyerQuoteStatusLabel,
   isBuyerPipelineDistributionStage,
 } from "@/lib/procurement/buyer-lifecycle-copy";
 
@@ -22,5 +23,11 @@ describe("buyer lifecycle copy", () => {
 
   it("falls back to raw stage for unknown values without throwing", () => {
     expect(buyerLifecycleStageLabel("hypothetical_future_stage")).toBe("hypothetical_future_stage");
+  });
+
+  it("maps quote request statuses to buyer-safe labels", () => {
+    expect(buyerQuoteStatusLabel("new")).toBe("Received");
+    expect(buyerQuoteStatusLabel("quoted")).toBe("Formal pricing shared");
+    expect(buyerQuoteStatusLabel("unknown_internal")).toBe("In progress");
   });
 });

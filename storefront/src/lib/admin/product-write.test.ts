@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeProductMetadata } from "@/lib/admin/product-write";
+import { mergeProductMetadata, resolveManufacturerSkuForVariantWrite } from "@/lib/admin/product-write";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
 import {
   IMPORT_DRAFT_PARSER_VERSION,
@@ -153,5 +153,57 @@ describe("variant generation", () => {
     expect(proposal.proposed.some((v) => v.sizeCode === "OS")).toBe(false);
     expect(proposal.proposed.some((v) => v.sizeCode === "M")).toBe(true);
     expect(proposal.removedOs).toBe(true);
+  });
+});
+
+describe("resolveManufacturerSkuForVariantWrite", () => {
+  it("reads manufacturer_sku from import draft by size, not variant_sku field", () => {
+    const input = baseInput({
+      importDraft: minimalDraft({
+        variants: [
+          {
+            size_label: "M",
+            normalized_size_code: "M",
+            sku: null,
+            manufacturer_sku: "GL-N125F-M",
+            mpn: null,
+            gtin: null,
+            list_price: null,
+          },
+        ],
+      }),
+    });
+    expect(resolveManufacturerSkuForVariantWrite(input, "M")).toBe("GL-N125F-M");
+  });
+
+  it("prefers explicit manufacturerSku on variant input", () => {
+    const input = baseInput();
+    expect(
+      resolveManufacturerSkuForVariantWrite(input, "M", {
+        sizeCode: "M",
+        variantSku: "GLV-GL-N125M",
+        listPrice: "",
+        manufacturerSku: "GL-N125F-M",
+      })
+    ).toBe("GL-N125F-M");
+  });
+});
+
+describe("checkVariantSkuCollision", () => {
+  it("returns error when variant SKU already exists", async () => {
+    const supabase = {
+      schema: () => ({
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { id: "other-variant" } }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const { checkVariantSkuCollision } = await import("@/lib/admin/product-write");
+    const result = await checkVariantSkuCollision(supabase, "GLV-GL-N125M");
+    expect(result).toEqual({ error: "SKU already exists: GLV-GL-N125M" });
   });
 });

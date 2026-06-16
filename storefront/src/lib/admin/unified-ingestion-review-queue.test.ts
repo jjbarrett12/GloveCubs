@@ -97,6 +97,18 @@ describe("canPromoteUnifiedStaging", () => {
       }).ok
     ).toBe(true);
   });
+
+  it("blocks CatalogOS URL import lineage rows", () => {
+    expect(
+      canPromoteUnifiedStaging({
+        jobStatus: "review_ready",
+        reviewStatus: "needs_review",
+        alreadyPromoted: false,
+        confirmAwaitingHuman: false,
+        catalogosUrlImportJobId: "job-url-1",
+      }).ok
+    ).toBe(false);
+  });
 });
 
 describe("modeLabel", () => {
@@ -125,6 +137,9 @@ function baseRow(partial: Partial<UnifiedReviewQueueRow>): UnifiedReviewQueueRow
     primaryImageUrl: null,
     promotedCatalogProductId: null,
     promotedCatalogVariantId: null,
+    catalogosUrlImportJobId: null,
+    catalogosUrlImportProductId: null,
+    sourceBatchId: null,
     createdAt: "2026-01-01T00:00:00Z",
     evidenceByField: {},
     ...partial,

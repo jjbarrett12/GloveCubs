@@ -1,5 +1,6 @@
 import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
 import { normalizeSizeCode } from "@/lib/admin/import-draft-mapper";
+import { SKU_PROPOSAL_SAFE_CONFIDENCE } from "@/lib/admin/variant-sku-intelligence";
 
 export type EditorVariantRow = {
   id?: string;
@@ -112,9 +113,15 @@ export function proposeVariantsFromImport(
       preserved.push(code);
     } else {
       const draftVar = draft.variants.find((v) => normSize(v.normalized_size_code) === code);
+      const proposedSku =
+        draftVar?.proposed_glovecubs_sku &&
+        (draftVar.sku_proposal_confidence ?? draft.sku_proposal_confidence ?? 0) >=
+          SKU_PROPOSAL_SAFE_CONFIDENCE
+          ? draftVar.proposed_glovecubs_sku
+          : "";
       proposed.push({
         sizeCode: code,
-        variantSku: draftVar?.sku ?? draftVar?.mpn ?? "",
+        variantSku: proposedSku,
         listPrice: draftVar?.list_price ?? "",
       });
       added.push(code);
@@ -143,6 +150,11 @@ export function variantReadinessIssues(rows: EditorVariantRow[]): string[] {
   const sizes = rows.map((r) => normSize(r.sizeCode));
   const dupes = sizes.filter((s, i) => sizes.indexOf(s) !== i);
   if (dupes.length > 0) issues.push(`Duplicate sizes: ${Array.from(new Set(dupes)).join(", ")}`);
+  const skus = rows.map((r) => r.variantSku.trim().toUpperCase()).filter(Boolean);
+  const dupeSkus = skus.filter((s, i) => skus.indexOf(s) !== i);
+  if (dupeSkus.length > 0) {
+    issues.push(`Duplicate variant SKUs: ${Array.from(new Set(dupeSkus)).join(", ")}`);
+  }
   if (rows.some((r) => normSize(r.sizeCode) === "UNKNOWN")) {
     issues.push("UNKNOWN size variant present");
   }

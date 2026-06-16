@@ -16,9 +16,17 @@ export function resolvePostLoginRedirectPath(input: {
   hasExplicitNext: boolean;
   safeNextPath: string;
   isActiveAdmin: boolean;
+  /** Default buyer landing when `next` is omitted (e.g. /account/quotes when company is linked). */
+  buyerDefaultPath?: string;
 }): string {
+  const buyerDefault =
+    typeof input.buyerDefaultPath === "string" &&
+    input.buyerDefaultPath.startsWith("/") &&
+    !input.buyerDefaultPath.startsWith("//")
+      ? input.buyerDefaultPath
+      : "/account";
   if (!input.hasExplicitNext) {
-    return input.isActiveAdmin ? "/admin" : "/account";
+    return input.isActiveAdmin ? "/admin" : buyerDefault;
   }
   if (input.isActiveAdmin && pathOnlyForRedirectRule(input.safeNextPath) === "/request-pricing") {
     return "/admin";

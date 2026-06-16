@@ -3,26 +3,20 @@ import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 
 const CARDS = [
   {
-    title: "B2B store",
-    body: "Browse active SKUs, thickness, and certifications. Add lines to your quote request cart.",
+    title: "Request pricing / RFQ",
+    body: "Case and pallet quotes, net terms questions, and specialist routing for serious volume.",
+    href: "/request-pricing",
+    cta: "Start RFQ",
+  },
+  {
+    title: "B2B catalog",
+    body: "Browse published catalog SKUs, thickness, and certifications. Add lines to your quote request for formal pricing review.",
     href: "/store",
-    cta: "Open store",
+    cta: "Browse catalog",
   },
   {
-    title: "Science of Gloves",
-    body: "Materials, mil, texture, certifications, and risk-based guidance—built for procurement buyers.",
-    href: "/glove-science",
-    cta: "Explore glove science",
-  },
-  {
-    title: "AI Glove Finder",
-    body: "Wizard-led recommender for task, risk, and material—built for buyers, not consumers.",
-    href: "/glove-finder",
-    cta: "Launch Glove Finder",
-  },
-  {
-    title: "Invoice savings",
-    body: "Upload an invoice; we extract lines and suggest catalog swaps with estimated savings.",
+    title: "Invoice review",
+    body: "Upload an invoice; we extract lines and map catalog options—formal savings confirmed during review.",
     href: "/invoice-savings",
     cta: "Upload invoice",
   },
@@ -33,14 +27,20 @@ const CARDS = [
     cta: "View industries",
   },
   {
-    title: "Request pricing / RFQ",
-    body: "Case and pallet quotes, net terms questions, and specialist routing for serious volume.",
-    href: "/request-pricing",
-    cta: "Start RFQ",
+    title: "Science of Gloves",
+    body: "Materials, mil, texture, certifications, and risk-based guidance—built for procurement buyers.",
+    href: "/glove-science",
+    cta: "Explore glove science",
+  },
+  {
+    title: "Guided Glove Finder",
+    body: "Wizard-led selection for task, risk, and material—catalog-backed starting points for quote review.",
+    href: "/glove-finder",
+    cta: "Open Guided Glove Finder",
   },
   {
     title: "FAQ",
-    body: "Ordering, compliance tone, and how we handle B2B inquiries.",
+    body: "Quote requests, compliance tone, and how we handle B2B inquiries.",
     href: "/faq",
     cta: "Read FAQ",
   },
@@ -48,7 +48,7 @@ const CARDS = [
 
 export const metadata = {
   title: "Resources | GloveCubs",
-  description: "Tools and guides for B2B glove buyers—store, AI finder, invoice analysis, and RFQ.",
+  description: "Tools and guides for B2B glove buyers—catalog, guided finder, invoice review, and RFQ.",
 };
 
 export default function ResourcesPage() {

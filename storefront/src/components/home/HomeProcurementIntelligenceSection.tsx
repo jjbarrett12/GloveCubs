@@ -62,7 +62,7 @@ export function HomeProcurementIntelligenceSection() {
                 Browse full catalog →
               </CTAClusterTertiaryLink>
               <Link href="/glove-finder" className="text-sm text-neutral-500 hover:text-brand">
-                AI glove finder (optional) →
+                Guided glove finder (optional) →
               </Link>
             </>
           }

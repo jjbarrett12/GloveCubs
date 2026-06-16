@@ -11,7 +11,7 @@ const CAPABILITIES = [
   },
   {
     icon: Sparkles,
-    title: "AI-assisted sourcing",
+    title: "Guided sourcing",
     body: "Guided finder connects task, materials, and constraints to quote-ready SKUs—not random substitutes.",
   },
   {
@@ -22,7 +22,7 @@ const CAPABILITIES = [
   {
     icon: Shield,
     title: "Supply continuity",
-    body: "Variant clarity for recurring programs—humans on quotes when automation reaches its limit.",
+    body: "Variant clarity for repeat procurement programs—humans on quotes when automation reaches its limit.",
   },
 ] as const;
 
@@ -31,7 +31,7 @@ export function HomeAiProcurementSection() {
     <ProcurementSectionShell
       tone="card"
       headingId="ai-procurement-heading"
-      ariaLabel="AI procurement intelligence"
+      ariaLabel="Procurement intelligence"
       className="border-t border-[var(--color-border-muted)] !py-16 sm:!py-20"
     >
       <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">

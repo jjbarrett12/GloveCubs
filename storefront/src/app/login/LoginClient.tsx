@@ -122,11 +122,19 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
         });
         return;
       }
-      const apiPath =
+      const defaultPath =
         typeof body.path === "string" && body.path.startsWith("/") && !body.path.startsWith("//")
           ? body.path
           : "/account";
-      const isActiveAdmin = apiPath === "/admin";
+      const buyerDefaultPath =
+        typeof (body as { buyer_default_path?: string }).buyer_default_path === "string" &&
+        (body as { buyer_default_path: string }).buyer_default_path.startsWith("/") &&
+        !(body as { buyer_default_path: string }).buyer_default_path.startsWith("//")
+          ? (body as { buyer_default_path: string }).buyer_default_path
+          : defaultPath === "/admin"
+            ? "/account"
+            : defaultPath;
+      const isActiveAdmin = defaultPath === "/admin";
       if (hasExplicitNext && requestedAdminRoute(explicitDest) && !isActiveAdmin) {
         setSignInIssue({
           title: "Not an admin account",
@@ -141,6 +149,7 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
         hasExplicitNext,
         safeNextPath: explicitDest,
         isActiveAdmin,
+        buyerDefaultPath,
       });
       window.location.assign(dest);
     } catch (err) {

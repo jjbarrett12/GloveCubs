@@ -8,6 +8,7 @@ import { AccountSignOut } from "./AccountSignOut";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { b2bTierLabel, b2bTierSiteDiscountPercent } from "@/lib/pricing/b2b-tier-meta";
 import { fetchBuyerAccountSnapshot } from "@/lib/account/buyer-account-snapshot";
+import { buyerQuoteStatusLabel } from "@/lib/procurement/buyer-lifecycle-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,18 @@ export default async function AccountPage() {
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <SiteHeaderLoader />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-white">Account home</h1>
+        <h1 className="text-2xl font-bold text-white">Account</h1>
         <p className="mt-2 text-sm text-white/65">
-          Sign-in, quotes, and your buyer workspace—everything you need to keep restocks moving.
+          Your procurement home — quote history, quicklist, and links to operational workspace tools.
         </p>
+
+        {gate.kind === "ready" ? (
+          <p className="mt-4">
+            <Link href="/account/quotes" className="text-sm font-semibold text-[#f06232] hover:underline">
+              Open quote history →
+            </Link>
+          </p>
+        ) : null}
 
         {adminUser ? (
           <div className="mt-6 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
@@ -73,15 +82,28 @@ export default async function AccountPage() {
 
         {gate.kind === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            Your account is not linked to an organization yet.{" "}
-            <Link className="font-semibold text-[#f06232] underline" href="/request-pricing">
-              Request business pricing
-            </Link>{" "}
-            or{" "}
-            <Link className="font-semibold text-[#f06232] underline" href="/contact">
-              contact support
-            </Link>
-            .
+            <p className="font-medium text-amber-50">Link your organization to unlock quote history</p>
+            <p className="mt-2 text-xs text-amber-100/80">
+              You can browse the catalog and submit quote requests now. Once your company is linked, requests appear in
+              quote history and workspace tools unlock.
+            </p>
+            <ul className="mt-3 space-y-1.5 text-xs">
+              <li>
+                <Link className="font-semibold text-[#f06232] underline" href="/request-pricing">
+                  Request business pricing
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] underline" href="/invoice-savings">
+                  Upload invoice for review
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] underline" href="/contact">
+                  Contact support
+                </Link>
+              </li>
+            </ul>
           </div>
         ) : null}
 
@@ -169,11 +191,16 @@ export default async function AccountPage() {
                 return (
                   <li key={q.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-white/90">{q.company_name || "Quote request"}</p>
+                      <Link
+                        href={`/account/quotes/${encodeURIComponent(q.id)}`}
+                        className="truncate font-medium text-white/90 hover:text-[#f06232] hover:underline"
+                      >
+                        {q.company_name || "Quote request"}
+                      </Link>
                       <p className="text-[11px] text-white/45">{when ? new Date(when).toLocaleString() : "—"}</p>
                     </div>
                     <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/75">
-                      {q.status}
+                      {buyerQuoteStatusLabel(q.status)}
                     </span>
                   </li>
                 );
@@ -186,14 +213,21 @@ export default async function AccountPage() {
           <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/70">
             <p className="font-medium text-white/85">No quote requests linked yet</p>
             <p className="mt-2 text-xs text-white/50">
-              Start a quote request from the cart while signed in with this company, and it will appear here and in
-              history.
+              Build a quote request from the catalog or your quicklist while signed in — requests appear here and in
+              quote history.
             </p>
-            <p className="mt-3">
-              <Link className="font-semibold text-[#f06232] hover:underline" href="/quote-cart">
-                Open quote request cart
-              </Link>
-            </p>
+            <ul className="mt-3 space-y-1.5 text-xs">
+              <li>
+                <Link className="font-semibold text-[#f06232] hover:underline" href="/quote-cart">
+                  Open quote request cart
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] hover:underline" href="/store">
+                  Browse catalog
+                </Link>
+              </li>
+            </ul>
           </div>
         ) : null}
 
@@ -236,7 +270,7 @@ export default async function AccountPage() {
                 Glove quicklist
               </Link>
               <span className="mt-0.5 block text-xs text-white/45">
-                Company-assigned variants for quote requests (no catalog-wide search).
+                Build repeat quotes from company-assigned variants — not catalog-wide search.
               </span>
             </li>
             <li>
@@ -273,14 +307,15 @@ export default async function AccountPage() {
         </section>
 
         {showWorkspace ? (
-          <section className="mt-10">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Workspace</h2>
+          <section className="mt-10 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Procurement workspace</h2>
             <p className="mt-2 text-sm text-white/55">
-              Savings, alternates, and reorder shortcuts for your company—available when your account is fully linked.
+              Operational tools — sourcing threads, verified spend, alternates, and repeat-quote shortcuts. Transactional
+              quote history stays on this account.
             </p>
             <p className="mt-3">
               <Link className="font-semibold text-[#f06232] hover:underline" href={workspaceHref}>
-                Open buyer workspace
+                Open procurement workspace
               </Link>
             </p>
           </section>

@@ -1,4 +1,9 @@
-import { extractProductFromHtml, type ExtractionResult, type ExtractedProductData } from "@/lib/admin/productExtraction";
+import { extractProductFromHtml, type ExtractionResult, type ExtractedProductData, type ExtractedSizeOption } from "@/lib/admin/productExtraction";
+import { attachSkuProposalsToDraft } from "@/lib/admin/variant-sku-intelligence";
+import {
+  normalizeGloveSizeCode,
+  sortGloveSizeCodes,
+} from "@/lib/admin/glove-size-normalization";
 import {
   IMPORT_DRAFT_PARSER_VERSION,
   IMPORT_DRAFT_SCHEMA_VERSION,
@@ -8,8 +13,7 @@ import {
   type StagingExtractedPayloadV1,
 } from "@/lib/admin/import-draft-types";
 
-const SIZE_ORDER = ["XXL", "XL", "XS", "L", "M", "S"] as const;
-const KNOWN_SIZE_CODES = new Set<string>(["XS", "S", "M", "L", "XL", "XXL", "OS", "UNKNOWN"]);
+const KNOWN_SIZE_CODES = new Set<string>(["XS", "S", "M", "L", "XL", "XXL", "XXXL", "OS", "UNKNOWN"]);
 
 function provenanceFromScores(
   field: string,
@@ -25,15 +29,51 @@ function provenanceFromScores(
 }
 
 function pickImageUrl(result: ExtractionResult): string | null {
+  const urls = pickImageUrls(result);
+  return urls[0] ?? null;
+}
+
+function pickImageUrls(result: ExtractionResult): string[] {
+  const fromGallery = result.extracted.images ?? [];
+  if (fromGallery.length > 0) return fromGallery;
   const meta = result.raw_data.meta_tags ?? {};
   const og = meta["og:image"]?.trim();
-  if (og && (og.startsWith("http://") || og.startsWith("https://"))) return og;
+  if (og && (og.startsWith("http://") || og.startsWith("https://"))) return [og];
   for (const node of result.raw_data.json_ld ?? []) {
     const img = node.image;
-    if (typeof img === "string" && img.trim()) return img.trim();
-    if (Array.isArray(img) && typeof img[0] === "string" && img[0].trim()) return img[0].trim();
+    if (typeof img === "string" && img.trim()) return [img.trim()];
+    if (Array.isArray(img) && typeof img[0] === "string" && img[0].trim()) return [img[0].trim()];
   }
-  return null;
+  return [];
+}
+
+function deriveQuantitySlugs(
+  extracted: ExtractedProductData,
+  textBlob: string
+): { box_quantity: string | null; case_quantity: string | null } {
+  const perBox = extracted.pack_size ?? extracted.units_per_box ?? null;
+  let unitsPerCase = extracted.total_units_per_case ?? null;
+  if (unitsPerCase == null && extracted.boxes_per_case != null && perBox != null) {
+    unitsPerCase = extracted.boxes_per_case * perBox;
+  }
+  if (unitsPerCase == null || perBox == null) {
+    const { case_pack, units_per_case } = deriveCasePack(extracted, textBlob);
+    if (units_per_case != null) unitsPerCase = units_per_case;
+    if (perBox == null && case_pack?.includes("/")) {
+      const parts = case_pack.split("/");
+      const maybeBox = parseInt(parts[1] ?? "", 10);
+      if (Number.isFinite(maybeBox) && maybeBox > 0) {
+        return {
+          box_quantity: String(maybeBox),
+          case_quantity: unitsPerCase != null ? String(unitsPerCase) : null,
+        };
+      }
+    }
+  }
+  return {
+    box_quantity: perBox != null ? String(perBox) : null,
+    case_quantity: unitsPerCase != null ? String(unitsPerCase) : null,
+  };
 }
 
 function summarizeJsonLd(nodes: Record<string, unknown>[] | undefined): Record<string, unknown> | null {
@@ -65,17 +105,32 @@ export function normalizeSizeCode(raw: string | null | undefined): string | null
   if (KNOWN_SIZE_CODES.has(upper)) return upper;
   const lower = t.toLowerCase();
   if (/\bone[\s-]?size\b/i.test(lower)) return "OS";
-  const sizeOrder = SIZE_ORDER;
-  for (const code of sizeOrder) {
-    if (code === "M" && (/\bmedium\b/i.test(lower) || /\bmed\b/i.test(lower))) return "M";
-    if (code === "S" && /\bsmall\b/i.test(lower)) return "S";
-    if (code === "L" && /\blarge\b/i.test(lower) && !/\bx-?large\b/i.test(lower)) return "L";
-    if (code === "XL" && /\bx-?large\b/i.test(lower)) return "XL";
-    if (code === "XS" && (/\bxs\b/i.test(lower) || /\bextra\s*small\b/i.test(lower))) return "XS";
-    if (code === "XXL" && (/\bxxl\b/i.test(lower) || /\b2xl\b/i.test(lower))) return "XXL";
-  }
+  const glove = normalizeGloveSizeCode(t);
+  if (glove) return glove;
   if (/^\d+(\.\d+)?$/.test(t)) return t;
   return upper.length <= 6 ? upper : null;
+}
+
+function buildVariantFromSizeOption(
+  opt: ExtractedSizeOption,
+  extracted: ExtractedProductData,
+  listPrice: string | null,
+  fieldProvenance: Record<string, ImportFieldProvenanceV1>
+): ImportDraftVariantV1 {
+  const manufacturerSku = opt.manufacturerSku?.trim() || null;
+  return {
+    size_label: opt.rawLabel,
+    normalized_size_code: opt.normalizedCode,
+    sku: null,
+    manufacturer_sku: manufacturerSku,
+    source_sku: manufacturerSku,
+    size_source: opt.source,
+    size_confidence: opt.confidence,
+    mpn: extracted.mpn ?? null,
+    gtin: extracted.upc ?? null,
+    list_price: listPrice,
+    provenance: fieldProvenance.size ? { size: fieldProvenance.size } : undefined,
+  };
 }
 
 function deriveCasePack(extracted: ExtractedProductData, textBlob: string): {
@@ -121,11 +176,15 @@ function buildVariantRow(
   listPrice: string | null,
   fieldProvenance: Record<string, ImportFieldProvenanceV1>
 ): ImportDraftVariantV1 {
-  const sku = extracted.sku ?? extracted.item_number ?? null;
+  const productSku = extracted.sku ?? extracted.item_number ?? null;
   return {
     size_label: sizeLabel,
     normalized_size_code: normalized,
-    sku,
+    sku: productSku,
+    manufacturer_sku: null,
+    source_sku: productSku,
+    size_source: null,
+    size_confidence: null,
     mpn: extracted.mpn ?? null,
     gtin: extracted.upc ?? null,
     list_price: listPrice,
@@ -138,6 +197,20 @@ export function buildImportDraftVariants(
   fieldProvenance: Record<string, ImportFieldProvenanceV1>,
   listPrice: string | null
 ): ImportDraftVariantV1[] {
+  if (extracted.size_options && extracted.size_options.length >= 1) {
+    const seen = new Set<string>();
+    const rows: ImportDraftVariantV1[] = [];
+    const ordered = sortGloveSizeCodes(extracted.size_options.map((o) => o.normalizedCode));
+    for (const code of ordered) {
+      if (seen.has(code)) continue;
+      const opt = extracted.size_options.find((o) => o.normalizedCode === code);
+      if (!opt) continue;
+      seen.add(code);
+      rows.push(buildVariantFromSizeOption(opt, extracted, listPrice, fieldProvenance));
+    }
+    if (rows.length > 0) return rows;
+  }
+
   const explicitVariants: ImportDraftVariantV1[] = [];
 
   if (extracted.sizes_available && extracted.sizes_available.length >= 1) {
@@ -191,14 +264,26 @@ export function toImportDraftProductV1(result: ExtractionResult, sourceUrl: stri
   if (case_pack) addProv("case_pack", case_pack);
   if (units_per_case != null) addProv("units_per_case", units_per_case);
 
+  const { box_quantity, case_quantity } = deriveQuantitySlugs(extracted, textBlob);
+  if (box_quantity) addProv("box_quantity", box_quantity);
+  if (case_quantity) addProv("case_quantity", case_quantity);
+  if (extracted.certifications?.length) addProv("certifications", extracted.certifications.join(", "));
+
   const glove_grade = extracted.exam_grade === true ? "medical_exam_grade" : null;
   const listPrice =
     extracted.price != null && Number.isFinite(extracted.price) ? String(extracted.price) : null;
 
+  const image_urls = pickImageUrls(result);
   const variants = buildImportDraftVariants(extracted, field_provenance, listPrice);
   const primarySize = extracted.size ? normalizeSizeCode(extracted.size) : null;
 
-  return {
+  const commerce_packaging = result.commerce_packaging ?? null;
+  const parse_warnings = [
+    ...result.reasoning.warnings,
+    ...(commerce_packaging?.parse_warnings ?? []),
+  ];
+
+  return attachSkuProposalsToDraft({
     schema_version: IMPORT_DRAFT_SCHEMA_VERSION,
     parser_version: IMPORT_DRAFT_PARSER_VERSION,
     source_url: sourceUrl,
@@ -206,7 +291,8 @@ export function toImportDraftProductV1(result: ExtractionResult, sourceUrl: stri
     brand: (extracted.brand ?? extracted.manufacturer)?.trim() || null,
     category_hint: null,
     description: extracted.description?.trim() || null,
-    image_url: pickImageUrl(result),
+    image_url: image_urls[0] ?? null,
+    image_urls: image_urls.length > 0 ? image_urls : undefined,
     sku: (extracted.sku ?? extracted.item_number)?.trim() || null,
     mpn: extracted.mpn?.trim() || null,
     gtin: extracted.upc?.trim() || null,
@@ -215,6 +301,10 @@ export function toImportDraftProductV1(result: ExtractionResult, sourceUrl: stri
     thickness_mil: extracted.thickness_mil ?? null,
     case_pack,
     units_per_case,
+    box_quantity,
+    case_quantity,
+    certification_slugs: extracted.certifications?.length ? extracted.certifications : undefined,
+    food_safe: extracted.food_safe ?? null,
     powder_free: extracted.powder_free ?? null,
     latex_free: extracted.latex_free ?? null,
     exam_grade: extracted.exam_grade ?? null,
@@ -226,13 +316,14 @@ export function toImportDraftProductV1(result: ExtractionResult, sourceUrl: stri
       fields: { ...scores },
     },
     field_provenance,
-    parse_warnings: [...result.reasoning.warnings],
+    parse_warnings,
+    commerce_packaging,
     raw_evidence: {
       spec_table: extracted.spec_table,
       meta_tags: result.raw_data.meta_tags,
       json_ld_summary: summarizeJsonLd(result.raw_data.json_ld),
     },
-  };
+  });
 }
 
 export function extractImportDraftFromHtml(html: string, sourceUrl: string): ImportDraftProductV1 {

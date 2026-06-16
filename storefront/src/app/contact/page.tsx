@@ -55,7 +55,7 @@ export default function ContactPage() {
               href="/glove-finder"
               className="inline-flex rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:border-[#f06232]/50"
             >
-              AI Glove Finder
+              Guided Glove Finder
             </Link>
             <Link
               href="/invoice-savings"

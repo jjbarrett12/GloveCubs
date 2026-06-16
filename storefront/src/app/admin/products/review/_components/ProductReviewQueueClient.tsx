@@ -7,6 +7,16 @@ import type { ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
 import type { UnifiedReviewQueueRow } from "@/lib/admin/unified-ingestion-review-queue";
 import type { IngestionMode } from "@/lib/unified-ingestion/types";
 import type { AdminCategoryOption } from "@/lib/admin/product-form-options";
+import {
+  parseClipboardCatalogosStagingRef,
+} from "@/lib/admin/clipboard-staging-catalogos-bridge";
+import {
+  catalogosReviewBatchUrl,
+  catalogosReviewDashboardUrl,
+  catalogosUrlImportJobPageUrl,
+  isCatalogosImportBatchHandoff,
+  isCatalogosUrlImportUnifiedRow,
+} from "@/lib/admin/review-queue-catalogos-handoff";
 import { TableCard } from "@/components/admin";
 
 function formatWhen(iso: string): string {
@@ -39,6 +49,8 @@ export function ProductReviewQueueClient({
   categories,
   supabaseConfigured,
   modeLabel,
+  catalogosBaseUrl = "",
+  batchId = "",
 }: {
   useUnifiedQueue: boolean;
   unifiedRows: UnifiedReviewQueueRow[];
@@ -46,6 +58,8 @@ export function ProductReviewQueueClient({
   categories: AdminCategoryOption[];
   supabaseConfigured: boolean;
   modeLabel: (mode: IngestionMode) => string;
+  catalogosBaseUrl?: string;
+  batchId?: string;
 }) {
   const router = useRouter();
   const [promoteId, setPromoteId] = React.useState<string | null>(null);
@@ -78,9 +92,16 @@ export function ProductReviewQueueClient({
           }),
         }
       );
-      const data = (await res.json().catch(() => ({}))) as { error?: string; productId?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        productId?: string;
+        existingProductId?: string;
+      };
       if (!res.ok) {
-        setError(data.error ?? `Promote failed (${res.status})`);
+        const suffix = data.existingProductId
+          ? ` Open the existing draft from Products or retry with link staging.`
+          : "";
+        setError((data.error ?? `Promote failed (${res.status})`) + suffix);
         return;
       }
       setPromoteId(null);
@@ -106,9 +127,16 @@ export function ProductReviewQueueClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category_id: promoteCategory.trim() }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; productId?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        productId?: string;
+        existingProductId?: string;
+      };
       if (!res.ok) {
-        setError(data.error ?? `Promote failed (${res.status})`);
+        const suffix = data.existingProductId
+          ? ` Open the existing draft from Products or retry with link staging.`
+          : "";
+        setError((data.error ?? `Promote failed (${res.status})`) + suffix);
         return;
       }
       setPromoteId(null);
@@ -170,9 +198,44 @@ export function ProductReviewQueueClient({
   }
 
   const empty = useUnifiedQueue ? unifiedRows.length === 0 : clipboardRows.length === 0;
+  const batchHandoff = isCatalogosImportBatchHandoff(batchId);
+  const catalogosBatchReviewUrl =
+    batchHandoff && catalogosBaseUrl ? catalogosReviewBatchUrl(catalogosBaseUrl, batchId) : "";
+  const catalogosReviewUrl = catalogosBaseUrl ? catalogosReviewDashboardUrl(catalogosBaseUrl) : "";
 
   return (
     <div className="space-y-4">
+      {batchHandoff ? (
+        <div className="rounded-xl border border-[#f06232]/30 bg-[#fff7f2] px-4 py-4 text-sm text-slate-800">
+          <p className="font-semibold text-[#c2410c]">Review and publish in CatalogOS</p>
+          <p className="mt-2 leading-relaxed text-slate-700">
+            Bridged URL imports are staged in CatalogOS import batches. Finish review in CatalogOS — not via storefront
+            promote or publish.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold">
+            {catalogosBatchReviewUrl ? (
+              <a
+                href={catalogosBatchReviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#c2410c] hover:underline"
+              >
+                Open this batch in CatalogOS review
+              </a>
+            ) : null}
+            {catalogosReviewUrl ? (
+              <a
+                href={catalogosReviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#c2410c] hover:underline"
+              >
+                CatalogOS review dashboard
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : null}
@@ -198,6 +261,7 @@ export function ProductReviewQueueClient({
             rows={unifiedRows}
             categories={categories}
             modeLabel={modeLabel}
+            catalogosBaseUrl={catalogosBaseUrl}
             promoteId={promoteId}
             promoteCategory={promoteCategory}
             confirmAwaitingHuman={confirmAwaitingHuman}
@@ -213,6 +277,7 @@ export function ProductReviewQueueClient({
           <ClipboardTable
             rows={clipboardRows}
             categories={categories}
+            catalogosBaseUrl={catalogosBaseUrl}
             promoteId={promoteId}
             promoteCategory={promoteCategory}
             promoteBusy={promoteBusy}
@@ -232,6 +297,7 @@ function UnifiedTable({
   rows,
   categories,
   modeLabel,
+  catalogosBaseUrl,
   promoteId,
   promoteCategory,
   confirmAwaitingHuman,
@@ -246,6 +312,7 @@ function UnifiedTable({
   rows: UnifiedReviewQueueRow[];
   categories: AdminCategoryOption[];
   modeLabel: (mode: IngestionMode) => string;
+  catalogosBaseUrl: string;
   promoteId: string | null;
   promoteCategory: string;
   confirmAwaitingHuman: boolean;
@@ -284,6 +351,16 @@ function UnifiedTable({
               r.reviewStatus === "needs_review" &&
               (r.jobStatus === "review_ready" || r.jobStatus === "awaiting_human");
             const blocked = r.jobStatus === "blocked" || r.jobStatus === "failed";
+            const catalogosHandoff = isCatalogosUrlImportUnifiedRow(r);
+            const catalogosJobUrl =
+              catalogosHandoff && r.catalogosUrlImportJobId && catalogosBaseUrl
+                ? catalogosUrlImportJobPageUrl(catalogosBaseUrl, r.catalogosUrlImportJobId)
+                : "";
+            const catalogosReviewUrl = catalogosBaseUrl ? catalogosReviewDashboardUrl(catalogosBaseUrl) : "";
+            const catalogosBatchUrl =
+              r.sourceBatchId && catalogosBaseUrl
+                ? catalogosReviewBatchUrl(catalogosBaseUrl, r.sourceBatchId)
+                : "";
 
             return (
               <tr key={r.stagingVariantId} className="align-top hover:bg-slate-50/80">
@@ -345,8 +422,12 @@ function UnifiedTable({
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{formatWhen(r.createdAt)}</td>
                 <td className="px-4 py-3 text-right">
                   <QueueActions
-                    canAct={canAct && !blocked}
+                    canAct={canAct && !blocked && !catalogosHandoff}
                     blocked={blocked}
+                    catalogosHandoff={catalogosHandoff}
+                    catalogosJobUrl={catalogosJobUrl}
+                    catalogosReviewUrl={catalogosReviewUrl}
+                    catalogosBatchUrl={catalogosBatchUrl}
                     promoteId={promoteId}
                     rowId={r.stagingVariantId}
                     promoteCategory={promoteCategory}
@@ -379,6 +460,7 @@ function UnifiedTable({
 function ClipboardTable({
   rows,
   categories,
+  catalogosBaseUrl,
   promoteId,
   promoteCategory,
   promoteBusy,
@@ -390,6 +472,7 @@ function ClipboardTable({
 }: {
   rows: ClipboardStagingRow[];
   categories: AdminCategoryOption[];
+  catalogosBaseUrl: string;
   promoteId: string | null;
   promoteCategory: string;
   promoteBusy: boolean;
@@ -415,6 +498,13 @@ function ClipboardTable({
         <tbody className="divide-y divide-slate-100">
           {rows.map((r) => {
             const ex = (r.extracted ?? {}) as Record<string, unknown>;
+            const catalogosRef = parseClipboardCatalogosStagingRef(ex);
+            const catalogosHandoff = catalogosRef != null;
+            const catalogosJobUrl =
+              catalogosRef && catalogosBaseUrl
+                ? catalogosUrlImportJobPageUrl(catalogosBaseUrl, catalogosRef.jobId)
+                : "";
+            const catalogosReviewUrl = catalogosBaseUrl ? catalogosReviewDashboardUrl(catalogosBaseUrl) : "";
             const title = String(ex.suggested_name ?? ex.page_title ?? "—");
             const thumb =
               (typeof r.image_url === "string" && r.image_url.trim()) ||
@@ -443,8 +533,12 @@ function ClipboardTable({
                 <td className="px-4 py-3 font-mono text-xs">{formatWhen(r.created_at)}</td>
                 <td className="px-4 py-3 text-right">
                   <QueueActions
-                    canAct={r.review_status === "needs_review"}
+                    canAct={r.review_status === "needs_review" && !catalogosHandoff}
                     blocked={false}
+                    catalogosHandoff={catalogosHandoff}
+                    catalogosJobUrl={catalogosJobUrl}
+                    catalogosReviewUrl={catalogosReviewUrl}
+                    catalogosBatchUrl=""
                     promoteId={promoteId}
                     rowId={r.id}
                     promoteCategory={promoteCategory}
@@ -473,6 +567,10 @@ function ClipboardTable({
 function QueueActions({
   canAct,
   blocked,
+  catalogosHandoff,
+  catalogosJobUrl,
+  catalogosReviewUrl,
+  catalogosBatchUrl,
   promoteId,
   rowId,
   promoteCategory,
@@ -490,6 +588,10 @@ function QueueActions({
 }: {
   canAct: boolean;
   blocked: boolean;
+  catalogosHandoff: boolean;
+  catalogosJobUrl: string;
+  catalogosReviewUrl: string;
+  catalogosBatchUrl: string;
   promoteId: string | null;
   rowId: string;
   promoteCategory: string;
@@ -507,6 +609,45 @@ function QueueActions({
 }) {
   if (blocked) {
     return <span className="text-xs text-slate-500">Blocked — cannot promote</span>;
+  }
+  if (catalogosHandoff) {
+    return (
+      <div className="flex max-w-[220px] flex-col items-end gap-1.5 text-xs text-slate-700">
+        <span className="text-right leading-snug">
+          This URL import should be reviewed and published in CatalogOS.
+        </span>
+        {catalogosBatchUrl ? (
+          <a
+            href={catalogosBatchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#c2410c] hover:underline"
+          >
+            Open batch in CatalogOS review
+          </a>
+        ) : null}
+        {catalogosJobUrl ? (
+          <a
+            href={catalogosJobUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#c2410c] hover:underline"
+          >
+            View URL import job
+          </a>
+        ) : null}
+        {catalogosReviewUrl ? (
+          <a
+            href={catalogosReviewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#c2410c] hover:underline"
+          >
+            CatalogOS review dashboard
+          </a>
+        ) : null}
+      </div>
+    );
   }
   if (!canAct) {
     return editHref ? (

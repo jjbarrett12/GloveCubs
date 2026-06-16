@@ -13,7 +13,7 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
-const NAV_MAIN: NavItem[] = [
+const NAV_PROCUREMENT: NavItem[] = [
   {
     href: "/admin",
     label: "Dashboard",
@@ -24,17 +24,8 @@ const NAV_MAIN: NavItem[] = [
     ),
   },
   {
-    href: "/admin/products",
-    label: "Products",
-    icon: (
-      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-      </svg>
-    ),
-  },
-  {
     href: "/admin/leads",
-    label: "Quotes",
+    label: "Quote requests",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -42,8 +33,29 @@ const NAV_MAIN: NavItem[] = [
     ),
   },
   {
+    href: "/admin/opportunities",
+    label: "Sourcing threads",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+      </svg>
+    ),
+  },
+  {
+    href: "/admin/procurement",
+    label: "Procurement review",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+      </svg>
+    ),
+  },
+];
+
+const NAV_FULFILLMENT: NavItem[] = [
+  {
     href: "/admin/orders",
-    label: "Orders",
+    label: "Order records",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
         <path
@@ -55,14 +67,46 @@ const NAV_MAIN: NavItem[] = [
     ),
   },
   {
-    href: "/admin/opportunities",
-    label: "Pipeline",
+    href: "/admin/purchase-orders",
+    label: "Purchase orders",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a48.1 48.1 0 00-3.259-.523M20.25 14.25V18.75M3.75 9h15.75M3.75 9v-.375A2.625 2.625 0 016.375 6h11.25A2.625 2.625 0 0120.25 8.625V9M3.75 9v.375c0 .621.504 1.125 1.125 1.125h15.75c.621 0 1.125-.504 1.125-1.125V9"
+        />
       </svg>
     ),
   },
+  {
+    href: "/admin/inventory",
+    label: "Inventory",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+        />
+      </svg>
+    ),
+  },
+];
+
+const NAV_CATALOG: NavItem[] = [
+  {
+    href: "/admin/products",
+    label: "Products",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+      </svg>
+    ),
+  },
+];
+
+const NAV_CUSTOMERS: NavItem[] = [
   {
     href: "/admin/companies",
     label: "Customers",
@@ -76,18 +120,48 @@ const NAV_MAIN: NavItem[] = [
       </svg>
     ),
   },
-];
-
-const NAV_MORE: NavItem[] = [
   {
-    href: "/admin/procurement",
-    label: "Sourcing",
+    href: "/admin/users",
+    label: "Users",
     icon: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.748-.5M4.5 15.75v-.106c0-1.113.285-2.16.786-3.07M4.5 15.75v.106A12.318 12.318 0 0012 18.75c2.331 0 4.512-.645 6.374-1.766M12 12.75a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"
+        />
       </svg>
     ),
   },
+  {
+    href: "/admin/net-terms",
+    label: "Net terms",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+        />
+      </svg>
+    ),
+  },
+  {
+    href: "/admin/messages",
+    label: "Messages",
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+        />
+      </svg>
+    ),
+  },
+];
+
+const NAV_SYSTEM: NavItem[] = [
   {
     href: "/admin/analytics",
     label: "Activity",
@@ -108,6 +182,18 @@ const NAV_MORE: NavItem[] = [
     ),
   },
 ];
+
+function AdminNavSections(props: { pathname: string; onNavigate?: () => void }) {
+  return (
+    <>
+      <NavBlock title="Procurement" items={NAV_PROCUREMENT} pathname={props.pathname} onNavigate={props.onNavigate} />
+      <NavBlock title="Fulfillment" items={NAV_FULFILLMENT} pathname={props.pathname} onNavigate={props.onNavigate} />
+      <NavBlock title="Catalog" items={NAV_CATALOG} pathname={props.pathname} onNavigate={props.onNavigate} />
+      <NavBlock title="Customers" items={NAV_CUSTOMERS} pathname={props.pathname} onNavigate={props.onNavigate} />
+      <NavBlock title="System" items={NAV_SYSTEM} pathname={props.pathname} onNavigate={props.onNavigate} />
+    </>
+  );
+}
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/admin") return pathname === "/admin";
@@ -226,8 +312,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
       <aside className="hidden w-[220px] shrink-0 flex-col border-r border-slate-200/90 bg-white lg:flex">
         <div className="flex h-14 items-center border-b border-slate-100 px-3">{brandBlock}</div>
         <div className="flex-1 overflow-y-auto px-2 py-4">
-          <NavBlock title="Sales & catalog" items={NAV_MAIN} pathname={pathname} />
-          <NavBlock title="Operations" items={NAV_MORE} pathname={pathname} />
+          <AdminNavSections pathname={pathname} />
         </div>
         <div className="border-t border-slate-100 p-3">
           <p className="truncate px-1 text-xs text-slate-500" title={identity}>
@@ -330,8 +415,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-2 py-3">
-              <NavBlock title="Sales & catalog" items={NAV_MAIN} pathname={pathname} onNavigate={closeMobile} />
-              <NavBlock title="Operations" items={NAV_MORE} pathname={pathname} onNavigate={closeMobile} />
+              <AdminNavSections pathname={pathname} onNavigate={closeMobile} />
             </div>
             <div className="border-t border-slate-100 p-3">
               <span

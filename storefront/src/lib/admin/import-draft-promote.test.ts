@@ -93,14 +93,53 @@ describe("import-draft-promote", () => {
   it("operator override variants win when supplied", () => {
     const input = importDraftToProductWriteInput(baseDraft(), {
       category_id: "cat-1",
-      variants: [{ sizeCode: "XL", variantSku: "OP-1", listPrice: "9.99" }],
+      variants: [{ sizeCode: "XL", variantSku: "OP-1", listPrice: "9.99", manufacturerSku: "MFR-XL" }],
+    }, { applySkuProposals: false });
+    expect(input.variants).toEqual([
+      { sizeCode: "XL", variantSku: "OP-1", listPrice: "9.99", manufacturerSku: "MFR-XL" },
+    ]);
+  });
+
+  it("does not copy manufacturer sku into variantSku on promote", () => {
+    const draft = baseDraft({
+      variants: [
+        {
+          size_label: "M",
+          normalized_size_code: "M",
+          sku: null,
+          manufacturer_sku: "GL-N125F-M",
+          source_sku: "GL-N125F-M",
+          mpn: null,
+          gtin: null,
+          list_price: null,
+        },
+      ],
     });
-    expect(input.variants).toEqual([{ sizeCode: "XL", variantSku: "OP-1", listPrice: "9.99" }]);
+    const variants = draftPromoteVariants(draft);
+    expect(variants[0]?.variantSku).toBe("");
+    expect(variants[0]?.manufacturerSku).toBe("GL-N125F-M");
   });
 
   it("maps units_per_case into product write metadata via importDraft", () => {
     const input = importDraftToProductWriteInput(baseDraft(), { category_id: "cat-1" });
     expect(input.importDraft?.units_per_case).toBe(1000);
+  });
+
+  it("uses selected category_slug for disposable glove case copy", () => {
+    const draft = baseDraft({
+      commerce_packaging: {
+        inner_unit_type: "box",
+        units_per_inner: 200,
+        inners_per_case: 10,
+        units_per_case: 2000,
+      },
+    });
+    const input = importDraftToProductWriteInput(draft, {
+      category_id: "71c407a2-0ee0-455c-b4fb-0c8d930ad6f5",
+      category_slug: "disposable_gloves",
+    });
+    expect(input.commercePackaging?.unit_noun).toBe("gloves");
+    expect(input.commercePackaging?.case_label).toBe("10 boxes × 200 gloves = 2,000 gloves");
   });
 
   it("allows OS only when draft variant is explicitly OS", () => {

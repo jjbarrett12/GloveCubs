@@ -84,7 +84,7 @@ export function BuyerQuicklistClient({ rows, tierCode }: Props) {
     return (
       <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/70">
         <p className="font-medium text-white/85">
-          No quicklist items yet. Your GloveCubs team can assign approved glove variants to make reorder requests faster.
+          No quicklist items yet. Your GloveCubs team can assign approved glove variants so you can build repeat quotes faster.
         </p>
         <p className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <Link className="font-semibold text-[#f06232] hover:underline" href="/store">

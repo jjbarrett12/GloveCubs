@@ -28,6 +28,11 @@ export default async function AdminProductsImportUrlPage() {
   const catalogosUnreachable = catalogosProbe != null && !catalogosProbe.ok;
   const [stagingRows, categories] = await Promise.all([listClipboardStaging(50), fetchAdminCategoriesForProductForm()]);
 
+  const catalogosBaseUrl =
+    process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/+$/, "") ||
+    conn.catalogos_base_url?.replace(/\/+$/, "") ||
+    "";
+
   const jobs = offline
     ? { rows: [] as UrlImportJobSummary[], error: null as string | null }
     : await (async () => {
@@ -76,7 +81,11 @@ export default async function AdminProductsImportUrlPage() {
       </div>
 
       <div className="mb-8">
-        <ClipboardUrlStagingClient categories={categories} initialRows={stagingRows} />
+        <ClipboardUrlStagingClient
+          categories={categories}
+          initialRows={stagingRows}
+          catalogosBaseUrl={catalogosBaseUrl}
+        />
       </div>
 
       <div className="mb-6">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { getHomeMapEmbedSrc } from "@/config/expressHomeMap";
 import { ProcurementSectionShell } from "@/components/procurement";
-import { HomeBridge, HomeSectionIntro } from "@/components/home/authority/HomeAuthorityPrimitives";
+import { HomeSectionIntro } from "@/components/home/authority/HomeAuthorityPrimitives";
 
 const MAPS_LINK_HREF =
   "https://www.google.com/maps/search/?api=1&query=Salt+Lake+City+Utah+glove+distributor";
@@ -13,7 +13,6 @@ export function HomeNationwideServiceSection() {
 
   return (
     <>
-      <HomeBridge variant="gray-to-dark" />
       <ProcurementSectionShell
         tone="raised"
         borderTop={false}
@@ -73,7 +72,6 @@ export function HomeNationwideServiceSection() {
           </div>
         </div>
       </ProcurementSectionShell>
-      <HomeBridge variant="to-dark" />
     </>
   );
 }

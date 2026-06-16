@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { PublicSubpageShell } from "@/components/layout/PublicSubpageShell";
 import { INDUSTRIES, INDUSTRY_KEYS, type IndustryKey } from "@/config/industries";
 import { getRequestPricingHrefForIntent, getStoreHrefForIntent } from "@/lib/discovery/intent-routes";
 
@@ -10,11 +9,11 @@ export const metadata = {
 
 export default function IndustriesOverviewPage() {
   return (
-    <PublicSubpageShell
-      title="Shop by industry"
-      subtitle="Pick your environment—we will point you to the right specs, case pricing, and reorder paths."
-      mainClassName="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8"
-    >
+    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <h1 className="mb-2 text-3xl font-bold text-white">Shop by industry</h1>
+      <p className="mb-8 text-base text-white/65">
+        Pick your environment—we will point you to the right specs, case pricing, and quote paths.
+      </p>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         {INDUSTRY_KEYS.map((key: IndustryKey) => {
           const cfg = INDUSTRIES[key];
@@ -53,6 +52,6 @@ export default function IndustriesOverviewPage() {
           </Link>
         </div>
       </section>
-    </PublicSubpageShell>
+    </main>
   );
 }

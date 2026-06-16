@@ -28,6 +28,10 @@ describe('Phase 0D guard scripts', () => {
     assert.doesNotThrow(() => runGuard('check-parent-inventory-usage.js'));
   });
 
+  it('check-express-freeze passes on current tree', () => {
+    assert.doesNotThrow(() => runGuard('check-express-freeze.js'));
+  });
+
   it('pricing drift regex detects commerce-pricing require', () => {
     const re = /require\s*\(\s*['"][^'"]*commerce-pricing['"]\s*\)/;
     assert.ok(re.test("const commercePricing = require('../lib/commerce-pricing');"));

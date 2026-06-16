@@ -414,10 +414,11 @@ describe('Product Extraction', () => {
       `;
       
       const result = extractProductFromHtml(html);
-      expect(result.extracted.sizes_available).toContain('S');
-      expect(result.extracted.sizes_available).toContain('M');
-      expect(result.extracted.sizes_available).toContain('L');
-      expect(result.extracted.sizes_available).toContain('XL');
+      const sizes = result.extracted.sizes_available ?? [];
+      expect(sizes.some((s) => /small/i.test(s))).toBe(true);
+      expect(sizes).toContain("Medium");
+      expect(sizes).toContain("Large");
+      expect(sizes).toContain("XL");
       expect(result.reasoning.warnings.length).toBeGreaterThan(0);
     });
     

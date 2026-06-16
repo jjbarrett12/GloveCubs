@@ -98,13 +98,28 @@ export function VariantSizeMatrix({ variants, quoteOnly, importDraft, onChange }
           <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-2 py-2">Size</th>
-              <th className="px-2 py-2">SKU</th>
+              <th className="px-2 py-2">GloveCubs SKU</th>
+              {importDraft ? <th className="px-2 py-2">Manufacturer SKU</th> : null}
               <th className="px-2 py-2">List price</th>
               <th className="px-2 py-2 w-16" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {variants.map((row, i) => (
+            {variants.map((row, i) => {
+              const draftVar = importDraft?.variants.find(
+                (v) => v.normalized_size_code.trim().toUpperCase() === row.sizeCode.trim().toUpperCase()
+              );
+              const proposedSku = draftVar?.proposed_glovecubs_sku ?? null;
+              const showApplyProposal =
+                proposedSku &&
+                !row.variantSku.trim() &&
+                (draftVar?.sku_proposal_confidence ?? importDraft?.sku_proposal_confidence ?? 0) >= 0.7;
+              const mfrSku = draftVar?.manufacturer_sku ?? draftVar?.source_sku ?? null;
+              const sizeMeta =
+                draftVar?.size_source && draftVar.size_confidence != null
+                  ? `${draftVar.size_source} · ${Math.round(draftVar.size_confidence * 100)}%`
+                  : null;
+              return (
               <tr key={row.id ?? `new-${i}`} className="bg-white">
                 <td className="px-2 py-1.5">
                   <input
@@ -113,15 +128,32 @@ export function VariantSizeMatrix({ variants, quoteOnly, importDraft, onChange }
                     placeholder="M"
                     className="w-full rounded border border-slate-200 px-2 py-1 font-mono text-xs uppercase"
                   />
+                  {sizeMeta ? (
+                    <p className="mt-0.5 text-[9px] text-slate-400">{sizeMeta}</p>
+                  ) : null}
                 </td>
                 <td className="px-2 py-1.5">
                   <input
                     value={row.variantSku}
                     onChange={(e) => patch(i, { variantSku: e.target.value })}
-                    placeholder="Auto"
+                    placeholder={proposedSku ?? "Auto"}
                     className="w-full rounded border border-slate-200 px-2 py-1 font-mono text-[11px]"
                   />
+                  {showApplyProposal ? (
+                    <button
+                      type="button"
+                      onClick={() => patch(i, { variantSku: proposedSku! })}
+                      className="mt-0.5 text-[9px] font-semibold text-[#c2410c] hover:underline"
+                    >
+                      Apply {proposedSku}
+                    </button>
+                  ) : null}
                 </td>
+                {importDraft ? (
+                  <td className="px-2 py-1.5 font-mono text-[11px] text-slate-600">
+                    {mfrSku ?? "—"}
+                  </td>
+                ) : null}
                 <td className="px-2 py-1.5">
                   <input
                     value={row.listPrice}
@@ -141,7 +173,8 @@ export function VariantSizeMatrix({ variants, quoteOnly, importDraft, onChange }
                   </button>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

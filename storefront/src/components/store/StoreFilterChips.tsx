@@ -7,6 +7,7 @@ import type { StoreCatalogUrlState } from "@/lib/catalog/store-url";
 import type { StoreBrandOption } from "@/lib/catalog/store-products";
 import type { StoreFacetMeta } from "@/lib/catalog/store-products";
 import { getAllCatalogFacetKeys } from "@/lib/catalog/catalog-facet-registry";
+import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
 
 function removeOneFacetValue(state: StoreCatalogUrlState, key: string, value: string): Partial<StoreCatalogUrlState> {
   const raw = (state as Record<string, unknown>)[key];
@@ -40,7 +41,9 @@ export function StoreFilterChips({
     const title = facetMeta[key]?.label ?? key.replace(/_/g, " ");
     for (const val of raw.map(String)) {
       const display =
-        key === "brand" ? (brands.find((b) => b.id === val)?.name ?? "Brand") : `${title}: ${val}`;
+        key === "brand"
+          ? (brands.find((b) => b.id === val)?.name ?? "Brand")
+          : `${title}: ${formatAttributeValueLabel(key, val)}`;
       chips.push({
         label: display,
         href: mergeStoreCatalogHref(urlState, removeOneFacetValue(urlState, key, val)),

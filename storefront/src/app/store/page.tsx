@@ -11,7 +11,6 @@ import { StoreSortBar } from "@/components/store/StoreSortBar";
 import { StoreFilterChips } from "@/components/store/StoreFilterChips";
 import { StorePagination } from "@/components/store/StorePagination";
 import { AddVisiblePageToQuote } from "@/components/store/AddVisiblePageToQuote";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getRequestPricingHrefForIntent } from "@/lib/discovery/intent-routes";
 import { getCanonicalStoreHrefIfNeeded } from "@/lib/catalog/store-legacy-url";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
@@ -110,9 +109,7 @@ export default async function StorePage({ searchParams }: PageProps) {
   const showAdminCatalogCta = Boolean(adminUser);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] font-poppins">
-      <SiteHeaderLoader />
-
+    <div className="font-poppins">
       <main className="py-4 sm:py-6">
         <StorePageShell>
           <section

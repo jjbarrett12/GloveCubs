@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ProductImage } from "@/components/store/ProductImage";
 import {
   fetchAdminProductsPage,
   parseAdminProductListQuery,
@@ -12,13 +11,13 @@ import {
   TableCard,
   TableToolbar,
   EmptyState,
-  StatusBadge,
 } from "@/components/admin";
 import { ProductsCommandActions } from "@/app/admin/products/_components/ProductsCommandActions";
 import { ProductsWorkspaceTabs } from "@/app/admin/products/_components/ProductsWorkspaceTabs";
 import { listClipboardStaging } from "@/lib/admin/clipboard-url-staging";
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ClipboardUrlStagingClient } from "@/app/admin/products/import/_components/ClipboardUrlStagingClient";
+import { ProductListTable } from "@/app/admin/products/_components/ProductListTable";
 import { fetchAdminCatalogOperationalCounts } from "@/lib/admin/admin-catalog-operational-counts";
 
 export const dynamic = "force-dynamic";
@@ -37,18 +36,6 @@ function buildQuery(base: Record<string, string | undefined>, overrides: Record<
   }
   const s = sp.toString();
   return s ? `?${s}` : "";
-}
-
-function healthLabel(row: AdminProductListRow): string {
-  if (row.imageHealth === "missing") return "Missing";
-  if (row.imageHealth === "placeholder_only") return "Placeholder";
-  return "OK";
-}
-
-function pdpLabel(row: AdminProductListRow): string {
-  if (row.pdpHealth === "n_a") return "—";
-  if (row.pdpHealth === "thin") return "Thin";
-  return "OK";
 }
 
 function parseWorkspaceTab(sp: Record<string, string | string[] | undefined>): string | undefined {
@@ -456,75 +443,7 @@ export default async function AdminProductsPage({
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full border-collapse text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/90 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Image</th>
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">Brand</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Visible</th>
-                  <th className="px-4 py-3">Variants</th>
-                  <th className="px-4 py-3">Images</th>
-                  <th className="px-4 py-3">PDP</th>
-                  <th className="px-4 py-3">Quote</th>
-                  <th className="px-4 py-3">Updated</th>
-                  <th className="px-4 py-3">Warnings</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
-                {result.rows.map((row) => (
-                  <tr key={row.id} className="transition-colors hover:bg-slate-50/80">
-                    <td className="px-4 py-3 align-middle">
-                      <Link href={`/admin/products/${row.id}`} className="block w-16 shrink-0">
-                        <ProductImage
-                          src={row.primaryImageUrl}
-                          alt={row.name}
-                          containerClassName="!rounded-lg !border !border-slate-200 !bg-slate-100"
-                          loading="lazy"
-                        />
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <Link href={`/admin/products/${row.id}`} className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
-                        {row.name}
-                      </Link>
-                      <div className="mt-0.5 font-mono text-xs text-slate-400">{row.id}</div>
-                    </td>
-                    <td className="px-4 py-3 align-top text-slate-600">{row.brandName ?? "—"}</td>
-                    <td className="px-4 py-3 align-top text-slate-600">{row.categoryName ?? "—"}</td>
-                    <td className="px-4 py-3 align-top">
-                      <StatusBadge status={row.status === "active" ? "enabled" : row.status === "archived" ? "disabled" : "pending"} />
-                    </td>
-                    <td className="px-4 py-3 align-top text-slate-600">{row.storefrontVisible ? "Yes" : "No"}</td>
-                    <td className="px-4 py-3 align-top font-mono text-slate-700">{row.activeVariantCount}</td>
-                    <td className="px-4 py-3 align-top text-slate-600">
-                      {healthLabel(row)}
-                      <span className="text-slate-400"> ({row.imageCount})</span>
-                    </td>
-                    <td className="px-4 py-3 align-top text-slate-600">{pdpLabel(row)}</td>
-                    <td className="px-4 py-3 align-top text-slate-600">{row.quoteEnabled ? "Yes" : "No"}</td>
-                    <td className="px-4 py-3 align-top font-mono text-xs text-slate-500">
-                      {row.updatedAt ? new Date(row.updatedAt).toISOString().slice(0, 10) : "—"}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <span className="font-mono text-sm font-medium text-slate-800">{row.warnings.length}</span>
-                      {row.warnings.length > 0 ? (
-                        <ul className="mt-1.5 max-w-[220px] list-inside list-disc text-xs leading-relaxed text-amber-900">
-                          {row.warnings.slice(0, 3).map((w) => (
-                            <li key={w.code}>{w.label}</li>
-                          ))}
-                          {row.warnings.length > 3 ? <li>…</li> : null}
-                        </ul>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ProductListTable rows={result.rows} />
         )}
 
         {result.total > 0 && withWarnings > 0 ? (

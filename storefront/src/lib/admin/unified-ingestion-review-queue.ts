@@ -4,6 +4,7 @@
 
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import type { IngestionJobStatus, IngestionMode } from "@/lib/unified-ingestion/types";
+import { parseIngestionJobLineage } from "@/lib/admin/review-queue-catalogos-handoff";
 
 export type FieldEvidenceSummary = {
   value: unknown;
@@ -31,6 +32,9 @@ export type UnifiedReviewQueueRow = {
   primaryImageUrl: string | null;
   promotedCatalogProductId: string | null;
   promotedCatalogVariantId: string | null;
+  catalogosUrlImportJobId: string | null;
+  catalogosUrlImportProductId: string | null;
+  sourceBatchId: string | null;
   createdAt: string;
   evidenceByField: Record<string, FieldEvidenceSummary>;
 };
@@ -126,12 +130,14 @@ export async function listUnifiedReviewQueue(
         normalized_brand,
         promoted_catalog_product_id,
         media_status,
+        source_batch_id,
         created_at,
         ingestion_jobs!inner (
           id,
           status,
           blocked_reason,
           metadata,
+          lineage,
           source_fingerprint,
           ingestion_mode,
           created_at
@@ -169,6 +175,7 @@ export async function listUnifiedReviewQueue(
     if (filters.jobStatus && filters.jobStatus !== "all" && jobStatus !== filters.jobStatus) continue;
 
     const metadata = (job.metadata ?? {}) as Record<string, unknown>;
+    const lineage = parseIngestionJobLineage(job.lineage);
     const duplicateOf =
       typeof metadata.duplicate_of === "string" ? metadata.duplicate_of : null;
 
@@ -200,6 +207,9 @@ export async function listUnifiedReviewQueue(
       promotedCatalogVariantId: v.promoted_catalog_variant_id
         ? String(v.promoted_catalog_variant_id)
         : null,
+      catalogosUrlImportJobId: lineage.url_import_job_id ?? null,
+      catalogosUrlImportProductId: lineage.url_import_product_id ?? null,
+      sourceBatchId: product.source_batch_id ? String(product.source_batch_id) : null,
       createdAt: String(v.created_at ?? product.created_at ?? job.created_at ?? ""),
       evidenceByField,
     });

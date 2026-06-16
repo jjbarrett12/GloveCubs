@@ -5,14 +5,18 @@ import {
   type ImportDraftProductV1,
 } from "@/lib/admin/import-draft-types";
 import {
+  buildFilterSyncApplyPatch,
   buildImportFieldSuggestions,
   buildSafeApplyAllPatch,
+  detectFilterSyncGaps,
   filterSafeSuggestions,
   isSafeSuggestion,
+  mapImportDraftToAttributes,
   type ImportApplyExistingState,
   type ImportFieldSuggestion,
 } from "@/lib/admin/import-suggestion-mapper";
 import type { EditorVariantRow } from "@/lib/admin/variant-generation";
+import { normalizeCommercePackaging } from "@commerce-packaging/labels";
 
 function minimalDraft(overrides: Partial<ImportDraftProductV1> = {}): ImportDraftProductV1 {
   return {
@@ -55,7 +59,8 @@ const allowedByKey = new Map<string, string[]>([
   ["thickness_mil", ["3", "4", "5"]],
   ["powder", ["powder_free", "powdered"]],
   ["grade", ["medical_exam_grade", "industrial"]],
-  ["certifications", ["latex_free", "fda_510k"]],
+  ["certifications", ["latex_free", "fda_510k", "astm_d6319", "fda_food_contact"]],
+  ["units_per_case", ["1000", "2000", "2500"]],
 ]);
 
 const existingVariants: EditorVariantRow[] = [
@@ -250,6 +255,97 @@ describe("buildSafeApplyAllPatch", () => {
         return n + one.appliedCount;
       }, 0)
     );
+  });
+});
+
+describe("mapImportDraftToAttributes pack and certifications", () => {
+  it("maps units_per_case from commerce_packaging and certification slugs from draft", () => {
+    const draft = minimalDraft({
+      commerce_packaging: normalizeCommercePackaging(
+        {
+          units_per_case: 2000,
+          inners_per_case: 10,
+          units_per_inner: 200,
+          inner_unit_type: "box",
+        },
+        "disposable_gloves"
+      ),
+      certification_slugs: ["astm_d6319", "fda_food_contact"],
+      food_safe: true,
+    });
+    const result = mapImportDraftToAttributes(draft, allowedByKey);
+    expect(result.attributes.units_per_case).toBe("2000");
+    expect(result.attributes.certifications).toEqual(
+      expect.arrayContaining(["astm_d6319", "fda_food_contact"])
+    );
+  });
+});
+
+describe("detectFilterSyncGaps", () => {
+  it("reports color and units_per_case gaps with structured fields", () => {
+    const cp = normalizeCommercePackaging(
+      { units_per_case: 2000, inners_per_case: 10, units_per_inner: 200, inner_unit_type: "box" },
+      "disposable_gloves"
+    );
+    const gaps = detectFilterSyncGaps(minimalDraft(), { material: "nitrile" }, allowedByKey, cp);
+    expect(gaps.some((g) => g.key === "color" && g.sourceValue === "blue_violet")).toBe(true);
+    expect(gaps.some((g) => g.key === "units_per_case" && g.recommendedAction === "Apply filter sync")).toBe(
+      true
+    );
+  });
+
+  it("reports stale units_per_case when editor commercePackaging changes post-promote", () => {
+    const syncedAttrs = {
+      material: "nitrile",
+      color: "blue_violet",
+      units_per_case: "1000",
+    };
+    const updatedCp = normalizeCommercePackaging(
+      { units_per_case: 2000, inners_per_case: 10, units_per_inner: 200, inner_unit_type: "box" },
+      "disposable_gloves"
+    );
+    const gaps = detectFilterSyncGaps(minimalDraft(), syncedAttrs, allowedByKey, updatedCp);
+    const unitsGap = gaps.find((g) => g.key === "units_per_case");
+    expect(unitsGap).toBeDefined();
+    expect(unitsGap?.sourceValue).toBe("2000");
+    expect(unitsGap?.storefrontValue).toBe("1000");
+  });
+
+  it("does not report units_per_case gap when storefront matches commercePackaging", () => {
+    const syncedAttrs = {
+      material: "nitrile",
+      color: "blue_violet",
+      units_per_case: "2000",
+    };
+    const cp = normalizeCommercePackaging(
+      { units_per_case: 2000, inners_per_case: 10, units_per_inner: 200, inner_unit_type: "box" },
+      "disposable_gloves"
+    );
+    const gaps = detectFilterSyncGaps(minimalDraft(), syncedAttrs, allowedByKey, cp);
+    expect(gaps.some((g) => g.key === "units_per_case")).toBe(false);
+  });
+});
+
+describe("buildFilterSyncApplyPatch", () => {
+  it("updates stale units_per_case from commercePackaging", () => {
+    const syncedAttrs = {
+      material: "nitrile",
+      color: "blue_violet",
+      units_per_case: "1000",
+    };
+    const updatedCp = normalizeCommercePackaging(
+      { units_per_case: 2000, inners_per_case: 10, units_per_inner: 200, inner_unit_type: "box" },
+      "disposable_gloves"
+    );
+    const { patch, applied } = buildFilterSyncApplyPatch(
+      minimalDraft(),
+      syncedAttrs,
+      allowedByKey,
+      updatedCp,
+      "units_per_case"
+    );
+    expect(applied).toBe(true);
+    expect(patch.attributes?.units_per_case).toBe("2000");
   });
 });
 

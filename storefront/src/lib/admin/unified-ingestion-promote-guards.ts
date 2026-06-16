@@ -10,7 +10,15 @@ export function canPromoteUnifiedStaging(input: {
   reviewStatus: string;
   alreadyPromoted: boolean;
   confirmAwaitingHuman: boolean;
+  catalogosUrlImportJobId?: string | null;
 }): { ok: true } | { ok: false; error: string; status: number } {
+  if (input.catalogosUrlImportJobId) {
+    return {
+      ok: false,
+      error: "CatalogOS URL import rows must be reviewed and published in CatalogOS.",
+      status: 409,
+    };
+  }
   if (input.jobStatus === "blocked" || input.jobStatus === "failed") {
     return { ok: false, error: `Cannot promote: ingestion job is ${input.jobStatus}.`, status: 409 };
   }

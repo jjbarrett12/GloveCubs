@@ -23,6 +23,14 @@ const itemSchemaBase = {
   quantity: z.number().int().positive().max(99999),
   line_note: z.string().trim().max(2000).optional().nullable(),
   size_code: z.string().max(80).nullish(),
+  sell_unit: z.enum(["case", "pallet"]).optional(),
+  unit_price_major: z.number().positive().max(1_000_000).optional().nullable(),
+  units_per_case: z.number().int().positive().max(1_000_000).optional().nullable(),
+  cases_per_pallet: z.number().int().positive().max(1_000_000).optional().nullable(),
+  units_per_pallet: z.number().int().positive().max(1_000_000).optional().nullable(),
+  unit_noun: z.enum(["gloves", "pairs", "units"]).optional().nullable(),
+  commerce_summary: z.string().trim().max(500).optional().nullable(),
+  line_unit_label: z.string().trim().max(40).optional().nullable(),
 };
 
 const itemSchema = isVariantMandatoryEnforceEnabled()
@@ -233,6 +241,14 @@ export async function POST(request: NextRequest) {
         size_code: item.size_code ?? null,
         quantity: item.quantity,
         line_note: lineNote,
+        sell_unit: item.sell_unit ?? "case",
+        unit_price_major: item.unit_price_major ?? null,
+        units_per_case: item.units_per_case ?? null,
+        cases_per_pallet: item.cases_per_pallet ?? null,
+        units_per_pallet: item.units_per_pallet ?? null,
+        unit_noun: item.unit_noun ?? null,
+        commerce_summary: item.commerce_summary ?? null,
+        line_unit_label: item.line_unit_label ?? null,
       };
 
       const { error: lineErr } = await supabase.schema("catalogos").from("quote_line_items").insert({
@@ -277,7 +293,12 @@ export async function POST(request: NextRequest) {
       const suffix = variantBits ? ` (${variantBits})` : "";
       const ln = i.line_note?.trim();
       const noteLine = ln ? `\n  Line note: ${ln}` : "";
-      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}${noteLine}`;
+      const commerceLine = i.commerce_summary?.trim()
+        ? `\n  Commerce: ${i.commerce_summary.trim()}`
+        : i.sell_unit === "pallet"
+          ? "\n  Sell unit: pallet"
+          : "";
+      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}${commerceLine}${noteLine}`;
     })
     .join("\n");
 

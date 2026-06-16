@@ -5,8 +5,11 @@
 import type { StoreCatalogUrlState } from "./store-filter-types";
 import type { StoreFacetCounts } from "./store-filter-types";
 import type { StoreFacetMeta } from "./store-products";
-import { getAllCatalogFacetKeys } from "./catalog-facet-registry";
-import { GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS } from "./catalog-facet-registry";
+import {
+  getCustomerFacingCatalogFacetKeys,
+  isCustomerFacingFacetKey,
+  GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS,
+} from "./catalog-facet-registry";
 import { mergeStoreCatalogHref } from "./store-url";
 
 export function isFacetMultiSelect(key: string): boolean {
@@ -38,34 +41,100 @@ export function facetValueSelected(state: StoreCatalogUrlState, key: string, val
   return currentFacetValues(state, key).includes(value);
 }
 
+const UNIVERSAL_FACET_ORDER = [
+  "material",
+  "grade",
+  "size",
+  "color",
+  "units_per_case",
+  "cases_per_pallet",
+  "pallet_pricing_available",
+  "certifications",
+  "industries",
+  "uses",
+  "protection_tags",
+  "thickness_mil",
+  "powder",
+  "texture",
+  "cuff_style",
+  "cut_level_ansi",
+  "coating",
+  "liner",
+  "gauge",
+] as const;
+
+const DISPOSABLE_FACET_ORDER = [
+  "material",
+  "grade",
+  "thickness_mil",
+  "powder",
+  "texture",
+  "size",
+  "color",
+  "units_per_case",
+  "cases_per_pallet",
+  "pallet_pricing_available",
+  "certifications",
+  "industries",
+  "uses",
+  "protection_tags",
+  "cuff_style",
+  "hand_orientation",
+  "sterility",
+] as const;
+
+const REUSABLE_FACET_ORDER = [
+  "protection_tags",
+  "cut_level_ansi",
+  "material",
+  "coating",
+  "liner",
+  "gauge",
+  "texture",
+  "cuff_style",
+  "size",
+  "units_per_case",
+  "cases_per_pallet",
+  "pallet_pricing_available",
+  "certifications",
+  "industries",
+  "uses",
+  "puncture_level",
+  "abrasion_level",
+  "flame_resistant",
+  "arc_rating",
+  "warm_cold_weather",
+] as const;
+
+/** Category-aware facet sidebar order (brand + price range are separate UI blocks). */
+export function getFacetOrderForStoreCategory(category?: string | null): readonly string[] {
+  if (category === "disposable_gloves") return DISPOSABLE_FACET_ORDER;
+  if (category === "reusable_work_gloves") return REUSABLE_FACET_ORDER;
+  return UNIVERSAL_FACET_ORDER;
+}
+
 /** Keys to render in sidebar (union of registry + any key that has counts). */
-export function orderedFacetKeysForUi(counts: Record<string, { value: string; count: number }[]>): string[] {
-  /** Procurement-first: spec and use-case before convenience facets. */
-  const preferred = [
-    "material",
-    "thickness_mil",
-    "certifications",
-    "uses",
-    "industries",
-    "protection_tags",
-    "color",
-    "size",
-    "powder",
-    "grade",
-  ];
-  const keys = new Set(getAllCatalogFacetKeys());
+export function orderedFacetKeysForUi(
+  counts: Record<string, { value: string; count: number }[]>,
+  category?: string | null
+): string[] {
+  const preferred = getFacetOrderForStoreCategory(category);
+  const keys = new Set(getCustomerFacingCatalogFacetKeys());
   const withData = preferred.filter((k) => keys.has(k) && (counts[k]?.length ?? 0) > 0);
-  const rest = Array.from(keys).filter((k) => !withData.includes(k) && (counts[k]?.length ?? 0) > 0);
+  const rest = Array.from(keys).filter(
+    (k) => !withData.includes(k) && (counts[k]?.length ?? 0) > 0 && isCustomerFacingFacetKey(k)
+  );
   rest.sort();
-  return [...withData, ...rest].filter((k) => k !== "brand");
+  return [...withData, ...rest].filter((k) => k !== "brand" && isCustomerFacingFacetKey(k));
 }
 
 /** Sidebar sections grouped by attribute_definitions.display_group when present. */
 export function facetKeysGroupedForUi(
   counts: StoreFacetCounts,
-  meta: StoreFacetMeta
+  meta: StoreFacetMeta,
+  category?: string | null
 ): { groupLabel: string; keys: string[] }[] {
-  const keys = orderedFacetKeysForUi(counts);
+  const keys = orderedFacetKeysForUi(counts, category);
   const byGroup = new Map<string, string[]>();
   for (const key of keys) {
     const label = meta[key]?.displayGroup?.trim() || "Product specifications";
@@ -94,7 +163,7 @@ export function hiddenFieldsPreservingFilters(
 ): { name: string; value: string }[] {
   const out: { name: string; value: string }[] = [];
   const resetPage = options?.resetPage !== false;
-  for (const key of getAllCatalogFacetKeys()) {
+  for (const key of getCustomerFacingCatalogFacetKeys()) {
     const v = (state as Record<string, unknown>)[key];
     if (Array.isArray(v) && v.length) out.push({ name: key, value: v.join(",") });
   }

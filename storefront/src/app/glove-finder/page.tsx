@@ -237,6 +237,9 @@ export default function GloveFinderPage() {
           </p>
           <div className="flex flex-wrap gap-3 border-t border-white/10 pt-6">
             <Button size="lg" variant="default" asChild>
+              <Link href="/quote-cart">Review quote request</Link>
+            </Button>
+            <Button size="lg" variant="default" asChild>
               <Link href={requestPricingHref}>Request pricing (prep line)</Link>
             </Button>
             <Button
@@ -265,21 +268,7 @@ export default function GloveFinderPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="text-lg font-semibold text-white hover:text-white/90">
-            GloveCubs
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/" className="text-sm text-white/70 hover:text-white">
-              Home
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      <main className="mx-auto min-w-0 max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <main className="mx-auto min-w-0 max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <WizardLayout
           currentStep={step}
           title="Restaurant prep line — glove selection (pilot)"
@@ -290,6 +279,5 @@ export default function GloveFinderPage() {
           {stepContent}
         </WizardLayout>
       </main>
-    </div>
   );
 }

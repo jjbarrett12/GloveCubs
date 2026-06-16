@@ -22,6 +22,10 @@ export default async function AdminProductsImportJobDetailPage({
   const idValid = !!jobId && JOB_ID_RE.test(jobId);
   const conn = computeProductsImportConnectionStatus();
   const offline = conn.status !== "online";
+  const catalogosBaseUrl =
+    process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/+$/, "") ||
+    conn.catalogos_base_url?.replace(/\/+$/, "") ||
+    "";
 
   let initial = null;
   let loadError: string | null = null;
@@ -62,9 +66,9 @@ export default async function AdminProductsImportJobDetailPage({
           <strong className="font-semibold">Catalog sync offline.</strong> <span>{conn.message}</span>
         </div>
       ) : loadError && !initial ? (
-        <UrlJobDetailClient jobId={jobId} initial={null} />
+        <UrlJobDetailClient jobId={jobId} initial={null} catalogosBaseUrl={catalogosBaseUrl} />
       ) : (
-        <UrlJobDetailClient jobId={jobId} initial={initial} />
+        <UrlJobDetailClient jobId={jobId} initial={initial} catalogosBaseUrl={catalogosBaseUrl} />
       )}
     </div>
   );

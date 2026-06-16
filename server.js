@@ -23,6 +23,8 @@ const {
     validateStorefrontPublicOriginOnBoot,
     shouldRedirectBrowserRequestToStorefront,
     shouldSuppressLegacyCustomerSpaHtml,
+    shouldSuppressLegacyAdminSpaHtml,
+    isAdminHtmlNavigation,
     getPublicHtmlRedirectStatusCode,
 } = require('./lib/storefront-public-redirect');
 const _storefrontBoot = validateStorefrontPublicOriginOnBoot(process.env);
@@ -6651,10 +6653,36 @@ app.get('/api/pricing/sell-price', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 /**
- * Customer-facing HTML: GET/HEAD redirect to Next when STOREFRONT_PUBLIC_ORIGIN is set (see lib/storefront-public-redirect.js).
- * /api/* stays here. /admin* browser UI stays on legacy SPA until Next admin parity is verified (Phase A exception).
+ * Customer + admin HTML: GET/HEAD redirect to Next when STOREFRONT_PUBLIC_ORIGIN is set (see lib/storefront-public-redirect.js).
+ * /api/* stays here. /admin* browser HTML redirects to Next (Phase 1B); legacy admin SPA blocked in production.
  */
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
+
+function sendLegacyAdminHtmlBlockedPage(req, res) {
+    const storefrontOrigin = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+    const adminUrl = storefrontOrigin ? `${storefrontOrigin}/admin` : 'https://www.glovecubs.com/admin';
+    const isProd = process.env.NODE_ENV === 'production';
+    const body =
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>GloveCubs — admin moved</title></head><body style="font-family:system-ui,sans-serif;max-width:42rem;margin:2rem auto;line-height:1.5">' +
+        '<h1>Admin HTML is not served on the API host</h1>' +
+        '<p>Operator admin UI is owned by the Next.js storefront. This host serves JSON under <code>/api/*</code> only.</p>' +
+        '<ul>' +
+        `<li>Open admin at <a href="${adminUrl.replace(/"/g, '&quot;')}">${adminUrl.replace(/</g, '&lt;')}</a></li>` +
+        '<li>Local dev: run <code>npm run dev</code> (Express + Next) or set <code>STOREFRONT_PUBLIC_ORIGIN</code> and reload (HTTP 308 redirect)</li>' +
+        '<li>Legacy admin SPA escape hatch (non-production only): <code>ALLOW_LEGACY_SPA_HTML=1</code></li>' +
+        '</ul>' +
+        (isProd ? '<p><strong>Production:</strong> configure STOREFRONT_PUBLIC_ORIGIN; this page should not appear.</p>' : '') +
+        '</body></html>';
+    res.status(503);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Link', `<${adminUrl}>; rel="successor-version"`);
+    res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'));
+    if (req.method === 'HEAD') {
+        return res.end();
+    }
+    return res.send(body);
+}
 
 function sendLegacyCustomerHtmlBlockedPage(req, res) {
     const isProd = process.env.NODE_ENV === 'production';
@@ -6690,10 +6718,30 @@ function handlePublicHtmlCatchAll(req, res) {
     }
     if (shouldRedirectBrowserRequestToStorefront(req)) {
         const origin = (process.env.STOREFRONT_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+        if (isAdminHtmlNavigation(req)) {
+            res.setHeader('Deprecation', 'true');
+            res.setHeader('Link', `<${origin}/admin>; rel="successor-version"`);
+            try {
+                console.log(
+                    JSON.stringify({
+                        category: 'admin_html_redirect',
+                        event: '308_to_storefront',
+                        path: req.path,
+                        originalUrl: req.originalUrl,
+                        ts: new Date().toISOString(),
+                    })
+                );
+            } catch (e) {
+                /* ignore */
+            }
+        }
         return res.redirect(getPublicHtmlRedirectStatusCode(), origin + req.originalUrl);
     }
     if (shouldSuppressLegacyCustomerSpaHtml(req)) {
         return sendLegacyCustomerHtmlBlockedPage(req, res);
+    }
+    if (shouldSuppressLegacyAdminSpaHtml(req)) {
+        return sendLegacyAdminHtmlBlockedPage(req, res);
     }
     // Prefer the request's own origin so www/apex and reverse-proxy hosts match fetch() (avoid cross-origin /api when DOMAIN is apex-only).
     const fromRequest = `${req.protocol}://${req.get('host') || 'localhost'}`.replace(/\/$/, '');
@@ -6719,6 +6767,11 @@ function handlePublicHtmlCatchAll(req, res) {
         );
         if (req.method === 'GET' && !req.path.startsWith('/api/')) {
             const p = (req.path || '').replace(/\/+$/, '') || '/';
+            if (p === '/admin' || p.startsWith('/admin/')) {
+                if (process.env.NODE_ENV === 'production') {
+                    return sendLegacyAdminHtmlBlockedPage(req, res);
+                }
+            }
             if (p === '/glove-finder' || p === '/invoice-savings') {
                 try {
                     console.log(

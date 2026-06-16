@@ -9,6 +9,8 @@ import {
 import { getStoreFacetCounts } from "@/lib/catalog/store-facet-counts";
 import type { StoreFacetCounts } from "@/lib/catalog/store-filter-types";
 import { getAttributeDefinitionIdsByKeys } from "@/lib/catalog/store-attribute-defs";
+import { commerceDisplayFromProductMetadata } from "@/lib/catalog/store-product-commerce";
+import { catalogBestOfferPriceQuery } from "@/lib/catalog/store-best-offer-price-query";
 
 const MAX_PRODUCT_IDS_FOR_PRICE = 10_000;
 const MAX_CATEGORIES_OR_BRANDS = 500;
@@ -16,12 +18,14 @@ const MAX_ATTR_QUERY_ROWS = 20_000;
 
 const COMMERCIAL_ATTR_KEYS = ["uses", "industries", "protection_tags", "certifications"] as const;
 
-type CommercialAttrBucket = {
+export type StoreProductCommercialAttrs = {
   uses: string[];
   industries: string[];
   protection_tags: string[];
   certifications: string[];
 };
+
+type CommercialAttrBucket = StoreProductCommercialAttrs;
 
 function emptyCommercialBucket(): CommercialAttrBucket {
   return { uses: [], industries: [], protection_tags: [], certifications: [] };
@@ -43,6 +47,18 @@ export type StoreProductRow = {
   badges: string[];
   /** From `catalogos.product_best_offer_price.best_price` when finite & > 0. */
   bestPrice: number | null;
+  /** Case sell price from commerce_packaging or bestPrice fallback. */
+  casePrice: number | null;
+  caseListPrice: number | null;
+  caseOnSale: boolean;
+  palletPrice: number | null;
+  palletListPrice: number | null;
+  palletOnSale: boolean;
+  unitsPerCase: number | null;
+  unitNoun: "gloves" | "pairs" | "units";
+  palletPricingAvailable: boolean;
+  caseLabel: string | null;
+  palletLabel: string | null;
   /** Batched from `product_attributes` (uses facet); max two values joined for scan line. */
   commercialUseSummary: string | null;
   /** Up to two distinct certification values for card scan. */
@@ -313,8 +329,7 @@ async function applyPriceBoundsToIds(
   if (priceMin == null && priceMax == null) return filteredIds;
   const lo = priceMin ?? 0;
   const hi = priceMax ?? Number.MAX_VALUE;
-  let priceQuery = supabase
-    .from("product_best_offer_price")
+  let priceQuery = catalogBestOfferPriceQuery(supabase)
     .select("product_id")
     .gte("best_price", lo)
     .lte("best_price", hi)
@@ -339,6 +354,8 @@ function mapProductsToRows(
     const vMeta = (v?.metadata ?? null) as Record<string, unknown> | null;
     const card = commercialCardFieldsFromBucket(commercialByProduct.get(p.id));
     const activeVariantCount = variantCounts.get(p.id) ?? 0;
+    const bestPrice = validDisplayPrice(bestPriceByProduct.get(p.id) ?? null);
+    const commerce = commerceDisplayFromProductMetadata(meta, bestPrice);
     return {
       id: p.id,
       name: p.name,
@@ -352,7 +369,18 @@ function mapProductsToRows(
       sizeCode: v?.size_code ?? null,
       materialHint: materialHint(meta, vMeta),
       badges: badgesFromProductMetadata(meta),
-      bestPrice: validDisplayPrice(bestPriceByProduct.get(p.id) ?? null),
+      bestPrice,
+      casePrice: commerce.casePrice,
+      caseListPrice: commerce.caseListPrice,
+      caseOnSale: commerce.caseOnSale,
+      palletPrice: commerce.palletPrice,
+      palletListPrice: commerce.palletListPrice,
+      palletOnSale: commerce.palletOnSale,
+      unitsPerCase: commerce.unitsPerCase,
+      unitNoun: commerce.unitNoun,
+      palletPricingAvailable: commerce.palletPricingAvailable,
+      caseLabel: commerce.caseLabel,
+      palletLabel: commerce.palletLabel,
       commercialUseSummary: card.commercialUseSummary,
       certificationHints: card.certificationHints,
       protectionHint: card.protectionHint,
@@ -428,8 +456,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
     ]);
 
     if (effectiveSort === "price_asc" || effectiveSort === "price_desc") {
-      let priceQuery = supabase
-        .from("product_best_offer_price")
+      let priceQuery = catalogBestOfferPriceQuery(supabase)
         .select("product_id, best_price, offer_count")
         .order("best_price", { ascending: effectiveSort === "price_asc" })
         .range(from, to);
@@ -462,9 +489,10 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
         if (filteredIds !== null && filteredIds.size > 0) {
           total = filteredIds.size;
         } else {
-          const { count: totalCount } = await supabase
-            .from("product_best_offer_price")
-            .select("product_id", { count: "exact", head: true });
+          const { count: totalCount } = await catalogBestOfferPriceQuery(supabase).select("product_id", {
+            count: "exact",
+            head: true,
+          });
           total = totalCount ?? 0;
         }
         return { products: [], total, page, limit, brands, facetCounts, facetMeta, error: null };
@@ -497,7 +525,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
       const total =
         filteredIds !== null && filteredIds.size > 0
           ? filteredIds.size
-          : ((await supabase.from("product_best_offer_price").select("product_id", { count: "exact", head: true }))
+          : ((await catalogBestOfferPriceQuery(supabase).select("product_id", { count: "exact", head: true }))
               .count ?? 0);
 
       const hydrated = await hydrateProductPage(supabase, list, bestPriceByProduct);
@@ -561,8 +589,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
     }
 
     const productIds = list.map((p) => p.id);
-    const { data: priceRes } = await supabase
-      .from("product_best_offer_price")
+    const { data: priceRes } = await catalogBestOfferPriceQuery(supabase)
       .select("product_id, best_price")
       .in("product_id", productIds);
     const bestPriceByProduct = new Map<string, number>(
@@ -648,8 +675,7 @@ export async function fetchStoreProductRowsByIds(productIds: string[]): Promise<
   if (error || !products?.length) return [];
 
   const list = products as CatalogProduct[];
-  const { data: priceRes } = await supabase
-    .from("product_best_offer_price")
+  const { data: priceRes } = await catalogBestOfferPriceQuery(supabase)
     .select("product_id, best_price")
     .in(
       "product_id",
@@ -662,6 +688,16 @@ export async function fetchStoreProductRowsByIds(productIds: string[]): Promise<
   const { products: rows } = await hydrateProductPage(supabase, list, bestPriceByProduct);
   const byId = new Map(rows.map((r) => [r.id, r]));
   return ids.map((id) => byId.get(id)).filter((x): x is StoreProductRow => Boolean(x));
+}
+
+/** Governed commercial attributes for storefront matching (uses, industries, protection, certifications). */
+export async function fetchStoreProductCommercialAttrsByProductIds(
+  productIds: string[]
+): Promise<Map<string, StoreProductCommercialAttrs>> {
+  const ids = Array.from(new Set(productIds)).filter(Boolean);
+  if (ids.length === 0 || !isSupabaseConfigured()) return new Map();
+  const supabase = getSupabaseAdmin() as any;
+  return fetchCommercialAttrBucketsByProductIds(supabase, ids);
 }
 
 export async function fetchStoreProducts(): Promise<{ products: StoreProductRow[]; error: string | null }> {

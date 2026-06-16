@@ -99,12 +99,12 @@ describe("Phase 1C quote ship-to policy", () => {
     expect(s).not.toMatch(/from\(\s*["']ship_to_addresses["']\s*\)/i);
   });
 
-  it("admin leads shows requested delivery from snapshot and warns on id without snapshot", () => {
+  it("admin leads shows delivery context from snapshot and warns on id without snapshot", () => {
     const s = readFileSync(adminLeads, "utf8");
-    expect(s).toContain("Requested delivery location");
+    expect(s).toContain("Delivery context");
     expect(s).toContain("formatShipToLabel");
     expect(s).toContain("ship_to_address_id");
-    expect(s).toContain("snapshot is missing");
+    expect(s).toContain("ship_to_address_id without quote-time snapshot");
     const lower = s.toLowerCase();
     expect(lower).not.toContain("shipping_rate");
     expect(lower).not.toContain("stripe");

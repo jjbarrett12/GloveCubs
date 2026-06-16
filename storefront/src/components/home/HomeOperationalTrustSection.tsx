@@ -15,8 +15,8 @@ const PILLARS = [
   },
   {
     icon: RefreshCw,
-    title: "Recurring ordering",
-    body: "Variant-level truth so monthly restocks stay on-spec across sites.",
+    title: "Repeat procurement",
+    body: "Variant-level truth for restocks—quote requests and quicklists, not auto-ship programs.",
   },
   {
     icon: Truck,

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { RequestPricingForm } from "@/components/request-pricing/RequestPricingForm";
 
 export const metadata: Metadata = {
@@ -10,17 +9,13 @@ export const metadata: Metadata = {
 
 export default function RequestPricingPage() {
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <SiteHeaderLoader />
-
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-20">
+    <main className="mx-auto max-w-3xl px-4 py-10 pb-20 sm:px-6 lg:px-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-2">Send us an inquiry</h1>
         <p className="text-white/65 mb-10 text-sm sm:text-base max-w-2xl">
           Whether you need distributor pricing, a bulk order, or help picking the right glove program—tell us what you are
           trying to solve. We review each submission and follow up by email or phone.
         </p>
         <RequestPricingForm />
-      </main>
-    </div>
+    </main>
   );
 }

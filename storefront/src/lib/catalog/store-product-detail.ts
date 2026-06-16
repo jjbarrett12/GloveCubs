@@ -11,6 +11,9 @@ import {
   type PdpVariantCaseEconomics,
   type PdpVariantPricingRow,
 } from "@/lib/pricing/variant-pricing-contracts";
+import { pdpCommerceFromProductMetadata } from "@/lib/catalog/store-product-commerce";
+import { catalogBestOfferPriceQuery } from "@/lib/catalog/store-best-offer-price-query";
+import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
 
 const CERT_SECTION_KEYS = new Set([
   "certifications",
@@ -79,6 +82,8 @@ export type StoreProductDetail = {
   variantPricing: PdpVariantPricingRow[];
   /** Server-authoritative case/pack economics per variant. */
   variantCaseEconomics: PdpVariantCaseEconomics[];
+  /** Case/pallet commerce from metadata.commerce_packaging (+ legacy fallbacks). */
+  commercePackaging: import("@/lib/catalog/store-product-commerce").PdpCommercePackaging;
   /** Logged-in company tier references keyed by catalog_variant_id (optional enrich). */
   buyerUnitReferencesByVariantId?: Record<string, PdpBuyerUnitReference>;
 };
@@ -247,7 +252,7 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
       .eq("catalog_product_id", pid)
       .order("is_primary", { ascending: false })
       .order("sort_order", { ascending: true }) as Promise<{ data: PdpGalleryImage[] | null }>,
-    supabase.from("product_best_offer_price").select("best_price").eq("product_id", pid).maybeSingle() as Promise<{
+    catalogBestOfferPriceQuery(supabase).select("best_price").eq("product_id", pid).maybeSingle() as Promise<{
       data: { best_price: number } | null;
     }>,
     supabase
@@ -306,7 +311,7 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     specRows.push({
       attribute_key: def.attribute_key,
       label: def.label,
-      value: cell,
+      value: formatAttributeValueLabel(def.attribute_key, cell),
       sort_order: def.sort_order,
     });
 
@@ -331,7 +336,9 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     if (!b || b.values.size === 0) continue;
     commercialRows.push({
       label: b.label,
-      value: Array.from(b.values).join(", "),
+      value: Array.from(b.values)
+        .map((v) => formatAttributeValueLabel(key, v))
+        .join(", "),
     });
   }
 
@@ -374,6 +381,9 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     fetchVariantCaseEconomicsBatch(supabase, variantIds),
   ]);
 
+  const bestPrice = validBestPrice(priceRes.data?.best_price ?? null);
+  const commercePackaging = pdpCommerceFromProductMetadata(meta, bestPrice);
+
   return {
     id: p.id,
     slug: p.slug,
@@ -383,7 +393,7 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     brandId: p.brand_id,
     brandName: brandRes.data?.name ?? null,
     metadata: meta,
-    bestPrice: validBestPrice(priceRes.data?.best_price ?? null),
+    bestPrice,
     gallery,
     variants,
     defaultVariant,
@@ -396,6 +406,7 @@ async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail 
     bestPriceScope: PDP_BEST_PRICE_SCOPE,
     variantPricing,
     variantCaseEconomics,
+    commercePackaging,
   };
 }
 

@@ -6,11 +6,13 @@ describe("describeLifecycleStageForOperator", () => {
     const o = describeLifecycleStageForOperator("quote_linked");
     expect(o.label).toContain("linked");
     expect(o.nextHint.toLowerCase()).not.toContain("sent");
+    expect(o.buyerSees).toBe("Pricing in progress");
   });
 
-  it("explains sales_follow_up without implying procurement is complete", () => {
+  it("explains sales_follow_up as buyer follow-up without implying procurement is complete", () => {
     const o = describeLifecycleStageForOperator("sales_follow_up");
-    expect(o.label).toMatch(/follow/i);
-    expect(o.nextHint).toMatch(/human/i);
+    expect(o.label).toMatch(/buyer follow-up/i);
+    expect(o.nextHint).toMatch(/follow-up/i);
+    expect(o.domain).toBe("buyer_follow_up");
   });
 });

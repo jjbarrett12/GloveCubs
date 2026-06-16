@@ -1,0 +1,555 @@
+.sectionCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 2rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: #0a0a0a;
+  padding: 2rem 1.5rem 2.25rem;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.35);
+}
+
+@media (min-width: 640px) {
+  .sectionCard {
+    padding: 2.5rem 2.25rem 2.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sectionCard {
+    padding: 3rem 2.75rem 3.25rem;
+  }
+}
+
+.glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 18% 0%, rgb(255 106 0 / 0.1) 0%, transparent 52%);
+}
+
+.headerGrid {
+  display: grid;
+  gap: 1.75rem;
+}
+
+@media (min-width: 1024px) {
+  .headerGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+    align-items: start;
+    gap: 2rem;
+  }
+}
+
+.logo {
+  height: 34px;
+  width: auto;
+  max-width: min(220px, 52vw);
+  object-fit: contain;
+  object-position: left;
+}
+
+.title {
+  margin-top: 1.25rem;
+  font-size: clamp(2rem, 4vw, 3.15rem);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.subtitle {
+  margin-top: 0.85rem;
+  max-width: 36rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.valueList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.valueItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.valueIcon {
+  display: flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgb(255 106 0 / 0.14);
+  color: var(--color-accent-orange);
+}
+
+.valueTitle {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.valueBody {
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.modeToggle {
+  display: inline-flex;
+  margin-top: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.03);
+  padding: 0.2rem;
+}
+
+.modeBtn {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.55rem 1rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.45);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.modeBtnActive {
+  border-color: rgb(255 106 0 / 0.55);
+  background: rgb(255 106 0 / 0.08);
+  color: var(--color-accent-orange);
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  text-align: center;
+}
+
+.stepDot {
+  display: flex;
+  height: 1.65rem;
+  width: 1.65rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: rgb(255 255 255 / 0.35);
+}
+
+.stepDotActive {
+  border-color: var(--color-accent-orange);
+  background: rgb(255 106 0 / 0.16);
+  color: var(--color-accent-orange);
+}
+
+.stepLabel {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.35);
+}
+
+.stepLabelActive {
+  color: var(--color-accent-orange);
+}
+
+.jobRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .jobRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .jobRow {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+.jobTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.03);
+  padding: 0.85rem 0.5rem;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.jobTile:hover {
+  border-color: rgb(255 255 255 / 0.2);
+}
+
+.jobTileActive {
+  border-color: var(--color-accent-orange);
+  background: rgb(255 106 0 / 0.07);
+  box-shadow: 0 0 0 1px rgb(255 106 0 / 0.25), 0 0 24px rgb(255 106 0 / 0.12);
+}
+
+.jobIcon {
+  display: flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.jobTileActive .jobIcon {
+  color: var(--color-accent-orange);
+}
+
+.jobLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.jobTileActive .jobLabel {
+  color: #fff;
+}
+
+.connector {
+  display: flex;
+  justify-content: center;
+  padding: 0.65rem 0 0.35rem;
+  color: var(--color-accent-orange);
+}
+
+.columns {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.1rem;
+  }
+}
+
+.panel {
+  border-radius: 1rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.04);
+  padding: 1.15rem;
+}
+
+.panelAccent {
+  border-color: rgb(255 106 0 / 0.28);
+  background: #111;
+}
+
+.panelHeading {
+  margin-bottom: 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent-orange);
+}
+
+.field {
+  margin-bottom: 0.65rem;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.68);
+}
+
+.selectWrap {
+  position: relative;
+}
+
+.select {
+  width: 100%;
+  min-height: 2.55rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  background-color: #161616;
+  padding: 0.5rem 2.35rem 0.5rem 0.75rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #fff;
+  cursor: pointer;
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.select:hover {
+  border-color: rgb(255 255 255 / 0.34);
+  background-color: #1c1c1c;
+}
+
+.select:focus-visible {
+  outline: none;
+  border-color: rgb(255 106 0 / 0.6);
+  box-shadow: 0 0 0 3px rgb(255 106 0 / 0.2);
+}
+
+.selectOption {
+  background-color: #161616;
+  color: #fff;
+}
+
+.selectIcon {
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  height: 1rem;
+  width: 1rem;
+  transform: translateY(-50%);
+  color: rgb(255 255 255 / 0.62);
+}
+
+.panelFootnote {
+  margin-top: 0.85rem;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.38);
+}
+
+.perfRow + .perfRow {
+  margin-top: 0.85rem;
+}
+
+.perfHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.perfLabel {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.78);
+}
+
+.perfValue {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.perfValueHigh {
+  color: var(--color-accent-orange);
+}
+
+.perfScale {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.28);
+}
+
+.perfTrack {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+}
+
+.perfFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(255 106 0 / 0.75), var(--color-accent-orange));
+  transition: width 0.35s ease;
+}
+
+.takeawayBlock + .takeawayBlock {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.takeawayLabel {
+  margin-bottom: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.takeawayText {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: rgb(255 255 255 / 0.78);
+}
+
+.rfqBox {
+  margin-top: 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgb(255 106 0 / 0.35);
+  background: rgb(255 106 0 / 0.06);
+  padding: 0.85rem;
+}
+
+.rfqTitle {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent-orange);
+}
+
+.rfqBody {
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.62);
+}
+
+.rfqBtn {
+  display: inline-flex;
+  margin-top: 0.85rem;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: var(--color-accent-orange);
+  padding: 0.7rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0a0a0a;
+  text-decoration: none;
+  transition: filter 0.2s;
+}
+
+.rfqBtn:hover {
+  filter: brightness(1.06);
+}
+
+.guideGrid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+@media (min-width: 768px) {
+  .guideGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .guideGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.guideCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.03);
+  padding: 0.9rem 1rem;
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.guideCard:hover {
+  border-color: rgb(255 106 0 / 0.35);
+  background: rgb(255 106 0 / 0.05);
+}
+
+.guideTitle {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.guideBody {
+  margin-top: 0.2rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.guideArrow {
+  flex-shrink: 0;
+  color: var(--color-accent-orange);
+}
+
+.footerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.disclaimer {
+  max-width: 42rem;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.38);
+}
+
+.footerLogo {
+  height: 28px;
+  width: auto;
+  opacity: 0.85;
+}

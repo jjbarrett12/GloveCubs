@@ -4,6 +4,7 @@ import { PageHeader, PageSection } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminOrderDetail, formatMinorAmount, type OrderProvenance } from "@/lib/admin/admin-orders-read-model";
 import { buildReorderQuotePayload } from "@/lib/account/reorder-to-quote-read-model";
+import { OrderOperatorActions } from "./OrderOperatorActions";
 
 export const dynamic = "force-dynamic";
 
@@ -62,8 +63,23 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
 
       <PageHeader
         title={`Order ${h.order_number}`}
-        description="Read-only canonical order header. Amounts are stored minor units; payment and fulfillment fields reflect recorded state only."
+        description="Canonical order record. Amounts are stored minor units; fulfillment actions use the transitional Express admin API."
       />
+
+      <PageSection title="Operator actions">
+        <OrderOperatorActions
+          orderId={h.id}
+          currentStatus={h.status}
+          paymentMethod={h.payment_method}
+          paymentIntegrityHold={h.payment_integrity_hold}
+          invoiceAmountDue={h.invoice_amount_due}
+          invoiceAmountPaid={h.invoice_amount_paid}
+          trackingNumber={
+            typeof h.metadata.tracking_number === "string" ? h.metadata.tracking_number : ""
+          }
+          trackingUrl={typeof h.metadata.tracking_url === "string" ? h.metadata.tracking_url : ""}
+        />
+      </PageSection>
 
       <PageSection title="Summary">
         <dl className="grid max-w-2xl gap-2 text-sm sm:grid-cols-2">

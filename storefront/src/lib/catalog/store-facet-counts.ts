@@ -8,6 +8,19 @@ import type { StoreFacetCounts } from "./store-filter-types";
 import { getAllCatalogFacetKeys } from "./catalog-facet-registry";
 import { getAttributeDefinitionIdsByKey } from "./store-attribute-defs";
 import { getStoreCatalogConstraintProductIds } from "./store-catalog-constraints";
+import { formatAttributeValueLabel } from "./attribute-value-labels";
+
+/** Attach UI labels to facet rows; canonical `value` is unchanged. */
+export function withFacetDisplayLabels(
+  facetKey: string,
+  rows: { value: string; count: number }[]
+): { value: string; count: number; label: string }[] {
+  return rows.map(({ value, count }) => ({
+    value,
+    count,
+    label: formatAttributeValueLabel(facetKey, value),
+  }));
+}
 
 /** Full industry facet list with labels; counts from catalog merged (0 when absent). */
 export function mergeIndustryFacetRows(
@@ -75,7 +88,10 @@ export async function getStoreFacetCounts(
 
   for (const key of FACET_KEYS) {
     if (key === "size") {
-      result.size = await aggregateSizeFacetCountsFromVariants(supabase, productIds);
+      result.size = withFacetDisplayLabels(
+        "size",
+        await aggregateSizeFacetCountsFromVariants(supabase, productIds)
+      );
       continue;
     }
 
@@ -101,9 +117,12 @@ export async function getStoreFacetCounts(
       if (key === "thickness_mil" && val === "7_plus") continue;
       counts.set(val, (counts.get(val) ?? 0) + 1);
     }
-    result[key] = Array.from(counts.entries())
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
+    result[key] = withFacetDisplayLabels(
+      key,
+      Array.from(counts.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count)
+    );
   }
 
   result.industries = mergeIndustryFacetRows(result.industries);

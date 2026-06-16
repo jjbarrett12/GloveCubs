@@ -4,7 +4,7 @@ import path from "node:path";
 
 const MIGRATION = path.resolve(
   __dirname,
-  "../../../../supabase/migrations/20261218120000_variant_pricing_authority_phase2b0.sql"
+  "../../../../supabase/migrations/20261218120100_variant_pricing_authority_phase2b0.sql"
 );
 
 describe("variant pricing authority migration contract", () => {

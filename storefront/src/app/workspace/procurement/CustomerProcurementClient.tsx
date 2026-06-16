@@ -64,7 +64,7 @@ export function OpportunityActionForms({ savingsOpportunityId }: { savingsOpport
           className="rounded border border-white/20 px-3 py-1.5 text-xs hover:bg-white/5 disabled:opacity-50"
           onClick={() => run({ action: "request_reorder", savings_opportunity_id: savingsOpportunityId })}
         >
-          Request reorder
+          Build repeat quote
         </button>
         <button
           type="button"
@@ -210,7 +210,7 @@ export function ReorderRequestButton({
           setMsg(null);
           try {
             await postAction({ action: "request_reorder", reorder_memory_id: reorderMemoryId });
-            setMsg("Reorder request sent.");
+            setMsg("Repeat quote signal sent.");
           } catch (e) {
             setErr(e instanceof Error ? e.message : "Failed");
           } finally {
@@ -218,7 +218,7 @@ export function ReorderRequestButton({
           }
         }}
       >
-        {label ?? "Request reorder"}
+        {label ?? "Build repeat quote"}
       </button>
       {msg ? <span className="text-[11px] text-emerald-400/90">{msg}</span> : null}
       {err ? <span className="text-[11px] text-red-400/90">{err}</span> : null}

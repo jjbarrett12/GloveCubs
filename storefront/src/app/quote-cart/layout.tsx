@@ -1,10 +1,7 @@
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { PublicExperienceChrome } from "@/components/layout/PublicExperienceChrome";
 
 export default function QuoteCartLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <SiteHeaderLoader />
-      {children}
-    </div>
+    <PublicExperienceChrome className="min-h-screen bg-[hsl(var(--background))] font-poppins">{children}</PublicExperienceChrome>
   );
 }

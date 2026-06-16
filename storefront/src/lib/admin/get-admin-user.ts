@@ -44,7 +44,13 @@ export async function resolveAdminAccess(): Promise<AdminAccessResult> {
 }
 
 export async function getAdminUser(): Promise<{ id: string } | null> {
+  const op = await getAdminOperator();
+  return op ? { id: op.id } : null;
+}
+
+/** Operator identity for server-side Express admin BFF (includes email for JWT + audit logs). */
+export async function getAdminOperator(): Promise<{ id: string; email: string | null } | null> {
   const r = await resolveAdminAccess();
   if (r.kind !== "ok") return null;
-  return { id: r.userId };
+  return { id: r.userId, email: r.email };
 }

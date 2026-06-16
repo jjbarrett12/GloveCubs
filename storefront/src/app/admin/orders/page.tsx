@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader, PageSection } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminOrderList, formatMinorAmount, type OrderProvenance } from "@/lib/admin/admin-orders-read-model";
+import { describeOrderStatusForOperator } from "@/lib/procurement/operator-lifecycle-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,7 @@ export default async function AdminOrdersPage({
   const dateFrom = sp(searchParams.date_from);
   const dateTo = sp(searchParams.date_to);
   const provenance = sp(searchParams.provenance) as "all" | "migrated" | "unknown" | "";
+  const payHold = sp(searchParams.payment_integrity_hold) === "1";
   const page = Math.max(1, parseInt(sp(searchParams.page) || "1", 10) || 1);
   const limit = 50;
   const offset = (page - 1) * limit;
@@ -77,6 +79,7 @@ export default async function AdminOrdersPage({
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     provenance: provenance === "migrated" || provenance === "unknown" ? provenance : "all",
+    paymentIntegrityHold: payHold || undefined,
     limit,
     offset,
   });
@@ -88,13 +91,14 @@ export default async function AdminOrdersPage({
   if (dateFrom) qs.set("date_from", dateFrom);
   if (dateTo) qs.set("date_to", dateTo);
   if (provenance && provenance !== "all") qs.set("provenance", provenance);
+  if (payHold) qs.set("payment_integrity_hold", "1");
   if (page > 1) qs.set("page", String(page));
 
   return (
     <div>
       <PageHeader
         title="Order records"
-        description="Canonical gc_commerce order headers and line counts for validation. May include migrated legacy history. These are database records—not finance-approved totals for downstream reporting."
+        description="Fulfillment review — canonical gc_commerce order headers. Database records for validation, not finance-approved totals or checkout KPIs."
       />
 
       <PageSection title="Filters">
@@ -145,6 +149,18 @@ export default async function AdminOrdersPage({
               <option value="unknown">Unknown (this page only)</option>
             </select>
           </div>
+          <div className="flex items-end gap-2 pb-1">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                name="payment_integrity_hold"
+                value="1"
+                defaultChecked={payHold}
+                className="rounded border-gray-300"
+              />
+              Payment integrity hold only
+            </label>
+          </div>
           <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
             Apply
           </button>
@@ -162,13 +178,14 @@ export default async function AdminOrdersPage({
                 <tr>
                   <th className="px-3 py-2">Order #</th>
                   <th className="px-3 py-2">Company</th>
-                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Fulfillment status</th>
                   <th className="px-3 py-2">Placed</th>
                   <th className="px-3 py-2 text-right">Total (minor)</th>
                   <th className="px-3 py-2 text-right">Total (display)</th>
                   <th className="px-3 py-2">Currency</th>
                   <th className="px-3 py-2 text-right">Lines</th>
                   <th className="px-3 py-2">Provenance</th>
+                  <th className="px-3 py-2">Pay hold</th>
                   <th className="px-3 py-2">Recorded payment</th>
                   <th className="px-3 py-2">Recorded fulfillment</th>
                 </tr>
@@ -176,7 +193,7 @@ export default async function AdminOrdersPage({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
+                    <td colSpan={12} className="px-3 py-8 text-center text-gray-500">
                       No order records matched.
                     </td>
                   </tr>
@@ -193,7 +210,17 @@ export default async function AdminOrdersPage({
                         <span className="font-mono text-[10px] text-gray-400">{r.company_id}</span>
                       </td>
                       <td className="px-3 py-2">
-                        <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-gray-700">{r.status}</span>
+                        {(() => {
+                          const copy = describeOrderStatusForOperator(r.status);
+                          return (
+                            <>
+                              <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-gray-700">
+                                {copy.label}
+                              </span>
+                              <p className="mt-0.5 font-mono text-[9px] text-gray-400">{r.status}</p>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-600">{new Date(r.placed_at).toLocaleString()}</td>
                       <td className="px-3 py-2 text-right font-mono text-xs text-gray-800">{r.total_minor}</td>
@@ -201,6 +228,13 @@ export default async function AdminOrdersPage({
                       <td className="px-3 py-2 font-mono text-xs">{r.currency_code}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.line_count}</td>
                       <td className="px-3 py-2 text-xs text-gray-700">{provenanceLabel(r.provenance)}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {r.payment_integrity_hold ? (
+                          <span className="font-semibold text-amber-800">Hold</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-xs">{r.has_payment_record ? "Yes" : "—"}</td>
                       <td className="px-3 py-2 text-xs">{r.has_fulfillment_record ? "Yes" : "—"}</td>
                     </tr>

@@ -26,10 +26,13 @@ function ProcurementPageHeader(props: { companyLabel: string }) {
         <p className="text-xs font-medium uppercase tracking-wide text-white/45">Buyer workspace</p>
         <h2 className="mt-1 text-base font-semibold tracking-tight text-white/90">{props.companyLabel}</h2>
         <p className="mt-1 max-w-xl text-sm text-white/55">
-          Snapshot of approved alternates, verified invoice spend, and reorder shortcuts. Figures help your team plan—they are not a live quote or checkout total.
+          Snapshot of approved alternates, verified invoice spend, and repeat-quote shortcuts. Figures help your team plan—they are not a live quote or checkout total.
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+        <Link href="/account/quotes" className="text-sm text-sky-400 hover:underline">
+          Quote history
+        </Link>
         <Link href="/invoice-savings" className="text-sm text-sky-400 hover:underline">
           Submit spend signal
         </Link>
@@ -285,13 +288,13 @@ function ReorderSection(props: { rows: CustomerReorderRowDto[] }) {
 
   if (top.length === 0) {
     return (
-      <section aria-label="Reorder">
-        <h3 className="text-sm font-medium text-white/90">Reorder with confidence</h3>
+      <section aria-label="Repeat quotes">
+        <h3 className="text-sm font-medium text-white/90">Repeat procurement</h3>
         <div className="mt-3">
           <EmptyState
-            title="No reorder shortcuts yet"
-            body="Reorder shortcuts appear after we have verified spend or approved alternates on file for your team."
-            action={{ href: "/workspace/procurement/reorder", label: "Open reorder list" }}
+            title="No repeat-quote shortcuts yet"
+            body="Repeat-quote shortcuts appear after we have verified spend or approved alternates on file for your team."
+            action={{ href: "/workspace/procurement/reorder", label: "Open repeat quotes" }}
           />
         </div>
       </section>
@@ -299,8 +302,8 @@ function ReorderSection(props: { rows: CustomerReorderRowDto[] }) {
   }
 
   return (
-    <section aria-label="Reorder">
-      <h3 className="text-sm font-medium text-white/90">Reorder with confidence</h3>
+    <section aria-label="Repeat quotes">
+      <h3 className="text-sm font-medium text-white/90">Repeat procurement</h3>
       <ul className="mt-3 divide-y divide-white/10 rounded-lg border border-white/10 bg-white/[0.02]">
         {top.map((r) => {
           const promoted = Date.parse(r.promoted_at);
@@ -314,10 +317,10 @@ function ReorderSection(props: { rows: CustomerReorderRowDto[] }) {
                   {r.last_trusted_unit_basis != null ? (
                     <span className="tabular-nums text-white/55"> · last verified basis {r.last_trusted_unit_basis}</span>
                   ) : null}
-                  <span className="text-white/40"> · reorder list updated {formatShortDate(r.promoted_at)}</span>
+                  <span className="text-white/40"> · list updated {formatShortDate(r.promoted_at)}</span>
                 </p>
                 {stale ? (
-                  <p className="mt-1 text-xs text-amber-200/80">Last reorder-list update was more than 90 days ago — confirm before large orders.</p>
+                  <p className="mt-1 text-xs text-amber-200/80">Last update was more than 90 days ago — confirm before large orders.</p>
                 ) : null}
               </div>
               <div className="shrink-0">
@@ -337,7 +340,7 @@ function ReorderSection(props: { rows: CustomerReorderRowDto[] }) {
       </ul>
       <p className="mt-2">
         <Link href="/workspace/procurement/reorder" className="text-sm text-sky-400 hover:underline">
-          Full reorder list
+          Full repeat-quote list
         </Link>
       </p>
     </section>
@@ -408,7 +411,7 @@ function ActivityFeedMini(props: { rows: CustomerTimelineRowDto[] }) {
     return (
       <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-4">
         <p className="text-xs font-medium uppercase tracking-wide text-white/45">Recent activity</p>
-        <p className="mt-2 text-sm text-white/50">Activity will appear when approvals, reorders, or your requests are recorded.</p>
+        <p className="mt-2 text-sm text-white/50">Activity will appear when approvals, repeat quotes, or your requests are recorded.</p>
       </div>
     );
   }
@@ -444,7 +447,7 @@ function QuietStatsRail(props: {
   return (
     <div className="grid grid-cols-2 gap-2">
       {stat("Approvals on file", props.approvedCount)}
-      {stat("Reorder-ready items", props.reorderCount)}
+      {stat("Repeat-quote items", props.reorderCount)}
       {stat("Verified spend lines", props.spendCount)}
       {stat("Sourcing threads", props.threadCount)}
     </div>

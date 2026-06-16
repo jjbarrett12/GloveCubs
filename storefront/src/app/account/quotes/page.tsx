@@ -9,6 +9,7 @@ import {
 } from "@/lib/procurement/customer-procurement-session";
 import { fetchBuyerQuoteHistoryWithLines } from "@/lib/account/buyer-account-snapshot";
 import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
+import { buyerQuoteStatusLabel } from "@/lib/procurement/buyer-lifecycle-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -70,22 +71,34 @@ export default async function AccountQuotesPage() {
 
         <h1 className="text-2xl font-bold text-white">Quote history</h1>
         <p className="mt-2 text-sm text-white/65">
-          Requests submitted while signed in with your active company. Older requests without a company link do not
-          appear here.
+          Your organization&apos;s quote requests — formal pricing and fulfillment are confirmed by our team, not in this
+          list.
         </p>
 
         {rows.length === 0 ? (
           <div className="mt-8 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-white/70">
-            <p>No linked quote requests yet.</p>
-            <p className="mt-3 text-white/55">
-              When you submit a quote from the quote cart while signed in with an active company, it will show up here.
-              If you submitted quotes before this link existed, they remain with our team but are not listed on this page.
+            <p className="font-medium text-white/85">No linked quote requests yet</p>
+            <p className="mt-2 text-xs text-white/50">
+              Build a line list from the catalog or your quicklist, then submit a quote request while signed in with this
+              company.
             </p>
-            <p className="mt-4">
-              <Link className="font-semibold text-[#f06232] hover:underline" href="/quote-cart">
-                Start a quote request
-              </Link>
-            </p>
+            <ul className="mt-4 space-y-2 text-xs">
+              <li>
+                <Link className="font-semibold text-[#f06232] hover:underline" href="/quote-cart">
+                  Open quote request cart
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] hover:underline" href="/store">
+                  Browse catalog
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] hover:underline" href="/request-pricing">
+                  Request pricing / RFQ
+                </Link>
+              </li>
+            </ul>
           </div>
         ) : (
           <div className="mt-8 overflow-x-auto rounded-lg border border-white/10">
@@ -97,7 +110,7 @@ export default async function AccountQuotesPage() {
                   <th className="px-3 py-2.5">Delivery</th>
                   <th className="px-3 py-2.5">Company / contact</th>
                   <th className="px-3 py-2.5 text-right">Lines</th>
-                  <th className="px-3 py-2.5 font-mono">Id</th>
+                  <th className="px-3 py-2.5">Reference</th>
                 </tr>
               </thead>
               <tbody>
@@ -114,7 +127,7 @@ export default async function AccountQuotesPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/80">
-                          {q.status}
+                          {buyerQuoteStatusLabel(q.status)}
                         </span>
                       </td>
                       <td className="max-w-[220px] px-3 py-2.5 text-xs text-white/70">
@@ -128,7 +141,14 @@ export default async function AccountQuotesPage() {
                         </p>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-white/80">{q.line_count}</td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-white/40">{q.id}</td>
+                      <td className="px-3 py-2.5">
+                        <Link
+                          href={`/account/quotes/${encodeURIComponent(q.id)}`}
+                          className="font-mono text-[10px] text-[#f06232] hover:underline"
+                        >
+                          View
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })}

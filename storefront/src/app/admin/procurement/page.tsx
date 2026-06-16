@@ -9,7 +9,7 @@ export default async function ProcurementOverviewPage() {
   if (!isSupabaseConfigured()) {
     return (
       <div>
-        <PageHeader title="Procurement" description="Supabase not configured." />
+        <PageHeader title="Procurement review" description="Supabase not configured." />
         <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to load procurement signals.
         </div>
@@ -23,8 +23,8 @@ export default async function ProcurementOverviewPage() {
   return (
     <div>
       <PageHeader
-        title="Procurement"
-        description="Companies with procurement signals — open queue items and blocked rows."
+        title="Procurement review"
+        description="Companies with open procurement review queues — savings opportunities and blocked rows."
       />
 
       <TableCard>
@@ -39,7 +39,7 @@ export default async function ProcurementOverviewPage() {
               <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="p-3">Company</th>
-                  <th className="p-3 text-right">Open queue</th>
+                  <th className="p-3 text-right">Open review</th>
                   <th className="p-3 text-right">Blocked</th>
                   <th className="p-3">Workspace</th>
                 </tr>

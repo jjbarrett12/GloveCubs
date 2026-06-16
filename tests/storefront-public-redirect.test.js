@@ -10,7 +10,10 @@ const {
     validateStorefrontPublicOriginOnBoot,
     shouldRedirectBrowserRequestToStorefront,
     shouldSuppressLegacyCustomerSpaHtml,
+    shouldSuppressLegacyAdminSpaHtml,
     isPublicCustomerHtmlNavigation,
+    isAdminHtmlNavigation,
+    buildStorefrontHtmlRedirectLocation,
     isDevApiOnlyMode,
     getPublicHtmlRedirectStatusCode,
     DEFAULT_DEV_STOREFRONT_ORIGIN,
@@ -47,9 +50,32 @@ describe('storefront-public-redirect', () => {
             assert.strictEqual(isPublicCustomerHtmlNavigation(mockReq('GET', '/login')), true);
             assert.strictEqual(isPublicCustomerHtmlNavigation(mockReq('GET', '/account')), true);
         });
-        it('excludes /api and /admin', () => {
+        it('excludes /api paths and /admin (admin uses isAdminHtmlNavigation)', () => {
             assert.strictEqual(isPublicCustomerHtmlNavigation(mockReq('GET', '/api/cart')), false);
             assert.strictEqual(isPublicCustomerHtmlNavigation(mockReq('GET', '/admin')), false);
+            assert.strictEqual(isPublicCustomerHtmlNavigation(mockReq('GET', '/admin/products')), false);
+        });
+    });
+
+    describe('isAdminHtmlNavigation', () => {
+        it('matches /admin and /admin/*', () => {
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/admin')), true);
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/admin/products')), true);
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/admin/products/new-from-url')), true);
+        });
+        it('excludes /api/admin and asset-like /admin paths', () => {
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/api/admin/orders')), false);
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/admin/app.js')), false);
+            assert.strictEqual(isAdminHtmlNavigation(mockReq('GET', '/administration')), false);
+        });
+    });
+
+    describe('buildStorefrontHtmlRedirectLocation', () => {
+        it('preserves path and query on redirect target', () => {
+            assert.strictEqual(
+                buildStorefrontHtmlRedirectLocation('http://localhost:3005/', '/admin/products?tab=imports'),
+                'http://localhost:3005/admin/products?tab=imports'
+            );
         });
     });
 
@@ -103,13 +129,20 @@ describe('storefront-public-redirect', () => {
                 false
             );
         });
-        it('never redirects /admin HTML (Phase A exception)', () => {
-            assert.strictEqual(
-                shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/admin'), originSet),
-                false
-            );
+        it('redirects /admin and /admin/* to storefront when origin valid (Phase 1B)', () => {
+            assert.strictEqual(shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/admin'), originSet), true);
             assert.strictEqual(
                 shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/admin/products'), originSet),
+                true
+            );
+            assert.strictEqual(
+                shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/admin/products/import'), originSet),
+                true
+            );
+        });
+        it('does not redirect asset-like /admin paths', () => {
+            assert.strictEqual(
+                shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/admin/legacy-app.js'), originSet),
                 false
             );
         });
@@ -121,6 +154,50 @@ describe('storefront-public-redirect', () => {
         });
         it('no redirect when origin unset', () => {
             assert.strictEqual(shouldRedirectBrowserRequestToStorefront(mockReq('GET', '/'), {}), false);
+        });
+    });
+
+    describe('shouldSuppressLegacyAdminSpaHtml', () => {
+        it('never suppresses /admin when redirect is active', () => {
+            assert.strictEqual(
+                shouldSuppressLegacyAdminSpaHtml(mockReq('GET', '/admin'), {
+                    STOREFRONT_PUBLIC_ORIGIN: 'http://localhost:3005',
+                }),
+                false
+            );
+        });
+        it('suppresses /admin in production even without storefront origin', () => {
+            assert.strictEqual(
+                shouldSuppressLegacyAdminSpaHtml(mockReq('GET', '/admin'), {
+                    NODE_ENV: 'production',
+                    STOREFRONT_PUBLIC_ORIGIN: '',
+                }),
+                true
+            );
+        });
+        it('suppresses /admin in dev when origin unset and legacy escape off', () => {
+            assert.strictEqual(
+                shouldSuppressLegacyAdminSpaHtml(mockReq('GET', '/admin'), { STOREFRONT_PUBLIC_ORIGIN: '' }),
+                true
+            );
+        });
+        it('allows legacy admin SPA in dev only when ALLOW_LEGACY_SPA_HTML=1', () => {
+            assert.strictEqual(
+                shouldSuppressLegacyAdminSpaHtml(mockReq('GET', '/admin'), {
+                    STOREFRONT_PUBLIC_ORIGIN: '',
+                    ALLOW_LEGACY_SPA_HTML: '1',
+                }),
+                false
+            );
+        });
+        it('never suppresses /api/admin/*', () => {
+            assert.strictEqual(
+                shouldSuppressLegacyAdminSpaHtml(mockReq('GET', '/api/admin/orders'), {
+                    NODE_ENV: 'production',
+                    STOREFRONT_PUBLIC_ORIGIN: '',
+                }),
+                false
+            );
         });
     });
 
@@ -155,6 +232,25 @@ describe('storefront-public-redirect', () => {
     });
 
     describe('validateStorefrontPublicOriginOnBoot', () => {
+        it('fails boot in production when ALLOW_LEGACY_SPA_HTML=1', () => {
+            const r = validateStorefrontPublicOriginOnBoot({
+                NODE_ENV: 'production',
+                STOREFRONT_PUBLIC_ORIGIN: 'https://example.com/',
+                ALLOW_LEGACY_SPA_HTML: '1',
+            });
+            assert.strictEqual(r.exitCode, 1);
+            assert.ok(r.log.some((l) => l.includes('ALLOW_LEGACY_SPA_HTML')));
+            assert.ok(r.log.some((l) => l.includes('FATAL')));
+        });
+        it('allows ALLOW_LEGACY_SPA_HTML=1 in development only', () => {
+            const r = validateStorefrontPublicOriginOnBoot({
+                NODE_ENV: 'development',
+                STOREFRONT_PUBLIC_ORIGIN: '',
+                ALLOW_LEGACY_SPA_HTML: '1',
+            });
+            assert.strictEqual(r.exitCode, undefined);
+            assert.ok(r.log.some((l) => l.includes('ALLOW_LEGACY_SPA_HTML')));
+        });
         it('requires origin in production', () => {
             const r = validateStorefrontPublicOriginOnBoot({
                 NODE_ENV: 'production',

@@ -15,12 +15,14 @@ describe("UrlImportPanel client component", () => {
 });
 
 describe("UrlJobDetailClient component", () => {
-  it("posts only selected product_ids to bridge proxy and links into review queue", () => {
+  it("posts only selected product_ids to bridge proxy and uses CatalogOS-first success banner", () => {
     const p = join(__dirname, "_components/UrlJobDetailClient.tsx");
     const s = readFileSync(p, "utf8");
     expect(s).toContain("/admin/api/products/import/url/jobs/");
     expect(s).toContain("/bridge");
     expect(s).toContain("product_ids: Array.from(selected)");
-    expect(s).toContain("/admin/products/review?batchId=");
+    expect(s).toContain("UrlImportBridgeSuccessBanner");
+    expect(s).toContain("catalogosBaseUrl");
+    expect(s).not.toMatch(/\brunPublish\b/i);
   });
 });

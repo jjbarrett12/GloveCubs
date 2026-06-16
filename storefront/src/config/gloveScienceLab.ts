@@ -228,6 +228,7 @@ export type CutLevel = "A1" | "A2" | "A3" | "A4" | "A5";
 export type ReuseTexture = "smooth-coat" | "microfoam" | "sandy" | "uncoated";
 export type GripEnv = "dry" | "wet" | "oil" | "abrasion";
 export type ReuseTask = "construction" | "warehouse" | "automotive" | "manufacturing" | "oil-gas" | "agriculture";
+export type ReuseCuff = "knit-wrist" | "safety-cuff" | "gauntlet";
 
 export type ReusableState = {
   category: ReuseCategory;
@@ -237,16 +238,24 @@ export type ReusableState = {
   texture: ReuseTexture;
   gripEnv: GripEnv;
   task: ReuseTask;
+  cuff: ReuseCuff;
 };
 
+export const REUSE_CUFF_OPTIONS: { id: ReuseCuff; label: string }[] = [
+  { id: "knit-wrist", label: "Knit wrist" },
+  { id: "safety-cuff", label: "Safety cuff" },
+  { id: "gauntlet", label: "Gauntlet" },
+];
+
 export const REUSE_DEFAULT: ReusableState = {
-  category: "knit-cut",
+  category: "leather",
   dippedCoating: "nitrile",
   knitShell: "hppe",
-  cutLevel: "A4",
-  texture: "microfoam",
-  gripEnv: "oil",
-  task: "manufacturing",
+  cutLevel: "A3",
+  texture: "uncoated",
+  gripEnv: "abrasion",
+  task: "construction",
+  cuff: "safety-cuff",
 };
 
 export const REUSE_CATEGORIES: {
@@ -345,6 +354,223 @@ export const TRUST_CARDS = [
     body: "Make informed decisions that protect people and control total cost.",
   },
 ] as const;
+
+/** Homepage science lab header — aligned with marketing mockup. */
+export const SCIENCE_HEADER_VALUES = [
+  {
+    title: "Smarter Choices",
+    body: "Match glove performance to real workplace demands.",
+  },
+  {
+    title: "Better Outcomes",
+    body: "Improve safety, comfort, and productivity.",
+  },
+  {
+    title: "Lower True Cost",
+    body: "Compare cost-per-use, not just unit price.",
+  },
+] as const;
+
+export type ScienceJobContext =
+  | "construction"
+  | "cleaning-janitorial"
+  | "automotive"
+  | "warehouse"
+  | "manufacturing"
+  | "chemical-handling";
+
+export const SCIENCE_JOB_DEFAULT: ScienceJobContext = "construction";
+
+export const SCIENCE_JOB_OPTIONS: {
+  id: ScienceJobContext;
+  label: string;
+  rfqIndustry: string;
+  disposableTask: DispTask;
+  reuseTask: ReuseTask;
+  reusePreset: Partial<ReusableState>;
+  disposablePreset: Partial<DisposableState>;
+}[] = [
+  {
+    id: "construction",
+    label: "Construction",
+    rfqIndustry: "construction",
+    disposableTask: "assembly",
+    reuseTask: "construction",
+    reusePreset: { category: "leather", texture: "uncoated", gripEnv: "abrasion", cutLevel: "A3", cuff: "safety-cuff" },
+    disposablePreset: { material: "nitrile", thickness: 6, texture: "full", gloveClass: "industrial", task: "assembly" },
+  },
+  {
+    id: "cleaning-janitorial",
+    label: "Cleaning / Janitorial",
+    rfqIndustry: "janitorial",
+    disposableTask: "cleaning",
+    reuseTask: "warehouse",
+    reusePreset: {
+      category: "dipped",
+      dippedCoating: "nitrile",
+      texture: "microfoam",
+      gripEnv: "wet",
+      cutLevel: "A2",
+      cuff: "knit-wrist",
+    },
+    disposablePreset: { material: "nitrile", thickness: 5, texture: "fingertip", gloveClass: "industrial", task: "cleaning" },
+  },
+  {
+    id: "automotive",
+    label: "Automotive",
+    rfqIndustry: "automotive",
+    disposableTask: "assembly",
+    reuseTask: "automotive",
+    reusePreset: {
+      category: "dipped",
+      dippedCoating: "foam-nitrile",
+      texture: "sandy",
+      gripEnv: "oil",
+      cutLevel: "A3",
+      cuff: "safety-cuff",
+    },
+    disposablePreset: { material: "nitrile", thickness: 6, texture: "full", gloveClass: "industrial", task: "assembly" },
+  },
+  {
+    id: "warehouse",
+    label: "Warehouse / Material Handling",
+    rfqIndustry: "warehousing_logistics",
+    disposableTask: "assembly",
+    reuseTask: "warehouse",
+    reusePreset: {
+      category: "knit-cut",
+      knitShell: "hppe",
+      texture: "microfoam",
+      gripEnv: "dry",
+      cutLevel: "A2",
+      cuff: "knit-wrist",
+    },
+    disposablePreset: { material: "nitrile", thickness: 5, texture: "fingertip", gloveClass: "general-purpose", task: "assembly" },
+  },
+  {
+    id: "manufacturing",
+    label: "Manufacturing / Industrial",
+    rfqIndustry: "industrial",
+    disposableTask: "assembly",
+    reuseTask: "manufacturing",
+    reusePreset: {
+      category: "knit-cut",
+      knitShell: "hppe",
+      texture: "microfoam",
+      gripEnv: "oil",
+      cutLevel: "A4",
+      cuff: "safety-cuff",
+    },
+    disposablePreset: { material: "nitrile", thickness: 6, texture: "full", gloveClass: "industrial", task: "assembly" },
+  },
+  {
+    id: "chemical-handling",
+    label: "Chemical Handling",
+    rfqIndustry: "chemical_processing",
+    disposableTask: "chemical",
+    reuseTask: "oil-gas",
+    reusePreset: {
+      category: "dipped",
+      dippedCoating: "nitrile",
+      texture: "smooth-coat",
+      gripEnv: "dry",
+      cutLevel: "A3",
+      cuff: "gauntlet",
+    },
+    disposablePreset: { material: "nitrile", thickness: 8, texture: "full", gloveClass: "chemo-rated", task: "chemical" },
+  },
+];
+
+export const SCIENCE_MOCKUP_PERF = [
+  { key: "grip", label: "Grip" },
+  { key: "abrasion", label: "Abrasion Resistance" },
+  { key: "chemical", label: "Chemical Resistance" },
+  { key: "cut", label: "Cut Protection" },
+  { key: "comfort", label: "Comfort" },
+  { key: "costPerUse", label: "Cost-per-use" },
+] as const;
+
+export type ScienceMockupPerfKey = (typeof SCIENCE_MOCKUP_PERF)[number]["key"];
+
+export const SCIENCE_LEARN_GUIDES = [
+  {
+    title: "Material Guide",
+    body: "Understand materials and when to use each.",
+    href: "/glove-science/nitrile-vs-vinyl-vs-latex",
+  },
+  {
+    title: "Coating Guide",
+    body: "Compare coatings and their real-world performance.",
+    href: "/glove-science/ansi-cut-resistance-explained",
+  },
+  {
+    title: "Grip Guide",
+    body: "Match grip textures to your working conditions.",
+    href: "/glove-science/glove-texture-science",
+  },
+  {
+    title: "Cost-per-use Trap",
+    body: "Avoid hidden costs and false savings.",
+    href: "/glove-science/why-gloves-fail",
+  },
+] as const;
+
+export const SCIENCE_REUSABLE_DISCLAIMER =
+  "Reusable filters: coating, liner, grip finish, cuff style, cut level, washability — not exam grade.";
+
+export function getScienceJobOption(id: ScienceJobContext) {
+  return SCIENCE_JOB_OPTIONS.find((j) => j.id === id) ?? SCIENCE_JOB_OPTIONS[0]!;
+}
+
+export function applyScienceJobPreset(
+  job: ScienceJobContext,
+  mode: LabMode
+): { disposable: DisposableState; reusable: ReusableState } {
+  const opt = getScienceJobOption(job);
+  return {
+    disposable: {
+      ...DISP_DEFAULT,
+      ...opt.disposablePreset,
+      task: opt.disposableTask,
+      gloveClass:
+        opt.disposablePreset.gloveClass ??
+        defaultGloveClassForMaterial(opt.disposablePreset.material ?? DISP_DEFAULT.material),
+    },
+    reusable: {
+      ...REUSE_DEFAULT,
+      ...opt.reusePreset,
+      task: opt.reuseTask,
+    },
+  };
+}
+
+export function mapDisposableToMockupPerf(
+  performance: ReturnType<typeof deriveDisposableProfile>["performance"],
+  texture: DispTexture
+): Record<ScienceMockupPerfKey, PerfLevel> {
+  const gripBonus = texture === "full" ? 1 : texture === "fingertip" ? 0 : -1;
+  return {
+    grip: clampLevel(performance.dexterity + gripBonus),
+    abrasion: performance.barrier,
+    chemical: performance.chemical,
+    cut: performance.puncture,
+    comfort: performance.comfort,
+    costPerUse: performance.cost,
+  };
+}
+
+export function mapReusableToMockupPerf(
+  performance: ReturnType<typeof deriveReusableProfile>["performance"]
+): Record<ScienceMockupPerfKey, PerfLevel> {
+  return {
+    grip: performance.grip,
+    abrasion: performance.abrasion,
+    chemical: clampLevel(Math.round((performance.wetOil + performance.durability) / 2)),
+    cut: performance.cut,
+    comfort: performance.dexterity,
+    costPerUse: clampLevel(2 - performance.durability),
+  };
+}
 
 function clampLevel(v: number): PerfLevel {
   return Math.max(0, Math.min(2, Math.round(v))) as PerfLevel;
@@ -507,6 +733,13 @@ export function deriveReusableProfile(s: ReusableState) {
           ? { abrasion: 2, durability: 1 }
           : { grip: 0 };
 
+  const cuffMod =
+    s.cuff === "gauntlet"
+      ? { wetOil: 1, durability: 1 }
+      : s.cuff === "knit-wrist"
+        ? { dexterity: 1 }
+        : { abrasion: 1 };
+
   const cutMod = {
     cut: s.category === "knit-cut" ? (cutIndex >= 3 ? 2 : cutIndex >= 2 ? 1 : 0) : cutIndex >= 2 ? 1 : 0,
     dexterity: cutIndex >= 4 ? -2 : cutIndex >= 3 ? -1 : 0,
@@ -522,6 +755,7 @@ export function deriveReusableProfile(s: ReusableState) {
           (shellMod[key as keyof typeof shellMod] ?? 0) +
           (texMod[key as keyof typeof texMod] ?? 0) +
           (gripMod[key as keyof typeof gripMod] ?? 0) +
+          (cuffMod[key as keyof typeof cuffMod] ?? 0) +
           (cutMod[key as keyof typeof cutMod] ?? 0)
       );
       return acc;

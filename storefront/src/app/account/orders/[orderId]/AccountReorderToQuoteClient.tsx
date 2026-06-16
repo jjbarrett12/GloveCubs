@@ -81,7 +81,7 @@ export function AccountReorderToQuoteClient({
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
-        setErr(typeof data.error === "string" ? data.error : "Could not prepare reorder.");
+        setErr(typeof data.error === "string" ? data.error : "Could not prepare repeat quote.");
         return;
       }
       const available = Array.isArray(data.availableLines) ? (data.availableLines as ApiAvailable[]) : [];
@@ -115,10 +115,10 @@ export function AccountReorderToQuoteClient({
 
   return (
     <section className="mt-10 rounded-lg border border-white/15 bg-white/[0.04] px-4 py-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Request reorder quote</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Build repeat quote</h2>
       <p className="mt-2 text-sm text-white/70">
-        This starts a new quote request from your past order. Historical prices are shown for reference only. Current
-        pricing and availability will be confirmed before fulfillment — not checkout.
+        Reuse lines from this past order to start a new quote request. Historical prices are shown for reference only.
+        Current pricing and availability will be confirmed before fulfillment — not checkout.
       </p>
 
       <div className="mt-4 space-y-2">
