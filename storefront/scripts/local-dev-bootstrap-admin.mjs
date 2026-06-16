@@ -1,5 +1,8 @@
 /**
- * LOCAL / DEVELOPMENT: create or reset a Supabase Auth user and grant Next storefront /admin (public.admin_users).
+ * LOCAL / DEVELOPMENT: create or reset a Supabase Auth user and grant operator access.
+ *
+ * Canonical allowlist: public.admin_users (id = auth.users.id).
+ * Also upserts public.app_admins compat mirror (transitional — see lib/admin-identity.js).
  *
  * Rules:
  * - Password ONLY from env GC_LOCAL_AUTH_BOOTSTRAP_PASSWORD (never hardcode; do not pass on argv).
@@ -14,7 +17,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
 import { createClient } from "@supabase/supabase-js";
+
+const require = createRequire(import.meta.url);
+const { grantCanonicalAdminOperator } = require("../../lib/admin-identity.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, "..", ".env.local");
@@ -159,17 +166,21 @@ if (!authUser) {
   }
 }
 
-const { error: admErr } = await sb.from("admin_users").upsert(
-  { id: authUser.id, is_active: true },
-  { onConflict: "id" },
-);
+const { error: admErr } = await (async () => {
+  try {
+    await grantCanonicalAdminOperator(sb, { id: authUser.id, email: authUser.email || email });
+    return { error: null };
+  } catch (e) {
+    return { error: { message: e.message || String(e) } };
+  }
+})();
 if (admErr) {
-  console.error("[bootstrap] admin_users upsert:", admErr.message);
+  console.error("[bootstrap] admin grant:", admErr.message);
   process.exit(4);
 }
 
 console.log("[bootstrap] Auth user:", created ? "created" : "password reset + email_confirm");
-console.log("[bootstrap] admin_users: upserted active row for auth id", authUser.id);
+console.log("[bootstrap] admin_users + app_admins compat: active row for auth id", authUser.id);
 
 if (anonKey && urlRef && anonRef === urlRef) {
   const anonClient = createClient(supabaseUrl, anonKey, {

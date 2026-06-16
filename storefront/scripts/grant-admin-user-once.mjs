@@ -1,12 +1,20 @@
 /**
- * Grant storefront /admin access for an auth user by email (public.admin_users.id = auth.users.id).
- * Requires SUPABASE_SERVICE_ROLE_KEY + NEXT_PUBLIC_SUPABASE_URL in .env.local.
+ * Grant storefront /admin + Express /api/admin access for an auth user by email.
+ *
+ * Canonical allowlist: public.admin_users (id = auth.users.id, is_active = true).
+ * Transitional compat: public.app_admins mirror (one-direction sync — do not grant app_admins alone).
+ *
+ * Requires SUPABASE_SERVICE_ROLE_KEY + NEXT_PUBLIC_SUPABASE_URL in storefront/.env.local
  * Usage: node scripts/grant-admin-user-once.mjs you@example.com
  */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
 import { createClient } from "@supabase/supabase-js";
+
+const require = createRequire(import.meta.url);
+const { grantCanonicalAdminOperator } = require("../../lib/admin-identity.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, "..", ".env.local");
@@ -56,14 +64,11 @@ if (!found) {
   process.exit(3);
 }
 
-const { error: upsertErr } = await sb.from("admin_users").upsert(
-  { id: found.id, is_active: true },
-  { onConflict: "id" },
-);
-
-if (upsertErr) {
-  console.error("admin_users upsert:", upsertErr.message, upsertErr);
+try {
+  await grantCanonicalAdminOperator(sb, { id: found.id, email: found.email || emailArg });
+} catch (err) {
+  console.error(String(err.message || err));
   process.exit(4);
 }
 
-console.log("OK: admin_users row for", found.email, "id", found.id);
+console.log("OK: canonical admin_users + app_admins compat for", found.email, "id", found.id);
