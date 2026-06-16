@@ -13,7 +13,7 @@
     "seed": "node seed.js",
     "diagnose:products": "node scripts/diagnose-products.mjs",
     "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
-    "test": "node scripts/check-no-catalogos-products.js && node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js && node --test \"tests/*.test.js\"",
+    "test": "node scripts/check-no-catalogos-products.js && node scripts/check-express-freeze.js && node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js && node --test \"tests/*.test.js\"",
     "check:commerce-truth": "node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js",
     "verify:pricing-authority-parity": "node scripts/verify-pricing-authority-parity.js",
     "verify:storefront-redirects": "node --test tests/storefront-public-redirect.test.js",
@@ -33,10 +33,18 @@
     "smoke:staging": "node scripts/smoke-staging.mjs --all",
     "smoke:reconcile": "node scripts/smoke-staging.mjs --reconcile-only",
     "smoke:commerce-truth": "node scripts/staging-commerce-truth-smoke.mjs",
+    "report:contamination": "node scripts/contamination-report.mjs",
+    "report:contamination:strict": "cross-env GC_CONTAMINATION_REPORT_STRICT=1 node scripts/contamination-report.mjs",
+    "plan:contamination-quarantine": "node scripts/contamination-quarantine-plan.mjs",
+    "test:contamination": "node --test tests/contamination-heuristics.test.js tests/contamination-quarantine.test.js",
     "check:po-mapping": "node scripts/check-po-mapping-health.js",
     "ar:aging-hold": "node scripts/ar-aging-auto-hold.js",
     "verify:structural-cleanup": "node scripts/run-structural-verification.mjs",
-    "check:v2-catalog": "node scripts/check-v2-catalog-guardrails.mjs"
+    "check:v2-catalog": "node scripts/check-v2-catalog-guardrails.mjs",
+    "verify:commerce-packaging-migration": "node scripts/verify-commerce-packaging-migration.mjs",
+    "audit:commerce-packaging": "npx tsx scripts/audit-commerce-packaging-coverage.mjs",
+    "backfill:commerce-packaging": "npx tsx scripts/backfill-commerce-packaging.mjs",
+    "test:commerce-packaging": "node --test tests/commerce-packaging-phase2e.test.js && cd storefront && npx vitest run ../lib/commerce-packaging/extract.test.ts ../lib/commerce-packaging/product-backfill.test.ts src/lib/admin/commerce-packaging-editor.test.ts src/lib/catalog/store-product-commerce.test.ts src/lib/quote-cart/commerce-line.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

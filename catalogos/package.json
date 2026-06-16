@@ -9,7 +9,10 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:catalog-sellable-guard": "vitest run src/lib/commerce/catalog-v2-sellable-integrity.integration.test.ts"
+    "test:catalog-sellable-guard": "vitest run src/lib/commerce/catalog-v2-sellable-integrity.integration.test.ts",
+    "qa:phase-3d-closeout": "tsx --tsconfig tsconfig.json scripts/qa-phase-3d-closeout.mjs",
+    "qa:phase-3e-v2": "tsx --tsconfig tsconfig.json scripts/qa-phase-3e-url-extraction-v2.mjs",
+    "qa:phase-3e-v2:fixture": "tsx --tsconfig tsconfig.json scripts/qa-phase-3e-url-extraction-v2.mjs --fixture"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

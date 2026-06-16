@@ -14,7 +14,12 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@commerce-packaging/*": ["../lib/commerce-packaging/*"],
+      "@glove-sku-intelligence": ["../lib/glove-sku-intelligence/index.ts"],
+      "@glove-sku-intelligence/*": ["../lib/glove-sku-intelligence/*"]
+    }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]

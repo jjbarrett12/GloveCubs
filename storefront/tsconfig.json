@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -16,9 +17,12 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@commerce-packaging/*": ["../lib/commerce-packaging/*"],
+      "@glove-sku-intelligence": ["../lib/glove-sku-intelligence/index.ts"],
+      "@glove-sku-intelligence/*": ["../lib/glove-sku-intelligence/*"],
       "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "scripts"]
 }

@@ -23,6 +23,11 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       "@supabase/supabase-js": path.join(storefrontNodeModules, "@supabase/supabase-js"),
+      "@glove-sku-intelligence": path.resolve(__dirname, "../lib/glove-sku-intelligence/index.ts"),
+      "@glove-sku-intelligence/glove-size-normalization": path.resolve(
+        __dirname,
+        "../lib/glove-sku-intelligence/glove-size-normalization.ts"
+      ),
     };
     const existing = Array.isArray(config.resolve.modules)
       ? config.resolve.modules

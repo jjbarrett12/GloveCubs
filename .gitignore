@@ -1,7 +1,7 @@
 # Dependencies & build output
 **/node_modules/
 **/.next/
-storefront/tsconfig.tsbuildinfo
+**/*.tsbuildinfo
 
 # Local tooling (git worktrees / agent paths — never commit)
 .claude/worktrees/
@@ -20,5 +20,16 @@ data/
 
 # Legacy JSON database - fully migrated to Supabase; do not recreate
 database.json
+database_backup.json
+contamination-report.json
+contamination-flagged.csv
+quarantine-plan.json
+quarantine-plan.csv
 .vercel
 .env*.local
+
+# Local storefront scratch / smoke artifacts
+storefront/tmp-*
+test-results/
+playwright-report/
+coverage/
