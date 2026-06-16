@@ -29,10 +29,26 @@ export const DISPOSABLE_ATTRIBUTE_KEYS = [
   "cuff_style",
   "hand_orientation",
   "packaging",
+  "box_quantity",
+  "case_quantity",
   "sterility",
 ] as const;
 export const WORK_GLOVE_ATTRIBUTE_KEYS = [
-  "cut_level_ansi", "puncture_level", "abrasion_level", "flame_resistant", "arc_rating", "warm_cold_weather",
+  "cut_level_ansi",
+  "puncture_level",
+  "abrasion_level",
+  "flame_resistant",
+  "arc_rating",
+  "warm_cold_weather",
+  "coating",
+  "liner",
+  "gauge",
+  "pack_quantity",
+  "certifications",
+  "uses",
+  "industries",
+  "texture",
+  "cuff_style",
 ] as const;
 
 export type UniversalAttributeSlug = (typeof UNIVERSAL_ATTRIBUTE_KEYS)[number];
@@ -44,33 +60,64 @@ export type AttributeSlug = UniversalAttributeSlug | DisposableAttributeSlug | W
 // Allowed value slugs (exact values from dictionary)
 // -----------------------------------------------------------------------------
 export const MATERIAL_VALUES = ["nitrile", "latex", "vinyl", "polyethylene_pe"] as const;
-export const SIZE_VALUES = ["xs", "s", "m", "l", "xl", "xxl"] as const;
-export const COLOR_VALUES = ["blue", "purple", "black", "white", "light_blue", "orange", "violet", "green", "tan", "gray", "beige", "yellow", "brown", "pink"] as const;
-/** All thicknesses listed individually (2–20 mil); no 7+ catch-all. */
-export const THICKNESS_MIL_VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] as const;
+export const SIZE_VALUES = ["xs", "s", "m", "l", "xl", "xxl", "xxxl"] as const;
+export const COLOR_VALUES = [
+  "blue",
+  "purple",
+  "black",
+  "white",
+  "light_blue",
+  "orange",
+  "violet",
+  "blue_violet",
+  "green",
+  "tan",
+  "gray",
+  "beige",
+  "yellow",
+  "brown",
+  "pink",
+] as const;
+/** All thicknesses listed individually (0.5, 2–20 mil); no 7+ catch-all. */
+export const THICKNESS_MIL_VALUES = ["0.5", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] as const;
 export const POWDER_VALUES = ["powder_free", "powdered"] as const;
-export const GRADE_VALUES = ["medical_exam_grade", "industrial_grade", "food_service_grade"] as const;
+export const GRADE_VALUES = [
+  "industrial_grade",
+  "food_service_grade",
+  "medical_exam_grade",
+  "surgical_grade",
+  "cleanroom_grade",
+  "chemical_resistant",
+  "general_purpose",
+] as const;
 export const INDUSTRIES_VALUES = [
   "agriculture",
   "automotive",
   "beauty_personal_care",
+  "cannabis",
   "chemical_processing",
   "cold_chain_outdoor",
   "construction",
   "dental",
   "education",
+  "electrical",
   "electronics_assembly",
   "emergency_services",
   "food_processing",
   "food_service",
   "healthcare",
+  "home_use",
+  "hospitality",
+  "hvac",
   "industrial",
   "janitorial",
   "landscaping_grounds",
   "laboratories",
   "metal_fabrication",
   "oil_gas_energy",
+  "painting",
   "pharmaceuticals",
+  "plumbing",
   "retail_grocery",
   "sanitation",
   "security_public_safety",
@@ -78,16 +125,74 @@ export const INDUSTRIES_VALUES = [
   "veterinary",
   "warehousing_logistics",
 ] as const;
+/** Legacy compliance slugs retained for existing product_attributes rows. */
 export const COMPLIANCE_VALUES = ["fda_approved", "astm_tested", "food_safe", "latex_free", "chemo_rated", "en_455", "en_374"] as const;
-/** Canonical certification slugs (same allowed set as legacy `compliance_certifications`). */
-export const CERTIFICATION_VALUES = COMPLIANCE_VALUES;
+export const DISPOSABLE_CERTIFICATION_VALUES = [
+  "astm_d6319",
+  "astm_d3578",
+  "astm_d5250",
+  "fda_food_contact",
+  "fda_510k",
+  "medical_exam_grade_cert",
+  "chemo_tested",
+  "fentanyl_tested",
+  "chemotherapy_drug_tested",
+  "aql_1_5",
+  "aql_2_5",
+  "aql_4_0",
+  "powder_free",
+  "latex_free",
+  "iso_13485",
+  "en_455",
+  "en_374",
+  ...COMPLIANCE_VALUES,
+] as const;
+export const SAFETY_CERTIFICATION_VALUES = [
+  "ansi_isea_105",
+  "en_388",
+  "en_407",
+  "en_511",
+  "en_iso_374",
+  "ce",
+  "ukca",
+  "reach",
+  "oeko_tex",
+  "nfpa_70e",
+  "arc_flash_rated",
+  "impact_rated",
+  "cut_rated",
+  "puncture_rated",
+] as const;
+/** Canonical certification slugs (disposable + safety + legacy). */
+export const CERTIFICATION_VALUES = [...DISPOSABLE_CERTIFICATION_VALUES, ...SAFETY_CERTIFICATION_VALUES] as const;
 export const USES_VALUES = [
-  "general_purpose",
+  "food_preparation",
+  "food_handling",
   "medical_exam",
   "patient_care",
-  "food_handling",
+  "dental_procedure",
   "laboratory",
   "chemical_handling",
+  "cleaning",
+  "janitorial",
+  "sanitation",
+  "automotive_repair",
+  "mechanical_work",
+  "painting",
+  "tattooing",
+  "beauty_services",
+  "hair_coloring",
+  "dishwashing",
+  "general_purpose",
+  "ppe",
+  "cut_protection",
+  "abrasion_protection",
+  "cold_protection",
+  "heat_protection",
+  "grip_work",
+  "construction_work",
+  "warehouse_work",
+  "material_handling",
   "industrial_maintenance",
   "cleanroom",
 ] as const;
@@ -100,7 +205,26 @@ export const PROTECTION_TAGS_VALUES = [
   "grip_enhanced",
   "abrasion_enhanced",
 ] as const;
-export const TEXTURE_VALUES = ["smooth", "fingertip_textured", "fully_textured"] as const;
+export const TEXTURE_VALUES = [
+  "smooth",
+  "fingertip_textured",
+  "fully_textured",
+  "micro_textured",
+  "diamond_texture",
+  "fish_scale",
+  "sandy_grip",
+  "foam_grip",
+  "crinkle_grip",
+  "raised_diamond",
+  "embossed",
+  "grip_dots",
+] as const;
+export const BOX_QUANTITY_VALUES = ["50", "90", "100", "150", "200", "250", "300"] as const;
+export const CASE_QUANTITY_VALUES = ["250", "500", "1000", "1500", "2000", "2500", "3000"] as const;
+export const PACK_QUANTITY_VALUES = ["each", "pair", "dozen", "pack", "case"] as const;
+export const COATING_VALUES = ["nitrile", "latex", "pu", "pvc", "foam"] as const;
+export const LINER_VALUES = ["hppe", "aramid", "cotton", "polyester"] as const;
+export const GAUGE_VALUES = ["7", "10", "13", "15", "18", "21"] as const;
 export const CUFF_STYLE_VALUES = ["beaded_cuff", "non_beaded", "extended_cuff"] as const;
 export const HAND_ORIENTATION_VALUES = ["ambidextrous"] as const;
 export const PACKAGING_VALUES = ["box_100_ct", "box_200_250_ct", "case_1000_ct", "case_2000_plus_ct"] as const;
@@ -129,6 +253,12 @@ export type AllowedValueSlug =
   | (typeof CUFF_STYLE_VALUES)[number]
   | (typeof HAND_ORIENTATION_VALUES)[number]
   | (typeof PACKAGING_VALUES)[number]
+  | (typeof BOX_QUANTITY_VALUES)[number]
+  | (typeof CASE_QUANTITY_VALUES)[number]
+  | (typeof PACK_QUANTITY_VALUES)[number]
+  | (typeof COATING_VALUES)[number]
+  | (typeof LINER_VALUES)[number]
+  | (typeof GAUGE_VALUES)[number]
   | (typeof STERILITY_VALUES)[number]
   | (typeof CUT_LEVEL_ANSI_VALUES)[number]
   | (typeof PUNCTURE_LEVEL_VALUES)[number]
@@ -211,6 +341,8 @@ export interface NormalizedProductContent {
   bullets?: string[];
   brand?: string;
   manufacturer_part_number?: string;
+  /** Source manufacturer SKU (never GLV-format); preserved from URL import contract. */
+  manufacturer_sku?: string;
   supplier_sku: string;
   upc?: string;
   supplier_cost: number;

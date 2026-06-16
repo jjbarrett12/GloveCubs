@@ -39,6 +39,8 @@ export interface StagingNormalizedData {
   bullets?: string[];
   brand?: string;
   manufacturer_part_number?: string;
+  /** Source manufacturer SKU (never GLV-format); preserved from URL import contract. */
+  manufacturer_sku?: string;
   supplier_sku: string;
   upc?: string;
   supplier_cost: number;
@@ -58,10 +60,18 @@ export interface StagingNormalizedData {
   category_guess?: string;
   category_slug: string;
   category_inference?: CategoryInferenceDetail;
+  /** Canonical case/pallet packaging (CommercePackagingV1). */
+  commerce_packaging?: Record<string, unknown>;
+  /** GLV SKU proposals (CatalogOsSkuProposalsV1). */
+  sku_proposals?: Record<string, unknown>;
   filter_attributes: Record<string, unknown>;
   confidence_by_key?: Record<string, number>;
   unmapped_values?: { attribute_key: string; raw_value: string }[];
   anomaly_flags?: ReviewFlag[];
+  /** Compact ProductSetupContract for staged review (Phase 3E.C.2a). */
+  product_setup_contract_summary?: Record<string, unknown>;
+  /** Compatibility alias for URL extraction review UI. */
+  _extraction_v2?: Record<string, unknown>;
 }
 
 /** Input to buildStagingPayload. */
@@ -150,6 +160,7 @@ const stagingNormalizedDataSchema = z.object({
   bullets: z.array(z.string()).optional(),
   brand: z.string().optional(),
   manufacturer_part_number: z.string().optional(),
+  manufacturer_sku: z.string().optional(),
   supplier_sku: z.string(),
   upc: z.string().optional(),
   supplier_cost: z.number(),
@@ -166,10 +177,14 @@ const stagingNormalizedDataSchema = z.object({
   pack_size: z.string().optional(),
   category_guess: z.string().optional(),
   category_slug: z.string(),
+  commerce_packaging: z.record(z.unknown()).optional(),
+  sku_proposals: z.record(z.unknown()).optional(),
   filter_attributes: z.record(z.unknown()),
   confidence_by_key: z.record(z.number()).optional(),
   unmapped_values: z.array(z.object({ attribute_key: z.string(), raw_value: z.string() })).optional(),
   anomaly_flags: z.array(reviewFlagSchema).optional(),
+  product_setup_contract_summary: z.record(z.unknown()).optional(),
+  _extraction_v2: z.record(z.unknown()).optional(),
 });
 
 const stagingPayloadSchema = z.object({

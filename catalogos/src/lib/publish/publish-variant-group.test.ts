@@ -17,12 +17,17 @@ vi.mock("./canonical-sync-service", () => ({
   finalizePublishSearchSync: vi.fn().mockResolvedValue({ ok: true, searchPublishStatus: "synced" }),
 }));
 
-vi.mock("./ensure-catalog-v2-link", () => ({
-  ensureCatalogV2ProductForListing: vi.fn().mockResolvedValue({
-    ok: true,
-    catalogProductId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-  }),
-}));
+vi.mock("./ensure-catalog-v2-link", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ensure-catalog-v2-link")>();
+  return {
+    ...actual,
+    ensureCatalogV2ProductForListing: vi.fn().mockResolvedValue({
+      ok: true,
+      catalogProductId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    }),
+    upsertSellableForCatalogV2Product: vi.fn().mockResolvedValue({ ok: true }),
+  };
+});
 
 vi.mock("@/lib/catalog-expansion/lifecycle", () => ({
   setLifecycleStatus: vi.fn().mockResolvedValue(undefined),
@@ -71,24 +76,7 @@ describe("runPublishVariantGroup partial batch contract", () => {
   it("variant 1 completes snapshot; variant 2 sync errors: no snapshot for v2; returns success false", async () => {
     const { runPublishVariantGroup } = await import("./publish-variant-group");
 
-    let insertCount = 0;
-    const productsApi = {
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-        })),
-      })),
-      insert: vi.fn(() => ({
-        select: vi.fn(() => ({
-          single: vi.fn(async () => {
-            insertCount += 1;
-            const id = insertCount === 1 ? "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" : "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
-            return { data: { id }, error: null };
-          }),
-        })),
-      })),
-    };
-
+    let catalogProductInsertCount = 0;
     let supplierNormalizedFromCount = 0;
     const supabaseMock = {
       from: vi.fn((table: string) => {
@@ -133,7 +121,6 @@ describe("runPublishVariantGroup partial batch contract", () => {
             })),
           };
         }
-        if (table === "products") return productsApi;
         if (table === "supplier_offers") {
           return { upsert: vi.fn().mockResolvedValue({ error: null }) };
         }
@@ -152,6 +139,37 @@ describe("runPublishVariantGroup partial batch contract", () => {
     };
 
     vi.spyOn(dbClient, "getSupabaseCatalogos").mockReturnValue(supabaseMock as never);
+    vi.spyOn(dbClient, "getSupabase").mockReturnValue({
+      schema: vi.fn(() => ({
+        from: vi.fn((table: string) => {
+          if (table === "catalog_products") {
+            return {
+              select: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+                })),
+              })),
+              insert: vi.fn(() => ({
+                select: vi.fn(() => ({
+                  single: vi.fn(async () => {
+                    catalogProductInsertCount += 1;
+                    const id =
+                      catalogProductInsertCount === 1
+                        ? "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                        : "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+                    return { data: { id }, error: null };
+                  }),
+                })),
+              })),
+            };
+          }
+          if (table === "catalog_variants") {
+            return { insert: vi.fn().mockResolvedValue({ error: null }) };
+          }
+          throw new Error(`unexpected catalog_v2 table in publish-variant-group mock: ${table}`);
+        }),
+      })),
+    } as never);
 
     let syncCalls = 0;
     vi.spyOn(productAttributeSync, "syncProductAttributesFromStaged").mockImplementation(async () => {

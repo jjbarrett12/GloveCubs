@@ -3,6 +3,17 @@
  * without creating new canonical data (display only).
  */
 
+import type {
+  FieldEvidence,
+  FieldTrust,
+  ProductUrlExtractionV2,
+  ProductUrlExtractionV2Summary,
+} from "@/lib/product-extraction/types";
+import {
+  isProductSetupContractSummaryV1,
+  resolveProductSetupContractFull,
+} from "@/lib/product-extraction/product-setup-contract";
+
 export type StagedReviewSourceHint = {
   rawDisplay: string;
   confidence?: number;
@@ -207,23 +218,92 @@ export function getPackagingMathReview(nd: Record<string, unknown>): {
   glovesPerBox: number | null;
   computedTotal: number | null;
   declaredTotal: number | null;
+  caseLabel: string | null;
+  palletLabel: string | null;
+  innerUnitLabel: string | null;
 } {
+  const cp = nd.commerce_packaging as
+    | {
+        inners_per_case?: number | null;
+        units_per_inner?: number | null;
+        units_per_case?: number | null;
+        inner_unit_type?: string | null;
+        case_label?: string | null;
+        pallet_label?: string | null;
+      }
+    | undefined;
+
+  if (cp?.units_per_case != null && cp.inners_per_case != null && cp.units_per_inner != null) {
+    const boxes = cp.inners_per_case;
+    const glovesPerBox = cp.units_per_inner;
+    const computedTotal = boxes * glovesPerBox;
+    const declaredTotal = cp.units_per_case;
+    const state: PackagingMathReviewState =
+      computedTotal === declaredTotal ? "matches" : "mismatch";
+    return {
+      state,
+      boxes,
+      glovesPerBox,
+      computedTotal,
+      declaredTotal,
+      caseLabel: cp.case_label ?? null,
+      palletLabel: cp.pallet_label ?? null,
+      innerUnitLabel: cp.inner_unit_type ?? null,
+    };
+  }
+
   const boxes = packagingBoxesPerCase(nd);
   const glovesPerBox = packagingGlovesPerBox(nd);
-  const declaredTotal = packagingDeclaredTotalGloves(nd);
+  const declaredTotal = packagingDeclaredTotalGloves(nd) ?? cp?.units_per_case ?? null;
   const computedTotal =
     boxes != null && glovesPerBox != null ? boxes * glovesPerBox : null;
 
   if (computedTotal == null) {
-    return { state: "incomplete", boxes, glovesPerBox, computedTotal: null, declaredTotal };
+    return {
+      state: "incomplete",
+      boxes,
+      glovesPerBox,
+      computedTotal: null,
+      declaredTotal,
+      caseLabel: cp?.case_label ?? null,
+      palletLabel: cp?.pallet_label ?? null,
+      innerUnitLabel: cp?.inner_unit_type ?? null,
+    };
   }
   if (declaredTotal == null) {
-    return { state: "matches", boxes, glovesPerBox, computedTotal, declaredTotal: null };
+    return {
+      state: "matches",
+      boxes,
+      glovesPerBox,
+      computedTotal,
+      declaredTotal: null,
+      caseLabel: cp?.case_label ?? null,
+      palletLabel: cp?.pallet_label ?? null,
+      innerUnitLabel: cp?.inner_unit_type ?? null,
+    };
   }
   if (computedTotal === declaredTotal) {
-    return { state: "matches", boxes, glovesPerBox, computedTotal, declaredTotal };
+    return {
+      state: "matches",
+      boxes,
+      glovesPerBox,
+      computedTotal,
+      declaredTotal,
+      caseLabel: cp?.case_label ?? null,
+      palletLabel: cp?.pallet_label ?? null,
+      innerUnitLabel: cp?.inner_unit_type ?? null,
+    };
   }
-  return { state: "mismatch", boxes, glovesPerBox, computedTotal, declaredTotal };
+  return {
+    state: "mismatch",
+    boxes,
+    glovesPerBox,
+    computedTotal,
+    declaredTotal,
+    caseLabel: cp?.case_label ?? null,
+    palletLabel: cp?.pallet_label ?? null,
+    innerUnitLabel: cp?.inner_unit_type ?? null,
+  };
 }
 
 const ND_FIELD_SPECS: {
@@ -465,4 +545,136 @@ export function buildStagedProductReviewEvidence(
 export function formatConfidencePct(conf: number | undefined): string {
   if (conf == null || !Number.isFinite(conf)) return "—";
   return `${(conf * 100).toFixed(0)}%`;
+}
+
+const EXTRACTION_V2_VERSION = "product-url-extraction-v2";
+
+const CONFIDENCE_KEYS = [
+  "overall",
+  "identity",
+  "variants",
+  "images",
+  "packaging",
+  "attributes",
+] as const;
+
+export type UrlExtractionReviewContext = {
+  summary: ProductUrlExtractionV2Summary;
+  full: ProductUrlExtractionV2 | null;
+};
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v != null && typeof v === "object" && !Array.isArray(v);
+}
+
+function hasValidExtractionV2Version(o: Record<string, unknown>): boolean {
+  return o.version === EXTRACTION_V2_VERSION && o.schemaVersion === 1;
+}
+
+function parseExtractionConfidence(v: unknown): ProductUrlExtractionV2["confidence"] | null {
+  if (!isRecord(v)) return null;
+  for (const k of CONFIDENCE_KEYS) {
+    const n = v[k];
+    if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  }
+  return v as ProductUrlExtractionV2["confidence"];
+}
+
+function parseExtractionReview(v: unknown): ProductUrlExtractionV2["review"] | null {
+  if (!isRecord(v)) return null;
+  if (typeof v.safeToCreateMaster !== "boolean") return null;
+  if (typeof v.safeToStageVariants !== "boolean") return null;
+  if (!Array.isArray(v.blockers) || !v.blockers.every((b) => typeof b === "string")) return null;
+  if (!Array.isArray(v.warnings) || !v.warnings.every((w) => typeof w === "string")) return null;
+  const hints = v.publishReadinessHints;
+  if (!isRecord(hints)) return null;
+  if (typeof hints.hasVariantCandidates !== "boolean") return null;
+  if (typeof hints.hasImageCandidate !== "boolean") return null;
+  if (typeof hints.hasPackagingSignal !== "boolean") return null;
+  if (typeof hints.hasSkuSourceSeparation !== "boolean") return null;
+  if (!Array.isArray(hints.warnings) || !hints.warnings.every((w) => typeof w === "string")) return null;
+  return v as ProductUrlExtractionV2["review"];
+}
+
+/** Read compact V2 summary from normalized_data (contract summary preferred). */
+export function parseExtractionV2Summary(
+  normalizedData: Record<string, unknown>
+): ProductUrlExtractionV2Summary | null {
+  if (!isRecord(normalizedData)) return null;
+
+  const contractSummary = normalizedData.product_setup_contract_summary;
+  if (isProductSetupContractSummaryV1(contractSummary)) {
+    const compat = contractSummary._extraction_v2_compat;
+    if (compat && hasValidExtractionV2Version(compat)) {
+      return compat as ProductUrlExtractionV2Summary;
+    }
+  }
+
+  const raw = normalizedData._extraction_v2;
+  if (!isRecord(raw)) return null;
+  if (!hasValidExtractionV2Version(raw)) return null;
+  if (typeof raw.sourceUrl !== "string" || !raw.sourceUrl.trim()) return null;
+  if (typeof raw.imageCandidateCount !== "number" || !Number.isFinite(raw.imageCandidateCount)) return null;
+  if (typeof raw.proposedVariantCount !== "number" || !Number.isFinite(raw.proposedVariantCount)) return null;
+  if (!Array.isArray(raw.variantDimensions)) return null;
+  const confidence = parseExtractionConfidence(raw.confidence);
+  if (!confidence) return null;
+  const review = parseExtractionReview(raw.review);
+  if (!review) return null;
+  return raw as ProductUrlExtractionV2Summary;
+}
+
+/** Read full V2 extraction from raw_payload (contract full preferred). */
+export function parseFullExtractionV2(rawPayload: Record<string, unknown>): ProductUrlExtractionV2 | null {
+  if (!isRecord(rawPayload)) return null;
+
+  const contractFull = resolveProductSetupContractFull(rawPayload);
+  if (contractFull?._sourceExtractionV2) {
+    return contractFull._sourceExtractionV2;
+  }
+
+  const raw = rawPayload.extraction_v2;
+  if (!isRecord(raw)) return null;
+  if (!hasValidExtractionV2Version(raw)) return null;
+  if (typeof raw.sourceUrl !== "string" || !raw.sourceUrl.trim()) return null;
+  if (typeof raw.fetchedAt !== "string" || !raw.fetchedAt.trim()) return null;
+  return raw as ProductUrlExtractionV2;
+}
+
+/** Resolve summary (required) and optional full extraction for review UI. */
+export function resolveUrlExtractionReviewContext(
+  normalizedData: Record<string, unknown>,
+  rawPayload: Record<string, unknown>
+): UrlExtractionReviewContext | null {
+  const summary = parseExtractionV2Summary(normalizedData);
+  if (!summary) return null;
+  const full = parseFullExtractionV2(rawPayload);
+  return { summary, full };
+}
+
+/** Display value from a FieldEvidence object; returns em dash when absent. */
+export function formatFieldEvidenceValue(evidence: FieldEvidence<unknown> | unknown): string {
+  if (evidence == null) return "—";
+  if (!isRecord(evidence) || !("value" in evidence)) return "—";
+  const v = evidence.value;
+  if (Array.isArray(v)) {
+    const parts = v.map((x) => str(x)).filter(Boolean);
+    return parts.length ? parts.join(", ") : "—";
+  }
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (v == null || v === "") return "—";
+  return String(v);
+}
+
+const TRUST_LABELS: Record<FieldTrust, string> = {
+  trusted: "Trusted",
+  probable: "Probable",
+  weak: "Weak",
+  conflicting: "Conflicting",
+  missing: "Missing",
+};
+
+/** Human label for FieldTrust badges in review UI. */
+export function formatTrustLabel(trust: FieldTrust): string {
+  return TRUST_LABELS[trust] ?? trust;
 }

@@ -164,4 +164,21 @@ describe("finalizeUrlImportParsedRow", () => {
     );
     expect(row.spec_sheet_urls).toEqual(["https://a.com/a.pdf", "https://b.com/sds.pdf"]);
   });
+
+  it("attaches commerce_packaging with schema_version 1", () => {
+    const row = finalizeUrlImportParsedRow(
+      {
+        sku: "S",
+        boxes_per_case: 10,
+        gloves_per_box: 100,
+        normalized_case_cost: 42,
+        category_slug: "disposable_gloves",
+      },
+      { parsedPage: { spec_table: {} } }
+    );
+    expect(row.commerce_packaging).toBeTruthy();
+    expect((row.commerce_packaging as { schema_version: number }).schema_version).toBe(1);
+    expect((row.commerce_packaging as { units_per_case?: number }).units_per_case).toBe(1000);
+    expect(row.boxes_per_case).toBe(10);
+  });
 });

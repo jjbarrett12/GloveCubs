@@ -2,7 +2,8 @@
  * Tests for product_attributes → products.attributes snapshot refresh.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import * as dbClient from "@/lib/db/client";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 
 function productAttributesChain(data: unknown[]) {
@@ -17,9 +18,53 @@ function productAttributesChain(data: unknown[]) {
   };
 }
 
+function catalogV2AdminMock(opts?: {
+  existingMetadata?: Record<string, unknown>;
+  updateError?: { message: string } | null;
+  updateAttemptsRef?: { count: number };
+}) {
+  const metadataUpdates: unknown[] = [];
+  const adminMock = {
+    schema: vi.fn(() => ({
+      from: vi.fn((table: string) => {
+        if (table !== "catalog_products") {
+          throw new Error(`unexpected catalog_v2 table in snapshot mock: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { metadata: opts?.existingMetadata ?? {} },
+                error: null,
+              }),
+            })),
+          })),
+          update: vi.fn((payload: unknown) => {
+            metadataUpdates.push(payload);
+            if (opts?.updateAttemptsRef) opts.updateAttemptsRef.count += 1;
+            const attempt = opts?.updateAttemptsRef?.count ?? 1;
+            const error =
+              opts?.updateError ??
+              (opts?.updateAttemptsRef && attempt === 1 ? { message: "transient" } : null);
+            return {
+              eq: vi.fn().mockResolvedValue({ error: error ?? null }),
+            };
+          }),
+        };
+      }),
+    })),
+  };
+  return { adminMock, metadataUpdates };
+}
+
 describe("refreshProductAttributesJsonSnapshot", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("writes single-value and deduped multi-select arrays from joined rows", async () => {
-    const updates: unknown[] = [];
+    const { adminMock, metadataUpdates } = catalogV2AdminMock();
+    vi.spyOn(dbClient, "getSupabase").mockReturnValue(adminMock as never);
     const data = [
       {
         value_text: "nitrile",
@@ -49,26 +94,17 @@ describe("refreshProductAttributesJsonSnapshot", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "product_attributes") return productAttributesChain(data);
-        if (table === "products") {
-          return {
-            update: vi.fn((payload: unknown) => {
-              updates.push(payload);
-              return {
-                eq: vi.fn().mockResolvedValue({ error: null }),
-              };
-            }),
-          };
-        }
         throw new Error(`unexpected table ${table}`);
       }),
     };
 
     const r = await refreshProductAttributesJsonSnapshot(supabase as never, "pid-1");
     expect(r).toEqual({ ok: true });
-    expect(updates).toHaveLength(1);
-    const payload = updates[0] as { attributes: Record<string, unknown> };
-    expect(payload.attributes.material).toBe("nitrile");
-    expect(payload.attributes.industries).toEqual(["healthcare", "food_service"]);
+    expect(metadataUpdates).toHaveLength(1);
+    const facetAttributes = (metadataUpdates[0] as { metadata: { facet_attributes: Record<string, unknown> } })
+      .metadata.facet_attributes;
+    expect(facetAttributes.material).toBe("nitrile");
+    expect(facetAttributes.industries).toEqual(["healthcare", "food_service"]);
   });
 
   it("Option A: JSON snapshot contains only keys derived from product_attributes (no extra keys)", async () => {
@@ -80,26 +116,23 @@ describe("refreshProductAttributesJsonSnapshot", () => {
         attribute_definitions: { attribute_key: "material" },
       },
     ];
-    const updates: unknown[] = [];
+    const { adminMock, metadataUpdates } = catalogV2AdminMock({
+      existingMetadata: { legacy_key: "keep_me" },
+    });
+    vi.spyOn(dbClient, "getSupabase").mockReturnValue(adminMock as never);
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "product_attributes") return productAttributesChain(data);
-        if (table === "products") {
-          return {
-            update: vi.fn((payload: unknown) => {
-              updates.push(payload);
-              return { eq: vi.fn().mockResolvedValue({ error: null }) };
-            }),
-          };
-        }
         throw new Error(`unexpected table ${table}`);
       }),
     };
     const r = await refreshProductAttributesJsonSnapshot(supabase as never, "pid-opt-a");
     expect(r).toEqual({ ok: true });
-    const attrs = (updates[0] as { attributes: Record<string, unknown> }).attributes;
-    expect(Object.keys(attrs).sort()).toEqual(["material"]);
-    expect(attrs).not.toHaveProperty("legacy_key");
+    const meta = (metadataUpdates[0] as { metadata: Record<string, unknown> }).metadata;
+    const facetAttributes = meta.facet_attributes as Record<string, unknown>;
+    expect(Object.keys(facetAttributes).sort()).toEqual(["material"]);
+    expect(facetAttributes).not.toHaveProperty("legacy_key");
+    expect(meta.legacy_key).toBe("keep_me");
   });
 
   it("returns ok: false when product_attributes select errors", async () => {
@@ -134,24 +167,20 @@ describe("refreshProductAttributesJsonSnapshot", () => {
         attribute_definitions: { attribute_key: "material" },
       },
     ];
-    const updates: unknown[] = [];
+    const { adminMock, metadataUpdates } = catalogV2AdminMock();
+    vi.spyOn(dbClient, "getSupabase").mockReturnValue(adminMock as never);
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "product_attributes") return productAttributesChain(data);
-        if (table === "products") {
-          return {
-            update: vi.fn((payload: unknown) => {
-              updates.push(payload);
-              return { eq: vi.fn().mockResolvedValue({ error: null }) };
-            }),
-          };
-        }
         throw new Error(`unexpected table ${table}`);
       }),
     };
     const r = await refreshProductAttributesJsonSnapshot(supabase as never, "pid-dup");
     expect(r).toEqual({ ok: true });
-    expect((updates[0] as { attributes: { material: string } }).attributes.material).toBe("nitrile");
+    expect(
+      (metadataUpdates[0] as { metadata: { facet_attributes: { material: string } } }).metadata.facet_attributes
+        .material
+    ).toBe("nitrile");
   });
 
   it("fails on conflicting single-select values for one attribute_key", async () => {
@@ -197,27 +226,17 @@ describe("refreshProductAttributesJsonSnapshot", () => {
         attribute_definitions: { attribute_key: "material" },
       },
     ];
-    let updateAttempts = 0;
+    const updateAttemptsRef = { count: 0 };
+    const { adminMock } = catalogV2AdminMock({ updateAttemptsRef });
+    vi.spyOn(dbClient, "getSupabase").mockReturnValue(adminMock as never);
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "product_attributes") return productAttributesChain(data);
-        if (table === "products") {
-          return {
-            update: vi.fn(() => {
-              updateAttempts++;
-              return {
-                eq: vi.fn().mockResolvedValue({
-                  error: updateAttempts === 1 ? { message: "transient" } : null,
-                }),
-              };
-            }),
-          };
-        }
         throw new Error(`unexpected table ${table}`);
       }),
     };
     const r = await refreshProductAttributesJsonSnapshot(supabase as never, "pid-4");
     expect(r).toEqual({ ok: true });
-    expect(updateAttempts).toBe(2);
+    expect(updateAttemptsRef.count).toBe(2);
   });
 });

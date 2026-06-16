@@ -57,6 +57,40 @@ function buildPublishReadiness() {
   };
 }
 
+function validExtractionV2Summary() {
+  return {
+    version: "product-url-extraction-v2" as const,
+    schemaVersion: 1 as const,
+    sourceUrl: "https://example.com/glove",
+    normalizedTitle: "Nitrile Exam Glove",
+    brand: "Proworks",
+    imageCandidateCount: 2,
+    proposedVariantCount: 0,
+    variantDimensions: [] as string[],
+    confidence: {
+      overall: 0.82,
+      identity: 0.85,
+      variants: 0.6,
+      images: 0.78,
+      packaging: 0.88,
+      attributes: 0.8,
+    },
+    review: {
+      safeToCreateMaster: true,
+      safeToStageVariants: false,
+      publishReadinessHints: {
+        hasVariantCandidates: false,
+        hasImageCandidate: true,
+        hasPackagingSignal: true,
+        hasSkuSourceSeparation: true,
+        warnings: [] as string[],
+      },
+      blockers: [] as string[],
+      warnings: [] as string[],
+    },
+  };
+}
+
 function buildStagingDetail(over: Record<string, unknown> = {}) {
   return {
     id: "norm-smoke-1",
@@ -199,5 +233,60 @@ describe("URL import review UX smoke", () => {
       expect(screen.getByText(/Ready to publish when you are/)).toBeTruthy();
     });
     expect(screen.queryByText("Staging family")).toBeNull();
+  });
+
+  it("detail sheet: shows URL extraction panel when _extraction_v2 exists", async () => {
+    mockFetchJson(
+      buildStagingDetail({
+        normalized_data: {
+          ...(buildStagingDetail().normalized_data as Record<string, unknown>),
+          _extraction_v2: validExtractionV2Summary(),
+        },
+      })
+    );
+    render(
+      <StagedProductDetail normalizedId="norm-v2" open categories={categories} onOpenChange={vi.fn()} />
+    );
+    await waitFor(() => {
+      expect(screen.getByText("URL extraction (V2)")).toBeTruthy();
+    });
+    expect(screen.getAllByText("Nitrile Exam Glove").length).toBeGreaterThan(0);
+    expect(screen.getByText("Case & Pallet setup")).toBeTruthy();
+  });
+
+  it("detail sheet: hides URL extraction panel when _extraction_v2 missing", async () => {
+    mockFetchJson(buildStagingDetail());
+    render(
+      <StagedProductDetail normalizedId="norm-nov2" open categories={categories} onOpenChange={vi.fn()} />
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Case & Pallet setup")).toBeTruthy();
+    });
+    expect(screen.queryByText("URL extraction (V2)")).toBeNull();
+  });
+
+  it("detail sheet: summary-only V2 with empty raw does not crash and shows anchor messaging", async () => {
+    mockFetchJson(
+      buildStagingDetail({
+        raw: { raw_payload: {} },
+        normalized_data: {
+          ...(buildStagingDetail().normalized_data as Record<string, unknown>),
+          _extraction_v2: validExtractionV2Summary(),
+        },
+      })
+    );
+    render(
+      <StagedProductDetail normalizedId="norm-v2-summary" open categories={categories} onOpenChange={vi.fn()} />
+    );
+    await waitFor(() => {
+      expect(screen.getByText("URL extraction (V2)")).toBeTruthy();
+    });
+    expect(
+      screen.getByText("Detailed image roles are available on the family anchor row.")
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Detailed variant evidence is available on the family anchor row.")
+    ).toBeTruthy();
+    expect(screen.queryByText("Source evidence")).toBeNull();
   });
 });

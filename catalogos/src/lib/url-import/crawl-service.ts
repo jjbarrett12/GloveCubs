@@ -30,6 +30,9 @@ import {
   shouldCallHtmlAi,
   shouldSkipHtmlAiAllStrong,
 } from "./merge-extracted-with-ai";
+import { isUrlExtractionV2Enabled } from "@/lib/product-extraction/feature-flag";
+import { runUrlExtractionV2 } from "@/lib/product-extraction/url-extraction-v2";
+import { buildUrlImportProductInsertsFromExtractionV2 } from "./crawl-v2-wire";
 
 function simpleHash(str: string): string {
   let h = 0;
@@ -438,6 +441,60 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
     }
 
     const categoryPath = "";
+
+    if (isUrlExtractionV2Enabled()) {
+      const extraction = await runUrlExtractionV2({
+        url,
+        html,
+        parsed,
+        fetchedAt: new Date().toISOString(),
+      });
+      const { inserts, warnings: v2Warnings } = buildUrlImportProductInsertsFromExtractionV2({
+        extraction,
+        legacyRawPayload: {
+          extraction_source: "product-url-extraction-v2",
+          legacy_openclaw_available: false,
+        },
+      });
+      for (const w of v2Warnings) {
+        if (!warnings.includes(w)) warnings.push(w);
+      }
+
+      for (const insertRow of inserts) {
+        const { error: prodErr } = await supabase.from("url_import_products").insert({
+          job_id: jobId,
+          page_id: pageId,
+          source_url: url,
+          raw_payload: insertRow.raw_payload,
+          normalized_payload: insertRow.normalized_payload,
+          extraction_method: insertRow.extraction_method,
+          confidence: insertRow.confidence,
+          ai_used: insertRow.ai_used,
+        });
+        if (prodErr) errors.push(`Product insert: ${prodErr.message}`);
+        else productsExtracted++;
+      }
+
+      await supabase
+        .from("url_import_pages")
+        .update({
+          status: "crawled",
+          content_hash: contentHash,
+          raw_html_length: html.length,
+          extracted_snapshot: {
+            title:
+              extraction.identity.normalizedTitle?.value ??
+              parsed.product_title ??
+              parsed.page_title,
+            extraction_v2: true,
+          },
+          crawled_at: new Date().toISOString(),
+        })
+        .eq("id", pageId);
+
+      pagesCrawled++;
+      if (parsed && isLikelyProductPath(new URL(url).pathname)) productPagesDetected++;
+    } else {
     const extractedBase = extractFromParsedPage(parsed as ParsedProductPage, sourceHost, categoryPath);
     let mergedExtracted = extractedBase;
     let htmlAiProvenance: Record<string, unknown> | undefined;
@@ -556,6 +613,7 @@ export async function runUrlImportCrawl(jobId: string): Promise<RunUrlImportCraw
 
     pagesCrawled++;
     if (parsed && isLikelyProductPath(new URL(url).pathname)) productPagesDetected++;
+    }
   }
 
   const { data: products } = await supabase

@@ -188,7 +188,7 @@ export async function createNewMasterProduct(
       name: nameTrim,
       description: payload.description ?? null,
       brand_id: payload.brand_id ?? null,
-      status: "active",
+      status: "draft",
       metadata: { category_id: payload.category_id, facet_attributes: {} },
     })
     .select("id")
@@ -196,31 +196,6 @@ export async function createNewMasterProduct(
   if (insertErr || !product) return { success: false, error: insertErr?.message ?? "Insert failed" };
 
   const masterId = product.id as string;
-  const { error: vInsErr } = await supabase.schema("catalog_v2").from("catalog_variants").insert({
-    catalog_product_id: masterId,
-    variant_sku: skuTrim,
-    sort_order: 0,
-    is_active: true,
-    metadata: {},
-  });
-  if (vInsErr) {
-    await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", masterId);
-    return { success: false, error: vInsErr.message };
-  }
-
-  const sellable = await upsertSellableForCatalogV2Product(masterId, {
-    name: nameTrim,
-    internalSku: skuTrim,
-    listPriceMinor: lm,
-    bulkPriceMinor: payload.bulk_price_minor ?? null,
-    unitCostMinor: payload.unit_cost_minor ?? null,
-    isActive: true,
-  });
-  if (!sellable.ok) {
-    await supabase.schema("catalog_v2").from("catalog_variants").delete().eq("catalog_product_id", masterId);
-    await supabase.schema("catalog_v2").from("catalog_products").delete().eq("id", masterId);
-    return { success: false, error: sellable.message };
-  }
   const nextSync = await nextSearchPublishStatusWhenAcceptingReview(normalizedId);
   const patch: Record<string, unknown> = {
     status: "approved",
@@ -243,7 +218,7 @@ export async function createNewMasterProduct(
   if (options?.publishToLive) {
     const pub = await publishStagedToLive(normalizedId, { publishedBy: options.publishedBy });
     if (!pub.published) {
-      await revalidateReview();
+      if (!options?.skipRevalidate) await revalidateReview();
       return {
         success: true,
         masterProductId: masterId,
@@ -254,7 +229,7 @@ export async function createNewMasterProduct(
     return { success: true, masterProductId: masterId, published: true };
   }
 
-  await revalidateReview();
+  if (!options?.skipRevalidate) await revalidateReview();
   return { success: true, masterProductId: masterId, published: false };
 }
 

@@ -48,6 +48,7 @@ export function makePublishReadiness(overrides: Partial<PublishReadiness> = {}):
       staging_validation: [],
       missing_required_attributes: [],
       case_pricing: [],
+      sku: [],
     },
     postClickPipelineNotes: NOTES,
     ...overrides,
@@ -91,6 +92,7 @@ export function makeStagingDetail(id: string, overrides: Partial<StagingDetailRo
         staging_validation: [],
         missing_required_attributes: [],
         case_pricing: [],
+        sku: [],
       },
     }),
   };

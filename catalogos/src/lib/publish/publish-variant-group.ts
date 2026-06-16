@@ -17,6 +17,7 @@ import {
   unitsPerCaseFromStagingNormalizedContent,
 } from "../../../../lib/supplier-offer-normalization";
 import type { SearchPublishStatus } from "./types";
+import { resolvePublishSkusFromStaging } from "@/lib/sku-intelligence/publish-sku-apply";
 
 export interface PublishVariantGroupInput {
   normalizedIds: string[];
@@ -234,9 +235,19 @@ async function runPublishVariantGroupAddVariants(params: {
   for (const row of params.rows) {
     const nd = row.normalized_data ?? {};
     const attrs = (row.attributes ?? nd.filter_attributes ?? nd) as Record<string, unknown>;
-    const variantSku = (nd.supplier_sku ?? nd.sku ?? row.id) as string;
-    const variantName = (nd.canonical_title ?? nd.name ?? variantSku) as string;
+    const supplierSku = (nd.supplier_sku ?? nd.sku ?? row.id) as string;
     const size = row.inferred_size ?? attrs.size;
+    const sizeCode = size != null ? String(size) : null;
+    const resolved = resolvePublishSkusFromStaging({
+      normalizedData: nd,
+      sizeCode,
+      fallbackParentSku: params.baseSku,
+      fallbackVariantSku: supplierSku,
+      applyProposals: true,
+    });
+    const variantSku = resolved.variantSku?.trim() || supplierSku;
+    const manufacturerSku = resolved.manufacturerSku?.trim() || supplierSku;
+    const variantName = (nd.canonical_title ?? nd.name ?? variantSku) as string;
     const axis = row.variant_axis ?? "size";
     const vVal = row.variant_value;
     const variantAttrPatch: Record<string, unknown> = {};
@@ -278,7 +289,11 @@ async function runPublishVariantGroupAddVariants(params: {
         description: (nd.description as string) ?? null,
         brand_id: brandId,
         status: "active",
-        metadata: { ...mergedAttrs, family_id: params.familyId },
+        metadata: {
+          ...mergedAttrs,
+          family_id: params.familyId,
+          ...(manufacturerSku ? { manufacturer_sku: manufacturerSku } : {}),
+        },
       })
       .select("id")
       .single();
@@ -300,7 +315,7 @@ async function runPublishVariantGroupAddVariants(params: {
       variant_sku: variantSku,
       sort_order: 0,
       is_active: true,
-      metadata: {},
+      metadata: manufacturerSku ? { manufacturer_sku: manufacturerSku } : {},
     });
     if (vInsErr) {
       return {
@@ -351,7 +366,7 @@ async function runPublishVariantGroupAddVariants(params: {
       {
         supplier_id: row.supplier_id,
         product_id: productId,
-        supplier_sku: variantSku,
+        supplier_sku: supplierSku,
         cost: costNum,
         sell_price: Number.isFinite(cost) ? cost : null,
         raw_id: row.raw_id,

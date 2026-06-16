@@ -21,6 +21,7 @@ import {
 } from "./ingestion-config";
 import { patchImportBatchStats } from "./batch-service";
 import { extractSupplierImportHints } from "./import-hints";
+import { extractProductSetupPassthroughFromParsedRow } from "@/lib/product-extraction/product-setup-contract";
 
 export interface ChunkRunnerInput {
   batchId: string;
@@ -276,6 +277,7 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
       });
       const nd = payload.normalized_data;
       const hints = extractSupplierImportHints(row);
+      const contractPassthrough = extractProductSetupPassthroughFromParsedRow(row);
       const matchMethod = rulesAccepted ? "rules" : "none";
       const aiMatchStatus = rulesAccepted ? "not_needed" : "pending";
       const aiMatchQueueReason = rulesAccepted
@@ -286,6 +288,7 @@ export async function runIngestionChunks(input: ChunkRunnerInput): Promise<Chunk
       const normalizedDataWithMeta = {
         ...nd,
         ...hints,
+        ...contractPassthrough,
         name: nd.canonical_title,
         sku: nd.supplier_sku,
         cost: nd.supplier_cost,

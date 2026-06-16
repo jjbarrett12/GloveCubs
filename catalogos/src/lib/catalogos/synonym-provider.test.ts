@@ -23,6 +23,8 @@ describe("getFallbackSynonymMap", () => {
     expect(map.color?.blk).toBe("black");
     expect(map.packaging?.["1000/cs"]).toBe("case_1000_ct");
     expect(map.grade?.exam).toBe("medical_exam_grade");
+    expect(map.material?.hdpe).toBe("polyethylene_pe");
+    expect(map.material?.polyethylene).toBe("polyethylene_pe");
   });
 
   it("is used by normalizeAttributeValue when no map passed (no drift)", () => {

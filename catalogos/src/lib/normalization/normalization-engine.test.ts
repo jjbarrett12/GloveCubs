@@ -72,6 +72,8 @@ describe("normalization utils", () => {
     expect(parseThicknessFromRaw(12)).toBe(12);
     expect(parseThicknessFromRaw(null, "gloves 4 mil powder free")).toBe(4);
     expect(parseThicknessFromRaw(null, "6mil nitrile")).toBe(6);
+    expect(parseThicknessFromRaw("0.5 mil")).toBe(0.5);
+    expect(parseThicknessFromRaw(null, "Safety Zone Polyethylene 0.5 mil - Small")).toBe(0.5);
   });
 
   it("extractContentFromRaw gets title, sku, cost", () => {
@@ -197,6 +199,74 @@ describe("deterministic extraction - disposable gloves", () => {
     const row = { name: "Gloves", size: "m", material: "nitrile", color: "blue", brand: "X", packaging: "box_100_ct", powder: "powder_free", grade: "exam" };
     const { attributes } = extractDisposableGloveAttributes(row, { synonymMap });
     expect(attributes.grade).toBe("medical_exam_grade");
+  });
+
+  it("maps boolean powder_free and latex_free without raw true strings", () => {
+    const row = {
+      name: "Nitrile glove",
+      material: "nitrile",
+      size: "m",
+      color: "blue",
+      brand: "X",
+      packaging: "box_100_ct",
+      powder_free: true,
+      latex_free: true,
+      grade: "industrial_grade",
+    };
+    const { attributes, unmapped } = extractDisposableGloveAttributes(row);
+    expect(attributes.powder).toBe("powder_free");
+    expect(attributes.certifications).toContain("latex_free");
+    expect(unmapped.some((u) => u.raw_value === "true")).toBe(false);
+  });
+
+  it("maps grade exam and exam_grade boolean without synonymMap", () => {
+    const row = {
+      name: "Nitrile exam glove",
+      material: "nitrile",
+      size: "m",
+      color: "blue",
+      brand: "X",
+      packaging: "box_100_ct",
+      powder: "powder_free",
+      grade: "exam",
+    };
+    const { attributes } = extractDisposableGloveAttributes(row);
+    expect(attributes.grade).toBe("medical_exam_grade");
+
+    const rowBool = { ...row, grade: undefined, exam_grade: true };
+    const { attributes: attrs2 } = extractDisposableGloveAttributes(rowBool);
+    expect(attrs2.grade).toBe("medical_exam_grade");
+  });
+
+  it("does not infer medical_exam_grade from nitrile material alone", () => {
+    const row = {
+      name: "Nitrile glove",
+      material: "nitrile",
+      size: "m",
+      color: "blue",
+      brand: "X",
+      packaging: "box_100_ct",
+      powder: "powder_free",
+      grade: "industrial_grade",
+    };
+    const { attributes } = extractDisposableGloveAttributes(row);
+    expect(attributes.grade).toBe("industrial_grade");
+  });
+
+  it("derives case_1000_ct packaging from boxes_per_case and gloves_per_box", () => {
+    const row = {
+      name: "Gloves",
+      material: "nitrile",
+      size: "m",
+      color: "blue",
+      brand: "X",
+      powder: "powder_free",
+      grade: "industrial_grade",
+      boxes_per_case: 10,
+      gloves_per_box: 100,
+    };
+    const { attributes } = extractDisposableGloveAttributes(row);
+    expect(attributes.packaging).toBe("case_1000_ct");
   });
 
   it("produces same result with explicit fallback map as with no map (single source from provider)", () => {
@@ -356,5 +426,26 @@ describe("staging payload generation", () => {
       supplierId: "33333333-3333-3333-3333-333333333333",
     });
     expect(payload.normalized_data.spec_sheet_urls).toEqual(["https://files.example.com/lat-xl-sds.pdf"]);
+  });
+
+  it("attaches sku_proposals from parsed row manufacturer evidence", () => {
+    const row = {
+      name: "ProWorks Nitrile Gloves",
+      sku: "GL-N125F-M",
+      supplier_sku: "GL-N125F-M",
+      cost: 85,
+      size: "M",
+      source_url:
+        "https://www.hospecobrands.com/products/proworks-blue-violet-nitrile-exam-gloves-powder-free-3-mil-hos-gl-n125f-l-gl-n125fl",
+      variants: ["XS", "S", "M", "L", "XL"].map((code, i) => ({
+        normalized_size_code: code,
+        manufacturer_sku: `GL-N125F-${code}`,
+        source_sku: `GL-N125F-${code}`,
+      })),
+    };
+    const result = runNormalization(row);
+    const proposals = result.content.sku_proposals as { proposed_parent_sku?: string } | undefined;
+    expect(proposals?.proposed_parent_sku).toBe("GLV-GL-N125");
+    expect(result.content.commerce_packaging).toBeDefined();
   });
 });

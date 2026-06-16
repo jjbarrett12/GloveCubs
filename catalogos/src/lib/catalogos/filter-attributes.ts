@@ -29,7 +29,7 @@ export const COLOR_OPTIONS = [
 export type ColorOption = (typeof COLOR_OPTIONS)[number];
 
 /** Disposable glove: thickness filter values — all thicknesses listed (no 7+ catch-all). */
-export const THICKNESS_MIL_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] as const;
+export const THICKNESS_MIL_OPTIONS = ["0.5", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] as const;
 export type ThicknessMilOption = (typeof THICKNESS_MIL_OPTIONS)[number];
 
 export const POWDER_OPTIONS = ["powder_free", "powdered"] as const;

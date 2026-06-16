@@ -9,6 +9,7 @@ import { urlImportPayloadToParsedRow } from "./to-parsed-row";
 import type { ParsedRow } from "@/lib/ingestion/types";
 import { getSupabaseCatalogos } from "@/lib/db/client";
 import { emitUrlImportEvent } from "./telemetry";
+import { resolveProductSetupContractFull } from "@/lib/product-extraction/product-setup-contract";
 
 export interface BridgeUrlImportToBatchInput {
   jobId: string;
@@ -21,6 +22,20 @@ export interface BridgeUrlImportToBatchResult {
   batchId?: string;
   normalizedCount?: number;
   error?: string;
+}
+
+/** Map url_import_products rows to ParsedRows with full contract on raw payload. */
+export function prepareUrlImportBridgeRows(
+  products: { normalized_payload: Record<string, unknown>; raw_payload?: Record<string, unknown> }[]
+): ParsedRow[] {
+  return products.map((p) => {
+    const row = urlImportPayloadToParsedRow(p.normalized_payload ?? {});
+    const contractFull = resolveProductSetupContractFull(p.raw_payload ?? {});
+    if (contractFull) {
+      row.product_setup_contract_full = contractFull;
+    }
+    return row;
+  });
 }
 
 export async function bridgeUrlImportToBatch(
@@ -38,16 +53,20 @@ export async function bridgeUrlImportToBatch(
 
   let query = supabase
     .from("url_import_products")
-    .select("id, normalized_payload")
+    .select("id, normalized_payload, raw_payload")
     .eq("job_id", input.jobId);
   if (input.productIds?.length) query = query.in("id", input.productIds);
   const { data: products, error: prodErr } = await query;
 
   if (prodErr) return { success: false, error: prodErr.message };
-  const list = (products ?? []) as { id: string; normalized_payload: Record<string, unknown> }[];
+  const list = (products ?? []) as {
+    id: string;
+    normalized_payload: Record<string, unknown>;
+    raw_payload?: Record<string, unknown>;
+  }[];
   if (list.length === 0) return { success: false, error: "No products to import" };
 
-  const rows: ParsedRow[] = list.map((p) => urlImportPayloadToParsedRow(p.normalized_payload ?? {}));
+  const rows: ParsedRow[] = prepareUrlImportBridgeRows(list);
 
   try {
     const result = await runPipelineFromParsedRows({

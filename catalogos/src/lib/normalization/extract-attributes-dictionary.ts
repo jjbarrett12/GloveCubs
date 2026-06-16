@@ -48,6 +48,33 @@ export interface ExtractionOutcome<T> {
   unmapped: { attribute_key: string; raw_value: string }[];
 }
 
+/** Coerce boolean-like row values (true/false, yes/no, 1/0, string "true"). */
+function coerceBool(v: unknown): boolean | undefined {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0) return false;
+  const s = strLower(v);
+  if (s === "true" || s === "yes" || s === "y" || s === "1") return true;
+  if (s === "false" || s === "no" || s === "n" || s === "0") return false;
+  return undefined;
+}
+
+function normalizeGradeToken(raw: string): string {
+  if (raw === "exam" || raw === "medical_exam" || raw === "exam_grade") return "medical_exam_grade";
+  if (raw === "food") return "food_service_grade";
+  return raw;
+}
+
+function packagingQtyFromRow(row: RawRow): number | undefined {
+  const direct = num(
+    row.case_qty ?? row.qty_per_case ?? row.total_gloves_per_case ?? row.units_per_case
+  );
+  if (direct != null) return direct;
+  const boxes = num(row.boxes_per_case ?? row.inners_per_case);
+  const perInner = num(row.gloves_per_box ?? row.units_per_box ?? row.units_per_inner ?? row.box_qty);
+  if (boxes != null && perInner != null) return boxes * perInner;
+  return num(row.box_qty);
+}
+
 /** Disposable gloves: extract only dictionary-allowed values; record unmapped. */
 export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOptions = {}): ExtractionOutcome<NormalizedDisposableGloveAttributes> {
   const { synonymMap } = options;
@@ -101,25 +128,38 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
     } else if (t.unmapped) unmapped.push({ attribute_key: "thickness_mil", raw_value: thickVal });
   }
 
-  // Powder (production-safe: yes/no, y/n, 1/0 map to powder_free/powdered)
-  const powderExplicit = strLower(row.powder ?? row.powder_free ?? row.powdered);
+  // Powder (production-safe: yes/no, y/n, 1/0, boolean true → powder_free)
+  const powderBool = coerceBool(row.powder_free ?? row.powderFree);
   const powderFromText = /\bpowder[- ]?free\b|pf\b|powderfree/i.test(text) ? "powder_free" : /\bpowdered\b/i.test(text) ? "powdered" : "";
-  const powderNormalized = (powderExplicit === "yes" || powderExplicit === "y" || powderExplicit === "1") ? "powder_free" : (powderExplicit === "no" || powderExplicit === "n" || powderExplicit === "0") ? "powdered" : powderExplicit;
-  const powderRaw = powderNormalized || powderFromText;
+  let powderRaw = "";
+  if (powderBool === true) powderRaw = "powder_free";
+  else if (powderBool === false) powderRaw = "powdered";
+  else {
+    const powderExplicit = strLower(row.powder ?? row.powdered);
+    const powderNormalized =
+      powderExplicit === "yes" || powderExplicit === "y" || powderExplicit === "1"
+        ? "powder_free"
+        : powderExplicit === "no" || powderExplicit === "n" || powderExplicit === "0"
+          ? "powdered"
+          : powderExplicit;
+    powderRaw = powderNormalized || powderFromText;
+  }
   const pow = lookupAllowed("powder", powderRaw, POWDER_VALUES, synonymMap);
   if (pow.value) {
     attributes.powder = pow.value;
     confidenceByKey.powder = 0.9;
   } else if (pow.normalizedRaw && pow.unmapped) unmapped.push({ attribute_key: "powder", raw_value: pow.normalizedRaw });
 
-  // Grade (production-safe: "food" → food_service_grade for lookup)
-  const gradeExplicit = strLower(row.grade);
+  // Grade (exam / gloveType / exam_grade boolean → medical_exam_grade)
+  const examGradeBool = coerceBool(row.exam_grade ?? row.examGrade);
+  const gradeExplicit = normalizeGradeToken(strLower(row.grade));
+  const gloveType = normalizeGradeToken(strLower(row.glove_type ?? row.gloveType ?? row.detected_family));
+  const gradeFromExamBool = examGradeBool === true ? "medical_exam_grade" : "";
   const gradeFromText = /\b(medical|exam|exam grade|fda\s*approved)\b/i.test(text) ? "medical_exam_grade"
     : /\b(industrial|general purpose)\b/i.test(text) ? "industrial_grade"
     : /\b(food\s*service|food\s*safe|nsf|food\b)\b/i.test(text) ? "food_service_grade"
     : "";
-  const gradeNormalized = gradeExplicit === "food" ? "food_service_grade" : gradeExplicit;
-  const gradeRaw = gradeNormalized || gradeFromText;
+  const gradeRaw = gradeFromExamBool || gradeExplicit || gloveType || gradeFromText;
   const gr = lookupAllowed("grade", gradeRaw, GRADE_VALUES, synonymMap);
   if (gr.value) {
     attributes.grade = gr.value;
@@ -133,8 +173,13 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
     if (attributes.industries?.length) confidenceByKey.industries = 0.8;
   }
 
-  // Certifications (multi; canonical; same value set as legacy compliance_certifications)
-  const cert = extractCertificationsFromText(text);
+  // Certifications (multi; canonical; latex-free boolean adds latex_free tag)
+  const latexFreeBool = coerceBool(row.latex_free ?? row.latexFree);
+  let cert = extractCertificationsFromText(text);
+  if (latexFreeBool === true && !cert.includes("latex_free")) {
+    cert = [...cert, "latex_free"];
+    confidenceByKey.certifications = Math.max(confidenceByKey.certifications ?? 0, 0.85);
+  }
   if (cert.length) {
     attributes.certifications = cert.filter((v): v is (typeof CERTIFICATION_VALUES)[number] => CERTIFICATION_VALUES.includes(v));
     if (attributes.certifications?.length) confidenceByKey.certifications = 0.85;
@@ -168,12 +213,21 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
   const cuff = lookupAllowed("cuff_style", cuffRaw, CUFF_STYLE_VALUES, synonymMap);
   if (cuff.value) { attributes.cuff_style = cuff.value; confidenceByKey.cuff_style = 0.85; }
 
-  // Hand orientation (default ambidextrous for gloves)
-  attributes.hand_orientation = "ambidextrous";
-  confidenceByKey.hand_orientation = 0.5;
+  // Hand orientation (explicit row/text or trusted default)
+  const handRaw =
+    strLower(row.hand_orientation) ||
+    (/\bambidextrous\b/i.test(text) ? "ambidextrous" : undefined);
+  const hand = lookupAllowed("hand_orientation", handRaw, HAND_ORIENTATION_VALUES, synonymMap);
+  if (hand.value) {
+    attributes.hand_orientation = hand.value;
+    confidenceByKey.hand_orientation = handRaw ? 0.85 : 0.5;
+  } else {
+    attributes.hand_orientation = "ambidextrous";
+    confidenceByKey.hand_orientation = 0.5;
+  }
 
   // Packaging
-  const qty = num(row.case_qty ?? row.qty_per_case ?? row.box_qty ?? row.pack_size);
+  const qty = packagingQtyFromRow(row);
   let packRaw: string | undefined;
   if (qty != null && qty >= 2000) packRaw = "case_2000_plus_ct";
   else if (qty != null && qty >= 1000) packRaw = "case_1000_ct";
@@ -188,7 +242,17 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
   } else if (pack.normalizedRaw && pack.unmapped) unmapped.push({ attribute_key: "packaging", raw_value: pack.normalizedRaw });
 
   // Sterility
-  const sterRaw = /\bsterile\b/i.test(text) ? "sterile" : /\bnon[- ]?sterile\b|non sterile/i.test(text) ? "non_sterile" : undefined;
+  const sterileBool = coerceBool(row.sterile);
+  const sterRaw =
+    sterileBool === true
+      ? "sterile"
+      : sterileBool === false
+        ? "non_sterile"
+        : /\bsterile\b/i.test(text)
+          ? "sterile"
+          : /\bnon[- ]?sterile\b|non sterile/i.test(text)
+            ? "non_sterile"
+            : undefined;
   const ster = lookupAllowed("sterility", sterRaw, STERILITY_VALUES, synonymMap);
   if (ster.value) { attributes.sterility = ster.value; confidenceByKey.sterility = 0.85; }
 
@@ -279,10 +343,18 @@ function parseMilFromText(text: string): number | undefined {
 }
 
 function extractMaterialFromText(text: string): string {
-  if (/\bnitrile\b/i.test(text)) return "nitrile";
-  if (/\blatex\b/i.test(text)) return "latex";
-  if (/\bvinyl\b/i.test(text)) return "vinyl";
-  if (/\bpoly(?:ethylene)?\b|pe\b/i.test(text)) return "polyethylene_pe";
+  const cleaned = text
+    .replace(/\blatex[\s-]?free\b/gi, " ")
+    .replace(/\bnot\s+made\s+with\s+latex\b/gi, " ")
+    .replace(/\bnon[\s-]?latex\b/gi, " ")
+    .replace(/\balternative\s+to\s+vinyl\b/gi, " ")
+    .replace(/\bvinyl\s+alternative\b/gi, " ");
+  if (/\bhdpe\b|\bhigh[\s-]?density\s+polyethylene\b|\bsynthetic\s+hdpe\s+resin\b|\bpoly(?:ethylene)?\b/i.test(cleaned)) {
+    return "polyethylene_pe";
+  }
+  if (/\bnitrile\b/i.test(cleaned)) return "nitrile";
+  if (/\bvinyl\b/i.test(cleaned)) return "vinyl";
+  if (/\blatex\b/i.test(cleaned)) return "latex";
   return "";
 }
 

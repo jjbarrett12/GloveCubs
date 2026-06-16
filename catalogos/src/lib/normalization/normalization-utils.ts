@@ -22,28 +22,35 @@ export function num(v: unknown): number | undefined {
 }
 
 /**
- * Canonical thickness (mil) parser: "12mil", "12-mil", "12 mil", "12 MIL", 12 → 12.
- * Single source of truth so we only ever store one value per thickness (e.g. "12").
- * Production-safe: clamps to 1–30 mil; invalid/negative → undefined.
+ * Canonical thickness (mil) parser: "12mil", "12-mil", "12 mil", "0.5 mil", ".5 mil" → numeric mil.
+ * Preserves decimal values (e.g. 0.5); invalid/negative/out-of-range → undefined.
  */
 export function parseThicknessFromRaw(v: unknown, fromText?: string): number | undefined {
+  const parseMil = (raw: string): number | undefined => {
+    const s = raw.trim();
+    if (!s) return undefined;
+    const m =
+      s.match(/^(\d+(?:\.\d+)?|\.\d+)\s*[-]?\s*(?:mil|mm)?$/i) ??
+      s.match(/(\d+(?:\.\d+)?|\.\d+)/);
+    if (!m?.[1]) return undefined;
+    const token = m[1].startsWith(".") ? `0${m[1]}` : m[1];
+    const n = parseFloat(token);
+    if (!Number.isFinite(n) || n <= 0 || n > 30) return undefined;
+    return n;
+  };
+
   if (v != null && typeof v === "number" && Number.isFinite(v)) {
-    const n = Math.round(v);
-    return n >= 1 && n <= 30 ? n : undefined;
+    return v > 0 && v <= 30 ? v : undefined;
   }
-  const s = v != null ? String(v).trim() : "";
-  if (s) {
-    const m = s.match(/^(\d+(?:\.\d+)?)\s*[-]?\s*(?:mil|mm)?$/i) ?? s.match(/(\d+(?:\.\d+)?)/);
-    if (m) {
-      const n = Math.round(parseFloat(m[1]));
-      if (Number.isFinite(n) && n >= 1 && n <= 30) return n;
-    }
+  if (v != null) {
+    const parsed = parseMil(String(v));
+    if (parsed != null) return parsed;
   }
   if (fromText) {
-    const m = fromText.match(/(\d+(?:\.\d+)?)\s*[-]?\s*(?:mil|mm)\b/i) ?? fromText.match(/\b(\d+(?:\.\d+)?)\s*(?:mil|mm)?/i);
-    if (m) {
-      const n = Math.round(parseFloat(m[1]));
-      if (Number.isFinite(n) && n >= 1 && n <= 30) return n;
+    const milMatch = fromText.match(/(?:^|[^\d.])(\d+(?:\.\d+)?|\.\d+)\s*mil\b/i);
+    if (milMatch?.[1]) {
+      const parsed = parseMil(milMatch[1]);
+      if (parsed != null) return parsed;
     }
   }
   return undefined;
@@ -127,7 +134,13 @@ export function extractContentFromRaw(row: Record<string, unknown>): Partial<Nor
       : undefined,
     bullets: Array.isArray(row.bullets) ? (row.bullets as string[]).map(str).filter(Boolean) : undefined,
     brand: firstStr(row, "brand", "manufacturer", "vendor") || undefined,
-    manufacturer_part_number: firstStr(row, "manufacturer_part_number", "mpn", "part_number") || undefined,
+    manufacturer_part_number: firstStr(row, "manufacturer_part_number", "mpn", "part_number", "manufacturer_sku") || undefined,
+    manufacturer_sku: (() => {
+      const mfr = firstStr(row, "manufacturer_sku");
+      if (!mfr) return undefined;
+      if (/\bGLV[-_]/i.test(mfr)) return undefined;
+      return mfr;
+    })(),
     supplier_sku: sku || "UNKNOWN",
     upc: firstStr(row, "upc", "gtin", "ean", "barcode") || undefined,
     supplier_cost: cost,

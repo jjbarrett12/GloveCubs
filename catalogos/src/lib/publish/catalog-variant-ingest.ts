@@ -61,7 +61,14 @@ type AdminClient = SupabaseClient;
  */
 export async function upsertCatalogVariantFromGloveIngest(
   admin: AdminClient,
-  input: { catalogProductId: string; sizeCode: string; variantSku: string; gtin?: string | null; mpn?: string | null }
+  input: {
+    catalogProductId: string;
+    sizeCode: string;
+    variantSku: string;
+    gtin?: string | null;
+    mpn?: string | null;
+    manufacturerSku?: string | null;
+  }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const skuCheck = validatePurchaseItemNumber(input.variantSku);
   if (!skuCheck.ok) return skuCheck;
@@ -72,7 +79,9 @@ export async function upsertCatalogVariantFromGloveIngest(
   }
 
   const variantSku = input.variantSku.trim();
-  const metadata = { size };
+  const metadata: Record<string, unknown> = { size };
+  const mfr = input.manufacturerSku?.trim();
+  if (mfr) metadata.manufacturer_sku = mfr;
 
   const { data: rowBySku, error: skuErr } = await admin
     .schema("catalog_v2")

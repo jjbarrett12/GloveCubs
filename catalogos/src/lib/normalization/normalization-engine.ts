@@ -17,6 +17,9 @@ import {
 import type { NormalizationResult, ReviewFlag, NormalizationEngineOptions } from "./types";
 import type { SynonymMapOption } from "./synonym-lookup";
 import { getIngestionExtractorId } from "@/lib/product-types";
+import { resolveCommercePackagingForStagingRow, getCommercePackagingFromNormalized } from "@commerce-packaging/staging-bridge";
+import { mergeCommercePackagingIntoFilterAttributes } from "@commerce-packaging/filter-sync";
+import { buildCatalogOsSkuProposalsFromParsedRow } from "@/lib/sku-intelligence/staging-sku-proposals";
 
 const DEFAULT_LOW_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -136,6 +139,30 @@ export function runNormalization(
     review_flags.push(f as ReviewFlag);
   }
 
+  const packagingPassthrough = [
+    "commerce_packaging",
+    "boxes_per_case",
+    "gloves_per_box",
+    "total_gloves_per_case",
+  ] as const;
+  for (const key of packagingPassthrough) {
+    if (rawRow[key] != null) {
+      (content as Record<string, unknown>)[key] = rawRow[key];
+    }
+  }
+  if (!rawRow.commerce_packaging) {
+    (content as Record<string, unknown>).commerce_packaging = resolveCommercePackagingForStagingRow(rawRow, {
+      categorySlug: category_slug,
+    });
+  }
+
+  const mergedFilterAttributes = mergeCommercePackagingIntoFilterAttributes(
+    filter_attributes as Record<string, unknown>,
+    getCommercePackagingFromNormalized(content as Record<string, unknown>)
+  );
+
+  (content as Record<string, unknown>).sku_proposals = buildCatalogOsSkuProposalsFromParsedRow(rawRow);
+
   return {
     content,
     category_slug,
@@ -145,7 +172,7 @@ export function runNormalization(
       reason: categoryInference.reason,
       ambiguous_candidates: categoryInference.ambiguous_candidates,
     },
-    filter_attributes,
+    filter_attributes: mergedFilterAttributes,
     confidence_by_key: confidence_by_key,
     unmapped_values,
     review_flags,

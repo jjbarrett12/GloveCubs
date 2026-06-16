@@ -64,6 +64,16 @@ export function unitsPerCaseFromStagingNormalizedContent(
   content: Record<string, unknown>,
   attributes: Record<string, unknown>
 ): number | null | undefined {
+  const cp = content.commerce_packaging as { units_per_case?: unknown } | undefined;
+  if (cp?.units_per_case != null) {
+    const n = Number(cp.units_per_case);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  const totalGloves = content.total_gloves_per_case;
+  if (totalGloves != null) {
+    const n = Number(totalGloves);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
   const u =
     content.units_per_case ??
     content.case_qty ??

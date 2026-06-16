@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { UrlImportProductRow } from "@/lib/url-import/admin-data";
+import {
+  formatConfidencePct,
+  parseExtractionV2Summary,
+} from "@/lib/review/staging-review-evidence";
+import type { ProductUrlExtractionV2Summary } from "@/lib/product-extraction/types";
 
 function str(v: unknown): string {
   if (v == null) return "";
@@ -26,6 +31,29 @@ function firstImageUrl(payload: Record<string, unknown>): string | null {
     if (t.startsWith("http://") || t.startsWith("https://")) return t;
   }
   return null;
+}
+
+function isHttpUrl(u: string): boolean {
+  return u.startsWith("http://") || u.startsWith("https://");
+}
+
+/** Legacy image first; V2 primaryImageUrl fallback when legacy absent (display only). */
+export function previewRowImageUrl(payload: Record<string, unknown>): string | null {
+  const legacy = firstImageUrl(payload);
+  if (legacy) return legacy;
+  const summary = parseExtractionV2Summary(payload);
+  const u = summary?.primaryImageUrl?.trim();
+  return u && isHttpUrl(u) ? u : null;
+}
+
+/** Compact V2 hint lines for preview table (informational, not publish enforcement). */
+export function formatPreviewV2IndicatorLines(summary: ProductUrlExtractionV2Summary): string[] {
+  return [
+    `V2 ${formatConfidencePct(summary.confidence.overall)}`,
+    `Variants: ${summary.proposedVariantCount}`,
+    summary.review.safeToCreateMaster ? "Create: ok" : "Create: review",
+    summary.review.safeToStageVariants ? "Stage: ok" : "Stage: review",
+  ];
 }
 
 function skuOrItem(p: UrlImportProductRow): string {
@@ -218,7 +246,9 @@ export function UrlImportPreviewClient({
             <tbody>
               {products.map((p) => {
                 const pl = p.normalized_payload ?? {};
-                const img = firstImageUrl(pl);
+                const img = previewRowImageUrl(pl);
+                const v2Summary = parseExtractionV2Summary(pl);
+                const v2Lines = v2Summary ? formatPreviewV2IndicatorLines(v2Summary) : null;
                 const conf =
                   typeof p.confidence === "number" && Number.isFinite(p.confidence)
                     ? `${Math.round(p.confidence * 100)}%`
@@ -272,7 +302,19 @@ export function UrlImportPreviewClient({
                         </span>
                       ) : null}
                     </td>
-                    <td className="p-3 align-top text-xs">{conf}</td>
+                    <td className="p-3 align-top text-xs">
+                      {conf}
+                      {v2Lines ? (
+                        <div
+                          className="mt-1 space-y-0.5 text-[10px] text-muted-foreground leading-snug"
+                          title="V2 hints only — publish still uses existing guards"
+                        >
+                          {v2Lines.map((line) => (
+                            <div key={line}>{line}</div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </td>
                   </tr>
                 );
               })}

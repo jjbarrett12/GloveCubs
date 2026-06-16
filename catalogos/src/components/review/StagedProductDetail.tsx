@@ -39,6 +39,10 @@ import {
   summarizeEvidenceReview,
   type StagedReviewSourceHint,
 } from "@/lib/review/staging-review-evidence";
+import { StagedCommercePackagingPanel } from "@/components/review/StagedCommercePackagingPanel";
+import { StagedSkuProposalPanel } from "@/components/review/StagedSkuProposalPanel";
+import { StagedUrlExtractionPanel } from "@/components/review/StagedUrlExtractionPanel";
+import { ProductSetupWizardPanel } from "@/components/review/ProductSetupWizardPanel";
 
 function StagedReviewMatchPrimaryActions({
   setActionModal,
@@ -559,6 +563,27 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                     )}
                   </div>
                 ) : null}
+                <ProductSetupWizardPanel
+                  normalizedId={normalizedId}
+                  normalizedData={nd}
+                  rawPayload={raw}
+                  publishReadiness={publishReadiness}
+                  onApplied={refreshDetail}
+                />
+                <StagedUrlExtractionPanel normalizedData={nd} rawPayload={raw} />
+                <StagedCommercePackagingPanel
+                  normalizedData={nd}
+                  casePriceFallback={
+                    nd.normalized_case_cost != null && Number.isFinite(Number(nd.normalized_case_cost))
+                      ? Number(nd.normalized_case_cost)
+                      : Number(nd.supplier_cost ?? nd.cost ?? 0) || null
+                  }
+                />
+                <StagedSkuProposalPanel
+                  normalizedId={normalizedId}
+                  normalizedData={nd}
+                  onApplied={refreshDetail}
+                />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Supplier</p>
                   <p className="font-medium">{supplier?.name ?? "—"}</p>

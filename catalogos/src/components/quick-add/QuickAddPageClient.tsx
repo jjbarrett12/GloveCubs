@@ -17,12 +17,15 @@ import {
   type ImportAutoPricingWithOverride,
 } from "@/lib/ingestion/import-pricing";
 import type { PublishReadiness } from "@/lib/review/publish-guards";
+import { effectiveMasterCreateSku } from "@/lib/sku-intelligence/publish-sku-apply";
+import { StagedSkuProposalPanel } from "@/components/review/StagedSkuProposalPanel";
 import { QuickAddShellForm } from "./QuickAddShellForm";
 import { StagingAttributePanel, type AttributeRequirementsState } from "./StagingAttributePanel";
 import { PublishReadinessPanel } from "./PublishReadinessPanel";
 import { PublishResultBanner } from "./PublishResultBanner";
 import { PublishFailureBanner } from "./PublishFailureBanner";
 import { formatMasterProductCreateError } from "./master-create-errors";
+import { StagedCommercePackagingPanel } from "@/components/review/StagedCommercePackagingPanel";
 
 type StagingDetail = Record<string, unknown> & {
   publish_readiness?: PublishReadiness;
@@ -154,7 +157,7 @@ function QuickAddInner({
   const shellInitial = useMemo(
     () => ({
       supplier_id: String(detail?.supplier_id ?? ""),
-      sku: String(nd.supplier_sku ?? nd.sku ?? ""),
+      sku: effectiveMasterCreateSku(nd) || String(nd.supplier_sku ?? nd.sku ?? ""),
       name: String(nd.name ?? ""),
       category_slug: String(nd.category_slug ?? ""),
       normalized_case_cost:
@@ -395,6 +398,17 @@ function QuickAddInner({
             disabled={actionBusy}
             onSaveCore={onSaveCore}
           />
+          <StagedCommercePackagingPanel
+            normalizedData={nd}
+            casePriceFallback={
+              nd.normalized_case_cost != null && Number.isFinite(Number(nd.normalized_case_cost))
+                ? Number(nd.normalized_case_cost)
+                : Number(nd.supplier_cost ?? nd.cost ?? 0) || null
+            }
+          />
+          {id ? (
+            <StagedSkuProposalPanel normalizedId={id} normalizedData={nd} onApplied={() => void refreshDetail(id)} />
+          ) : null}
           <StagingAttributePanel
             normalizedId={id}
             detailUpdatedAt={String(detail.updated_at ?? "")}

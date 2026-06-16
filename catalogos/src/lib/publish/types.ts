@@ -47,6 +47,8 @@ export interface PublishInput {
   overrideSellPrice?: number | null;
   /** When true, sell unit is case but normalized_case_cost could not be computed; publish must block. */
   pricingCaseCostUnavailable?: boolean;
+  /** Full staged normalized_data for commerce_packaging metadata sync. */
+  stagedNormalizedData?: Record<string, unknown>;
   publishedBy?: string;
 }
 

@@ -9,6 +9,10 @@ import {
   FAMILY_GROUPING_CONFIDENCE_THRESHOLD,
 } from "./family-inference";
 import { createOpenAiVariantHint } from "./ai-variant-hint";
+import {
+  buildCatalogOsSkuProposalsFromStagingRows,
+  type StagingSkuContextRow,
+} from "@/lib/sku-intelligence/staging-sku-proposals";
 
 export interface RunFamilyInferenceResult {
   batchId: string;
@@ -61,6 +65,8 @@ export async function runFamilyInferenceForBatch(
 
   let updated = 0;
   const groupKeys = new Set<string>();
+  const inferredById = new Map(inferred.map((r) => [r.id, r]));
+
   for (const row of inferred) {
     const { error: updateErr } = await supabase
       .from("supplier_products_normalized")
@@ -79,6 +85,36 @@ export async function runFamilyInferenceForBatch(
     else {
       updated++;
       if (row.family_group_key) groupKeys.add(row.family_group_key);
+    }
+  }
+
+  const familyGroups = new Map<string, StagingSkuContextRow[]>();
+  for (const row of list) {
+    const inf = inferredById.get(row.id);
+    const key = inf?.family_group_key;
+    if (!key) continue;
+    const ctx: StagingSkuContextRow = {
+      normalized_data: row.normalized_data,
+      attributes: row.attributes,
+      inferred_size: inf.inferred_size ?? null,
+    };
+    const group = familyGroups.get(key) ?? [];
+    group.push(ctx);
+    familyGroups.set(key, group);
+  }
+
+  for (const [familyKey, members] of familyGroups) {
+    if (members.length < 2) continue;
+    const proposals = buildCatalogOsSkuProposalsFromStagingRows(members);
+    for (const row of list) {
+      const inf = inferredById.get(row.id);
+      if (inf?.family_group_key !== familyKey) continue;
+      const nd = { ...(row.normalized_data ?? {}), sku_proposals: proposals };
+      const { error: skuErr } = await supabase
+        .from("supplier_products_normalized")
+        .update({ normalized_data: nd, updated_at: new Date().toISOString() })
+        .eq("id", row.id);
+      if (skuErr) errors.push(`SKU proposals ${row.id}: ${skuErr.message}`);
     }
   }
 

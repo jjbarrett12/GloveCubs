@@ -72,6 +72,11 @@ export function getFallbackSynonymMap(): SynonymMap {
       "250/box": "box_200_250_ct",
       "2000+": "case_2000_plus_ct",
     },
+    material: {
+      hdpe: "polyethylene_pe",
+      "high density polyethylene": "polyethylene_pe",
+      polyethylene: "polyethylene_pe",
+    },
   };
 }
 

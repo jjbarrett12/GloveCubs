@@ -21,8 +21,8 @@ export function getSupabase(useServiceRole = false) {
 }
 
 /**
- * Client that targets the catalogos schema (PostgREST Accept-Profile / Content-Profile).
- * Use for all CatalogOS tables: suppliers, import_batches, supplier_products_raw, etc.
+ * Client that targets the catalogos schema via Supabase db.schema routing.
+ * Use for all CatalogOS tables: suppliers, import_batches, url_import_jobs, supplier_products_raw, etc.
  * IDs are UUIDs (strings).
  */
 export function getSupabaseCatalogos(useServiceRole = true): SupabaseClient {
@@ -32,12 +32,7 @@ export function getSupabaseCatalogos(useServiceRole = true): SupabaseClient {
   }
   return createClient(url, key, {
     auth: useServiceRole ? { persistSession: false, autoRefreshToken: false } : undefined,
-    global: {
-      headers: {
-        "Accept-Profile": "catalogos",
-        "Content-Profile": "catalogos",
-      },
-    },
+    db: { schema: "catalogos" },
   });
 }
 

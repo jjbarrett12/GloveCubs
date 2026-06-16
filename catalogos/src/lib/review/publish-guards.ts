@@ -12,6 +12,10 @@ import {
   isImplementedProductTypeKey,
   type ProductTypeKey,
 } from "@/lib/product-types";
+import { evaluateCommercePackagingReadiness } from "@commerce-packaging/readiness";
+import { getCommercePackagingFromNormalized } from "@commerce-packaging/staging-bridge";
+import { getSupabase } from "@/lib/db/client";
+import { evaluateSkuReadinessFromStaging, skuReadinessBlockers, skuReadinessWarnings } from "@/lib/sku-intelligence/sku-readiness";
 
 /** Blockers grouped for operator UI (subset of full publish pipeline). */
 export interface PublishReadinessBlockerSections {
@@ -19,6 +23,7 @@ export interface PublishReadinessBlockerSections {
   staging_validation: string[];
   missing_required_attributes: string[];
   case_pricing: string[];
+  sku: string[];
 }
 
 export interface PublishReadiness {
@@ -43,11 +48,12 @@ function emptySections(): PublishReadinessBlockerSections {
     staging_validation: [],
     missing_required_attributes: [],
     case_pricing: [],
+    sku: [],
   };
 }
 
 function flattenBlockers(s: PublishReadinessBlockerSections): string[] {
-  return [...s.workflow, ...s.staging_validation, ...s.missing_required_attributes, ...s.case_pricing];
+  return [...s.workflow, ...s.staging_validation, ...s.missing_required_attributes, ...s.case_pricing, ...s.sku];
 }
 
 const POST_CLICK_NOTES = [
@@ -123,6 +129,18 @@ export async function evaluatePublishReadiness(normalizedId: string): Promise<Pu
     );
   }
 
+  const cp = getCommercePackagingFromNormalized(nd);
+  const commerceReadiness = evaluateCommercePackagingReadiness(cp, {
+    casePriceFallback: input.stagedContent.supplier_cost,
+    publishIntent: true,
+  });
+  for (const b of commerceReadiness.blockers) {
+    sections.case_pricing.push(b.label);
+  }
+  for (const w of commerceReadiness.warnings) {
+    warnings.push(w.label);
+  }
+
   const publishCheck = publishSafe(categorySlug as CategorySlug, input.stagedFilterAttributes ?? {});
   if (!publishCheck.publishable) {
     sections.missing_required_attributes.push(
@@ -133,6 +151,60 @@ export async function evaluatePublishReadiness(normalizedId: string): Promise<Pu
   const stageCheck = stageSafe(categorySlug as CategorySlug, input.stagedFilterAttributes ?? {});
   if (stageCheck.missing_strongly_preferred.length > 0) {
     warnings.push(`Strongly preferred attributes missing (non-blocking): ${stageCheck.missing_strongly_preferred.join(", ")}`);
+  }
+
+  const attrs = (row.attributes as Record<string, unknown>) ?? {};
+  const admin = getSupabase(true);
+  const existingParentSkus = new Set<string>();
+  const existingVariantSkus = new Set<string>();
+
+  if (masterId) {
+    const { data: parents } = await admin
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .select("internal_sku")
+      .neq("id", masterId);
+    for (const p of parents ?? []) {
+      const sku = (p as { internal_sku?: string }).internal_sku?.trim().toUpperCase();
+      if (sku) existingParentSkus.add(sku);
+    }
+
+    const { data: variants } = await admin
+      .schema("catalog_v2")
+      .from("catalog_variants")
+      .select("variant_sku, catalog_product_id")
+      .neq("catalog_product_id", masterId);
+    for (const v of variants ?? []) {
+      const sku = (v as { variant_sku?: string }).variant_sku?.trim().toUpperCase();
+      if (sku) existingVariantSkus.add(sku);
+    }
+  } else {
+    const { data: parents } = await admin.schema("catalog_v2").from("catalog_products").select("internal_sku");
+    for (const p of parents ?? []) {
+      const sku = (p as { internal_sku?: string }).internal_sku?.trim().toUpperCase();
+      if (sku) existingParentSkus.add(sku);
+    }
+    const { data: variants } = await admin.schema("catalog_v2").from("catalog_variants").select("variant_sku");
+    for (const v of variants ?? []) {
+      const sku = (v as { variant_sku?: string }).variant_sku?.trim().toUpperCase();
+      if (sku) existingVariantSkus.add(sku);
+    }
+  }
+
+  const skuItems = evaluateSkuReadinessFromStaging({
+    normalizedData: nd,
+    attributes: attrs,
+    inferredSize: row.inferred_size as string | null | undefined,
+    existingParentSkus,
+    existingVariantSkus,
+    excludeMasterProductId: masterId ?? null,
+    requireVariantSku: isImplementedProductTypeKey(categorySlug),
+  });
+  for (const b of skuReadinessBlockers(skuItems)) {
+    sections.sku.push(b);
+  }
+  for (const w of skuReadinessWarnings(skuItems)) {
+    warnings.push(w);
   }
 
   const blockers = flattenBlockers(sections);

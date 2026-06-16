@@ -3,6 +3,7 @@
  * for the existing ingestion pipeline (extractContentFromRaw, runNormalization).
  */
 
+import { attachCommercePackagingToParsedRow } from "@commerce-packaging/staging-bridge";
 import type { NormalizedFamily } from "@/lib/openclaw/normalize";
 
 function num(v: string | number | undefined | null): number | undefined {
@@ -241,7 +242,14 @@ export function finalizeUrlImportParsedRow(
   if (supplierMfr) delete out.supplier_manufacturer;
   if (imageUrls.length) delete out.image_urls;
 
-  return out;
+  const categorySlug =
+    typeof out.category_slug === "string"
+      ? out.category_slug
+      : typeof out.category === "string"
+        ? out.category
+        : undefined;
+
+  return attachCommercePackagingToParsedRow(out, { parsedPage: ctx.parsedPage, categorySlug });
 }
 
 export interface NormalizedFamilyToParsedRowOptions {

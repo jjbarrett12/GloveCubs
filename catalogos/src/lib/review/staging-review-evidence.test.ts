@@ -1,14 +1,104 @@
 import { describe, it, expect } from "vitest";
+import { summarizeProductUrlExtractionV2 } from "@/lib/product-extraction/extraction-v2-bridge";
+import { makeFieldEvidence } from "@/lib/product-extraction/evidence-helpers";
+import type { ProductUrlExtractionV2, ProductUrlExtractionV2Summary } from "@/lib/product-extraction/types";
 import {
   buildStagedProductReviewEvidence,
   formatConfidencePct,
+  formatFieldEvidenceValue,
+  formatTrustLabel,
   getPackagingMathReview,
   getStagingSizeDisplay,
   getStagingSourceTitle,
   getVariantSkuDisplay,
+  parseExtractionV2Summary,
+  parseFullExtractionV2,
+  resolveUrlExtractionReviewContext,
   summarizeEvidenceReview,
   unwrapExtractedField,
 } from "./staging-review-evidence";
+
+function minimalExtraction(overrides: Partial<ProductUrlExtractionV2> = {}): ProductUrlExtractionV2 {
+  return {
+    version: "product-url-extraction-v2",
+    schemaVersion: 1,
+    sourceUrl: "https://example.com/glove",
+    fetchedAt: "2026-06-11T00:00:00.000Z",
+    source: { rawTextSample: "Nitrile exam glove" },
+    identity: {
+      normalizedTitle: makeFieldEvidence("Nitrile Exam Glove", 0.82, "title"),
+    },
+    taxonomy: {
+      material: makeFieldEvidence("nitrile", 0.9, "table"),
+      disposableReusable: makeFieldEvidence("disposable", 0.82, "heuristic"),
+    },
+    commercePackaging: {},
+    attributes: { material: makeFieldEvidence("nitrile", 0.9, "table") },
+    variants: {
+      dimensions: [],
+      options: [],
+      proposedVariants: [],
+      unresolvedVariantNotes: [],
+    },
+    images: { candidates: [], rejected: [] },
+    documents: { specSheetUrls: [], sdsUrls: [], otherUrls: [] },
+    confidence: {
+      overall: 0.8,
+      identity: 0.8,
+      variants: 0.7,
+      images: 0.8,
+      packaging: 0.85,
+      attributes: 0.85,
+    },
+    review: {
+      safeToCreateMaster: true,
+      safeToStageVariants: false,
+      publishReadinessHints: {
+        hasVariantCandidates: false,
+        hasImageCandidate: true,
+        hasPackagingSignal: true,
+        hasSkuSourceSeparation: true,
+        warnings: [],
+      },
+      blockers: [],
+      warnings: [],
+    },
+    ...overrides,
+  };
+}
+
+function validSummary(over: Partial<ProductUrlExtractionV2Summary> = {}): ProductUrlExtractionV2Summary {
+  return {
+    version: "product-url-extraction-v2",
+    schemaVersion: 1,
+    sourceUrl: "https://example.com/glove",
+    imageCandidateCount: 1,
+    proposedVariantCount: 0,
+    variantDimensions: [],
+    confidence: {
+      overall: 0.8,
+      identity: 0.8,
+      variants: 0.7,
+      images: 0.8,
+      packaging: 0.85,
+      attributes: 0.85,
+    },
+    review: {
+      safeToCreateMaster: true,
+      safeToStageVariants: false,
+      publishReadinessHints: {
+        hasVariantCandidates: false,
+        hasImageCandidate: true,
+        hasPackagingSignal: true,
+        hasSkuSourceSeparation: true,
+        warnings: [],
+      },
+      blockers: [],
+      warnings: [],
+    },
+    ...over,
+  };
+}
 
 describe("formatConfidencePct", () => {
   it("renders percent for finite confidence", () => {
@@ -142,6 +232,38 @@ describe("getPackagingMathReview", () => {
     expect(r.computedTotal).toBeNull();
     expect(r.declaredTotal).toBe(1000);
   });
+
+  it("reads commerce_packaging case label and warns on inner unknown", () => {
+    const r = getPackagingMathReview({
+      commerce_packaging: {
+        schema_version: 1,
+        sell_by_case_enabled: true,
+        sell_by_pallet_enabled: true,
+        minimum_sell_unit: "case",
+        bulk_sell_unit: "pallet",
+        inner_unit_type: null,
+        units_per_inner: null,
+        inners_per_case: null,
+        units_per_case: 1000,
+        units_per_case_overridden: false,
+        unit_noun: "gloves",
+        case_label: "1,000 gloves per case",
+        cases_per_pallet: null,
+        units_per_pallet: null,
+        units_per_pallet_overridden: false,
+        pallet_label: null,
+        case_price: 42,
+        pallet_price: null,
+        pallet_discount_percent: null,
+        msrp_per_case: null,
+        compare_at_case_price: null,
+        field_provenance: {},
+        parse_warnings: ["inner packaging unknown"],
+      },
+    });
+    expect(r.caseLabel).toBe("1,000 gloves per case");
+    expect(r.state).toBe("incomplete");
+  });
 });
 
 describe("buildStagedProductReviewEvidence", () => {
@@ -246,5 +368,122 @@ describe("buildStagedProductReviewEvidence", () => {
     const sz = rows.find((r) => r.id === "size_code");
     expect(sz?.normalizedDisplay).toBe("m");
     expect(sz?.ontologyHint?.rawDisplay).toContain("Medium");
+  });
+});
+
+describe("parseExtractionV2Summary", () => {
+  it("returns summary from normalized_data._extraction_v2", () => {
+    const summary = validSummary({ normalizedTitle: "Nitrile Glove" });
+    const parsed = parseExtractionV2Summary({ _extraction_v2: summary });
+    expect(parsed?.normalizedTitle).toBe("Nitrile Glove");
+    expect(parsed?.sourceUrl).toBe("https://example.com/glove");
+  });
+
+  it("returns null when _extraction_v2 missing", () => {
+    expect(parseExtractionV2Summary({})).toBeNull();
+  });
+
+  it("returns null for wrong version", () => {
+    expect(parseExtractionV2Summary({ _extraction_v2: { ...validSummary(), version: "v1" } })).toBeNull();
+  });
+
+  it("returns null for wrong schemaVersion", () => {
+    expect(parseExtractionV2Summary({ _extraction_v2: { ...validSummary(), schemaVersion: 2 } })).toBeNull();
+  });
+
+  it("returns null when confidence is malformed", () => {
+    expect(
+      parseExtractionV2Summary({
+        _extraction_v2: { ...validSummary(), confidence: { overall: "bad" } },
+      })
+    ).toBeNull();
+  });
+
+  it("returns null when review is malformed", () => {
+    expect(
+      parseExtractionV2Summary({
+        _extraction_v2: { ...validSummary(), review: { safeToCreateMaster: "yes" } },
+      })
+    ).toBeNull();
+  });
+
+  it("does not throw on non-object normalizedData", () => {
+    expect(parseExtractionV2Summary(null as unknown as Record<string, unknown>)).toBeNull();
+    expect(parseExtractionV2Summary([] as unknown as Record<string, unknown>)).toBeNull();
+  });
+});
+
+describe("parseFullExtractionV2", () => {
+  it("returns full extraction from raw_payload.extraction_v2", () => {
+    const full = minimalExtraction();
+    const parsed = parseFullExtractionV2({ extraction_v2: full });
+    expect(parsed?.sourceUrl).toBe("https://example.com/glove");
+    expect(parsed?.fetchedAt).toBe("2026-06-11T00:00:00.000Z");
+  });
+
+  it("returns null when extraction_v2 missing", () => {
+    expect(parseFullExtractionV2({})).toBeNull();
+  });
+
+  it("returns null for wrong version", () => {
+    expect(parseFullExtractionV2({ extraction_v2: { ...minimalExtraction(), version: "legacy" } })).toBeNull();
+  });
+
+  it("does not throw on non-object rawPayload", () => {
+    expect(parseFullExtractionV2(null as unknown as Record<string, unknown>)).toBeNull();
+  });
+});
+
+describe("resolveUrlExtractionReviewContext", () => {
+  it("returns both summary and full when both valid", () => {
+    const full = minimalExtraction();
+    const summary = summarizeProductUrlExtractionV2(full);
+    const ctx = resolveUrlExtractionReviewContext({ _extraction_v2: summary }, { extraction_v2: full });
+    expect(ctx?.summary.sourceUrl).toBe("https://example.com/glove");
+    expect(ctx?.full?.sourceUrl).toBe("https://example.com/glove");
+  });
+
+  it("returns summary-only when full blob missing", () => {
+    const summary = validSummary();
+    const ctx = resolveUrlExtractionReviewContext({ _extraction_v2: summary }, {});
+    expect(ctx).toEqual({ summary, full: null });
+  });
+
+  it("returns null when summary missing", () => {
+    expect(resolveUrlExtractionReviewContext({}, { extraction_v2: minimalExtraction() })).toBeNull();
+  });
+
+  it("returns summary-only when full blob invalid", () => {
+    const summary = validSummary();
+    const ctx = resolveUrlExtractionReviewContext(
+      { _extraction_v2: summary },
+      { extraction_v2: { version: "bad", schemaVersion: 1 } }
+    );
+    expect(ctx).toEqual({ summary, full: null });
+  });
+
+  it("does not throw on non-object inputs", () => {
+    expect(
+      resolveUrlExtractionReviewContext(null as unknown as Record<string, unknown>, {})
+    ).toBeNull();
+    expect(
+      resolveUrlExtractionReviewContext({ _extraction_v2: validSummary() }, null as unknown as Record<string, unknown>)
+    ).toEqual({ summary: validSummary(), full: null });
+  });
+});
+
+describe("formatFieldEvidenceValue", () => {
+  it("formats string, boolean, and array values", () => {
+    expect(formatFieldEvidenceValue(makeFieldEvidence("nitrile", 0.9, "table"))).toBe("nitrile");
+    expect(formatFieldEvidenceValue(makeFieldEvidence(true, 0.9, "text"))).toBe("Yes");
+    expect(formatFieldEvidenceValue(makeFieldEvidence(["AAMI", "FDA"], 0.8, "bullet"))).toBe("AAMI, FDA");
+    expect(formatFieldEvidenceValue(null)).toBe("—");
+  });
+});
+
+describe("formatTrustLabel", () => {
+  it("maps trust enums to labels", () => {
+    expect(formatTrustLabel("trusted")).toBe("Trusted");
+    expect(formatTrustLabel("weak")).toBe("Weak");
   });
 });

@@ -15,6 +15,7 @@ import type { CategorySlug } from "@/lib/catalogos/attribute-dictionary-types";
 import { DEFAULT_PRODUCT_TYPE_KEY } from "@/lib/product-types";
 import type { PublishInput, PublishResult } from "./types";
 import { finalizePublishSearchSync } from "./canonical-sync-service";
+import { syncCommercePackagingToCatalogV2Metadata } from "./commerce-metadata-sync";
 import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Product } from "./ensure-catalog-v2-link";
 import {
   buildSupplierOfferUpsertRow,
@@ -28,6 +29,7 @@ import {
   upsertCatalogVariantFromGloveIngest,
   validatePurchaseItemNumber,
 } from "./catalog-variant-ingest";
+import { resolvePublishSkusFromStaging } from "@/lib/sku-intelligence/publish-sku-apply";
 
 function firstNonEmptyTrimmedString(...vals: unknown[]): string | undefined {
   for (const v of vals) {
@@ -120,6 +122,7 @@ export function buildPublishInputFromStaged(
     rawId,
     overrideSellPrice: (content.override_sell_price as number | null) ?? null,
     pricingCaseCostUnavailable: pricingCaseCostUnavailable || undefined,
+    stagedNormalizedData: content,
     publishedBy: options.publishedBy,
   };
 }
@@ -130,6 +133,70 @@ function slugFrom(sku: string, name?: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+async function ensurePublishImages(
+  admin: ReturnType<typeof getSupabase>,
+  productId: string,
+  imageUrls?: string[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: existing, error: fetchErr } = await admin
+    .schema("catalog_v2")
+    .from("catalog_product_images")
+    .select("metadata")
+    .eq("catalog_product_id", productId);
+  if (fetchErr) return { ok: false, error: `catalog_product_images lookup: ${fetchErr.message}` };
+
+  const realCount = (existing ?? []).filter((row) => {
+    const provenance = (row as { metadata?: { image_provenance?: string } }).metadata?.image_provenance;
+    return provenance !== "placeholder";
+  }).length;
+  if (realCount > 0) return { ok: true };
+
+  const url = imageUrls?.map((u) => String(u).trim()).find(Boolean);
+  if (!url) {
+    return {
+      ok: false,
+      error:
+        "Publish blocked: active-product guard requires ≥1 non-placeholder image. Add product images in staging or upload before publish.",
+    };
+  }
+
+  const { error: insErr } = await admin.schema("catalog_v2").from("catalog_product_images").insert({
+    catalog_product_id: productId,
+    url,
+    sort_order: 0,
+    metadata: { image_provenance: "supplier_feed" },
+  });
+  if (insErr) return { ok: false, error: `catalog_product_images insert: ${insErr.message}` };
+  return { ok: true };
+}
+
+async function activateCatalogProductWhenReady(
+  admin: ReturnType<typeof getSupabase>,
+  productId: string,
+  categoryId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: prod, error: fetchErr } = await admin
+    .schema("catalog_v2")
+    .from("catalog_products")
+    .select("metadata, status")
+    .eq("id", productId)
+    .single();
+  if (fetchErr || !prod) return { ok: false, error: "catalog product not found for activation" };
+
+  const currentMeta = (prod as { metadata?: Record<string, unknown> }).metadata ?? {};
+  const patch: Record<string, unknown> = {
+    metadata: { ...currentMeta, category_id: categoryId },
+    updated_at: new Date().toISOString(),
+  };
+  if ((prod as { status?: string }).status !== "active") {
+    patch.status = "active";
+  }
+
+  const { error: updateErr } = await admin.schema("catalog_v2").from("catalog_products").update(patch).eq("id", productId);
+  if (updateErr) return { ok: false, error: `catalog_v2 activate: ${updateErr.message}` };
+  return { ok: true };
 }
 
 /**
@@ -220,6 +287,23 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     const desc = input.stagedContent.description ?? prodRow.description;
     const brandId = input.stagedContent.brand ? await getOrCreateBrandId(input.stagedContent.brand) : null;
     if (!slug) slug = slugFrom(internalSkuForSellable, name);
+
+    const resolvedSkus =
+      input.stagedNormalizedData && gloveIngestSize
+        ? resolvePublishSkusFromStaging({
+            normalizedData: input.stagedNormalizedData,
+            sizeCode: gloveIngestSize,
+            fallbackParentSku: internalSkuForSellable,
+            fallbackVariantSku: input.stagedContent.supplier_sku,
+            applyProposals: true,
+            existingParentSku: prodRow.internal_sku,
+            existingVariantSku: null,
+          })
+        : null;
+
+    const nextInternalSku = resolvedSkus?.parentSku?.trim() || internalSkuForSellable;
+    if (resolvedSkus?.parentSku) internalSkuForSellable = resolvedSkus.parentSku;
+
     const { error: updateErr } = await admin
       .schema("catalog_v2")
       .from("catalog_products")
@@ -228,27 +312,40 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
         description: desc ?? prodRow.description,
         brand_id: brandId ?? prodRow.brand_id,
         slug: slug || undefined,
-        status: "active",
-        internal_sku: internalSkuForSellable,
+        internal_sku: nextInternalSku,
         updated_at: new Date().toISOString(),
       })
       .eq("id", productId);
     if (updateErr) return { success: false, error: `catalog_v2.catalog_products update: ${updateErr.message}` };
 
     if (gloveIngestSize) {
+      const variantSku = resolvedSkus?.variantSku?.trim() || input.stagedContent.supplier_sku;
+      const skuRes = validatePurchaseItemNumber(variantSku);
+      if (!skuRes.ok) return { success: false, error: skuRes.error };
       const vr = await upsertCatalogVariantFromGloveIngest(admin, {
         catalogProductId: productId,
         sizeCode: gloveIngestSize,
-        variantSku: input.stagedContent.supplier_sku,
+        variantSku,
         gtin: input.stagedContent.gtin,
         mpn: input.stagedContent.mpn,
+        manufacturerSku: resolvedSkus?.manufacturerSku ?? null,
       });
       if (!vr.ok) return { success: false, error: vr.error };
     }
   } else if (input.newProductPayload) {
     const payload = input.newProductPayload;
     const brandId = input.stagedContent.brand ? await getOrCreateBrandId(input.stagedContent.brand) : payload.brand_id ?? null;
-    slug = slugFrom(payload.sku, payload.name);
+    const resolvedSkus = input.stagedNormalizedData
+      ? resolvePublishSkusFromStaging({
+          normalizedData: input.stagedNormalizedData,
+          sizeCode: gloveIngestSize,
+          fallbackParentSku: payload.sku,
+          fallbackVariantSku: payload.sku,
+          applyProposals: true,
+        })
+      : null;
+    const parentSku = resolvedSkus?.parentSku?.trim() || payload.sku;
+    slug = slugFrom(parentSku, payload.name);
     const { data: existingSlug } = await admin
       .schema("catalog_v2")
       .from("catalog_products")
@@ -263,23 +360,26 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
       .insert({
         product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
         slug: slug!,
-        internal_sku: payload.sku,
+        internal_sku: parentSku,
         name: payload.name,
         description: payload.description ?? input.stagedContent.description ?? null,
         brand_id: brandId,
-        status: "active",
+        status: "draft",
         metadata: {},
       })
       .select("id, internal_sku")
       .single();
     if (insertErr || !inserted) return { success: false, error: insertErr?.message ?? "catalog_v2 insert failed" };
     productId = (inserted as { id: string }).id;
-    internalSkuForSellable = (inserted as { internal_sku: string | null }).internal_sku || payload.sku;
+    internalSkuForSellable = (inserted as { internal_sku: string | null }).internal_sku || parentSku;
 
-    const variantMetadata = gloveIngestSize ? { size: gloveIngestSize } : {};
+    const variantSku = resolvedSkus?.variantSku?.trim() || parentSku;
+    const variantMetadata: Record<string, unknown> = gloveIngestSize ? { size: gloveIngestSize } : {};
+    const mfr = resolvedSkus?.manufacturerSku?.trim();
+    if (mfr) variantMetadata.manufacturer_sku = mfr;
     const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
       catalog_product_id: productId,
-      variant_sku: payload.sku,
+      variant_sku: variantSku,
       sort_order: 0,
       is_active: true,
       metadata: variantMetadata,
@@ -321,6 +421,32 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
       productId,
       slug: slug ?? undefined,
     };
+  }
+
+  if (input.stagedNormalizedData) {
+    const commerceSync = await syncCommercePackagingToCatalogV2Metadata(
+      admin,
+      productId,
+      input.stagedNormalizedData
+    );
+    if (!commerceSync.ok) {
+      return {
+        success: false,
+        error: `Publish blocked: commerce_packaging metadata sync failed (${commerceSync.message ?? "unknown"}).`,
+        productId,
+        slug: slug ?? undefined,
+      };
+    }
+  }
+
+  const imageResult = await ensurePublishImages(admin, productId, input.stagedContent.images);
+  if (!imageResult.ok) {
+    return { success: false, error: imageResult.error, productId, slug: slug ?? undefined };
+  }
+
+  const activateResult = await activateCatalogProductWhenReady(admin, productId, categoryId);
+  if (!activateResult.ok) {
+    return { success: false, error: activateResult.error, productId, slug: slug ?? undefined };
   }
 
   const sellPrice = input.overrideSellPrice ?? input.stagedContent.supplier_cost;
