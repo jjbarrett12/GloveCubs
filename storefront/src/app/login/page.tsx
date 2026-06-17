@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { resolveSupabasePublicEnv } from "@/lib/supabase/public-env";
 import { LoginClient } from "./LoginClient";
 
 export const metadata: Metadata = {
@@ -18,9 +19,7 @@ export default function LoginPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const supabaseConfigured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
-  );
+  const { configured: supabaseConfigured } = resolveSupabasePublicEnv();
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">

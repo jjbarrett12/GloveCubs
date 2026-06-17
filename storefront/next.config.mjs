@@ -1,11 +1,81 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function parseEnvFile(filePath) {
+  const out = {};
+  try {
+    for (const line of fs.readFileSync(filePath, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      out[key] = val;
+    }
+  } catch {
+    /* optional file */
+  }
+  return out;
+}
+
+function mergeEnvFiles(...files) {
+  const merged = {};
+  for (const file of files) {
+    for (const [key, value] of Object.entries(parseEnvFile(file))) {
+      if (typeof value === "string" && value.trim()) merged[key] = value.trim();
+    }
+  }
+  return merged;
+}
+
+const mergedEnv = mergeEnvFiles(
+  path.join(__dirname, "../.env"),
+  path.join(__dirname, "../.env.local"),
+  path.join(__dirname, ".env"),
+  path.join(__dirname, ".env.local"),
+);
+
+function applySupabaseEnvFallbacks() {
+  const url = mergedEnv.NEXT_PUBLIC_SUPABASE_URL || mergedEnv.SUPABASE_URL || "";
+  const anon = mergedEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || mergedEnv.SUPABASE_ANON_KEY || "";
+  const service = mergedEnv.SUPABASE_SERVICE_ROLE_KEY || "";
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && url) {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = url;
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() && anon) {
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = anon;
+  }
+  if (!process.env.SUPABASE_URL?.trim() && url) {
+    process.env.SUPABASE_URL = url;
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() && service) {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = service;
+  }
+}
+
+applySupabaseEnvFallbacks();
+
+const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
+const publicSupabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
+
 /** @type {import('next').NextConfig} */
 
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: publicSupabaseAnon,
+  },
   reactStrictMode: true,
   /**
    * `storefront/lib/*.js` mirrors repo-root `lib/` for modules required from CJS
