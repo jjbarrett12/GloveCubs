@@ -5,6 +5,7 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   assertCustomerCompanyAccess,
+  redirectsToAccountHub,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import { fetchBuyerQuicklistForCompany } from "@/lib/account/buyer-quicklist-read-model";
@@ -27,7 +28,7 @@ export default async function AccountQuicklistPage() {
   if (gate.kind === "sign_in_required") {
     redirect("/login?next=%2Faccount%2Fquicklist");
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     redirect("/account");
   }
 

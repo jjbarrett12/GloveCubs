@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   assertCustomerCompanyAccess,
+  redirectsToAccountHub,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import { canMutateShipToAddresses, fetchCustomerCompanyMemberRole } from "@/lib/commerce/ship-to-address-mutation-role";
@@ -23,7 +24,7 @@ export async function resolveBuyerShippingAddressesGate(
   if (gate.kind === "sign_in_required") {
     return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
 

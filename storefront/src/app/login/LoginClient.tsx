@@ -17,11 +17,12 @@ import {
 type Props = {
   nextPath: string | string[] | undefined;
   issue: string | string[] | undefined;
+  reset: string | string[] | undefined;
   supabaseConfigured: boolean;
   hasExplicitNext: boolean;
 };
 
-export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNext }: Props) {
+export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExplicitNext }: Props) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -33,6 +34,7 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
   const passwordPlainRef = React.useRef<HTMLInputElement>(null);
 
   const issueStr = Array.isArray(issue) ? issue[0] : issue;
+  const resetStr = Array.isArray(reset) ? reset[0] : reset;
   const explicitDest = safeCommerceNextPath(nextPath);
   const signInAlertRef = React.useRef<HTMLDivElement>(null);
 
@@ -66,9 +68,11 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
     setSignInIssue(null);
     if (!supabaseConfigured) {
       setSignInIssue({
-        title: "Customer login is not available here",
+        title: "Customer login is not configured for this deployment",
         lines: [
-          "Supabase environment variables are missing, so password login cannot run in this deployment.",
+          "Supabase public environment variables are missing or blank, so password login cannot run here.",
+          "This is a deployment configuration issue — not a problem with your email or password.",
+          "If you reached this page after signing in elsewhere, contact support; your account may still need company access.",
         ],
       });
       return;
@@ -107,8 +111,23 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
         cache: "no-store",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        path?: string;
+        error?: string;
+        code?: string;
+      };
       if (!res.ok) {
+        if (body.code === "missing_supabase_env") {
+          setSignInIssue({
+            title: "Signed in, but this deployment is misconfigured",
+            lines: [
+              "Your email and password worked, but server-side Supabase environment variables are missing or blank.",
+              "Post-login routing and portal access require NEXT_PUBLIC_SUPABASE_* and SUPABASE_SERVICE_ROLE_KEY on the server.",
+              "This is not a company membership issue — ask an operator to fix deployment env, then try again.",
+            ],
+          });
+          return;
+        }
         const detail =
           typeof body.error === "string" && body.error.trim()
             ? body.error.trim()
@@ -179,23 +198,40 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
           <h1 className="mt-6 text-2xl font-bold tracking-tight text-neutral-900">Customer Login</h1>
         </div>
 
+        {resetStr === "success" ? (
+          <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+            Your password was updated. Sign in with your email and new password.
+          </div>
+        ) : null}
+
+        {issueStr === "company_inactive" ? (
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950">
+            Your company account is not active yet. Contact GloveCubs support or your account representative.{" "}
+            <Link href="/contact" className="font-semibold text-[#f06232] underline">
+              Contact support
+            </Link>
+            .
+          </div>
+        ) : null}
+
         {issueStr === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Your account is signed in but is not linked to an organization yet.{" "}
-            <Link href="/request-pricing" className="font-semibold text-[#f06232] underline">
-              Request business pricing
+            <Link href="/signup" className="font-semibold text-[#f06232] underline">
+              Create an account
             </Link>{" "}
-            or{" "}
+            to shop gloves and submit quote requests, or{" "}
             <Link href="/contact" className="font-semibold text-[#f06232] underline">
               contact support
-            </Link>{" "}
-            for access.
+            </Link>
+            .
           </div>
         ) : null}
 
         {!supabaseConfigured ? (
           <p className="mt-6 text-center text-sm text-neutral-600">
-            Customer login is not configured (missing Supabase environment variables). Use{" "}
+            Customer login is not configured for this deployment (missing or blank Supabase public env). This is
+            not the same as having no company membership. Use{" "}
             <Link href="/request-pricing" className="text-[#f06232] underline">
               business pricing
             </Link>{" "}
@@ -297,6 +333,11 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
                   )}
                 </button>
               </div>
+              <p className="mt-2 text-right text-sm">
+                <Link href="/login/forgot-password" className="font-semibold text-[#f06232] underline hover:text-[#d45529]">
+                  Forgot password?
+                </Link>
+              </p>
             </div>
             <button
               type="submit"
@@ -306,10 +347,16 @@ export function LoginClient({ nextPath, issue, supabaseConfigured, hasExplicitNe
               {busy ? "Logging in…" : "Log in"}
             </button>
             <p className="text-center text-sm text-neutral-600">
-              <Link href="/request-pricing" className="font-semibold text-[#f06232] underline hover:text-[#d45529]">
-                Become a customer
+              <Link href="/signup" className="font-semibold text-[#f06232] underline hover:text-[#d45529]">
+                Create an account
               </Link>{" "}
-              to set up an account for immediate discounts on bulk shipments.
+              to shop gloves and submit quote requests.
+            </p>
+            <p className="text-center text-sm text-neutral-500">
+              Need a custom quote without an account?{" "}
+              <Link href="/request-pricing" className="font-semibold text-[#f06232] underline hover:text-[#d45529]">
+                Request pricing
+              </Link>
             </p>
           </form>
         )}

@@ -5,6 +5,7 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   assertCustomerCompanyAccess,
+  redirectsToAccountHub,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import {
@@ -54,7 +55,7 @@ export default async function AccountOrderDetailPage({ params }: { params: { ord
   if (gate.kind === "sign_in_required") {
     redirect(`/login?next=%2Faccount%2Forders%2F${encodeURIComponent(params.orderId)}`);
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     redirect("/account");
   }
 

@@ -24,6 +24,7 @@ describe("admin company detail page (Phase C + D2 quicklist + ship-to)", () => {
     expect(s).toContain("parseCustomerDetailTab");
     expect(h).toContain("?tab=delivery");
     expect(s).toContain("Team access");
+    expect(s).toContain("CompanyAddMemberForm");
     expect(s).toContain("Delivery locations");
     expect(s).toContain("Preferred products");
     expect(s).toContain("not revenue or margin reporting");

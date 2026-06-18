@@ -28,6 +28,7 @@ export default function LoginPage({
         <LoginClient
           nextPath={searchParams.next}
           issue={searchParams.issue}
+          reset={searchParams.reset}
           supabaseConfigured={supabaseConfigured}
           hasExplicitNext={hasExplicitNextParam(searchParams.next)}
         />

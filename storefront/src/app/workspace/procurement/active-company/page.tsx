@@ -12,6 +12,7 @@ export default async function ProcurementActiveCompanyPage() {
     redirect(`/login?next=${encodeURIComponent("/workspace/procurement/active-company")}`);
   }
   if (g.kind === "no_membership") redirect("/login?issue=no_membership");
+  if (g.kind === "company_not_active") redirect("/account");
   if (g.kind === "ready") redirect("/workspace/procurement");
 
   const ids = g.companyIds;

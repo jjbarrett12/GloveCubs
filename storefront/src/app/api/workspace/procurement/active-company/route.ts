@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isPortalActiveCompanyStatus } from "@/lib/procurement/customer-procurement-company-gate";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { resolveActiveCompanyId, setActiveCompanyForUser } from "@/lib/procurement/repo-active-company-resolve";
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
   }
   const supabase = getSupabaseAdmin() as any;
   const gate = await resolveCustomerProcurementGate(supabase);
-  if (gate.kind === "sign_in_required" || gate.kind === "no_membership") {
+  if (gate.kind === "sign_in_required" || gate.kind === "no_membership" || gate.kind === "company_not_active") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = gate.kind === "ready" ? gate.session.userId : gate.userId;
@@ -28,6 +29,19 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { data: company, error: coErr } = await supabase
+    .schema("gc_commerce")
+    .from("companies")
+    .select("status")
+    .eq("id", parsed.data.company_id)
+    .maybeSingle();
+  if (coErr) {
+    return NextResponse.json({ error: "Failed to verify company" }, { status: 500 });
+  }
+  if (!company || !isPortalActiveCompanyStatus(company.status)) {
+    return NextResponse.json({ error: "Company is not active", code: "COMPANY_NOT_ACTIVE" }, { status: 403 });
   }
 
   const setRes = await setActiveCompanyForUser(userId, parsed.data.company_id, { supabase });

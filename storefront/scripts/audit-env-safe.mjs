@@ -1,10 +1,20 @@
 /**
- * Safe env audit — prints presence/length/masked preview only. No full secrets.
+ * Safe env audit — prints presence/length/masked preview only. No full secret values.
  * Usage: node scripts/audit-env-safe.mjs [optional-env-file...]
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_ENV_FILE_PATHS,
+  envKeyStatus,
+  maskEnvValue,
+  mergeEnvFileVars,
+  parseEnvFile,
+  REQUIRED_LOGIN_ENV_KEYS,
+  resolveEffectiveLoginEnv,
+  validateRequiredLoginEnv,
+} from "./env-file-utils.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const storefrontRoot = path.resolve(__dirname, "..");
@@ -29,44 +39,12 @@ const WRONG_NAMES = [
   "NEXT_SUPABASE_ANON_KEY",
 ];
 
-function parseEnvFile(filePath) {
-  const out = {};
-  try {
-    for (const line of fs.readFileSync(filePath, "utf8").split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      out[key] = val;
-    }
-  } catch (e) {
-    return { error: String(e.message || e), vars: {} };
-  }
-  return { error: null, vars: out };
-}
-
-function mask(val, highlySensitive = false) {
-  if (val == null || val === "") return { present: false, length: 0, masked: "(empty)" };
-  const s = String(val);
-  if (highlySensitive) return { present: true, length: s.length, masked: `[REDACTED len=${s.length}]` };
-  if (s.length <= 8) return { present: true, length: s.length, masked: `${s.slice(0, 2)}…${s.slice(-2)}` };
-  return { present: true, length: s.length, masked: `${s.slice(0, 4)}…${s.slice(-4)}` };
-}
-
 function auditFile(filePath) {
   const rel = path.relative(repoRoot, filePath);
   const parsed = parseEnvFile(filePath);
   if (parsed.error) {
     console.log(`\n=== ${rel} ===`);
-    console.log(`  ERROR: ${parsed.error}`);
+    console.log(`  ERROR: ${parsed.error.message || parsed.error}`);
     return;
   }
   const stat = fs.statSync(filePath);
@@ -74,24 +52,15 @@ function auditFile(filePath) {
   console.log(`  size=${stat.size} mtime=${stat.mtime.toISOString()}`);
   for (const key of KEYS) {
     const raw = parsed.vars[key];
-    const highlySensitive = key === "SUPABASE_SERVICE_ROLE_KEY";
-    const m = mask(raw, highlySensitive);
+    const status = envKeyStatus(raw);
+    const m = maskEnvValue(key, raw ?? "");
     const flags = [];
-    if (m.present && /^\s|\s$/.test(String(raw))) flags.push("leading/trailing-space");
-    if (m.present && String(raw).includes('"') && !String(raw).match(/^".*"$/)) flags.push("embedded-quotes");
-    console.log(
-      `  ${key}: present=${m.present} len=${m.length} masked=${m.masked}${flags.length ? ` flags=[${flags.join(",")}]` : ""}`,
-    );
+    if (status === "ok" && /^\s|\s$/.test(String(raw))) flags.push("leading/trailing-space");
+    console.log(`  ${key}: status=${status} masked=${m}${flags.length ? ` flags=[${flags.join(",")}]` : ""}`);
   }
 }
 
-const defaultFiles = [
-  path.join(repoRoot, ".env"),
-  path.join(repoRoot, ".env.local"),
-  path.join(storefrontRoot, ".env.local"),
-  path.join(storefrontRoot, ".env"),
-];
-
+const defaultFiles = DEFAULT_ENV_FILE_PATHS;
 const files = process.argv.length > 2 ? process.argv.slice(2) : defaultFiles;
 console.log(`Repo root: ${repoRoot}`);
 console.log(`Next.js root: ${storefrontRoot}`);
@@ -102,32 +71,29 @@ for (const f of files) {
   else console.log(`\n=== ${path.relative(repoRoot, f)} === MISSING`);
 }
 
-// Simulate next.config merge logic
-function mergeEnvFiles(...filePaths) {
-  const merged = {};
-  for (const filePath of filePaths) {
-    if (!fs.existsSync(filePath)) continue;
-    const { vars } = parseEnvFile(filePath);
-    for (const [key, value] of Object.entries(vars)) {
-      if (typeof value === "string" && value.trim()) merged[key] = value.trim();
-    }
-  }
-  return merged;
+const merged = mergeEnvFileVars(defaultFiles);
+const resolvedUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || merged.NEXT_PUBLIC_SUPABASE_URL || merged.SUPABASE_URL || "";
+const resolvedAnon =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+  merged.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  merged.SUPABASE_ANON_KEY ||
+  "";
+const resolvedService = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || merged.SUPABASE_SERVICE_ROLE_KEY || "";
+
+console.log("\n=== effective login env (safe) ===");
+for (const spec of REQUIRED_LOGIN_ENV_KEYS) {
+  const row = resolveEffectiveLoginEnv({ envFilePaths: defaultFiles })[spec.key];
+  const hostPart = row.hostname ? ` host=${row.hostname}` : "";
+  console.log(`  ${spec.key}: status=${row.status} (${spec.visibility}) source=${row.source}${hostPart}`);
 }
-
-const merged = mergeEnvFiles(
-  path.join(repoRoot, ".env"),
-  path.join(storefrontRoot, ".env"),
-  path.join(storefrontRoot, ".env.local"),
-);
-
-const resolvedUrl = merged.NEXT_PUBLIC_SUPABASE_URL || merged.SUPABASE_URL || "";
-const resolvedAnon = merged.NEXT_PUBLIC_SUPABASE_ANON_KEY || merged.SUPABASE_ANON_KEY || "";
+const problems = validateRequiredLoginEnv(resolveEffectiveLoginEnv({ envFilePaths: defaultFiles }));
+console.log(`  login_ready=${problems.length === 0}`);
 
 console.log("\n=== next.config.mjs merge simulation ===");
-console.log(`  resolved NEXT_PUBLIC_SUPABASE_URL: ${mask(resolvedUrl).masked} (len=${resolvedUrl.length})`);
-console.log(`  resolved NEXT_PUBLIC_SUPABASE_ANON_KEY: ${mask(resolvedAnon).masked} (len=${resolvedAnon.length})`);
-console.log(`  login would be configured: ${Boolean(resolvedUrl && resolvedAnon)}`);
+console.log(`  resolved NEXT_PUBLIC_SUPABASE_URL: ${maskEnvValue("NEXT_PUBLIC_SUPABASE_URL", resolvedUrl)}`);
+console.log(`  resolved NEXT_PUBLIC_SUPABASE_ANON_KEY: ${maskEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY", resolvedAnon)}`);
+console.log(`  resolved SUPABASE_SERVICE_ROLE_KEY: ${maskEnvValue("SUPABASE_SERVICE_ROLE_KEY", resolvedService)}`);
+console.log(`  login would be configured: ${Boolean(resolvedUrl && resolvedAnon && resolvedService)}`);
 
 console.log("\n=== common mistakes (non-empty wrong-name keys) ===");
 for (const f of defaultFiles) {
@@ -135,8 +101,11 @@ for (const f of defaultFiles) {
   const { vars } = parseEnvFile(f);
   for (const key of WRONG_NAMES) {
     const v = vars[key];
-    if (v?.trim()) {
-      console.log(`  ${path.relative(repoRoot, f)} has ${key} (len=${v.length}) — needs NEXT_PUBLIC_* for browser`);
+    if (envKeyStatus(v) === "ok") {
+      console.log(`  ${path.relative(repoRoot, f)} has ${key} — needs NEXT_PUBLIC_* for browser`);
     }
   }
 }
+
+console.log("\n=== vercel env pull warning ===");
+console.log("  Blank NEXT_PUBLIC_SUPABASE_* values in pulled files are invalid. Run npm run env:check after pull.");

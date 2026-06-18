@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   assertCustomerCompanyAccess,
+  redirectsToAccountHub,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import { buildReorderQuotePayload } from "@/lib/account/reorder-to-quote-read-model";
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   if (gate.kind === "sign_in_required") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

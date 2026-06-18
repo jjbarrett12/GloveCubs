@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
+import { resolveCustomerProcurementGate, COMPANY_NOT_ACTIVE_BUYER_MESSAGE } from "@/lib/procurement/customer-procurement-session";
 import { AccountSignOut } from "./AccountSignOut";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { b2bTierLabel, b2bTierSiteDiscountPercent } from "@/lib/pricing/b2b-tier-meta";
@@ -77,6 +77,25 @@ export default async function AccountPage() {
               Open admin console
             </Link>
             .
+          </div>
+        ) : null}
+
+        {gate.kind === "company_not_active" ? (
+          <div className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            <p className="font-medium text-red-50">Company account not active</p>
+            <p className="mt-2 text-xs text-red-100/80">{COMPANY_NOT_ACTIVE_BUYER_MESSAGE}</p>
+            <ul className="mt-3 space-y-1.5 text-xs">
+              <li>
+                <Link className="font-semibold text-[#f06232] underline" href="/contact">
+                  Contact support
+                </Link>
+              </li>
+              <li>
+                <Link className="font-semibold text-[#f06232] underline" href="/store">
+                  Continue browsing the catalog
+                </Link>
+              </li>
+            </ul>
           </div>
         ) : null}
 

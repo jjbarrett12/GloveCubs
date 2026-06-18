@@ -26,23 +26,28 @@ export async function GET(req: Request) {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !anon || !key) {
-    return NextResponse.json({
-      path: "/account" as const,
-      ...(DEBUG_POST_LOGIN
-        ? {
-            diag: {
-              logged_in: false,
-              user_id_suffix: null as string | null,
-              admin_row_found: false,
-              admin_active: false,
-              destination: "/account",
-              session_via: "none" as const,
-              supabase_url_host: url ? supabaseHost(url) : null,
-              reason: "missing_supabase_env",
-            },
-          }
-        : {}),
-    });
+    return NextResponse.json(
+      {
+        error:
+          "Login routing is unavailable because Supabase environment variables are missing or blank on the server.",
+        code: "missing_supabase_env",
+        ...(DEBUG_POST_LOGIN
+          ? {
+              diag: {
+                logged_in: false,
+                user_id_suffix: null as string | null,
+                admin_row_found: false,
+                admin_active: false,
+                destination: null,
+                session_via: "none" as const,
+                supabase_url_host: url ? supabaseHost(url) : null,
+                reason: "missing_supabase_env",
+              },
+            }
+          : {}),
+      },
+      { status: 503 },
+    );
   }
 
   const cookieStore = await cookies();
@@ -90,16 +95,20 @@ export async function GET(req: Request) {
   const adminActive = adminRowFound;
 
   let buyerDefaultPath: "/account/quotes" | "/account" = "/account";
+  let buyerIssue: "company_inactive" | null = null;
   if (!adminUser) {
     const gate = await resolveCustomerProcurementGate(svc);
     if (gate.kind === "ready") {
       buyerDefaultPath = "/account/quotes";
+    } else if (gate.kind === "company_not_active") {
+      buyerIssue = "company_inactive";
     }
   }
 
   return NextResponse.json({
     path,
     buyer_default_path: adminUser ? "/account" : buyerDefaultPath,
+    buyer_issue: buyerIssue,
     ...(DEBUG_POST_LOGIN
       ? {
           authDebug: adminUser ? ("active_admin_row" as const) : ("no_admin_row_for_auth_uid" as const),

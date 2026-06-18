@@ -20,6 +20,7 @@ import { fetchAdminCompanyDetail } from "@/lib/admin/admin-companies-read-model"
 import { fetchCompanyQuicklistItems } from "@/lib/admin/admin-company-quicklist";
 import { fetchAdminShipToAddresses } from "@/lib/admin/admin-ship-to-addresses";
 import { parseCustomerDetailTab } from "@/lib/admin/admin-customer-detail-tabs";
+import { CompanyAddMemberForm } from "../CompanyAddMemberForm";
 import { CompanyB2bTierSelect } from "../CompanyB2bTierSelect";
 import { CompanyProfileForm } from "../CompanyProfileForm";
 import { CompanyQuicklistManager } from "../CompanyQuicklistManager";
@@ -357,31 +358,40 @@ export default async function AdminCompanyDetailPage({
             title="Team access"
             description="Member contact from auth identity — not company CRM. Rows reflect sign-in users linked to this customer account."
           >
-            <TableCard>
-              {members.length === 0 ? (
-                <EmptyState title="No team members" description="No team members linked to this customer account." />
-              ) : (
-                <DetailTableShell
-                  headers={[{ label: "Role" }, { label: "Email" }, { label: "User ID" }, { label: "Joined" }]}
-                >
-                  {members.map((m) => (
-                    <tr key={m.id} className={adminTableRowHover}>
-                      <td className={cn(adminTableCell, "px-4 py-2.5 capitalize")}>{m.role}</td>
-                      <td className={cn(adminTableCell, "px-4 py-2.5")}>{m.email ?? "—"}</td>
-                      <td className={cn(adminTableCell, "px-4 py-2.5 font-mono text-xs text-admin-muted")}>{m.user_id}</td>
-                      <td className={cn(adminTableCell, "px-4 py-2.5 text-xs")}>
-                        {new Date(m.joined_at).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </DetailTableShell>
-              )}
-            </TableCard>
+            <CompanyAddMemberForm companyId={companyId} />
+            <div className="mt-6">
+              <TableCard>
+                {members.length === 0 ? (
+                  <EmptyState title="No team members" description="Add a buyer above to link portal access." />
+                ) : (
+                  <DetailTableShell
+                    headers={[{ label: "Role" }, { label: "Email" }, { label: "User ID" }, { label: "Joined" }]}
+                  >
+                    {members.map((m) => (
+                      <tr key={m.id} className={adminTableRowHover}>
+                        <td className={cn(adminTableCell, "px-4 py-2.5 capitalize")}>{m.role}</td>
+                        <td className={cn(adminTableCell, "px-4 py-2.5")}>{m.email ?? "—"}</td>
+                        <td className={cn(adminTableCell, "px-4 py-2.5 font-mono text-xs text-admin-muted")}>
+                          {m.user_id}
+                        </td>
+                        <td className={cn(adminTableCell, "px-4 py-2.5 text-xs")}>
+                          {new Date(m.joined_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </DetailTableShell>
+                )}
+              </TableCard>
+            </div>
           </PremiumSectionCard>
 
-          <PlaceholderPanel title="Invites coming soon">
-            <p>Self-service invites and role management for team access are not enabled in this phase.</p>
-            <p className="text-admin-muted">Operators continue to manage access through your established identity processes.</p>
+          <PlaceholderPanel title="Self-service invites coming soon">
+            <p>Buyers can be linked above by operator email. Self-service invite links ship in a later phase.</p>
+            <p className="text-admin-muted">
+              New buyers without a password should use{" "}
+              <span className="font-mono text-xs">/login/forgot-password</span> with their email to set one before
+              first sign-in.
+            </p>
           </PlaceholderPanel>
         </div>
       ) : null}

@@ -5,6 +5,7 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   assertCustomerCompanyAccess,
+  redirectsToAccountHub,
   resolveCustomerProcurementGate,
 } from "@/lib/procurement/customer-procurement-session";
 import { fetchBuyerQuoteDetail, snapshotProductLabel } from "@/lib/account/buyer-account-snapshot";
@@ -41,7 +42,7 @@ export default async function AccountQuoteDetailPage({ params }: PageProps) {
   if (gate.kind === "sign_in_required") {
     redirect(`/login?next=${encodeURIComponent(`/account/quotes/${quoteId}`)}`);
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     redirect("/account");
   }
 

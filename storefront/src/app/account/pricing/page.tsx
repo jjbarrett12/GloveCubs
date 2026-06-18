@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
+import { redirectsToAccountHub, resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { b2bTierLabel, b2bTierSiteDiscountPercent } from "@/lib/pricing/b2b-tier-meta";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export default async function AccountPricingPage() {
   if (gate.kind === "sign_in_required") {
     redirect("/login?next=%2Faccount%2Fpricing");
   }
-  if (gate.kind === "no_membership" || gate.kind === "active_company_required") {
+  if (redirectsToAccountHub(gate)) {
     redirect("/account");
   }
 
