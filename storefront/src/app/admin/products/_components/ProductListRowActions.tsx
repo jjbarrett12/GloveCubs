@@ -3,6 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { adminAlertSurface, adminSecondaryButton } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
+
+const deleteButton = cn(
+  adminSecondaryButton,
+  "border-admin-danger/40 text-admin-danger hover:bg-[var(--admin-danger-surface)]",
+);
 
 export function ProductListRowActions({
   productId,
@@ -41,22 +48,18 @@ export function ProductListRowActions({
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <Link
-        href={`/admin/products/${productId}/edit`}
-        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-[#c2410c] shadow-sm hover:border-[#f06232]/40 hover:bg-slate-50"
-      >
+    <div className="flex min-w-[9rem] flex-col items-end gap-1.5">
+      <Link href={`/admin/products/${productId}/edit`} className={cn(adminSecondaryButton, "text-xs")}>
         Edit
       </Link>
-      <button
-        type="button"
-        disabled={deleting}
-        onClick={() => void onDelete()}
-        className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-      >
+      <button type="button" disabled={deleting} onClick={() => void onDelete()} className={cn(deleteButton, "text-xs")}>
         {deleting ? "Deleting…" : "Delete"}
       </button>
-      {error ? <p className="max-w-[140px] text-right text-xs text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className={cn(adminAlertSurface("critical", "w-full max-w-xs text-right text-xs leading-snug"))}>
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

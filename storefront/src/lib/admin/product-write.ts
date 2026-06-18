@@ -6,6 +6,12 @@ import { randomBytes } from "crypto";
 
 import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
 import { evaluateActivePublishReadiness } from "@/lib/admin/product-write-active-readiness";
+import { getAdminUser } from "@/lib/admin/get-admin-user";
+import {
+  isUrlImportProductMetadata,
+  URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
+} from "@/lib/admin/clipboard-promote-guards";
+import { sortVariantsByGloveSize, type ManufacturerSkuSource } from "@/lib/admin/variant-generation";
 import {
   runManualPostActiveSideEffects,
   shouldRunManualPostActiveSideEffects,
@@ -43,6 +49,10 @@ export type ProductEditorVariantInput = {
   listPrice: string;
 
   manufacturerSku?: string | null;
+
+  manufacturerSkuSource?: ManufacturerSkuSource;
+
+  manufacturerSkuNeedsReview?: boolean;
 
 };
 
@@ -573,7 +583,12 @@ async function mergeVariantsForProduct(
 
 
 
-  const variants = input.variants.length ? input.variants : [{ sizeCode: "UNKNOWN", variantSku: "", listPrice: "" }];
+  const variants = sortVariantsByGloveSize(
+    (input.variants.length ? input.variants : [{ sizeCode: "UNKNOWN", variantSku: "", listPrice: "" }]).map((v) => ({
+      ...v,
+      manufacturerSku: v.manufacturerSku ?? undefined,
+    })),
+  );
 
   const touchedIds = new Set<string>();
 
@@ -596,6 +611,7 @@ async function mergeVariantsForProduct(
     const mfrSku = manufacturerSkuForVariant(input, sizeKey, v);
 
     if (mfrSku) vmeta.manufacturer_sku = mfrSku;
+    if (v.manufacturerSkuSource) vmeta.manufacturer_sku_source = v.manufacturerSkuSource;
 
 
 
@@ -1046,6 +1062,7 @@ export async function insertCatalogProduct(input: ProductWriteInput): Promise<{ 
     const mfrSku = manufacturerSkuForVariant(input, (v.sizeCode || "SZ").trim().toUpperCase(), v);
 
     if (mfrSku) vmeta.manufacturer_sku = mfrSku;
+    if (v.manufacturerSkuSource) vmeta.manufacturer_sku_source = v.manufacturerSkuSource;
 
 
 
@@ -1198,10 +1215,14 @@ export async function updateCatalogProduct(
   const targetStatus = input.status;
 
   if (targetStatus === "active") {
+    if (isUrlImportProductMetadata(metadata)) {
+      const admin = await getAdminUser();
+      if (!admin) return { error: URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE };
+    }
     const activeGuard = await evaluateActivePublishReadiness(
       supabase,
       { ...input, status: "active", internalSku },
-      { metadata, productId, importDraft: input.importDraft ?? null }
+      { metadata, productId, importDraft: input.importDraft ?? null, adminReviewPublish: true }
     );
     if (activeGuard) return { error: activeGuard };
   }
@@ -1388,7 +1409,9 @@ async function purgeCatalogProductDependencies(
       .in("sellable_product_id", sellableIds);
     if (orderLineErr) return { error: orderLineErr.message };
     if ((orderLineCount ?? 0) > 0) {
-      return { error: "Product cannot be deleted because it appears on one or more orders." };
+      return {
+        error: `Cannot delete: this product appears on ${orderLineCount} order line(s). Archive or deactivate it instead.`,
+      };
     }
   }
 
@@ -1408,7 +1431,9 @@ async function purgeCatalogProductDependencies(
       .in("catalog_variant_id", variantIds);
     if (variantOrderLineErr) return { error: variantOrderLineErr.message };
     if ((variantOrderLineCount ?? 0) > 0) {
-      return { error: "Product cannot be deleted because one or more variants appear on orders." };
+      return {
+        error: `Cannot delete: a variant appears on ${variantOrderLineCount} order line(s). Archive or deactivate instead.`,
+      };
     }
   }
 

@@ -1,7 +1,10 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { resolveAdminAccess } from "@/lib/admin/get-admin-user";
+import { resolveAdminHealth } from "@/lib/admin/admin-health";
 import { AdminShell } from "./_components/AdminShell";
+import { AdminThemeProvider } from "./_components/AdminThemeProvider";
+import "./admin-theme.css";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +23,18 @@ export default async function AdminRootLayout({ children }: { children: React.Re
 
   const deployEnv =
     process.env.VERCEL_ENV?.trim() || (process.env.NODE_ENV === "production" ? "production" : "development");
+  const health = resolveAdminHealth();
 
   return (
-    <AdminShell adminEmail={access.email} adminUserId={access.userId} deployEnv={deployEnv}>
-      {children}
-    </AdminShell>
+    <AdminThemeProvider>
+      <AdminShell
+        adminEmail={access.email}
+        adminUserId={access.userId}
+        deployEnv={deployEnv}
+        health={{ status: health.status, severity: health.severity, issues: health.issues }}
+      >
+        {children}
+      </AdminShell>
+    </AdminThemeProvider>
   );
 }

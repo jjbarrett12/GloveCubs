@@ -2,6 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminFormInput,
+  adminFormLabel,
+  adminPrimaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export type UrlImportPanelProps = {
   offline: boolean;
@@ -16,6 +24,8 @@ function deriveHost(value: string): string {
     return "";
   }
 }
+
+const inputClass = cn(adminFormInput, "mt-2 w-full rounded-lg shadow-inner disabled:opacity-50");
 
 export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps) {
   const router = useRouter();
@@ -98,46 +108,40 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      className={cn(adminCardSurface, "space-y-5 p-6")}
       aria-label="URL import"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-4">
-        <h2 className="text-lg font-semibold text-slate-900">Supplier URL crawl</h2>
-        <p className="text-sm text-slate-600">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-admin-border-subtle pb-4">
+        <h2 className="text-lg font-semibold text-admin-primary">Supplier URL crawl</h2>
+        <p className="text-sm text-admin-secondary">
           This console starts the job; extraction runs in the catalog sync service.
         </p>
       </div>
 
       {offline ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {offlineMessage}
-        </div>
+        <div className={adminAlertSurface("critical")}>{offlineMessage}</div>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">
-            Supplier name
-          </span>
+          <span className={adminFormLabel}>Supplier name</span>
           <input
             type="text"
             value={supplierName}
             onChange={(e) => setSupplierName(e.target.value)}
             disabled={disabled}
             placeholder="Acme Glove Co"
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:opacity-50"
+            className={inputClass}
           />
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">
-            Crawl mode
-          </span>
+          <span className={adminFormLabel}>Crawl mode</span>
           <select
             value={crawlMode}
             onChange={(e) => setCrawlMode(e.target.value as "single_product" | "category")}
             disabled={disabled}
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:opacity-50"
+            className={inputClass}
           >
             <option value="single_product">Single product</option>
             <option value="category">Category</option>
@@ -145,23 +149,19 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
         </label>
 
         <label className="block sm:col-span-2">
-          <span className="text-sm font-semibold text-slate-700">
-            Start URL
-          </span>
+          <span className={adminFormLabel}>Start URL</span>
           <input
             type="url"
             value={startUrl}
             onChange={(e) => setStartUrl(e.target.value)}
             disabled={disabled}
             placeholder="https://supplier.example.com/products/..."
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:opacity-50"
+            className={inputClass}
           />
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">
-            Allowed domain
-          </span>
+          <span className={adminFormLabel}>Allowed domain</span>
           <input
             type="text"
             value={allowedDomain}
@@ -171,17 +171,15 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
             }}
             disabled={disabled}
             placeholder="supplier.example.com"
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:opacity-50"
+            className={inputClass}
           />
-          <span className="mt-1.5 block text-xs text-slate-500">
+          <span className="mt-1.5 block text-xs text-admin-muted">
             Auto-filled from start URL host. Override only if needed.
           </span>
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">
-            Max pages
-          </span>
+          <span className={adminFormLabel}>Max pages</span>
           <input
             type="number"
             min={1}
@@ -192,29 +190,23 @@ export function UrlImportPanel({ offline, offlineMessage }: UrlImportPanelProps)
               setMaxPages(Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 500) : 1);
             }}
             disabled={disabled || crawlMode === "single_product"}
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:opacity-50"
+            className={inputClass}
           />
-          <span className="mt-1.5 block text-xs text-slate-500">
+          <span className="mt-1.5 block text-xs text-admin-muted">
             {crawlMode === "single_product" ? "Single product mode crawls exactly 1 page." : "Capped at 500."}
           </span>
         </label>
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </div>
+        <div className={adminAlertSurface("critical")}>{error}</div>
       ) : null}
 
-      <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
-        <button
-          type="submit"
-          disabled={disabled}
-          className="rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:cursor-not-allowed disabled:opacity-50"
-        >
+      <div className="flex flex-col gap-3 border-t border-admin-border-subtle pt-4 sm:flex-row sm:items-center">
+        <button type="submit" disabled={disabled} className={cn(adminPrimaryButton, "px-5 py-2.5")}>
           {submitting ? "Starting…" : "Start URL import"}
         </button>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-admin-secondary">
           Large category crawls can take a few minutes; keep this tab open until the run finishes.
         </p>
       </div>

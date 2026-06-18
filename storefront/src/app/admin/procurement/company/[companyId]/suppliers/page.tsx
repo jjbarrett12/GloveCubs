@@ -1,6 +1,9 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchSupplierObservationSummary } from "@/lib/procurement/procurement-workspace-read-models";
-import { PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
+import { ProcurementTableShell, adminTableRowHover } from "@/app/admin/procurement/_ProcurementTableShell";
+import { ErrorState, PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
+import { adminTableCell } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +20,10 @@ export default async function ProcurementSuppliersPage({ params }: { params: { c
             { label: "Suppliers" },
           ]}
         />
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Supabase not configured.
-        </div>
+        <ErrorState
+          title="Database not configured"
+          message="Supplier activity cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
       </div>
     );
   }
@@ -43,26 +47,21 @@ export default async function ProcurementSuppliersPage({ params }: { params: { c
           {rows.length === 0 ? (
             <EmptyState title="No supplier rows yet" description="Nothing in the current scan window for this account." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="p-3">Supplier ID</th>
-                    <th className="p-3 text-right">Rows (in scan)</th>
-                    <th className="p-3">Last observed</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {rows.map((r) => (
-                    <tr key={r.catalogos_supplier_id} className="hover:bg-blue-50/40">
-                      <td className="p-3 font-mono text-xs text-gray-900">{r.catalogos_supplier_id}</td>
-                      <td className="p-3 text-right font-mono tabular-nums text-gray-900">{r.observation_count}</td>
-                      <td className="p-3 text-xs text-gray-600">{r.last_observed_at ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProcurementTableShell
+              headers={[
+                { label: "Supplier ID" },
+                { label: "Rows (in scan)", align: "right" },
+                { label: "Last observed" },
+              ]}
+            >
+              {rows.map((r) => (
+                <tr key={r.catalogos_supplier_id} className={adminTableRowHover}>
+                  <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>{r.catalogos_supplier_id}</td>
+                  <td className={cn(adminTableCell, "p-3 text-right font-mono tabular-nums")}>{r.observation_count}</td>
+                  <td className={cn(adminTableCell, "p-3 text-xs")}>{r.last_observed_at ?? "—"}</td>
+                </tr>
+              ))}
+            </ProcurementTableShell>
           )}
         </TableCard>
       </PageSection>

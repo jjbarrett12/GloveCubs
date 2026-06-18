@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { adminFormInput } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 const TIERS = [
   { code: "cub", label: "Cub (10% off site list)" },
@@ -53,7 +55,7 @@ export function CompanyB2bTierSelect({ companyId, initialTier }: Props) {
       </label>
       <select
         id={`tier-${companyId}`}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 shadow-sm disabled:opacity-50"
+        className={cn(adminFormInput, "text-xs font-medium disabled:opacity-50")}
         disabled={pending}
         value={tier}
         onChange={(ev) => void onChange(ev)}
@@ -64,7 +66,7 @@ export function CompanyB2bTierSelect({ companyId, initialTier }: Props) {
           </option>
         ))}
       </select>
-      {msg ? <p className="text-[11px] text-red-600">{msg}</p> : null}
+      {msg ? <p className="text-[11px] text-admin-danger">{msg}</p> : null}
     </div>
   );
 }

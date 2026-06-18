@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { adminBodyText, adminMutedPanel } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -10,16 +11,9 @@ type Props = {
 /** Honest “coming soon” / disabled operational panel — no fake forms or CTAs. */
 export function PlaceholderPanel({ title, children, className }: Props) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-600 shadow-inner",
-        className,
-      )}
-      role="region"
-      aria-label={title}
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <div className="mt-2 space-y-2 leading-snug">{children}</div>
+    <div className={cn(adminMutedPanel, "px-4 py-4 shadow-inner", className)} role="region" aria-label={title}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-admin-muted">{title}</p>
+      <div className={cn("mt-2 space-y-2 leading-snug", adminBodyText)}>{children}</div>
     </div>
   );
 }

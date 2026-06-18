@@ -27,6 +27,12 @@ import {
   type ImportApplyPatch,
 } from "@/lib/admin/import-suggestion-mapper";
 import type { EditorVariantRow } from "@/lib/admin/variant-generation";
+import {
+  manufacturerFieldsFromDraftVariant,
+  sortVariantsByGloveSize,
+  type ManufacturerSkuSource,
+} from "@/lib/admin/variant-generation";
+import { isUrlImportProductMetadata } from "@/lib/admin/clipboard-promote-guards";
 import { adminUpdateProductAction } from "@/app/admin/products/_components/product-editor-actions";
 import { ProductCommandHeader } from "@/app/admin/products/_components/ProductCommandHeader";
 import { ProductAttributeEditor } from "@/app/admin/products/_components/ProductAttributeEditor";
@@ -40,13 +46,24 @@ import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { initCommercePackagingFromEditor } from "@/lib/admin/commerce-packaging-editor";
 import type { GovernanceWarning } from "@/lib/admin/catalog-governance";
 import { skuCollisionSetsForReadiness } from "@/lib/admin/sku-collision-lookup";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminFormInput,
+  adminFormLabel,
+  adminLink,
+  adminPrimaryButton,
+  adminSecondaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
-const lbl = "text-xs font-semibold text-slate-600";
-const field =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
-const fieldBlocking =
-  "mt-1 w-full rounded-lg border-2 border-red-400 bg-red-50/40 px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200";
-const wrapBlocking = "rounded-lg border-2 border-red-400 bg-red-50/40 p-2.5";
+const lbl = adminFormLabel;
+const field = cn(adminFormInput, "mt-1 w-full rounded-lg shadow-inner");
+const fieldBlocking = cn(
+  adminFormInput,
+  "mt-1 w-full rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] shadow-inner focus:border-admin-danger focus:ring-admin-danger/30",
+);
+const wrapBlocking = "rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] p-2.5";
 
 export type ProductEditorShellProps = {
   categories: AdminCategoryOption[];
@@ -60,16 +77,37 @@ export type ProductEditorShellProps = {
 };
 
 function variantsFromDb(
-  rows: NonNullable<AdminProductDetailResult["variants"]>
+  rows: NonNullable<AdminProductDetailResult["variants"]>,
+  importDraft: ImportDraftProductV1 | null
 ): EditorVariantRow[] {
   const active = rows.filter((v) => v.isActive);
   if (active.length === 0) return [{ sizeCode: "M", variantSku: "", listPrice: "" }];
-  return active.map((v) => {
+  const mapped = active.map((v) => {
     const vm = (v.metadata ?? {}) as Record<string, unknown>;
     const lp = vm.list_price;
     const listPrice = typeof lp === "number" ? String(lp) : typeof lp === "string" ? lp : "";
-    return { id: v.id, sizeCode: v.sizeCode ?? "", variantSku: v.variantSku, listPrice };
+    const draftVar = importDraft?.variants.find(
+      (d) => d.normalized_size_code.trim().toUpperCase() === (v.sizeCode ?? "").trim().toUpperCase()
+    );
+    const storedMfr = typeof vm.manufacturer_sku === "string" ? vm.manufacturer_sku.trim() : "";
+    const storedSource = vm.manufacturer_sku_source as ManufacturerSkuSource | undefined;
+    const draftFields = manufacturerFieldsFromDraftVariant(draftVar);
+    let manufacturerSku = storedMfr || draftFields.manufacturerSku || "";
+    let manufacturerSkuSource = storedSource ?? draftFields.manufacturerSkuSource ?? "missing";
+    if (storedMfr && draftFields.manufacturerSku && storedMfr !== draftFields.manufacturerSku) {
+      manufacturerSkuSource = "manual";
+    }
+    return {
+      id: v.id,
+      sizeCode: v.sizeCode ?? "",
+      variantSku: v.variantSku,
+      listPrice,
+      manufacturerSku,
+      manufacturerSkuSource,
+      manufacturerSkuNeedsReview: !manufacturerSku && (draftFields.manufacturerSkuNeedsReview ?? false),
+    };
   });
+  return sortVariantsByGloveSize(mapped);
 }
 
 function metaStr(meta: Record<string, unknown> | null | undefined, keys: string[]): string {
@@ -95,7 +133,9 @@ export function ProductEditorShell({
   const meta = (product.metadata ?? {}) as Record<string, unknown>;
 
   const [pending, startTransition] = React.useTransition();
+  const [pendingAction, setPendingAction] = React.useState<"draft" | "publish" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
   const [dirty, setDirty] = React.useState(false);
   const [pendingCategoryId, setPendingCategoryId] = React.useState<string | null>(null);
   const [pendingCategoryDefs, setPendingCategoryDefs] = React.useState<AttributeDefinitionRow[] | null>(null);
@@ -114,7 +154,9 @@ export function ProductEditorShell({
   const [attributes, setAttributes] = React.useState<Record<string, string | string[]>>(editor.productAttributes);
   const [definitions, setDefinitions] = React.useState<AttributeDefinitionRow[]>(editor.attributeDefinitions);
   const [legacyFields, setLegacyFields] = React.useState<LegacyMetadataField[]>(editor.legacyMetadataFields);
-  const [variants, setVariants] = React.useState<EditorVariantRow[]>(() => variantsFromDb(dbVariants));
+  const [variants, setVariants] = React.useState<EditorVariantRow[]>(() =>
+    sortVariantsByGloveSize(variantsFromDb(dbVariants, editor.importDraft))
+  );
   const [importDraft] = React.useState<ImportDraftProductV1 | null>(editor.importDraft);
   const categorySlug = categories.find((c) => c.id === categoryId)?.slug ?? null;
   const [commercePackaging, setCommercePackaging] = React.useState<CommercePackagingV1>(() =>
@@ -193,6 +235,8 @@ export function ProductEditorShell({
     return () => window.clearTimeout(timer);
   }, [internalSku, variants, productId]);
 
+  const isUrlImport = isUrlImportProductMetadata(product.metadata);
+
   const draftReadiness = computeEditorReadiness({
     brandName,
     categoryId,
@@ -206,6 +250,7 @@ export function ProductEditorShell({
     attributeDefinitions: definitions,
     dirty,
     importDraft,
+    adminReviewPublish: isUrlImport,
     allowedByKey,
     commercePackaging,
     internalSku,
@@ -225,6 +270,7 @@ export function ProductEditorShell({
     attributeDefinitions: definitions,
     dirty: false,
     importDraft,
+    adminReviewPublish: isUrlImport,
     allowedByKey,
     commercePackaging,
     internalSku,
@@ -251,7 +297,7 @@ export function ProductEditorShell({
     );
 
     const safe = filterSafeSuggestions(buildImportFieldSuggestions(importDraft));
-    const { patch: safePatch } = buildSafeApplyAllPatch(importDraft, allowed, safe, variantsFromDb(dbVariants), {
+    const { patch: safePatch } = buildSafeApplyAllPatch(importDraft, allowed, safe, variantsFromDb(dbVariants, importDraft), {
       existing: {
         identity: { name: product.name, brandName: product.brandName ?? "", description: product.description ?? "", primaryImageUrl: initialPrimaryImageUrl },
         attributes: editor.productAttributes,
@@ -293,18 +339,15 @@ export function ProductEditorShell({
       status: targetStatus,
       quote_only: quoteOnly,
       attributes,
-      variants: variants.map((r) => {
-        const draftVar = importDraft?.variants.find(
-          (v) => v.normalized_size_code.trim().toUpperCase() === r.sizeCode.trim().toUpperCase()
-        );
-        return {
-          id: r.id,
-          size_code: r.sizeCode,
-          variant_sku: r.variantSku,
-          list_price: r.listPrice,
-          manufacturer_sku: draftVar?.manufacturer_sku ?? draftVar?.source_sku ?? null,
-        };
-      }),
+      variants: sortVariantsByGloveSize(variants).map((r) => ({
+        id: r.id,
+        size_code: r.sizeCode,
+        variant_sku: r.variantSku,
+        list_price: r.listPrice,
+        manufacturer_sku: r.manufacturerSku?.trim() || null,
+        manufacturer_sku_source: r.manufacturerSkuSource ?? null,
+        manufacturer_sku_needs_review: r.manufacturerSkuNeedsReview ?? false,
+      })),
       internal_sku: internalSku,
       commerce_packaging: commercePackaging,
     };
@@ -312,17 +355,34 @@ export function ProductEditorShell({
 
   function save(targetStatus: "draft" | "active") {
     setError(null);
+    setSuccessMessage(null);
     const fd = new FormData();
     fd.set("product_id", productId);
     fd.set("payload", JSON.stringify(buildPayload(targetStatus)));
+    setPendingAction(targetStatus === "active" ? "publish" : "draft");
     startTransition(async () => {
-      const res = await adminUpdateProductAction(fd);
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        const res = await adminUpdateProductAction(fd);
+        if (!res.ok) {
+          setError(res.error);
+          setStatus(product.status === "active" ? "active" : "draft");
+          return;
+        }
+        setDirty(false);
+        if (targetStatus === "active") {
+          router.push(`/admin/products?tab=products&published=1`);
+          return;
+        }
+        setStatus("draft");
+        setSuccessMessage("Draft saved.");
+        router.refresh();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Save failed";
+        setError(message);
+        setStatus(product.status === "active" ? "active" : "draft");
+      } finally {
+        setPendingAction(null);
       }
-      setDirty(false);
-      router.refresh();
     });
   }
 
@@ -402,16 +462,16 @@ export function ProductEditorShell({
 
   return (
     <div className="relative pb-8">
-      <nav className="mb-3 text-xs text-slate-500">
-        <Link href="/admin/products" className="hover:text-[#f06232]">
+      <nav className="mb-3 text-xs text-admin-muted">
+        <Link href="/admin/products" className={adminLink}>
           Products
         </Link>
         <span className="mx-1.5">/</span>
-        <Link href={`/admin/products/${productId}`} className="hover:text-[#f06232]">
+        <Link href={`/admin/products/${productId}`} className={adminLink}>
           {product.name}
         </Link>
         <span className="mx-1.5">/</span>
-        <span className="text-slate-700">Edit</span>
+        <span className="text-admin-secondary">Edit</span>
       </nav>
 
       <ProductCommandHeader
@@ -424,6 +484,7 @@ export function ProductEditorShell({
         readiness={publishReadiness}
         storefrontPath={storefrontPdpPath}
         pending={pending}
+        pendingAction={pendingAction}
         dirty={dirty}
         onSaveDraft={() => save("draft")}
         onPublish={() => {
@@ -433,36 +494,36 @@ export function ProductEditorShell({
             );
             return;
           }
-          setStatus("active");
           save("active");
         }}
+        urlImportReview={isUrlImport}
       />
 
+      {successMessage ? (
+        <div role="status" className={cn(adminAlertSurface("success", "sticky top-[5.5rem] z-10 mt-4"))}>
+          {successMessage}
+        </div>
+      ) : null}
+
       {error ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
+        <div role="alert" className={cn(adminAlertSurface("critical", "sticky top-[5.5rem] z-10 mt-4 font-medium"))}>
+          {error}
+        </div>
       ) : null}
 
       {pendingCategoryId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
-            <h2 className="text-base font-semibold text-slate-900">Change category?</h2>
-            <p className="mt-2 text-sm text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className={cn(adminCardSurface, "max-w-md p-5 shadow-xl")}>
+            <h2 className="text-base font-semibold text-admin-primary">Change category?</h2>
+            <p className="mt-2 text-sm text-admin-secondary">
               Switching to <strong>{pendingCategoryName}</strong> removes storefront filter attributes that are not
               valid for the new category. Overlapping keys are preserved.
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={cancelCategoryChange}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
+              <button type="button" onClick={cancelCategoryChange} className={adminSecondaryButton}>
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={confirmCategoryChange}
-                className="rounded-lg bg-[#f06232] px-3 py-2 text-sm font-semibold text-white hover:bg-[#e5582d]"
-              >
+              <button type="button" onClick={confirmCategoryChange} className={adminPrimaryButton}>
                 Confirm change
               </button>
             </div>
@@ -514,7 +575,7 @@ export function ProductEditorShell({
                 !internalSku.trim() &&
                 importDraft.sku_proposal_confidence != null &&
                 importDraft.sku_proposal_confidence >= 0.7 ? (
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-[10px] text-admin-muted">
                     Proposal: {importDraft.proposed_parent_sku} (
                     {Math.round(importDraft.sku_proposal_confidence * 100)}%)
                   </p>
@@ -524,7 +585,7 @@ export function ProductEditorShell({
                 <span className={lbl}>
                   Brand
                   {blockingSet.has("__brand__") ? (
-                    <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                    <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
                   ) : null}
                 </span>
                 <input
@@ -540,7 +601,7 @@ export function ProductEditorShell({
                 <span className={lbl}>
                   Category
                   {blockingSet.has("__category__") ? (
-                    <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                    <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
                   ) : null}
                 </span>
                 <select
@@ -563,7 +624,7 @@ export function ProductEditorShell({
                 <span className={lbl}>
                   Primary image URL
                   {blockingSet.has("__primary_image__") ? (
-                    <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                    <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
                   ) : null}
                 </span>
                 <div className="mt-1 flex gap-3">
@@ -572,7 +633,7 @@ export function ProductEditorShell({
                     <img
                       src={primaryImageUrl}
                       alt=""
-                      className="h-16 w-16 shrink-0 rounded-lg border border-slate-200 object-cover"
+                      className="h-16 w-16 shrink-0 rounded-lg border border-admin-border object-cover"
                     />
                   ) : null}
                   <input
@@ -605,7 +666,7 @@ export function ProductEditorShell({
                     setQuoteOnly(e.target.checked);
                     markDirty();
                   }}
-                  className="rounded border-slate-300 text-[#f06232]"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Quote only
               </label>
@@ -632,7 +693,7 @@ export function ProductEditorShell({
             quoteOnly={quoteOnly}
             importDraft={importDraft}
             onChange={(v) => {
-              setVariants(v);
+              setVariants(sortVariantsByGloveSize(v));
               markDirty();
             }}
           />
@@ -653,7 +714,7 @@ export function ProductEditorShell({
           />
           <PublishReadinessPanel readiness={publishReadiness} />
           <div className="text-center">
-            <Link href={`/admin/products/${productId}`} className="text-xs font-medium text-slate-500 hover:text-[#f06232]">
+            <Link href={`/admin/products/${productId}`} className={cn("text-xs font-medium", adminLink)}>
               View read-only detail →
             </Link>
           </div>

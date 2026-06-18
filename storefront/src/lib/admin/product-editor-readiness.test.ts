@@ -401,7 +401,45 @@ describe("computeEditorReadiness", () => {
     );
   });
 
-  it("blocks storefront publish for clipboard URL-import metadata", () => {
+  it("allows admin review publish for clipboard URL-import metadata when readiness passes", () => {
+    const result = computeEditorReadiness({
+      brandName: "Acme",
+      categoryId: "cat-1",
+      primaryImageUrl: "https://example.com/img.jpg",
+      publishIntent: true,
+      quoteOnly: true,
+      attributes: { color: "blue_violet", material: "nitrile", grade: "medical_exam_grade", industries: ["healthcare"] },
+      variants: [
+        {
+          sizeCode: "M",
+          variantSku: "GLV-TEST-M",
+          listPrice: "10",
+          manufacturerSku: "N105ORFM",
+          manufacturerSkuSource: "imported",
+        },
+      ],
+      metadata: {
+        import_staging_id: "staging-uuid",
+        import_extraction_authority: "catalogos_url_import_v2",
+        catalogos_url_import_job_id: "job-123",
+      },
+      governanceWarnings: [],
+      attributeDefinitions: defs,
+      dirty: false,
+      adminReviewPublish: true,
+      commercePackaging: normalizeCommercePackaging(
+        { units_per_case: 1000, case_price: 42, inner_unit_type: "box", units_per_inner: 100, inners_per_case: 10, unit_noun: "gloves" },
+        "disposable_gloves"
+      ),
+      internalSku: "GLV-TEST",
+    });
+    expect(result.publishBlockers.some((b) => b.code === "url_import_non_admin_publish_blocked")).toBe(
+      false
+    );
+    expect(hasPublishBlockers(result)).toBe(false);
+  });
+
+  it("blocks non-admin publish for URL-import metadata", () => {
     const result = computeEditorReadiness({
       brandName: "Acme",
       categoryId: "cat-1",
@@ -424,12 +462,12 @@ describe("computeEditorReadiness", () => {
       ),
       internalSku: "GLV-TEST",
     });
-    expect(result.publishBlockers.some((b) => b.code === "url_import_storefront_publish_blocked")).toBe(
+    expect(result.publishBlockers.some((b) => b.code === "url_import_non_admin_publish_blocked")).toBe(
       true
     );
   });
 
-  it("blocks storefront publish for CatalogOS job metadata without clipboard staging id", () => {
+  it("does not warn GLV format for GC parent SKU", () => {
     const result = computeEditorReadiness({
       brandName: "Acme",
       categoryId: "cat-1",
@@ -437,15 +475,38 @@ describe("computeEditorReadiness", () => {
       publishIntent: true,
       quoteOnly: true,
       attributes: { color: "blue_violet" },
-      variants: [{ sizeCode: "M", variantSku: "GLV-TEST-M", listPrice: "10" }],
-      metadata: { catalogos_url_import_job_id: "job-only" },
+      variants: [{ sizeCode: "M", variantSku: "GC-A7504D-M", listPrice: "10", manufacturerSku: "N105ORFM" }],
+      metadata: {},
       governanceWarnings: [],
       attributeDefinitions: defs,
       dirty: false,
-      internalSku: "GLV-TEST",
+      internalSku: "GC-A7504D",
+      commercePackaging: normalizeCommercePackaging(
+        { units_per_case: 1000, case_price: 42, inner_unit_type: "box", units_per_inner: 100, inners_per_case: 10, unit_noun: "gloves" },
+        "disposable_gloves"
+      ),
     });
-    expect(result.publishBlockers.some((b) => b.code === "url_import_storefront_publish_blocked")).toBe(
-      true
-    );
+    expect(result.warnings.some((w) => w.code === "parent_sku_not_glv_format")).toBe(false);
+  });
+
+  it("flags duplicate manufacturer SKU across sizes as warning", () => {
+    const result = computeEditorReadiness({
+      brandName: "Acme",
+      categoryId: "cat-1",
+      primaryImageUrl: "https://example.com/img.jpg",
+      publishIntent: false,
+      quoteOnly: true,
+      attributes: { color: "blue_violet" },
+      variants: [
+        { sizeCode: "L", variantSku: "GLV-1-L", listPrice: "", manufacturerSku: "GL-N105ORFX" },
+        { sizeCode: "XL", variantSku: "GLV-1-XL", listPrice: "", manufacturerSku: "GL-N105ORFX" },
+      ],
+      metadata: { import_staging_id: "st-1" },
+      governanceWarnings: [],
+      attributeDefinitions: defs,
+      dirty: false,
+      adminReviewPublish: true,
+    });
+    expect(result.warnings.some((w) => w.code === "duplicate_manufacturer_sku")).toBe(true);
   });
 });

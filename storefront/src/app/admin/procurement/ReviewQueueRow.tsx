@@ -9,6 +9,15 @@ import {
   recommendationMarkReviewedAction,
   recommendationRejectAction,
 } from "@/app/admin/procurement/recommendation-actions";
+import { StatusBadge } from "@/components/admin";
+import {
+  adminLink,
+  adminPrimaryButton,
+  adminSecondaryButton,
+  adminTableCell,
+} from "@/components/admin/admin-theme-utils";
+import { adminTableRowHover } from "@/app/admin/procurement/_ProcurementTableShell";
+import { cn } from "@/lib/utils";
 
 type Row = Record<string, unknown>;
 
@@ -42,47 +51,53 @@ export function ReviewQueueRow({ row, companyId }: { row: Row; companyId: string
   }
 
   return (
-    <tr className="align-top text-sm hover:bg-blue-50/40">
-      <td className="p-3 font-mono text-xs text-gray-700">{id.slice(0, 8)}…</td>
-      <td className="p-3 text-gray-900">{status}</td>
-      <td className="p-3 font-mono text-xs text-gray-700">{String(row.source_catalog_product_id).slice(0, 8)}…</td>
-      <td className="p-3 font-mono text-xs text-gray-700">{String(row.candidate_catalog_product_id).slice(0, 8)}…</td>
-      <td className="p-3 text-right font-mono tabular-nums text-gray-900">
+    <tr className={cn(adminTableRowHover, "align-top text-sm")}>
+      <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>{id.slice(0, 8)}…</td>
+      <td className={cn(adminTableCell, "p-3")}>
+        <StatusBadge status={status || "neutral"} />
+      </td>
+      <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>
+        {String(row.source_catalog_product_id).slice(0, 8)}…
+      </td>
+      <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>
+        {String(row.candidate_catalog_product_id).slice(0, 8)}…
+      </td>
+      <td className={cn(adminTableCell, "p-3 text-right font-mono tabular-nums")}>
         {row.estimated_delta_per_basis != null ? String(row.estimated_delta_per_basis) : "—"}
       </td>
-      <td className="p-3">
+      <td className={cn(adminTableCell, "p-3")}>
         <div className="flex flex-wrap items-center gap-1.5">
-          {opp && (
-            <Link href={`/admin/procurement/opportunity/${opp}`} className="mr-1 text-xs font-medium text-blue-700 hover:underline">
+          {opp ? (
+            <Link href={`/admin/procurement/opportunity/${opp}`} className={cn("mr-1 text-xs", adminLink)}>
               Spine
             </Link>
-          )}
-          {status === "draft" && (
+          ) : null}
+          {status === "draft" ? (
             <button
               type="button"
               disabled={pending}
-              className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              className={adminSecondaryButton}
               onClick={() => run("review", recommendationMarkReviewedAction)}
             >
               Mark reviewed
             </button>
-          )}
-          {status === "operator_reviewed" && (
+          ) : null}
+          {status === "operator_reviewed" ? (
             <button
               type="button"
               disabled={pending}
-              className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
+              className={cn(adminPrimaryButton, "px-2 py-1 text-xs")}
               onClick={() => run("approve", recommendationApproveAction)}
             >
               Approve for workspace
             </button>
-          )}
-          {(status === "draft" || status === "operator_reviewed") && (
+          ) : null}
+          {status === "draft" || status === "operator_reviewed" ? (
             <>
               <button
                 type="button"
                 disabled={pending}
-                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                className={adminSecondaryButton}
                 onClick={() => {
                   const reason = window.prompt("Rejection reason (required)") ?? "";
                   const f = fd();
@@ -95,7 +110,7 @@ export function ReviewQueueRow({ row, companyId }: { row: Row; companyId: string
               <button
                 type="button"
                 disabled={pending}
-                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                className={adminSecondaryButton}
                 onClick={() => {
                   const reason = window.prompt("Archive reason (required)") ?? "";
                   const f = fd();
@@ -106,9 +121,9 @@ export function ReviewQueueRow({ row, companyId }: { row: Row; companyId: string
                 Archive
               </button>
             </>
-          )}
+          ) : null}
         </div>
-        {message && <p className="mt-2 text-xs text-amber-800">{message}</p>}
+        {message ? <p className="mt-2 text-xs text-admin-warning">{message}</p> : null}
       </td>
     </tr>
   );

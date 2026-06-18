@@ -1,0 +1,55 @@
+/**
+ * Admin portal theme tokens — scoped to [data-admin-theme] only.
+ * Does not modify storefront buyer/global theme variables.
+ */
+
+[data-admin-theme="dark"] {
+  --admin-canvas: #0a0a0a;
+  --admin-canvas-raised: #121212;
+  --admin-surface: #1a1a1a;
+  --admin-surface-muted: #141414;
+  --admin-border: rgb(255 255 255 / 0.1);
+  --admin-border-subtle: rgb(255 255 255 / 0.06);
+  --admin-text-primary: #f8fafc;
+  --admin-text-secondary: rgb(255 255 255 / 0.72);
+  --admin-text-muted: rgb(255 255 255 / 0.48);
+  --admin-accent: #f06232;
+  --admin-accent-soft: rgb(240 98 50 / 0.14);
+  --admin-success: #34d399;
+  --admin-warning: #fbbf24;
+  --admin-danger: #f87171;
+  --admin-info: #38bdf8;
+  --admin-focus-ring: rgb(240 98 50 / 0.5);
+  --admin-danger-surface: rgb(248 113 113 / 0.12);
+  --admin-warning-surface: rgb(251 191 36 / 0.12);
+  --admin-info-surface: rgb(56 189 248 / 0.12);
+  --admin-success-surface: rgb(52 211 153 / 0.12);
+}
+
+[data-admin-theme="light"] {
+  --admin-canvas: #f8fafc;
+  --admin-canvas-raised: #ffffff;
+  --admin-surface: #ffffff;
+  --admin-surface-muted: #f1f5f9;
+  --admin-border: #e2e8f0;
+  --admin-border-subtle: #f1f5f9;
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-muted: #94a3b8;
+  --admin-accent: #e5582d;
+  --admin-accent-soft: #fff7f2;
+  --admin-success: #059669;
+  --admin-warning: #d97706;
+  --admin-danger: #dc2626;
+  --admin-info: #0284c7;
+  --admin-focus-ring: rgb(240 98 50 / 0.4);
+  --admin-danger-surface: #fef2f2;
+  --admin-warning-surface: #fffbeb;
+  --admin-info-surface: #eff6ff;
+  --admin-success-surface: #ecfdf5;
+}
+
+[data-admin-theme] :focus-visible {
+  outline: 2px solid var(--admin-focus-ring);
+  outline-offset: 2px;
+}

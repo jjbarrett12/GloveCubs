@@ -1,5 +1,7 @@
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
 import { PageHeader, StatCard, StatGrid } from "@/components/admin";
+import { adminAlertSurface } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { listClipboardStaging, type ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
 import {
   listUnifiedReviewQueue,
@@ -65,7 +67,7 @@ export default async function AdminProductsReviewPage({
     : clipboardRows.filter((r) => r.review_status === "dismissed").length;
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Review & staging"
         description="Decide which staged ingest rows become catalog drafts. Dismiss anything that should not ship."
@@ -84,32 +86,32 @@ export default async function AdminProductsReviewPage({
       </StatGrid>
 
       {useUnifiedQueue ? (
-        <div className="mb-6 rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-4 text-sm text-slate-700">
-          <strong className="text-[#c2410c]">Unified ingestion queue</strong> — Quick Draft and Deep Supplier Crawl rows from{" "}
+        <div className={cn(adminAlertSurface("info", "mb-6"))}>
+          <strong className="text-admin-accent">Unified ingestion queue</strong> — Quick Draft and Deep Supplier Crawl rows from{" "}
           <span className="font-mono text-xs">catalog_v2.catalog_staging_*</span>. Promoting creates a draft only.
           {catalogOsOffline ? (
-            <span className="mt-2 block text-amber-900">
+            <span className="mt-2 block text-admin-warning">
               Catalog sync is offline; new Deep crawls need CatalogOS, but staged rows below still load.
             </span>
           ) : null}
         </div>
       ) : catalogOsOffline ? (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <div className={cn(adminAlertSurface("warning", "mb-6"))}>
           <strong className="font-semibold">Catalog sync is offline or misconfigured.</strong>{" "}
           <span>{conn.message}</span> Legacy clipboard staging loads when Supabase is configured.
         </div>
       ) : (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-          <strong className="text-slate-900">Legacy clipboard queue</strong> — set{" "}
+        <div className={cn(adminAlertSurface("info", "mb-6"))}>
+          <strong className="text-admin-primary">Legacy clipboard queue</strong> — set{" "}
           <span className="font-mono text-xs">UNIFIED_REVIEW_QUEUE=1</span> for unified staging.
         </div>
       )}
 
       {batchId && useUnifiedQueue ? (
-        <div className="mb-6 rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-4 text-sm text-slate-800">
-          <strong className="text-[#c2410c]">CatalogOS URL import batch</strong>
+        <div className={cn(adminAlertSurface("info", "mb-6"))}>
+          <strong className="text-admin-accent">CatalogOS URL import batch</strong>
           <span className="font-mono text-xs"> {batchId}</span>
-          <p className="mt-2 leading-relaxed text-slate-700">
+          <p className="mt-2 leading-relaxed text-admin-secondary">
             This URL import should be reviewed and published in CatalogOS. Storefront review queue is visibility only —
             use CatalogOS review, wizard, and publish guards for canonical publish.
           </p>

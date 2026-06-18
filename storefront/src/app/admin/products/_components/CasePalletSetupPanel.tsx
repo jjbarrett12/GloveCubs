@@ -2,6 +2,14 @@
 
 import * as React from "react";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
+import {
+  adminAlertSurface,
+  adminFormInput,
+  adminMutedPanel,
+  adminPrimaryButton,
+  adminStatusBadgeClasses,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { PresetNumericInput } from "@/app/admin/products/_components/PresetNumericInput";
 import type { CommercePackagingV1, InnerUnitType, PackagingFieldKey } from "@commerce-packaging/types";
 import { normalizeCommercePackaging, hasPackagingMathConflict } from "@commerce-packaging/labels";
@@ -23,12 +31,13 @@ const UNITS_PER_INNER_PRESETS = [50, 90, 100, 150, 200, 250, 300];
 const INNERS_PER_CASE_PRESETS = [1, 2, 4, 5, 6, 8, 10, 12, 20, 24];
 const CASES_PER_PALLET_PRESETS = CASES_PER_PALLET_BUCKETS.map(Number);
 
-const lbl = "text-[11px] font-semibold text-slate-600";
-const field =
-  "mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm tabular-nums shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
-const fieldBlocking =
-  "mt-0.5 w-full rounded-lg border-2 border-red-400 bg-red-50/40 px-2 py-1.5 text-sm tabular-nums shadow-inner focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200";
-const wrapBlocking = "rounded-lg border-2 border-red-400 bg-red-50/40 p-2";
+const lbl = "text-[11px] font-semibold text-admin-secondary";
+const field = cn(adminFormInput, "mt-0.5 w-full rounded-lg tabular-nums shadow-inner");
+const fieldBlocking = cn(
+  adminFormInput,
+  "mt-0.5 w-full rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] tabular-nums shadow-inner focus:border-admin-danger focus:ring-admin-danger/30",
+);
+const wrapBlocking = "rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] p-2";
 
 type Props = {
   value: CommercePackagingV1;
@@ -110,33 +119,38 @@ function SetupToolbar({
   onTogglePallet: (enabled: boolean) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
-      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+    <div className="flex flex-wrap items-center gap-2 border-b border-admin-border-subtle pb-2">
+      <span
+        className={cn(
+          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ring-1",
+          adminStatusBadgeClasses("success"),
+        )}
+      >
         Sell by case
       </span>
-      <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-700">
+      <label className="inline-flex items-center gap-1.5 text-[11px] text-admin-secondary">
         <input
           type="checkbox"
           checked={value.sell_by_pallet_enabled}
           disabled={disabled}
           onChange={(e) => onTogglePallet(e.target.checked)}
-          className="rounded border-slate-300 text-[#f06232]"
+          className="rounded border-admin-border text-admin-accent"
         />
         Sell by pallet
       </label>
       {missing.length > 0 ? (
-        <span className="text-[10px] font-medium text-amber-800">
+        <span className="text-[10px] font-medium text-admin-warning">
           Missing: {missing.join(" · ")}
         </span>
       ) : (
-        <span className="text-[10px] font-semibold text-emerald-700">Complete</span>
+        <span className="text-[10px] font-semibold text-admin-success">Complete</span>
       )}
       {hasSuggestions && onApplySuggestions ? (
         <button
           type="button"
           disabled={disabled}
           onClick={onApplySuggestions}
-          className="ml-auto rounded-md bg-[#f06232] px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-[#e5582d]"
+          className={cn(adminPrimaryButton, "ml-auto text-[10px]")}
         >
           Apply parser suggestions
         </button>
@@ -174,7 +188,6 @@ export function CasePalletSetupPanel({
         title="Pricing & sales"
         description="List and sale prices for case and pallet. Sale price below list shows as a discount on the storefront."
         dense
-        className="border-[#f06232]/15 bg-gradient-to-b from-[#fffaf7] to-white"
       >
         <SetupToolbar
           value={value}
@@ -197,7 +210,7 @@ export function CasePalletSetupPanel({
             <span className={lbl}>
               Product price / case
               {casePriceBlocking ? (
-                <span className="ml-1 text-[10px] font-bold uppercase text-red-700">Req</span>
+                <span className="ml-1 text-[10px] font-bold uppercase text-admin-danger">Req</span>
               ) : null}
             </span>
             {priceInput(
@@ -213,7 +226,7 @@ export function CasePalletSetupPanel({
               blocking: casePriceBlocking,
             })}
             {formatProv("case_price", value) ? (
-              <p className="mt-0.5 text-[10px] text-slate-500">{formatProv("case_price", value)}</p>
+              <p className="mt-0.5 text-[10px] text-admin-muted">{formatProv("case_price", value)}</p>
             ) : null}
           </label>
           <label
@@ -233,7 +246,7 @@ export function CasePalletSetupPanel({
               disabled: disabled || !value.sell_by_pallet_enabled,
             })}
             {formatProv("pallet_price", value) ? (
-              <p className="mt-0.5 text-[10px] text-slate-500">{formatProv("pallet_price", value)}</p>
+              <p className="mt-0.5 text-[10px] text-admin-muted">{formatProv("pallet_price", value)}</p>
             ) : null}
           </label>
         </div>
@@ -244,30 +257,30 @@ export function CasePalletSetupPanel({
         description="How gloves are packed inside a case and on a pallet. Inner units are operational detail — customers buy by case or pallet."
         dense
       >
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-admin-border-subtle pb-2">
           {(value.case_label || value.pallet_label) && (
-            <div className="min-w-0 flex-1 rounded-md border border-sky-100 bg-sky-50/80 px-2 py-1 text-[10px] leading-snug text-sky-900">
+            <div className={cn(adminAlertSurface("info", "min-w-0 flex-1 text-[10px] leading-snug"))}>
               {value.case_label ? <span>{value.case_label}</span> : null}
-              {value.case_label && value.pallet_label ? <span className="mx-1.5 text-sky-400">·</span> : null}
+              {value.case_label && value.pallet_label ? <span className="mx-1.5 text-admin-muted">·</span> : null}
               {value.pallet_label ? <span>{value.pallet_label}</span> : null}
             </div>
           )}
           {missingPack.length > 0 ? (
-            <span className="text-[10px] font-medium text-amber-800">Missing: {missingPack.join(" · ")}</span>
+            <span className="text-[10px] font-medium text-admin-warning">Missing: {missingPack.join(" · ")}</span>
           ) : (
-            <span className="text-[10px] font-semibold text-emerald-700">Packaging complete</span>
+            <span className="text-[10px] font-semibold text-admin-success">Packaging complete</span>
           )}
         </div>
 
         <div className="mt-2 grid gap-3 xl:grid-cols-2">
-          <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/50 p-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Case pack</p>
+          <div className={cn(adminMutedPanel, "space-y-2 p-2.5")}>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-admin-muted">Case pack</p>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className={`block sm:col-span-2 ${unitsBlocking ? wrapBlocking : ""}`}>
                 <span className={lbl}>
                   Units per case
                   {unitsBlocking ? (
-                    <span className="ml-1 text-[10px] font-bold uppercase text-red-700">Req</span>
+                    <span className="ml-1 text-[10px] font-bold uppercase text-admin-danger">Req</span>
                   ) : null}
                 </span>
                 <input
@@ -285,7 +298,7 @@ export function CasePalletSetupPanel({
                   className={unitsBlocking ? fieldBlocking : field}
                 />
                 {formatProv("units_per_case", value) ? (
-                  <p className="mt-0.5 text-[10px] text-slate-500">{formatProv("units_per_case", value)}</p>
+                  <p className="mt-0.5 text-[10px] text-admin-muted">{formatProv("units_per_case", value)}</p>
                 ) : null}
               </label>
               <PresetNumericInput
@@ -326,15 +339,16 @@ export function CasePalletSetupPanel({
           </div>
 
           <div
-            className={`space-y-2 rounded-lg border p-2.5 ${
+            className={cn(
+              "space-y-2 rounded-lg border p-2.5",
               value.sell_by_pallet_enabled
-                ? "border-slate-100 bg-slate-50/50"
-                : "border-dashed border-slate-200 bg-slate-50/30 opacity-60"
-            }`}
+                ? "border-admin-border bg-admin-surface-muted"
+                : cn(adminMutedPanel, "opacity-60"),
+            )}
           >
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Pallet load</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-admin-muted">Pallet load</p>
             {!value.sell_by_pallet_enabled ? (
-              <p className="text-[10px] text-slate-500">Enable “Sell by pallet” above to configure pallet UOM.</p>
+              <p className="text-[10px] text-admin-muted">Enable “Sell by pallet” above to configure pallet UOM.</p>
             ) : (
               <div className="grid gap-2">
                 <PresetNumericInput
@@ -361,7 +375,7 @@ export function CasePalletSetupPanel({
                     }}
                     className={field}
                   />
-                  <p className="mt-0.5 text-[10px] text-slate-400">Auto-calculated unless overridden.</p>
+                  <p className="mt-0.5 text-[10px] text-admin-muted">Auto-calculated unless overridden.</p>
                 </label>
               </div>
             )}
@@ -369,7 +383,7 @@ export function CasePalletSetupPanel({
         </div>
 
         {value.parse_warnings.length > 0 ? (
-          <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[10px] text-amber-800">
+          <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[10px] text-admin-warning">
             {value.parse_warnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
@@ -377,7 +391,7 @@ export function CasePalletSetupPanel({
         ) : null}
 
         {mathConflict ? (
-          <p className="mt-2 text-[10px] font-medium text-amber-700">
+          <p className="mt-2 text-[10px] font-medium text-admin-warning">
             Inner packaging math does not match units per case — adjust inners × units or override units/case.
           </p>
         ) : null}

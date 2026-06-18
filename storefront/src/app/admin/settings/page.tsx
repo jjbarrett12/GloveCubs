@@ -1,4 +1,18 @@
 import { PageHeader, StatusBadge } from "@/components/admin";
+import { AdminHealthBanner } from "@/components/admin/AdminHealthBanner";
+import { AdminThemeAppearanceSection } from "@/app/admin/_components/AdminThemeAppearanceSection";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminMutedPanel,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
+import {
+  MODULE_IMPACT_ROWS,
+  resolveAdminHealth,
+  type AdminHealthIntegration,
+  type AdminHealthStatus,
+} from "@/lib/admin/admin-health";
 
 export const dynamic = "force-dynamic";
 
@@ -7,30 +21,34 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-function Row({ label, value, on }: { label: string; value: string; on: boolean }) {
+function statusLabel(status: AdminHealthStatus): string {
+  return status.replace(/_/g, " ");
+}
+
+function IntegrationRow({ integration }: { integration: AdminHealthIntegration }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 py-3 last:border-b-0">
-      <dt className="text-sm text-gray-600">{label}</dt>
-      <dd className="flex items-center gap-2 text-sm">
-        <StatusBadge status={on ? "enabled" : "disabled"} />
-        <span className="font-mono text-xs text-gray-500">{value}</span>
-      </dd>
+    <div className="border-b border-admin-border-subtle px-4 py-3 last:border-b-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-admin-primary">{integration.label}</p>
+          <p className="mt-1 text-xs leading-relaxed text-admin-secondary">{integration.description}</p>
+          {integration.settingsEnvHint ? (
+            <p className="mt-2 text-xs text-admin-muted">
+              Env: <span className="font-mono">{integration.settingsEnvHint}</span>
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+          <StatusBadge status={integration.configured ? "enabled" : "disabled"} />
+          <span className="text-xs capitalize text-admin-muted">{statusLabel(integration.status)}</span>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function AdminSettingsPage() {
-  const supabasePublic = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
-  );
-  const serviceConfigured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
-  );
-  const catalogOsPublic = Boolean(process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim());
-  const catalogOsInternal = Boolean(process.env.CATALOGOS_INTERNAL_URL?.trim());
-  const internalKey = Boolean(process.env.INTERNAL_API_KEY?.trim());
-  const deployEnv =
-    process.env.VERCEL_ENV?.trim() || (process.env.NODE_ENV === "production" ? "production" : "development");
+  const health = resolveAdminHealth();
 
   return (
     <div>
@@ -39,34 +57,101 @@ export default function AdminSettingsPage() {
         description="Environment status for this deployment. Values are on/off only—no secrets are shown."
       />
 
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who can use admin</h2>
-        <p className="mt-2 text-sm leading-relaxed text-gray-700">
+      <section id="health" className="mb-6 scroll-mt-6 overflow-hidden rounded-lg border border-admin-border bg-admin-surface shadow-sm">
+        <header className="border-b border-admin-border bg-admin-surface-muted px-4 py-3">
+          <h2 className="text-sm font-semibold text-admin-primary">Admin Health</h2>
+          <p className="mt-1 text-xs text-admin-secondary">
+            Overall status:{" "}
+            <span className="font-medium capitalize text-admin-primary">{statusLabel(health.status)}</span>
+            {" · "}
+            Deployment: <span className="font-mono">{health.deployEnv}</span>
+          </p>
+        </header>
+
+        {health.issues.length > 0 ? (
+          <div className="border-b border-admin-border-subtle p-4">
+            <AdminHealthBanner issues={health.issues} scope="settings" />
+          </div>
+        ) : (
+          <p className="border-b border-admin-border-subtle px-4 py-3 text-sm text-admin-success">
+            All checked integrations are configured for this environment.
+          </p>
+        )}
+
+        <div className="divide-y divide-admin-border-subtle">
+          {health.integrations.map((integration) => (
+            <IntegrationRow key={integration.id} integration={integration} />
+          ))}
+        </div>
+      </section>
+
+      <AdminThemeAppearanceSection />
+
+      <section className="mb-6 overflow-hidden rounded-lg border border-admin-border bg-admin-surface shadow-sm">
+        <header className="border-b border-admin-border bg-admin-surface-muted px-4 py-3">
+          <h2 className="text-sm font-semibold text-admin-primary">Module impact</h2>
+          <p className="mt-1 text-xs text-admin-secondary">Which admin modules depend on each integration.</p>
+        </header>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="border-b border-admin-border-subtle bg-admin-surface-muted text-xs font-semibold uppercase tracking-wide text-admin-muted">
+              <tr>
+                <th className="px-4 py-2">Module</th>
+                <th className="px-4 py-2">Requires</th>
+              </tr>
+            </thead>
+            <tbody>
+              {MODULE_IMPACT_ROWS.map((row) => (
+                <tr key={row.moduleId} className="border-b border-admin-border-subtle last:border-0">
+                  <td className="px-4 py-2.5 font-medium text-admin-primary">{row.label}</td>
+                  <td className="px-4 py-2.5 text-admin-secondary">{row.requires}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className={cn(adminCardSurface, "mb-6 p-4")}>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Local development</h2>
+        <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
+          Purchase orders, inventory, users, and net terms require the Express admin bridge before they can load data.
+          Configure the Express API origin and JWT signing in <span className="font-mono text-xs">storefront/.env.local</span>{" "}
+          using <span className="font-mono text-xs">storefront/.env.example</span> as a guide. Restart the storefront dev
+          server after changing environment variables.
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
+          Supabase keys are required for dashboard, catalog, customers, orders, and messages. Run{" "}
+          <span className="font-mono text-xs">npm run env:sync</span> in the storefront folder when local Supabase keys
+          are missing.
+        </p>
+      </section>
+
+      {health.isProduction ? (
+        <section className={cn(adminAlertSurface("warning", "mb-6"))}>
+          <h2 className="text-xs font-semibold uppercase tracking-wide">Production guidance</h2>
+          <p className="mt-2 text-sm leading-relaxed">
+            If fulfillment modules are unavailable in production, update deployment environment variables for the
+            storefront service. Missing Express API origin or JWT signing is treated as production-blocking for those
+            modules. Contact your deployment owner — secret values are never shown here.
+          </p>
+        </section>
+      ) : null}
+
+      <section className={cn(adminCardSurface, "mb-6 p-4")}>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Who can use admin</h2>
+        <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
           Admin is limited to team accounts that are explicitly enabled. If someone can sign in but cannot reach admin,
           their profile likely is not on the allowlist yet—have an owner add them or confirm they are using the same
           email as their invite.
         </p>
-        <details className="mt-4 rounded-md border border-gray-100 bg-gray-50/80 p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-gray-700">Technical details (IT)</summary>
-          <p className="mt-2 text-xs leading-relaxed text-gray-600">
+        <details className={cn(adminMutedPanel, "mt-4 border-solid p-3")}>
+          <summary className="cursor-pointer text-xs font-semibold text-admin-secondary">Technical details (IT)</summary>
+          <p className="mt-2 text-xs leading-relaxed text-admin-muted">
             Access is tied to Supabase Auth plus an active row in the admin allowlist table keyed by the same user id
             as sign-in. Email-only placeholders without that link will not match a live session.
           </p>
         </details>
-      </section>
-
-      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <header className="border-b border-gray-200 bg-gray-50 px-4 py-3">
-          <h2 className="text-sm font-semibold text-gray-900">Integrations</h2>
-        </header>
-        <dl>
-          <Row label="Deployment" value={deployEnv} on />
-          <Row label="Supabase (browser client)" value={supabasePublic ? "configured" : "not configured"} on={supabasePublic} />
-          <Row label="Supabase (server)" value={serviceConfigured ? "configured" : "not configured"} on={serviceConfigured} />
-          <Row label="Catalog sync service (internal URL)" value={catalogOsInternal ? "configured" : "not configured"} on={catalogOsInternal} />
-          <Row label="Server API key (imports)" value={internalKey ? "set" : "not set"} on={internalKey} />
-          <Row label="Catalog sync (public URL)" value={catalogOsPublic ? "configured" : "not configured"} on={catalogOsPublic} />
-        </dl>
       </section>
     </div>
   );

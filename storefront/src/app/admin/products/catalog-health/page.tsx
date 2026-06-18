@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { fetchCatalogHealth } from "@/lib/admin/catalog-health";
-import { PageHeader } from "@/components/admin";
+import { EmptyState, ErrorState, PageHeader } from "@/components/admin";
+import { adminCardSurface, adminLink } from "@/components/admin/admin-theme-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -19,32 +21,37 @@ export default async function AdminProductsCatalogHealthPage() {
       />
 
       {!configured ? (
-        <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Supabase is not configured for this environment. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
-          to see live counts.
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {buckets.map((b) => (
-          <div
-            key={b.key}
-            data-bucket={b.key}
-            className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="text-sm font-semibold text-gray-900">{b.label}</div>
-              <div className="font-mono text-2xl font-bold tabular-nums text-gray-900">
-                {b.count == null ? "n/a" : b.count.toLocaleString()}
+        <ErrorState
+          title="Database not configured"
+          message="Catalog health counts cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
+      ) : buckets.length === 0 ? (
+        <EmptyState title="No catalog buckets returned" description="Catalog health data is unavailable right now." />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {buckets.map((b) => (
+            <div
+              key={b.key}
+              data-bucket={b.key}
+              className={`${adminCardSurface} p-4 transition-colors hover:bg-admin-surface-muted`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="text-sm font-semibold text-admin-primary">{b.label}</div>
+                <div className="font-mono text-2xl font-bold tabular-nums text-admin-primary">
+                  {b.count == null ? "—" : b.count.toLocaleString()}
+                </div>
               </div>
+              <p className="mt-2 text-xs leading-snug text-admin-muted">{b.description}</p>
             </div>
-            <p className="mt-2 text-xs leading-snug text-gray-500">{b.description}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <p className="mt-6 text-xs text-gray-500">
-        Counts are sampled for speed. For a full reconciliation export, use your reporting tools or data team.
+      <p className="mt-6 text-xs text-admin-muted">
+        Counts are sampled for speed. For a full reconciliation export, use your reporting tools or data team.{" "}
+        <Link href="/admin/products" className={adminLink}>
+          Products →
+        </Link>
       </p>
     </div>
   );

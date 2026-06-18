@@ -1,6 +1,9 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchTrustedSpendHistory } from "@/lib/procurement/procurement-workspace-read-models";
-import { PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
+import { ProcurementTableShell, adminTableRowHover } from "@/app/admin/procurement/_ProcurementTableShell";
+import { ErrorState, PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
+import { adminTableCell } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +20,10 @@ export default async function ProcurementSpendPage({ params }: { params: { compa
             { label: "Spend" },
           ]}
         />
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Supabase not configured.
-        </div>
+        <ErrorState
+          title="Database not configured"
+          message="Spend history cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
       </div>
     );
   }
@@ -43,30 +47,33 @@ export default async function ProcurementSpendPage({ params }: { params: { compa
           {list.length === 0 ? (
             <EmptyState title="No trusted observations" description="No spend observations recorded for this company." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="p-3">Observed</th>
-                    <th className="p-3">Product</th>
-                    <th className="p-3">Supplier</th>
-                    <th className="p-3 text-right">Unit price</th>
-                    <th className="p-3 text-right">Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {list.map((r) => (
-                    <tr key={String(r.id)} className="hover:bg-blue-50/40">
-                      <td className="p-3 text-xs text-gray-600">{String(r.observed_at ?? "")}</td>
-                      <td className="p-3 font-mono text-xs text-gray-700">{String(r.catalog_product_id).slice(0, 8)}…</td>
-                      <td className="p-3 font-mono text-xs text-gray-700">{String(r.catalogos_supplier_id).slice(0, 8)}…</td>
-                      <td className="p-3 text-right font-mono tabular-nums text-gray-900">{String(r.unit_price ?? "")}</td>
-                      <td className="p-3 text-right font-mono tabular-nums text-gray-900">{String(r.quantity ?? "")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProcurementTableShell
+              headers={[
+                { label: "Observed" },
+                { label: "Product" },
+                { label: "Supplier" },
+                { label: "Unit price", align: "right" },
+                { label: "Qty", align: "right" },
+              ]}
+            >
+              {list.map((r) => (
+                <tr key={String(r.id)} className={adminTableRowHover}>
+                  <td className={cn(adminTableCell, "p-3 text-xs")}>{String(r.observed_at ?? "")}</td>
+                  <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>
+                    {String(r.catalog_product_id).slice(0, 8)}…
+                  </td>
+                  <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>
+                    {String(r.catalogos_supplier_id).slice(0, 8)}…
+                  </td>
+                  <td className={cn(adminTableCell, "p-3 text-right font-mono tabular-nums")}>
+                    {String(r.unit_price ?? "")}
+                  </td>
+                  <td className={cn(adminTableCell, "p-3 text-right font-mono tabular-nums")}>
+                    {String(r.quantity ?? "")}
+                  </td>
+                </tr>
+              ))}
+            </ProcurementTableShell>
           )}
         </TableCard>
       </PageSection>

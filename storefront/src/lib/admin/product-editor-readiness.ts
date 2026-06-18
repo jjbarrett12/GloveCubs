@@ -30,6 +30,9 @@ import {
 import {
   clipboardUrlImportActiveStatusError,
   isUrlImportProductMetadata,
+  URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
+  URL_IMPORT_REVIEW_GUIDANCE,
+  URL_IMPORT_REVIEW_REQUIRED_MESSAGE,
 } from "@/lib/admin/clipboard-promote-guards";
 
 export type ReadinessItem = {
@@ -59,6 +62,8 @@ export type EditorReadinessInput = {
   attributeDefinitions: AttributeDefinitionRow[];
   dirty: boolean;
   importDraft?: ImportDraftProductV1 | null;
+  /** Admin product editor review surface — allows URL-import publish when readiness passes. */
+  adminReviewPublish?: boolean;
   allowedByKey?: Map<string, string[]>;
   commercePackaging?: CommercePackagingV1 | null;
   internalSku?: string;
@@ -84,6 +89,23 @@ function attributeKeysWithValues(attributes: Record<string, string | string[]>):
   return keys;
 }
 
+function isGloveCubsInternalParentSkuFormat(sku: string): boolean {
+  const s = sku.trim().toUpperCase();
+  return isGlvParentSkuFormat(s) || /^GC-[A-Z0-9-]+$/.test(s);
+}
+
+function resolveManufacturerSku(
+  v: EditorVariantRow,
+  importDraft?: ImportDraftProductV1 | null
+): string {
+  const fromRow = v.manufacturerSku?.trim();
+  if (fromRow) return fromRow;
+  const draftVar = importDraft?.variants.find(
+    (d) => d.normalized_size_code.toUpperCase() === v.sizeCode.trim().toUpperCase()
+  );
+  return draftVar?.manufacturer_sku?.trim() ?? draftVar?.source_sku?.trim() ?? "";
+}
+
 export function computeEditorReadiness(input: EditorReadinessInput): EditorReadinessResult {
   const warnings: ReadinessItem[] = [];
   const publishBlockers: ReadinessItem[] = [];
@@ -91,18 +113,20 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
 
   const attrKeys = attributeKeysWithValues(input.attributes);
 
-  if (input.publishIntent && isUrlImportProductMetadata(input.metadata)) {
-    const catalogosJobId =
-      typeof input.metadata?.catalogos_url_import_job_id === "string"
-        ? input.metadata.catalogos_url_import_job_id.trim()
-        : "";
+  if (input.publishIntent && isUrlImportProductMetadata(input.metadata) && !input.adminReviewPublish) {
     publishBlockers.push({
-      code: "url_import_storefront_publish_blocked",
-      label: clipboardUrlImportActiveStatusError(input.metadata, "active") ?? "URL-import drafts cannot be published from storefront.",
+      code: "url_import_non_admin_publish_blocked",
+      label: clipboardUrlImportActiveStatusError(input.metadata, "active") ?? URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
       severity: "blocker",
-      recommendedAction: catalogosJobId
-        ? `Open CatalogOS URL import job ${catalogosJobId} → review → publish.`
-        : "Complete CatalogOS review and publish (not storefront active status).",
+    });
+  }
+
+  if (isUrlImportProductMetadata(input.metadata) && !input.publishIntent) {
+    warnings.push({
+      code: "url_import_review_required",
+      label: URL_IMPORT_REVIEW_REQUIRED_MESSAGE,
+      severity: "warning",
+      recommendedAction: URL_IMPORT_REVIEW_GUIDANCE,
     });
   }
 
@@ -248,7 +272,20 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
       if (!v.variantSku.trim()) {
         publishBlockers.push({
           code: "missing_variant_sku",
-          label: `Variant SKU required to publish (${v.sizeCode || "size unknown"})`,
+          label: `GloveCubs variant SKU required to publish (${v.sizeCode || "size unknown"})`,
+          severity: "blocker",
+        });
+      }
+    }
+    for (const v of input.variants) {
+      if (!v.sizeCode.trim()) continue;
+      const mfr = resolveManufacturerSku(v, input.importDraft);
+      const requiresMfr =
+        isUrlImportProductMetadata(input.metadata) || Boolean(input.importDraft);
+      if (requiresMfr && !mfr && !v.manufacturerSkuNeedsReview) {
+        publishBlockers.push({
+          code: "missing_manufacturer_sku",
+          label: `Manufacturer SKU required (${v.sizeCode})`,
           severity: "blocker",
         });
       }
@@ -256,10 +293,10 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
   }
 
   const parentSku = input.internalSku?.trim() ?? "";
-  if (parentSku && !isGlvParentSkuFormat(parentSku)) {
+  if (parentSku && !isGloveCubsInternalParentSkuFormat(parentSku)) {
     warnings.push({
       code: "parent_sku_not_glv_format",
-      label: "Parent SKU is not GLV- format",
+      label: "GloveCubs parent SKU is not GLV- or GC- format",
       severity: "warning",
     });
   }
@@ -299,11 +336,8 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
   }
 
   for (const v of input.variants) {
-    const draftVar = input.importDraft?.variants.find(
-      (d) => d.normalized_size_code.toUpperCase() === v.sizeCode.trim().toUpperCase()
-    );
-    const mfr = draftVar?.manufacturer_sku?.trim().toUpperCase();
-    if (mfr && v.variantSku.trim().toUpperCase() === mfr) {
+    const mfr = resolveManufacturerSku(v, input.importDraft);
+    if (mfr && v.variantSku.trim().toUpperCase() === mfr.toUpperCase()) {
       const item: ReadinessItem = {
         code: "manufacturer_sku_used_as_variant_sku",
         label: "Manufacturer SKU must not be used as GloveCubs variant SKU",
@@ -315,18 +349,26 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
     }
   }
 
+  if (input.importDraft || input.variants.some((v) => v.manufacturerSku?.trim())) {
+    const mfrSkus = input.variants
+      .map((v) => resolveManufacturerSku(v, input.importDraft).toUpperCase())
+      .filter(Boolean);
+    if (mfrSkus.length > 1 && new Set(mfrSkus).size < mfrSkus.length) {
+      warnings.push({
+        code: "duplicate_manufacturer_sku",
+        label: "Duplicate manufacturer SKU across multiple sizes — verify variant mapping",
+        severity: "warning",
+      });
+    }
+  }
+
   if (input.skuCollisions) {
     const collisionIssues = detectSkuCollisionIssues({
       parentSku: parentSku || null,
       variantSkus: input.variants.map((v) => v.variantSku),
       existingParentSkus: input.skuCollisions.existingParentSkus,
       existingVariantSkus: input.skuCollisions.existingVariantSkus,
-      manufacturerSkusByVariant: input.variants.map((v) => {
-        const draftVar = input.importDraft?.variants.find(
-          (d) => d.normalized_size_code.toUpperCase() === v.sizeCode.trim().toUpperCase()
-        );
-        return draftVar?.manufacturer_sku ?? "";
-      }),
+      manufacturerSkusByVariant: input.variants.map((v) => resolveManufacturerSku(v, input.importDraft)),
     });
     for (const issue of collisionIssues) {
       const item: ReadinessItem = {

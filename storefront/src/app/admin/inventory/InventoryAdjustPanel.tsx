@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { adminFormInput, adminPrimaryButton } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 type Props = {
   productId: string;
@@ -53,16 +55,16 @@ export function InventoryAdjustPanel({ productId, sku, name, onHand }: Props) {
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2">
-      <span className="w-full text-xs text-gray-500">
-        Adjust <span className="font-medium text-gray-800">{sku}</span> — {name} (on hand: {onHand})
+    <form onSubmit={(e) => void submit(e)} className="mt-2 flex flex-wrap items-end gap-2 border-t border-admin-border-subtle pt-2">
+      <span className="w-full text-xs text-admin-muted">
+        Adjust <span className="font-medium text-admin-primary">{sku}</span> — {name} (on hand: {onHand})
       </span>
       <div>
-        <label className="block text-[10px] font-medium text-gray-500">Delta</label>
+        <label className="block text-[10px] font-medium text-admin-muted">Delta</label>
         <input
           type="number"
           step="1"
-          className="mt-0.5 w-24 rounded border border-gray-300 px-2 py-1 text-sm"
+          className={cn(adminFormInput, "mt-0.5 w-24")}
           value={delta}
           onChange={(e) => setDelta(e.target.value)}
           disabled={pending}
@@ -70,24 +72,20 @@ export function InventoryAdjustPanel({ productId, sku, name, onHand }: Props) {
         />
       </div>
       <div className="min-w-[140px] flex-1">
-        <label className="block text-[10px] font-medium text-gray-500">Reason</label>
+        <label className="block text-[10px] font-medium text-admin-muted">Reason</label>
         <input
-          className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          className={cn(adminFormInput, "mt-0.5 w-full")}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           disabled={pending}
           placeholder="Recv PO, damage…"
         />
       </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-      >
+      <button type="submit" disabled={pending} className={adminPrimaryButton}>
         {pending ? "…" : "Apply"}
       </button>
       {msg ? (
-        <span className={`text-xs ${msg.kind === "ok" ? "text-green-800" : "text-red-700"}`}>{msg.text}</span>
+        <span className={cn("text-xs", msg.kind === "ok" ? "text-admin-success" : "text-admin-danger")}>{msg.text}</span>
       ) : null}
     </form>
   );

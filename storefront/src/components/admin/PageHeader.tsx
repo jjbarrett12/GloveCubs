@@ -1,10 +1,12 @@
 ﻿/**
  * Admin Page Header Component
- * 
- * Consistent page header with title, description, and optional actions
+ *
+ * Consistent page header with title, description, and optional actions.
+ * Uses admin semantic tokens (scoped via data-admin-theme).
  */
 
 import { cn } from "@/lib/utils";
+import { adminEyebrow } from "@/components/admin/admin-theme-utils";
 import { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -13,7 +15,7 @@ interface PageHeaderProps {
   actions?: ReactNode;
   breadcrumb?: { label: string; href?: string }[];
   className?: string;
-  /** Dark surfaces (e.g. catalog command center) — keeps structure, adjusts text/breadcrumb colors only */
+  /** Accent eyebrow + section styling (catalog command center) */
   variant?: "default" | "dark";
 }
 
@@ -25,24 +27,21 @@ export function PageHeader({
   className,
   variant = "default",
 }: PageHeaderProps) {
-  const dark = variant === "dark";
+  const accent = variant === "dark";
   return (
     <div className={cn("mb-6", className)}>
       {breadcrumb && breadcrumb.length > 0 && (
-        <nav className="flex mb-2" aria-label="Breadcrumb">
+        <nav className="mb-2 flex" aria-label="Breadcrumb">
           <ol className="flex items-center gap-1 text-sm">
             {breadcrumb.map((item, i) => (
               <li key={i} className="flex items-center gap-1">
-                {i > 0 && <span className={dark ? "text-neutral-600" : "text-gray-400"}>/</span>}
+                {i > 0 && <span className="text-admin-muted">/</span>}
                 {item.href ? (
-                  <a
-                    href={item.href}
-                    className={dark ? "text-neutral-500 hover:text-[#f06232]" : "text-gray-500 hover:text-gray-700"}
-                  >
+                  <a href={item.href} className="text-admin-muted hover:text-admin-accent">
                     {item.label}
                   </a>
                 ) : (
-                  <span className={dark ? "text-neutral-200" : "text-gray-900"}>{item.label}</span>
+                  <span className="text-admin-primary">{item.label}</span>
                 )}
               </li>
             ))}
@@ -51,25 +50,15 @@ export function PageHeader({
       )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          {dark ? (
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#f06232]">Catalog operations</p>
-          ) : null}
-          <h1
-            className={cn(
-              dark
-                ? "mt-1 text-2xl font-bold tracking-tight text-white sm:text-[26px]"
-                : "text-2xl font-semibold tracking-tight text-slate-900 sm:text-[26px]",
-            )}
-          >
+          {accent ? <p className={adminEyebrow}>Catalog operations</p> : null}
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-admin-primary sm:text-[26px]">
             {title}
           </h1>
-          {description && (
-            <p className={cn("text-sm leading-relaxed", dark ? "mt-2 max-w-3xl text-neutral-400" : "mt-2 max-w-3xl text-slate-600")}>
-              {description}
-            </p>
-          )}
+          {description ? (
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-admin-secondary">{description}</p>
+          ) : null}
         </div>
-        {actions && <div className="flex flex-shrink-0 flex-col items-stretch gap-2 sm:items-end">{actions}</div>}
+        {actions ? <div className="flex flex-shrink-0 flex-col items-stretch gap-2 sm:items-end">{actions}</div> : null}
       </div>
     </div>
   );
@@ -90,30 +79,30 @@ export function PageSection({
   className?: string;
   variant?: "default" | "dark";
 }) {
-  const dark = variant === "dark";
+  const accent = variant === "dark";
   return (
     <section className={cn("mb-8", className)}>
       {(title || description || actions) && (
         <div
           className={cn(
             "mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between",
-            dark && "border-b border-white/10 pb-3",
+            accent && "border-b border-admin-border-subtle pb-3",
           )}
         >
           <div className="min-w-0">
             {title ? (
               <h2
                 className={cn(
-                  dark
-                    ? "text-xs font-bold uppercase tracking-[0.14em] text-[#f06232]"
-                    : "text-base font-semibold text-gray-900",
+                  accent ? adminEyebrow : "text-base font-semibold text-admin-primary",
                 )}
               >
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className={cn("text-sm", dark ? "mt-1 text-neutral-400" : "mt-0.5 text-gray-500")}>{description}</p>
+              <p className={cn("text-sm", accent ? "mt-1 text-admin-secondary" : "mt-0.5 text-admin-muted")}>
+                {description}
+              </p>
             ) : null}
           </div>
           {actions ? <div className="flex flex-shrink-0 items-center gap-2">{actions}</div> : null}

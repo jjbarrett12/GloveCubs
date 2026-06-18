@@ -66,9 +66,29 @@ describe("evaluateActivePublishReadinessSync", () => {
     ).toBeNull();
   });
 
-  it("blocks URL-import metadata before other checks", () => {
+  it("blocks non-admin URL-import metadata before other checks", () => {
     const err = evaluateActivePublishReadinessSync(activeInput(), { metadata: { import_staging_id: "st-1" } }, deps);
-    expect(err).toContain("cannot be published");
+    expect(err).toContain("admin review");
+  });
+
+  it("allows admin review publish for URL-import metadata when readiness passes", () => {
+    expect(
+      evaluateActivePublishReadinessSync(
+        activeInput({
+          attributes: { color: "blue_violet", material: "nitrile", grade: "medical_exam_grade", industries: ["healthcare"] },
+          variants: [
+            {
+              sizeCode: "M",
+              variantSku: "GLV-ACME-M",
+              listPrice: "",
+              manufacturerSku: "N105ORFM",
+            },
+          ],
+        }),
+        { metadata: { import_staging_id: "st-1", product_line_code: "disposable_gloves" }, adminReviewPublish: true },
+        deps
+      )
+    ).toBeNull();
   });
 
   it("blocks active save when editor readiness fails (missing brand)", () => {
@@ -104,13 +124,13 @@ describe("evaluateActivePublishReadinessSync", () => {
     expect(err).toContain("Required attribute: Color");
   });
 
-  it("URL-import block wins over otherwise complete manual product", () => {
+  it("non-admin URL-import block wins over otherwise complete manual product", () => {
     const err = evaluateActivePublishReadinessSync(
       activeInput(),
       { metadata: { catalogos_url_import_job_id: "job-99" } },
       deps
     );
-    expect(err).toContain("cannot be published");
+    expect(err).toContain("admin review");
   });
 });
 

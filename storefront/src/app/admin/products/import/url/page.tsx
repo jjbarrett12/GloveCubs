@@ -2,6 +2,8 @@ import { catalogosInternalRequest, probeCatalogosHealth } from "@/lib/admin/cata
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
 import { adaptUrlImportJobList, type UrlImportJobSummary } from "@/lib/admin/url-import-adapter";
 import { PageHeader, StatusBadge } from "@/components/admin";
+import { adminAlertSurface, adminLink, adminMutedPanel } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { UrlImportPanel } from "../_components/UrlImportPanel";
 import { ClipboardUrlStagingClient } from "../_components/ClipboardUrlStagingClient";
 import { listClipboardStaging } from "@/lib/admin/clipboard-url-staging";
@@ -46,7 +48,7 @@ export default async function AdminProductsImportUrlPage() {
       })();
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Import from URL"
         description="Paste supplier links for staging and review. Remote crawls run when catalog sync is online; clipboard staging works either way."
@@ -59,23 +61,23 @@ export default async function AdminProductsImportUrlPage() {
       />
 
       {offline ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <div className={cn(adminAlertSurface("warning", "mb-4"))}>
           <strong className="font-semibold">Catalog sync is offline.</strong> {conn.message} You can still use clipboard staging below.
         </div>
       ) : catalogosUnreachable && catalogosProbe ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <div className={cn(adminAlertSurface("warning", "mb-4"))}>
           <strong className="font-semibold">Catalog sync configured but not reachable.</strong> {catalogosProbe.message} Clipboard
           staging below still works against Supabase. Start CatalogOS at {conn.catalogos_base_url ?? "localhost:3010"} or fix{" "}
-          <code className="rounded bg-amber-100/80 px-1 font-mono text-xs">CATALOGOS_INTERNAL_URL</code>.
+          <code className="rounded bg-admin-surface-muted px-1 font-mono text-xs">CATALOGOS_INTERNAL_URL</code>.
         </div>
       ) : null}
 
       <div className="mb-6 flex flex-wrap gap-4 text-sm">
-        <Link href="/admin/products/import/jobs" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <Link href="/admin/products/import/jobs" className={adminLink}>
           Import activity
         </Link>
-        <span className="text-slate-300">|</span>
-        <Link href="/admin/products" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <span className="text-admin-border">|</span>
+        <Link href="/admin/products" className={adminLink}>
           Back to products
         </Link>
       </div>
@@ -93,17 +95,17 @@ export default async function AdminProductsImportUrlPage() {
       </div>
 
       {!offline && jobs.rows.length > 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <span className="font-semibold text-slate-800">Recent import runs (sample):</span>{" "}
+        <div className={cn(adminMutedPanel, "border-solid px-4 py-3 text-sm text-admin-secondary")}>
+          <span className="font-semibold text-admin-primary">Recent import runs (sample):</span>{" "}
           {jobs.rows.map((j) => (
             <span key={j.id} className="ml-2 inline-block">
               <Link
-                className="font-mono font-medium text-[#c2410c] hover:text-[#e5582d] hover:underline"
+                className={cn("font-mono font-medium", adminLink)}
                 href={`/admin/products/import/jobs/${encodeURIComponent(j.id)}`}
               >
                 {j.id.slice(0, 8)}…
               </Link>
-              <span className="text-slate-500"> ({j.status})</span>
+              <span className="text-admin-muted"> ({j.status})</span>
             </span>
           ))}
         </div>

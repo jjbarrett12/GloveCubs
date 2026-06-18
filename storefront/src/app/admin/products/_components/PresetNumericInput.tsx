@@ -2,6 +2,10 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import {
+  adminFormInput,
+  adminStatusBadgeClasses,
+} from "@/components/admin/admin-theme-utils";
 
 type Props = {
   label: string;
@@ -49,31 +53,32 @@ export function PresetNumericInput({
   }
 
   const inputClass = cn(
-    "w-full rounded-lg border bg-white tabular-nums shadow-inner focus:outline-none focus:ring-2",
+    adminFormInput,
+    "w-full tabular-nums shadow-inner focus:outline-none focus:ring-2",
     compact ? "px-2 py-1 text-xs" : "px-2.5 py-2 text-sm",
     blocking
-      ? "border-2 border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-200"
-      : "border-slate-200 focus:border-[#f06232]/50 focus:ring-[#f06232]/20"
+      ? "border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] focus:border-admin-danger focus:ring-admin-danger/30"
+      : "focus:border-admin-accent focus:ring-admin-accent/30",
   );
 
   return (
     <div
       className={cn(
         compact ? "space-y-1" : "space-y-1.5",
-        blocking && "rounded-lg border-2 border-red-400 bg-red-50/30 p-2",
-        className
+        blocking && "rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] p-2",
+        className,
       )}
     >
-      <span className={cn("font-semibold text-slate-600", compact ? "text-[11px]" : "text-xs")}>
+      <span className={cn("font-semibold text-admin-muted", compact ? "text-[11px]" : "text-xs")}>
         {label}
         {blocking ? (
-          <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
         ) : null}
       </span>
       <div
         className={cn(
           "flex gap-1",
-          compact ? "flex-nowrap overflow-x-auto pb-0.5 [scrollbar-width:thin]" : "flex-wrap"
+          compact ? "flex-nowrap overflow-x-auto pb-0.5 [scrollbar-width:thin]" : "flex-wrap",
         )}
       >
         {presets.map((n) => (
@@ -86,8 +91,8 @@ export function PresetNumericInput({
               "shrink-0 rounded-md border font-medium tabular-nums transition",
               compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]",
               !customMode && value === n
-                ? "border-[#f06232] bg-[#f06232]/10 text-[#f06232]"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                ? cn("border-admin-accent bg-admin-accent-soft text-admin-accent", adminStatusBadgeClasses("accent"))
+                : "border-admin-border bg-admin-surface text-admin-secondary hover:border-admin-accent/40",
             )}
           >
             {n.toLocaleString("en-US")}
@@ -104,8 +109,8 @@ export function PresetNumericInput({
             "shrink-0 rounded-md border font-medium transition",
             compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]",
             customMode
-              ? "border-[#f06232] bg-[#f06232]/10 text-[#f06232]"
-              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              ? "border-admin-accent bg-admin-accent-soft text-admin-accent"
+              : "border-admin-border bg-admin-surface text-admin-secondary hover:border-admin-accent/40",
           )}
         >
           …
@@ -123,7 +128,7 @@ export function PresetNumericInput({
           placeholder="Custom"
         />
       ) : null}
-      {hint ? <p className="text-[10px] leading-snug text-slate-500">{hint}</p> : null}
+      {hint ? <p className="text-[10px] leading-snug text-admin-muted">{hint}</p> : null}
     </div>
   );
 }

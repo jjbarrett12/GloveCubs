@@ -49,13 +49,16 @@ describe("admin operator coherence (Slice 1D)", () => {
     expect(shell).not.toMatch(/title="Sales & catalog"/);
   });
 
-  it("admin dashboard prioritizes procurement queues", () => {
+  it("admin dashboard prioritizes procurement queues before catalog", () => {
     const page = read("app/admin/page.tsx");
-    const procIdx = page.indexOf("Procurement queues");
-    const catalogIdx = page.indexOf("Catalog quality");
-    expect(procIdx).toBeGreaterThan(-1);
-    expect(catalogIdx).toBeGreaterThan(procIdx);
-    expect(page).toContain("describeQuoteStatusForOperator");
+    const queueIdx = page.indexOf("Priority queues");
+    const catalogIdx = page.indexOf("Catalog readiness");
+    expect(queueIdx).toBeGreaterThan(-1);
+    expect(catalogIdx).toBeGreaterThan(queueIdx);
+    expect(page).toContain("Command center");
+    expect(page).toContain("AdminRecentQuotesTable");
+    const table = read("app/admin/_components/AdminRecentQuotesTable.tsx");
+    expect(table).toContain("describeQuoteStatusForOperator");
   });
 
   it("sourcing threads page uses operator vocabulary with buyer mirror", () => {

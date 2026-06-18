@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchProcurementEventTimeline, fetchProcurementOpportunitySummary } from "@/lib/procurement/procurement-workspace-read-models";
 import { describeLifecycleStageForOperator } from "@/lib/procurement/operator-lifecycle-copy";
-import { PageHeader, PageSection, StatCard, StatGrid, TableCard, EmptyState } from "@/components/admin";
+import { EmptyState, ErrorState, PageHeader, PageSection, PremiumSectionCard, StatCard, StatGrid } from "@/components/admin";
+import { adminLink } from "@/components/admin/admin-theme-utils";
+import { ProcurementEventsTable } from "@/app/admin/procurement/_ProcurementDetailUi";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +21,10 @@ export default async function ProcurementOpportunityWorkspacePage({ params }: { 
             { label: "Thread" },
           ]}
         />
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Supabase not configured.
-        </div>
+        <ErrorState
+          title="Database not configured"
+          message="Sourcing thread details cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
       </div>
     );
   }
@@ -51,17 +54,17 @@ export default async function ProcurementOpportunityWorkspacePage({ params }: { 
       </StatGrid>
 
       <PageSection title="Stage guidance">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-700">{stageCopy.nextHint}</p>
+        <PremiumSectionCard>
+          <p className="text-sm text-admin-secondary">{stageCopy.nextHint}</p>
           <dl className="mt-4 grid max-w-xl gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Linked quote request</dt>
-              <dd className="mt-0.5 font-mono text-gray-900">
+              <dt className="text-xs font-medium uppercase tracking-wide text-admin-muted">Linked quote request</dt>
+              <dd className="mt-0.5 font-mono text-admin-primary">
                 {header.quote_request_id ? (
                   <>
                     {header.quote_request_id}
                     <span className="mt-1 block">
-                      <Link href="/admin/leads" className="text-sm font-medium text-blue-700 hover:underline">
+                      <Link href="/admin/leads" className={adminLink}>
                         Open quote request queue →
                       </Link>
                     </span>
@@ -72,44 +75,25 @@ export default async function ProcurementOpportunityWorkspacePage({ params }: { 
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">CRM prospect</dt>
-              <dd className="mt-0.5 font-mono text-gray-900">
+              <dt className="text-xs font-medium uppercase tracking-wide text-admin-muted">CRM prospect</dt>
+              <dd className="mt-0.5 font-mono text-admin-primary">
                 {header.sales_prospect_id != null ? String(header.sales_prospect_id) : "—"}
               </dd>
             </div>
           </dl>
-        </div>
+        </PremiumSectionCard>
       </PageSection>
 
       <PageSection title="Procurement activity">
-        <TableCard>
-          {eventList.length === 0 ? (
-            <EmptyState title="No activity" description="No procurement events recorded for this sourcing thread." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="p-3">Time</th>
-                    <th className="p-3">Event</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {eventList.map((e) => (
-                    <tr key={String(e.id)} className="align-top hover:bg-blue-50/40">
-                      <td className="whitespace-nowrap p-3 text-xs text-gray-600">{String(e.created_at ?? "")}</td>
-                      <td className="p-3 text-xs text-gray-900">{String(e.event_type ?? "")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </TableCard>
+        {eventList.length === 0 ? (
+          <EmptyState title="No activity" description="No procurement events recorded for this sourcing thread." />
+        ) : (
+          <ProcurementEventsTable events={eventList} />
+        )}
       </PageSection>
 
-      <p className="mt-6 text-sm text-gray-600">
-        <Link href="/admin/opportunities" className="font-medium text-blue-700 hover:underline">
+      <p className="mt-6 text-sm text-admin-secondary">
+        <Link href="/admin/opportunities" className={adminLink}>
           ← Sourcing threads
         </Link>
       </p>

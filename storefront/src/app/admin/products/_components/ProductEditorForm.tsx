@@ -5,6 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AdminCategoryOption } from "@/lib/admin/product-form-options";
 import { adminCreateProductAction, adminUpdateProductAction } from "@/app/admin/products/_components/product-editor-actions";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminEyebrow,
+  adminFormInput,
+  adminFormLabel,
+  adminLink,
+  adminMutedPanel,
+  adminPrimaryButton,
+  adminSecondaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export type ProductEditorInitial = {
   productId?: string;
@@ -26,9 +38,8 @@ function defaultVariants(): ProductEditorInitial["variants"] {
   return [{ sizeCode: "M", variantSku: "", listPrice: "" }];
 }
 
-const lbl = "text-xs font-semibold text-slate-600";
-const field =
-  "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
+const field = cn(adminFormInput, "mt-2 w-full rounded-lg shadow-inner");
+const cellInput = cn(adminFormInput, "rounded-lg shadow-inner");
 
 export function ProductEditorForm({
   categories,
@@ -134,25 +145,25 @@ export function ProductEditorForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="relative max-w-3xl space-y-6 rounded-2xl border border-slate-200 bg-white p-6 pb-28 shadow-sm sm:pb-24"
+      className={cn(adminCardSurface, "relative max-w-3xl space-y-6 p-6 pb-28 sm:pb-24")}
     >
       {mode === "create" ? (
-        <div className="rounded-xl border border-[#f06232]/25 bg-[#fff7f2] px-4 py-3 text-sm text-slate-800">
-          <strong className="text-[#c2410c]">Draft first, publish later.</strong> New rows default to draft. Switch to{" "}
-          <span className="font-semibold text-slate-900">Published</span> only after category, primary image, and variants satisfy database
+        <div className={adminAlertSurface("info", "text-sm")}>
+          <strong className="text-admin-accent">Draft first, publish later.</strong> New rows default to draft. Switch to{" "}
+          <span className="font-semibold text-admin-primary">Published</span> only after category, primary image, and variants satisfy database
           guards.
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-        <p className="mb-4 text-xs font-bold uppercase tracking-wide text-[#c2410c]">Identity &amp; taxonomy</p>
+      <div className={cn(adminMutedPanel, "border-solid p-5")}>
+        <p className={cn(adminEyebrow, "mb-4")}>Identity &amp; taxonomy</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
-            <span className={lbl}>Product name</span>
+            <span className={adminFormLabel}>Product name</span>
             <input required value={name} onChange={(e) => setName(e.target.value)} className={field} />
           </label>
           <label className="block">
-            <span className={lbl}>Brand (matches catalog brand)</span>
+            <span className={adminFormLabel}>Brand (matches catalog brand)</span>
             <input
               value={brandName}
               onChange={(e) => setBrandName(e.target.value)}
@@ -161,7 +172,7 @@ export function ProductEditorForm({
             />
           </label>
           <label className="block">
-            <span className={lbl}>Category</span>
+            <span className={adminFormLabel}>Category</span>
             <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={field}>
               <option value="">Select category…</option>
               {categories.map((c) => (
@@ -172,43 +183,43 @@ export function ProductEditorForm({
             </select>
           </label>
           <label className="block">
-            <span className={lbl}>Material</span>
+            <span className={adminFormLabel}>Material</span>
             <input value={material} onChange={(e) => setMaterial(e.target.value)} className={field} />
           </label>
           <label className="block">
-            <span className={lbl}>Color</span>
+            <span className={adminFormLabel}>Color</span>
             <input value={color} onChange={(e) => setColor(e.target.value)} className={field} />
           </label>
           <label className="block">
-            <span className={lbl}>Mil thickness</span>
+            <span className={adminFormLabel}>Mil thickness</span>
             <input value={milThickness} onChange={(e) => setMilThickness(e.target.value)} className={field} />
           </label>
           <label className="block">
-            <span className={lbl}>Case pack</span>
+            <span className={adminFormLabel}>Case pack</span>
             <input value={casePack} onChange={(e) => setCasePack(e.target.value)} className={field} />
           </label>
           <label className="block sm:col-span-2">
-            <span className={lbl}>Primary image URL</span>
+            <span className={adminFormLabel}>Primary image URL</span>
             <input
               value={primaryImageUrl}
               onChange={(e) => setPrimaryImageUrl(e.target.value)}
-              className={`${field} font-mono text-xs`}
+              className={cn(field, "font-mono text-xs")}
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className={lbl}>Description</span>
+            <span className={adminFormLabel}>Description</span>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className={field} />
           </label>
           <fieldset className="sm:col-span-2">
-            <legend className={lbl}>Status</legend>
-            <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-800">
+            <legend className={adminFormLabel}>Status</legend>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm text-admin-secondary">
               <label className="inline-flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="pub"
                   checked={status === "draft"}
                   onChange={() => setStatus("draft")}
-                  className="border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="border-admin-border text-admin-accent focus:ring-admin-accent/30"
                 />
                 Draft (not on public store)
               </label>
@@ -218,29 +229,29 @@ export function ProductEditorForm({
                   name="pub"
                   checked={status === "active"}
                   onChange={() => setStatus("active")}
-                  className="border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="border-admin-border text-admin-accent focus:ring-admin-accent/30"
                 />
                 Published (active on store when guards pass)
               </label>
             </div>
           </fieldset>
-          <label className="inline-flex cursor-pointer items-center gap-2 sm:col-span-2 text-sm text-slate-800">
+          <label className="inline-flex cursor-pointer items-center gap-2 sm:col-span-2 text-sm text-admin-secondary">
             <input
               type="checkbox"
               checked={quoteOnly}
               onChange={(e) => setQuoteOnly(e.target.checked)}
-              className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+              className="rounded border-admin-border text-admin-accent focus:ring-admin-accent/30"
             />
             Quote only (no list price on variants)
           </label>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-        <p className="mb-4 text-xs font-bold uppercase tracking-wide text-[#c2410c]">Variants &amp; pricing</p>
+      <div className={cn(adminMutedPanel, "border-solid p-5")}>
+        <p className={cn(adminEyebrow, "mb-4")}>Variants &amp; pricing</p>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-900">Size variants</h3>
-          <button type="button" onClick={addVariantRow} className="text-sm font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+          <h3 className="text-sm font-semibold text-admin-primary">Size variants</h3>
+          <button type="button" onClick={addVariantRow} className={cn("text-sm font-semibold", adminLink)}>
             + Add variant
           </button>
         </div>
@@ -251,26 +262,26 @@ export function ProductEditorForm({
                 placeholder="Size"
                 value={row.sizeCode}
                 onChange={(e) => patchVariant(i, { sizeCode: e.target.value })}
-                className="col-span-3 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(cellInput, "col-span-3 text-sm")}
               />
               <input
                 placeholder="Variant SKU (optional — auto)"
                 value={row.variantSku}
                 onChange={(e) => patchVariant(i, { variantSku: e.target.value })}
-                className="col-span-4 rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(cellInput, "col-span-4 font-mono text-xs")}
               />
               <input
                 placeholder="List price"
                 value={row.listPrice}
                 onChange={(e) => patchVariant(i, { listPrice: e.target.value })}
                 disabled={quoteOnly}
-                className="col-span-3 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:cursor-not-allowed disabled:opacity-45"
+                className={cn(cellInput, "col-span-3 text-sm disabled:cursor-not-allowed disabled:opacity-45")}
               />
               <button
                 type="button"
                 onClick={() => removeVariantRow(i)}
                 disabled={variants.length <= 1}
-                className="col-span-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                className={cn(adminSecondaryButton, "col-span-2 text-xs disabled:opacity-40")}
               >
                 Remove
               </button>
@@ -280,21 +291,14 @@ export function ProductEditorForm({
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
+        <div className={adminAlertSurface("critical")}>{error}</div>
       ) : null}
 
-      <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex flex-wrap gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/90">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d] disabled:opacity-60"
-        >
+      <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex flex-wrap gap-3 border-t border-admin-border bg-admin-surface/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-admin-surface/90">
+        <button type="submit" disabled={pending} className={cn(adminPrimaryButton, "px-5 py-2.5")}>
           {pending ? "Saving…" : mode === "create" ? "Create product" : "Save changes"}
         </button>
-        <Link
-          href="/admin/products"
-          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
-        >
+        <Link href="/admin/products" className={cn(adminSecondaryButton, "inline-flex items-center px-4 py-2.5")}>
           Cancel
         </Link>
       </div>

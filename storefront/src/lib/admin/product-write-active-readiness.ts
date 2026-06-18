@@ -16,7 +16,10 @@ import {
   type AttributeDefinitionRow,
 } from "@/lib/admin/product-attribute-sync";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
-import { clipboardUrlImportActiveStatusError } from "@/lib/admin/clipboard-promote-guards";
+import {
+  isUrlImportProductMetadata,
+  URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
+} from "@/lib/admin/clipboard-promote-guards";
 import {
   lookupSkuCollisions,
   normalizeSkuCollisionQuery,
@@ -28,6 +31,8 @@ export type ActivePublishReadinessContext = {
   metadata: Record<string, unknown>;
   productId?: string | null;
   importDraft?: ImportDraftProductV1 | null;
+  /** Set when publish originates from authenticated admin product editor review. */
+  adminReviewPublish?: boolean;
 };
 
 export type ActivePublishReadinessDeps = {
@@ -46,6 +51,9 @@ function productWriteVariantsToEditorRows(variants: ProductWriteInput["variants"
     sizeCode: v.sizeCode,
     variantSku: v.variantSku,
     listPrice: v.listPrice,
+    manufacturerSku: v.manufacturerSku ?? undefined,
+    manufacturerSkuNeedsReview: v.manufacturerSkuNeedsReview,
+    manufacturerSkuSource: v.manufacturerSkuSource,
   }));
 }
 
@@ -110,6 +118,7 @@ export function buildEditorReadinessInputFromProductWrite(
     attributeDefinitions: deps.attributeDefinitions,
     dirty: false,
     importDraft: input.importDraft ?? ctx.importDraft ?? null,
+    adminReviewPublish: ctx.adminReviewPublish ?? false,
     allowedByKey,
     commercePackaging,
     internalSku: input.internalSku ?? undefined,
@@ -125,8 +134,9 @@ export function evaluateActivePublishReadinessSync(
 ): string | null {
   if (input.status !== "active") return null;
 
-  const urlBlock = clipboardUrlImportActiveStatusError(ctx.metadata, "active");
-  if (urlBlock) return urlBlock;
+  if (isUrlImportProductMetadata(ctx.metadata) && !ctx.adminReviewPublish) {
+    return URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE;
+  }
 
   if (!input.name.trim()) return "Product name is required to publish.";
 

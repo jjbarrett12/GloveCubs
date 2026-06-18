@@ -2,6 +2,16 @@
 
 import * as React from "react";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminLink,
+  adminMutedPanel,
+  adminPrimaryButton,
+  adminSecondaryButton,
+  adminStatusBadgeClasses,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import {
@@ -148,41 +158,42 @@ export function ImportIntelligencePanel({
   }
 
   return (
-    <PremiumSectionCard title="Import intelligence" dense className="border-[#f06232]/15 bg-gradient-to-b from-[#fffaf7] to-white">
+    <PremiumSectionCard title="Import intelligence" dense>
       <dl className="grid gap-2 text-xs">
         {sourceUrl ? (
           <div>
-            <dt className="font-semibold text-slate-500">Source URL</dt>
-            <dd className="break-all font-mono text-[11px] text-slate-700">{sourceUrl}</dd>
+            <dt className="font-semibold text-admin-muted">Source URL</dt>
+            <dd className="break-all font-mono text-[11px] text-admin-secondary">{sourceUrl}</dd>
           </div>
         ) : null}
         <div>
-          <dt className="font-semibold text-slate-500">Parser</dt>
-          <dd>{parserVersion ?? "—"}</dd>
+          <dt className="font-semibold text-admin-muted">Parser</dt>
+          <dd className="text-admin-secondary">{parserVersion ?? "—"}</dd>
         </div>
       </dl>
 
       {!draft ? (
-        <p className="mt-3 text-sm text-slate-500">No linked staging draft. Re-import via review queue to refresh evidence.</p>
+        <p className="mt-3 text-sm text-admin-muted">No linked staging draft. Re-import via review queue to refresh evidence.</p>
       ) : (
         <>
           {skuProposals?.parent_sku.value ? (
-            <div className="mt-3 rounded-lg border border-[#f06232]/20 bg-[#fffaf7] px-3 py-2.5 text-xs text-slate-800">
-              <p className="font-semibold text-slate-900">SKU proposals</p>
+            <div className={cn(adminCardSurface, "mt-3 border-admin-accent/20 px-3 py-2.5 text-xs text-admin-secondary")}>
+              <p className="font-semibold text-admin-primary">SKU proposals</p>
               <p className="mt-1">
                 Parent:{" "}
                 <span className="font-mono font-medium">{skuProposals.parent_sku.value}</span>
                 <span
-                  className={`ml-2 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                  className={cn(
+                    "ml-2 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1",
                     skuProposals.parent_sku.confidence >= SKU_PROPOSAL_SAFE_CONFIDENCE
-                      ? "bg-green-100 text-green-800"
-                      : "bg-amber-100 text-amber-900"
-                  }`}
+                      ? adminStatusBadgeClasses("success")
+                      : adminStatusBadgeClasses("warning"),
+                  )}
                 >
                   {skuProposals.parent_sku.confidence >= SKU_PROPOSAL_SAFE_CONFIDENCE ? "High" : "Review"}
                 </span>
               </p>
-              <p className="mt-0.5 text-slate-600">
+              <p className="mt-0.5 text-admin-muted">
                 Source: {skuProposals.parent_sku.source.replace(/_/g, " ")} ·{" "}
                 {Math.round(skuProposals.parent_sku.confidence * 100)}%
               </p>
@@ -190,7 +201,7 @@ export function ImportIntelligencePanel({
                 <div className="mt-2 overflow-x-auto">
                   <table className="min-w-full text-[10px]">
                     <thead>
-                      <tr className="text-left text-slate-500">
+                      <tr className="text-left text-admin-muted">
                         <th className="pr-2 py-1">Size</th>
                         <th className="pr-2 py-1">Manufacturer</th>
                         <th className="pr-2 py-1">GloveCubs</th>
@@ -217,7 +228,7 @@ export function ImportIntelligencePanel({
                   type="button"
                   onClick={() => applySkuProposals(false)}
                   disabled={!skuApplySafe}
-                  className="rounded-lg border border-[#f06232]/30 bg-white px-3 py-1.5 text-[11px] font-semibold text-[#c2410c] hover:bg-[#fff7f2] disabled:opacity-40"
+                  className={cn(adminPrimaryButton, "border border-admin-accent/30 bg-admin-accent-soft text-[11px] text-admin-accent hover:opacity-90 disabled:opacity-40")}
                 >
                   Apply SKU proposals
                 </button>
@@ -225,21 +236,21 @@ export function ImportIntelligencePanel({
                   type="button"
                   onClick={() => setConfirmReplaceSkus(true)}
                   disabled={!skuApplySafe}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  className={cn(adminSecondaryButton, "text-[11px] disabled:opacity-40")}
                 >
                   Replace existing SKU values
                 </button>
               </div>
               {lastSkuApplySkipped != null && lastSkuApplySkipped > 0 ? (
-                <p className="mt-1 text-[10px] text-slate-600">
+                <p className="mt-1 text-[10px] text-admin-muted">
                   {lastSkuApplySkipped} SKU field{lastSkuApplySkipped === 1 ? "" : "s"} already had values and were not overwritten.
                 </p>
               ) : null}
               {!skuApplySafe ? (
-                <p className="mt-1 text-[10px] text-amber-800">Review required before auto-apply</p>
+                <p className="mt-1 text-[10px] text-admin-warning">Review required before auto-apply</p>
               ) : null}
               {confirmReplaceSkus ? (
-                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-950">
+                <div className={adminAlertSurface("warning", "mt-2 text-[11px]")}>
                   <p className="font-medium">
                     This changes GloveCubs internal SKUs. Manufacturer SKUs will remain preserved separately.
                   </p>
@@ -247,14 +258,14 @@ export function ImportIntelligencePanel({
                     <button
                       type="button"
                       onClick={() => applySkuProposals(true)}
-                      className="rounded bg-amber-900 px-2 py-1 text-[10px] font-semibold text-white"
+                      className={cn(adminPrimaryButton, "text-[10px]")}
                     >
                       Confirm replace
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmReplaceSkus(false)}
-                      className="text-[10px] font-medium underline"
+                      className={cn("text-[10px] font-medium", adminLink)}
                     >
                       Cancel
                     </button>
@@ -265,22 +276,22 @@ export function ImportIntelligencePanel({
           ) : null}
 
           {variantEvidence && variantEvidence.codes.length > 0 ? (
-            <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
-              <p className="font-semibold text-slate-800">Variant evidence</p>
+            <div className={cn(adminCardSurface, "mt-3 px-3 py-2.5 text-xs text-admin-secondary")}>
+              <p className="font-semibold text-admin-primary">Variant evidence</p>
               <p className="mt-1">
                 Sizes detected:{" "}
                 <span className="font-mono font-medium">{variantEvidence.codes.join(", ")}</span>
               </p>
               {variantEvidence.sources.length > 0 ? (
-                <p className="mt-0.5 text-slate-600">
+                <p className="mt-0.5 text-admin-muted">
                   Source: {variantEvidence.sources.join(", ").replace(/_/g, " ")}
                 </p>
               ) : null}
-              <p className="mt-0.5 text-slate-600">
+              <p className="mt-0.5 text-admin-muted">
                 Manufacturer SKUs detected: {variantEvidence.mfrCount}
               </p>
               {variantEvidence.fallbackOnly || variantEvidence.warnings.length > 0 ? (
-                <ul className="mt-1.5 list-inside list-disc text-amber-800">
+                <ul className="mt-1.5 list-inside list-disc text-admin-warning">
                   {variantEvidence.fallbackOnly ? (
                     <li>Size options came from text fallback — review before publish</li>
                   ) : null}
@@ -293,13 +304,13 @@ export function ImportIntelligencePanel({
           ) : null}
 
           {missingFilters.length > 0 ? (
-            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-950">
+            <div className={adminAlertSurface("warning", "mt-3 text-xs")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">Missing storefront filter fields</p>
                 <button
                   type="button"
                   onClick={() => applyFilterSync()}
-                  className="shrink-0 rounded border border-amber-400 bg-white px-2 py-1 text-[10px] font-semibold text-amber-950 hover:bg-amber-100"
+                  className={cn(adminSecondaryButton, "shrink-0 text-[10px]")}
                 >
                   Apply all filter sync
                 </button>
@@ -314,7 +325,7 @@ export function ImportIntelligencePanel({
                     <button
                       type="button"
                       onClick={() => applyFilterSync(m.key)}
-                      className="shrink-0 rounded border border-amber-400 bg-white px-2 py-1 text-[10px] font-semibold text-amber-950 hover:bg-amber-100"
+                      className={cn(adminSecondaryButton, "shrink-0 text-[10px]")}
                     >
                       Apply
                     </button>
@@ -329,7 +340,7 @@ export function ImportIntelligencePanel({
               type="button"
               onClick={applyAllSafe}
               disabled={applicableSafeCount === 0}
-              className="rounded-lg bg-[#f06232]/10 px-3 py-1.5 text-xs font-semibold text-[#c2410c] hover:bg-[#f06232]/20 disabled:opacity-40"
+              className="rounded-lg bg-admin-accent-soft px-3 py-1.5 text-xs font-semibold text-admin-accent hover:bg-admin-accent/20 disabled:opacity-40"
             >
               Apply all safe ({applicableSafeCount})
             </button>
@@ -344,35 +355,36 @@ export function ImportIntelligencePanel({
               return (
                 <li
                   key={s.id}
-                  className={`flex items-start justify-between gap-2 rounded-lg border px-2.5 py-2 ${
+                  className={cn(
+                    "flex items-start justify-between gap-2 rounded-lg border px-2.5 py-2",
                     isMissingFilter
-                      ? "border-amber-300 bg-amber-50/80"
-                      : "border-slate-100 bg-white"
-                  }`}
+                      ? "border-admin-warning/30 bg-[var(--admin-warning-surface)]"
+                      : cn(adminCardSurface, "border-admin-border-subtle"),
+                  )}
                 >
                   <div className="min-w-0 text-xs">
-                    <p className="font-semibold text-slate-800">
+                    <p className="font-semibold text-admin-primary">
                       {s.label}
                       {isMissingFilter ? (
-                        <span className="ml-1.5 rounded bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">
+                        <span className={cn("ml-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1", adminStatusBadgeClasses("warning"))}>
                           Filter gap
                         </span>
                       ) : null}
                       {!isSafe ? (
-                        <span className="ml-1.5 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600">
+                        <span className={cn("ml-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1", adminStatusBadgeClasses("neutral"))}>
                           Low confidence
                         </span>
                       ) : null}
                     </p>
-                    <p className="mt-0.5 truncate text-slate-600">{String(s.value)}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">
+                    <p className="mt-0.5 truncate text-admin-secondary">{String(s.value)}</p>
+                    <p className="mt-0.5 text-[10px] text-admin-muted">
                       {Math.round(s.confidence * 100)}% · {s.source}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => applySuggestion(s)}
-                    className="shrink-0 rounded border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                    className={cn(adminSecondaryButton, "shrink-0 text-[10px]")}
                   >
                     Apply
                   </button>
@@ -381,8 +393,8 @@ export function ImportIntelligencePanel({
             })}
           </ul>
           {skipped.length > 0 ? (
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-600">
-              <p className="font-semibold text-slate-700">Skipped</p>
+            <div className={cn(adminMutedPanel, "mt-3 border-solid px-2.5 py-2 text-[11px] text-admin-secondary")}>
+              <p className="font-semibold text-admin-primary">Skipped</p>
               <ul className="mt-1 list-inside list-disc">
                 {skipped.map((s, i) => (
                   <li key={i}>

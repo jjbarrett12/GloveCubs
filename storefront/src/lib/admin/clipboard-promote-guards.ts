@@ -7,8 +7,18 @@ import {
   CLIPBOARD_EXTRACTION_AUTHORITY_LOCAL,
 } from "@/lib/admin/clipboard-url-catalogos-extract";
 
-export const CLIPBOARD_PROMOTE_PUBLISH_BLOCKED_MESSAGE =
-  "URL-import products cannot be published from storefront. Complete CatalogOS review and publish.";
+export const URL_IMPORT_REVIEW_REQUIRED_MESSAGE =
+  "Imported products must be reviewed before publishing.";
+
+export const URL_IMPORT_REVIEW_GUIDANCE =
+  "Complete required fields, confirm variants, then publish to catalog.";
+
+/** Staging promote route — cannot skip review by setting active in promote body. */
+export const CLIPBOARD_PROMOTE_PUBLISH_BLOCKED_MESSAGE = `${URL_IMPORT_REVIEW_REQUIRED_MESSAGE} ${URL_IMPORT_REVIEW_GUIDANCE}`;
+
+/** Non-admin paths must not activate URL-import drafts without admin review. */
+export const URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE =
+  "URL-import products cannot be published without admin review.";
 
 const URL_IMPORT_EXTRACTION_AUTHORITIES = new Set([
   CLIPBOARD_EXTRACTION_AUTHORITY_CATALOGOS,
@@ -107,14 +117,19 @@ export function clipboardImportMetadataFromStagingExtracted(
   return out;
 }
 
-/** Block storefront editor/API from activating URL-import drafts. */
+/**
+ * Block non-admin activation of URL-import drafts.
+ * Admin product editor review publish passes `adminReviewPublish: true`.
+ */
 export function clipboardUrlImportActiveStatusError(
   meta: Record<string, unknown> | null | undefined,
-  targetStatus: "draft" | "active"
+  targetStatus: "draft" | "active",
+  options?: { adminReviewPublish?: boolean }
 ): string | null {
   if (targetStatus !== "active") return null;
   if (!isUrlImportProductMetadata(meta)) return null;
-  return CLIPBOARD_PROMOTE_PUBLISH_BLOCKED_MESSAGE;
+  if (options?.adminReviewPublish) return null;
+  return URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE;
 }
 
 export function catalogosUrlImportJobDetailPath(jobId: string): string {

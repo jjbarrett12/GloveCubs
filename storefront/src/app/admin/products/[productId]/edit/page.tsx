@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ADMIN_PRODUCT_UUID_RE, fetchAdminProductDetail } from "@/lib/admin/product-operations";
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ProductEditorShell } from "@/app/admin/products/_components/ProductEditorShell";
+import { ErrorState } from "@/components/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,10 @@ export default async function AdminEditProductPage({ params }: { params: { produ
 
   if (!data.configured) {
     return (
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          Supabase is not configured for this environment.
-        </div>
-      </div>
+      <ErrorState
+        title="Database not configured"
+        message="Product editor cannot load in this environment. Review Admin Health for configuration status."
+      />
     );
   }
 
@@ -35,17 +35,15 @@ export default async function AdminEditProductPage({ params }: { params: { produ
     (data.images ?? []).find((im) => im.isPrimary)?.url ?? (data.images ?? [])[0]?.url ?? "";
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
-      <ProductEditorShell
-        categories={categories}
-        productId={productId}
-        product={data.product}
-        variants={data.variants ?? []}
-        warnings={data.warnings ?? []}
-        storefrontPdpPath={data.storefrontPdpPath ?? null}
-        editor={data.editor}
-        primaryImageUrl={primary}
-      />
-    </div>
+    <ProductEditorShell
+      categories={categories}
+      productId={productId}
+      product={data.product}
+      variants={data.variants ?? []}
+      warnings={data.warnings ?? []}
+      storefrontPdpPath={data.storefrontPdpPath ?? null}
+      editor={data.editor}
+      primaryImageUrl={primary}
+    />
   );
 }

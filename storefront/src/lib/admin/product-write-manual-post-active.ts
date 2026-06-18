@@ -6,7 +6,6 @@
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { resolveEffectiveCasePriceFromPackaging } from "@commerce-packaging/pricing";
 import { buildSupplierOfferUpsertRow } from "../../../../lib/supplier-offer-normalization";
-import { isUrlImportProductMetadata } from "@/lib/admin/clipboard-promote-guards";
 import { refreshProductAttributesJsonSnapshot } from "@/lib/admin/product-attributes-json-snapshot";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
 
@@ -35,8 +34,8 @@ export function shouldRunManualPostActiveSideEffects(
   importStagingId?: string | null
 ): boolean {
   if (targetStatus !== "active") return false;
+  // Initial staging promote insert path — product must be reviewed in editor first.
   if (importStagingId?.trim()) return false;
-  if (isUrlImportProductMetadata(metadata)) return false;
   return true;
 }
 

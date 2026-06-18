@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PageHeader, EmptyState } from "@/components/admin";
+import { adminLink, adminMutedPanel, adminPrimaryButton, adminSecondaryButton } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "CSV import (coming soon) | GloveCubs admin",
@@ -8,7 +10,7 @@ export const metadata = {
 
 export default function AdminProductsImportCsvPage() {
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="CSV import (coming soon)"
         description="Spreadsheet uploads will land here in a future release. Until then, export your catalog from Products or use URL import."
@@ -20,30 +22,27 @@ export default function AdminProductsImportCsvPage() {
       />
 
       <div className="mb-6 text-sm">
-        <Link href="/admin/products/import/url" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <Link href="/admin/products/import/url" className={adminLink}>
           Import from URL
         </Link>
-        <span className="mx-2 text-slate-300">|</span>
-        <Link href="/admin/products/import/jobs" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <span className="mx-2 text-admin-border">|</span>
+        <Link href="/admin/products/import/jobs" className={adminLink}>
           Import activity
         </Link>
       </div>
 
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80">
+      <div className={cn(adminMutedPanel, "border-solid")}>
         <EmptyState
           title="CSV import is not available in this console yet"
           description="Use URL import and Review & staging for now. Export the current grid as CSV from Products when you need a baseline file."
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <Link
-                href="/admin/products"
-                className="inline-flex rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d]"
-              >
+              <Link href="/admin/products" className={cn(adminPrimaryButton, "inline-flex px-4 py-2.5")}>
                 Back to products
               </Link>
               <a
                 href="/admin/api/products/export"
-                className="inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
+                className={cn(adminSecondaryButton, "inline-flex px-4 py-2.5")}
               >
                 Export CSV
               </a>

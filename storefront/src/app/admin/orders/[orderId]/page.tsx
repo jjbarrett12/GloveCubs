@@ -1,6 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader, PageSection } from "@/components/admin";
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  PremiumSectionCard,
+  StatusBadge,
+  TableCard,
+} from "@/components/admin";
+import { DetailTableShell, adminTableRowHover } from "@/components/admin/DetailTableShell";
+import {
+  adminLink,
+  adminMutedPanel,
+  adminTableCell,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminOrderDetail, formatMinorAmount, type OrderProvenance } from "@/lib/admin/admin-orders-read-model";
 import { buildReorderQuotePayload } from "@/lib/account/reorder-to-quote-read-model";
@@ -24,6 +38,15 @@ function snapshotSummary(snap: Record<string, unknown>): string {
   return parts.length ? parts.join(" · ") : "—";
 }
 
+function SummaryField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-admin-muted">{label}</dt>
+      <dd className={cn(adminTableCell, "text-sm")}>{children}</dd>
+    </>
+  );
+}
+
 export async function generateMetadata({ params }: { params: { orderId: string } }) {
   return { title: `Order ${params.orderId.slice(0, 8)}… | GloveCubs admin`, robots: { index: false, follow: false } as const };
 }
@@ -36,8 +59,12 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
   if (error) {
     return (
       <div>
-        <PageHeader title="Order record" description={error} />
-        <Link href="/admin/orders" className="text-sm text-blue-700 hover:underline">
+        <PageHeader
+          title="Order record"
+          breadcrumb={[{ label: "Order records", href: "/admin/orders" }]}
+        />
+        <ErrorState title="Could not load order" message={error} />
+        <Link href="/admin/orders" className={cn("mt-4 inline-block text-sm", adminLink)}>
           ← Order records
         </Link>
       </div>
@@ -53,20 +80,16 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
 
   return (
     <div>
-      <nav className="mb-3 text-sm text-gray-500">
-        <Link href="/admin/orders" className="font-medium text-blue-700 hover:underline">
-          Order records
-        </Link>
-        <span className="mx-2">/</span>
-        <span className="text-gray-800">{h.order_number}</span>
-      </nav>
-
       <PageHeader
         title={`Order ${h.order_number}`}
         description="Canonical order record. Amounts are stored minor units; fulfillment actions use the transitional Express admin API."
+        breadcrumb={[
+          { label: "Order records", href: "/admin/orders" },
+          { label: h.order_number },
+        ]}
       />
 
-      <PageSection title="Operator actions">
+      <div className="mb-8">
         <OrderOperatorActions
           orderId={h.id}
           currentStatus={h.status}
@@ -74,153 +97,179 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
           paymentIntegrityHold={h.payment_integrity_hold}
           invoiceAmountDue={h.invoice_amount_due}
           invoiceAmountPaid={h.invoice_amount_paid}
-          trackingNumber={
-            typeof h.metadata.tracking_number === "string" ? h.metadata.tracking_number : ""
-          }
+          trackingNumber={typeof h.metadata.tracking_number === "string" ? h.metadata.tracking_number : ""}
           trackingUrl={typeof h.metadata.tracking_url === "string" ? h.metadata.tracking_url : ""}
         />
-      </PageSection>
+      </div>
 
-      <PageSection title="Summary">
-        <dl className="grid max-w-2xl gap-2 text-sm sm:grid-cols-2">
-          <dt className="text-gray-500">Company</dt>
-          <dd className="text-gray-900">
-            {h.company_trade_name || "—"}{" "}
-            <span className="block font-mono text-xs text-gray-400">{h.company_id}</span>
-          </dd>
-          <dt className="text-gray-500">Status</dt>
-          <dd>
-            <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold uppercase text-gray-800">{h.status}</span>
-          </dd>
-          <dt className="text-gray-500">Provenance</dt>
-          <dd className="text-gray-800">
-            {provenanceLabel(h.provenance)}
-            {h.legacy_order_id != null ? (
-              <span className="ml-2 font-mono text-xs text-gray-500">legacy public.orders id: {h.legacy_order_id}</span>
-            ) : null}
-          </dd>
-          <dt className="text-gray-500">Placed</dt>
-          <dd className="text-gray-800">{new Date(h.placed_at).toLocaleString()}</dd>
-          <dt className="text-gray-500">Created</dt>
-          <dd className="text-gray-800">{new Date(h.created_at).toLocaleString()}</dd>
-          <dt className="text-gray-500">Updated</dt>
-          <dd className="text-gray-800">{new Date(h.updated_at).toLocaleString()}</dd>
-          <dt className="text-gray-500">Currency</dt>
-          <dd className="font-mono">{h.currency_code}</dd>
-          <dt className="text-gray-500">Subtotal (minor)</dt>
-          <dd className="font-mono">{h.subtotal_minor}</dd>
-          <dt className="text-gray-500">Discount (minor)</dt>
-          <dd className="font-mono">{h.discount_minor}</dd>
-          <dt className="text-gray-500">Shipping (minor)</dt>
-          <dd className="font-mono">{h.shipping_minor}</dd>
-          <dt className="text-gray-500">Tax (minor)</dt>
-          <dd className="font-mono">{h.tax_minor}</dd>
-          <dt className="text-gray-500">Total (minor)</dt>
-          <dd className="font-mono">{h.total_minor}</dd>
-          <dt className="text-gray-500">Total (formatted)</dt>
-          <dd className="font-medium text-gray-900">{formatMinorAmount(h.total_minor, h.currency_code)}</dd>
-        </dl>
-      </PageSection>
+      <div className="mb-8 grid gap-5 lg:grid-cols-2">
+        <PremiumSectionCard title="Summary" dense>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <SummaryField label="Company">
+              {h.company_trade_name || "—"}
+              <span className="block font-mono text-xs text-admin-muted">{h.company_id}</span>
+            </SummaryField>
+            <SummaryField label="Status">
+              <StatusBadge status={h.status} />
+            </SummaryField>
+            <SummaryField label="Provenance">
+              {provenanceLabel(h.provenance)}
+              {h.legacy_order_id != null ? (
+                <span className="ml-2 font-mono text-xs text-admin-muted">
+                  legacy public.orders id: {h.legacy_order_id}
+                </span>
+              ) : null}
+            </SummaryField>
+            <SummaryField label="Placed">{new Date(h.placed_at).toLocaleString()}</SummaryField>
+            <SummaryField label="Created">{new Date(h.created_at).toLocaleString()}</SummaryField>
+            <SummaryField label="Updated">{new Date(h.updated_at).toLocaleString()}</SummaryField>
+            <SummaryField label="Currency">
+              <span className="font-mono">{h.currency_code}</span>
+            </SummaryField>
+            <SummaryField label="Total (formatted)">
+              <span className="font-medium">{formatMinorAmount(h.total_minor, h.currency_code)}</span>
+            </SummaryField>
+          </dl>
+        </PremiumSectionCard>
 
-      <PageSection title="Recorded payment state">
-        <ul className="list-inside list-disc text-sm text-gray-700">
-          <li>Stripe PaymentIntent: {h.stripe_payment_intent_id || "—"}</li>
-          <li>Payment method: {h.payment_method || "—"}</li>
-          <li>Payment confirmed at: {h.payment_confirmed_at ? new Date(h.payment_confirmed_at).toLocaleString() : "—"}</li>
-          <li>Payment integrity hold: {h.payment_integrity_hold == null ? "—" : h.payment_integrity_hold ? "Yes" : "No"}</li>
-        </ul>
-      </PageSection>
+        <PremiumSectionCard title="Amounts (minor units)" dense>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <SummaryField label="Subtotal">
+              <span className="font-mono">{h.subtotal_minor}</span>
+            </SummaryField>
+            <SummaryField label="Discount">
+              <span className="font-mono">{h.discount_minor}</span>
+            </SummaryField>
+            <SummaryField label="Shipping">
+              <span className="font-mono">{h.shipping_minor}</span>
+            </SummaryField>
+            <SummaryField label="Tax">
+              <span className="font-mono">{h.tax_minor}</span>
+            </SummaryField>
+            <SummaryField label="Total">
+              <span className="font-mono">{h.total_minor}</span>
+            </SummaryField>
+          </dl>
+        </PremiumSectionCard>
+      </div>
 
-      <PageSection title="Recorded fulfillment / inventory timestamps">
-        <ul className="list-inside list-disc text-sm text-gray-700">
-          <li>Reserved: {h.inventory_reserved_at ? new Date(h.inventory_reserved_at).toLocaleString() : "—"}</li>
-          <li>Released: {h.inventory_released_at ? new Date(h.inventory_released_at).toLocaleString() : "—"}</li>
-          <li>Deducted: {h.inventory_deducted_at ? new Date(h.inventory_deducted_at).toLocaleString() : "—"}</li>
-        </ul>
-      </PageSection>
+      <div className="mb-8 grid gap-5 lg:grid-cols-2">
+        <PremiumSectionCard title="Recorded payment state" dense>
+          <ul className="list-inside list-disc space-y-1 text-sm text-admin-secondary">
+            <li>Stripe PaymentIntent: {h.stripe_payment_intent_id || "—"}</li>
+            <li>Payment method: {h.payment_method || "—"}</li>
+            <li>
+              Payment confirmed at:{" "}
+              {h.payment_confirmed_at ? new Date(h.payment_confirmed_at).toLocaleString() : "—"}
+            </li>
+            <li>
+              Payment integrity hold:{" "}
+              {h.payment_integrity_hold == null ? "—" : h.payment_integrity_hold ? "Yes" : "No"}
+            </li>
+          </ul>
+        </PremiumSectionCard>
 
-      <PageSection title="Invoice fields (Net30 / AR when used)">
-        <ul className="list-inside list-disc text-sm text-gray-700">
-          <li>Invoice status: {h.invoice_status || "—"}</li>
-          <li>Amount due: {h.invoice_amount_due ?? "—"}</li>
-          <li>Amount paid: {h.invoice_amount_paid ?? "—"}</li>
-          <li>Due at: {h.invoice_due_at ? new Date(h.invoice_due_at).toLocaleString() : "—"}</li>
-        </ul>
-      </PageSection>
+        <PremiumSectionCard title="Recorded fulfillment / inventory timestamps" dense>
+          <ul className="list-inside list-disc space-y-1 text-sm text-admin-secondary">
+            <li>Reserved: {h.inventory_reserved_at ? new Date(h.inventory_reserved_at).toLocaleString() : "—"}</li>
+            <li>Released: {h.inventory_released_at ? new Date(h.inventory_released_at).toLocaleString() : "—"}</li>
+            <li>Deducted: {h.inventory_deducted_at ? new Date(h.inventory_deducted_at).toLocaleString() : "—"}</li>
+          </ul>
+        </PremiumSectionCard>
+      </div>
 
-      <PageSection title="Identifiers">
-        <p className="font-mono text-xs text-gray-600">Order id: {h.id}</p>
-        <p className="mt-1 font-mono text-xs text-gray-600">Created by user: {h.created_by_user_id || "—"}</p>
-        <p className="mt-1 font-mono text-xs text-gray-600">Idempotency key: {h.idempotency_key || "—"}</p>
-      </PageSection>
+      <div className="mb-8 grid gap-5 lg:grid-cols-2">
+        <PremiumSectionCard title="Invoice fields (Net30 / AR when used)" dense>
+          <ul className="list-inside list-disc space-y-1 text-sm text-admin-secondary">
+            <li>Invoice status: {h.invoice_status || "—"}</li>
+            <li>Amount due: {h.invoice_amount_due ?? "—"}</li>
+            <li>Amount paid: {h.invoice_amount_paid ?? "—"}</li>
+            <li>Due at: {h.invoice_due_at ? new Date(h.invoice_due_at).toLocaleString() : "—"}</li>
+          </ul>
+        </PremiumSectionCard>
 
-      <PageSection title="Operator metadata">
-        <details className="rounded border border-gray-200 bg-gray-50 p-3">
-          <summary className="cursor-pointer text-sm font-medium text-gray-800">metadata (JSON)</summary>
-          <pre className="mt-2 max-h-64 overflow-auto text-xs text-gray-800">{metaJson}</pre>
+        <PremiumSectionCard title="Identifiers" dense>
+          <p className="font-mono text-xs text-admin-muted">Order id: {h.id}</p>
+          <p className="mt-1 font-mono text-xs text-admin-muted">Created by user: {h.created_by_user_id || "—"}</p>
+          <p className="mt-1 font-mono text-xs text-admin-muted">Idempotency key: {h.idempotency_key || "—"}</p>
+        </PremiumSectionCard>
+      </div>
+
+      <PremiumSectionCard title="Operator metadata" className="mb-8">
+        <details className={cn(adminMutedPanel, "p-3")}>
+          <summary className="cursor-pointer text-sm font-medium text-admin-primary">metadata (JSON)</summary>
+          <pre className="mt-2 max-h-64 overflow-auto text-xs text-admin-secondary">{metaJson}</pre>
         </details>
         {shipJson ? (
-          <details className="mt-3 rounded border border-gray-200 bg-gray-50 p-3">
-            <summary className="cursor-pointer text-sm font-medium text-gray-800">shipping_address (JSON)</summary>
-            <pre className="mt-2 max-h-64 overflow-auto text-xs text-gray-800">{shipJson}</pre>
+          <details className={cn(adminMutedPanel, "mt-3 p-3")}>
+            <summary className="cursor-pointer text-sm font-medium text-admin-primary">shipping_address (JSON)</summary>
+            <pre className="mt-2 max-h-64 overflow-auto text-xs text-admin-secondary">{shipJson}</pre>
           </details>
         ) : null}
-      </PageSection>
+      </PremiumSectionCard>
 
       {reorderDry.payload ? (
-        <PageSection title="Reorder-to-quote mapping (read-only indicator)">
-          <p className="text-sm text-gray-600">
-            Dry run for buyer quote cart: how many lines would add as catalog-backed quote lines vs need review or are
-            blocked. No writes.
-          </p>
-          <ul className="mt-2 list-inside list-disc text-sm text-gray-800">
+        <PremiumSectionCard
+          title="Reorder-to-quote mapping (read-only indicator)"
+          description="Dry run for buyer quote cart: how many lines would add as catalog-backed quote lines vs need review or are blocked. No writes."
+          className="mb-8"
+        >
+          <ul className="list-inside list-disc text-sm text-admin-primary">
             <li>Available: {reorderDry.payload.summary.available}</li>
             <li>Needs review: {reorderDry.payload.summary.needs_review}</li>
             <li>Unavailable: {reorderDry.payload.summary.unavailable}</li>
             <li>Snapshot-only: {reorderDry.payload.summary.snapshot_only}</li>
           </ul>
-        </PageSection>
+        </PremiumSectionCard>
       ) : null}
 
-      <PageSection title="Order lines">
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-            <thead className="border-b border-gray-100 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Qty</th>
-                <th className="px-3 py-2 text-right">Unit (minor)</th>
-                <th className="px-3 py-2 text-right">Line subtotal</th>
-                <th className="px-3 py-2 text-right">Line total</th>
-                <th className="px-3 py-2">Sellable product</th>
-                <th className="px-3 py-2">Snapshot summary</th>
-                <th className="px-3 py-2">Snapshot</th>
-              </tr>
-            </thead>
-            <tbody>
+      <PremiumSectionCard title="Order lines">
+        <TableCard>
+          {lines.length === 0 ? (
+            <EmptyState title="No line items" description="This order has no recorded line items." />
+          ) : (
+            <DetailTableShell
+              minWidth="min-w-[900px]"
+              headers={[
+                { label: "#" },
+                { label: "Qty" },
+                { label: "Unit (minor)", align: "right" },
+                { label: "Line subtotal", align: "right" },
+                { label: "Line total", align: "right" },
+                { label: "Sellable product" },
+                { label: "Snapshot summary" },
+                { label: "Snapshot" },
+              ]}
+            >
               {lines.map((ln) => (
-                <tr key={ln.id} className="border-b border-gray-50 last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs">{ln.line_number}</td>
-                  <td className="px-3 py-2 tabular-nums">{ln.quantity}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{ln.unit_price_minor}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{ln.line_subtotal_minor}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{ln.total_minor}</td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-gray-600">{ln.sellable_product_id}</td>
-                  <td className="max-w-[220px] px-3 py-2 text-xs text-gray-800">{snapshotSummary(ln.product_snapshot)}</td>
-                  <td className="px-3 py-2">
+                <tr key={ln.id} className={adminTableRowHover}>
+                  <td className={cn(adminTableCell, "px-3 py-2 font-mono text-xs")}>{ln.line_number}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2 tabular-nums")}>{ln.quantity}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2 text-right font-mono text-xs")}>{ln.unit_price_minor}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2 text-right font-mono text-xs")}>
+                    {ln.line_subtotal_minor}
+                  </td>
+                  <td className={cn(adminTableCell, "px-3 py-2 text-right font-mono text-xs")}>{ln.total_minor}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2 font-mono text-[10px] text-admin-muted")}>
+                    {ln.sellable_product_id}
+                  </td>
+                  <td className={cn(adminTableCell, "max-w-[220px] px-3 py-2 text-xs")}>
+                    {snapshotSummary(ln.product_snapshot)}
+                  </td>
+                  <td className={cn(adminTableCell, "px-3 py-2")}>
                     <details>
-                      <summary className="cursor-pointer text-xs text-blue-700">JSON</summary>
-                      <pre className="mt-1 max-h-40 max-w-xs overflow-auto text-[10px] text-gray-700">
+                      <summary className={cn("cursor-pointer text-xs", adminLink)}>JSON</summary>
+                      <pre className="mt-1 max-h-40 max-w-xs overflow-auto text-[10px] text-admin-secondary">
                         {JSON.stringify(ln.product_snapshot, null, 2)}
                       </pre>
                     </details>
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </PageSection>
+            </DetailTableShell>
+          )}
+        </TableCard>
+      </PremiumSectionCard>
     </div>
   );
 }

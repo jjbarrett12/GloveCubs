@@ -17,7 +17,20 @@ import {
   isCatalogosImportBatchHandoff,
   isCatalogosUrlImportUnifiedRow,
 } from "@/lib/admin/review-queue-catalogos-handoff";
-import { TableCard } from "@/components/admin";
+import { EmptyState, StatusBadge, TableCard } from "@/components/admin";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminFormInput,
+  adminLink,
+  adminPrimaryButton,
+  adminSecondaryButton,
+  adminTableBody,
+  adminTableHead,
+  adminTableHeadCell,
+  adminTableRowHover,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -25,17 +38,17 @@ function formatWhen(iso: string): string {
   return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
 }
 
-function statusBadgeClass(status: string): string {
-  if (status === "needs_review" || status === "review_ready" || status === "awaiting_human") {
-    return "border-amber-200 bg-amber-50 text-amber-950";
-  }
-  if (status === "converted_to_draft" || status === "promoted_to_draft" || status === "promoted") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  }
-  if (status === "dismissed" || status === "failed" || status === "blocked") {
-    return "border-slate-200 bg-slate-100 text-slate-700";
-  }
-  return "border-slate-200 bg-slate-50 text-slate-800";
+const deleteButton = cn(
+  adminSecondaryButton,
+  "border-admin-danger/40 text-admin-danger hover:bg-[var(--admin-danger-surface)]",
+);
+
+function reviewStatusForBadge(status: string): string {
+  if (status === "converted_to_draft" || status === "promoted_to_draft" || status === "promoted") return "completed";
+  if (status === "dismissed") return "cancelled";
+  if (status === "failed" || status === "blocked") return "failed";
+  if (status === "needs_review" || status === "review_ready" || status === "awaiting_human") return "pending";
+  return status;
 }
 
 function jobStatusLabel(status: string): string {
@@ -191,8 +204,8 @@ export function ProductReviewQueueClient({
 
   if (!supabaseConfigured) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-        Supabase is not configured — review queue cannot load.
+      <div className={adminAlertSurface("warning")}>
+        Database is not configured — review queue cannot load.
       </div>
     );
   }
@@ -206,9 +219,9 @@ export function ProductReviewQueueClient({
   return (
     <div className="space-y-4">
       {batchHandoff ? (
-        <div className="rounded-xl border border-[#f06232]/30 bg-[#fff7f2] px-4 py-4 text-sm text-slate-800">
-          <p className="font-semibold text-[#c2410c]">Review and publish in CatalogOS</p>
-          <p className="mt-2 leading-relaxed text-slate-700">
+        <div className={adminAlertSurface("info")}>
+          <p className="font-semibold text-admin-accent">Review and publish in CatalogOS</p>
+          <p className="mt-2 leading-relaxed text-admin-secondary">
             Bridged URL imports are staged in CatalogOS import batches. Finish review in CatalogOS — not via storefront
             promote or publish.
           </p>
@@ -218,7 +231,7 @@ export function ProductReviewQueueClient({
                 href={catalogosBatchReviewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#c2410c] hover:underline"
+                className={adminLink}
               >
                 Open this batch in CatalogOS review
               </a>
@@ -228,7 +241,7 @@ export function ProductReviewQueueClient({
                 href={catalogosReviewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#c2410c] hover:underline"
+                className={adminLink}
               >
                 CatalogOS review dashboard
               </a>
@@ -236,16 +249,14 @@ export function ProductReviewQueueClient({
           </div>
         </div>
       ) : null}
-      {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
-      ) : null}
+      {error ? <div className={adminAlertSurface("critical")}>{error}</div> : null}
 
       <TableCard>
-        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-4">
-          <h2 className="text-base font-semibold text-slate-900">
+        <div className="border-b border-admin-border bg-admin-surface-muted px-4 py-4">
+          <h2 className="text-base font-semibold text-admin-primary">
             {useUnifiedQueue ? "Unified ingestion staging" : "Clipboard URL staging"}
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
             {useUnifiedQueue
               ? "Rows keyed by staging_variant_id. Promoting creates a draft in catalog_v2 only."
               : "Legacy clipboard rows. Enable UNIFIED_REVIEW_QUEUE for Quick/Deep convergence."}
@@ -253,9 +264,10 @@ export function ProductReviewQueueClient({
         </div>
 
         {empty ? (
-          <div className="px-4 py-12 text-center text-sm text-slate-500">
-            No staging rows yet. Paste URLs under Import from URL or run a Deep crawl.
-          </div>
+          <EmptyState
+            title="No staging rows yet"
+            description="Paste URLs under Import from URL or run a Deep crawl."
+          />
         ) : useUnifiedQueue ? (
           <UnifiedTable
             rows={unifiedRows}
@@ -327,20 +339,20 @@ function UnifiedTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead className={cn(adminTableHead, "border-b border-admin-border")}>
           <tr>
-            <th className="px-4 py-3">Preview</th>
-            <th className="px-4 py-3">Title</th>
-            <th className="px-4 py-3">Mode</th>
-            <th className="px-4 py-3">Job state</th>
-            <th className="px-4 py-3">Source</th>
-            <th className="px-4 py-3">Evidence</th>
-            <th className="px-4 py-3">Review</th>
-            <th className="px-4 py-3">Created</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Preview</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Title</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Mode</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Job state</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Source</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Evidence</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Review</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Created</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3 text-right")}>Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
+        <tbody className={adminTableBody}>
           {rows.map((r) => {
             const nameEv = r.evidenceByField.name;
             const conf =
@@ -363,38 +375,33 @@ function UnifiedTable({
                 : "";
 
             return (
-              <tr key={r.stagingVariantId} className="align-top hover:bg-slate-50/80">
+              <tr key={r.stagingVariantId} className={cn("align-top", adminTableRowHover)}>
                 <td className="px-4 py-3">
                   {r.primaryImageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={r.primaryImageUrl}
                       alt=""
-                      className="h-12 w-12 rounded-lg border border-slate-200 object-cover"
+                      className="h-12 w-12 rounded-lg border border-admin-border object-cover"
                     />
                   ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-admin-border text-xs text-admin-muted">
                       —
                     </div>
                   )}
                 </td>
-                <td className="max-w-[180px] px-4 py-3 font-semibold text-slate-900">{r.title}</td>
+                <td className="max-w-[180px] px-4 py-3 font-semibold text-admin-primary">{r.title}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex rounded-full border border-[#f06232]/30 bg-[#fff7f2] px-2 py-0.5 text-xs font-semibold text-[#c2410c]">
-                    {modeLabel(r.ingestionMode)}
-                  </span>
+                  <span className="text-xs font-semibold text-admin-accent">{modeLabel(r.ingestionMode)}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusBadgeClass(r.jobStatus)}`}
-                  >
-                    {jobStatusLabel(r.jobStatus)}
-                  </span>
+                  <StatusBadge status={reviewStatusForBadge(r.jobStatus)} />
+                  <span className="sr-only">{jobStatusLabel(r.jobStatus)}</span>
                   {r.blockedReason ? (
-                    <div className="mt-1 text-xs text-amber-900">{r.blockedReason}</div>
+                    <div className="mt-1 text-xs text-admin-warning">{r.blockedReason}</div>
                   ) : null}
                   {r.duplicateOf ? (
-                    <div className="mt-1 font-mono text-xs text-slate-500">dup: {r.duplicateOf.slice(0, 8)}…</div>
+                    <div className="mt-1 font-mono text-xs text-admin-muted">dup: {r.duplicateOf.slice(0, 8)}…</div>
                   ) : null}
                 </td>
                 <td className="max-w-[200px] px-4 py-3">
@@ -402,24 +409,20 @@ function UnifiedTable({
                     href={r.sourceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="break-all font-mono text-xs text-[#c2410c] hover:underline"
+                    className={cn("break-all font-mono text-xs", adminLink)}
                   >
                     {r.sourceUrl}
                   </a>
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-600">
+                <td className="px-4 py-3 text-xs text-admin-secondary">
                   <div>{conf} · {nameEv?.sourceType ?? "—"}</div>
-                  <div className="font-mono text-[10px] text-slate-400">{r.sourceFingerprint.slice(0, 12)}…</div>
+                  <div className="font-mono text-[10px] text-admin-muted">{r.sourceFingerprint.slice(0, 12)}…</div>
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusBadgeClass(r.reviewStatus)}`}
-                  >
-                    {r.reviewStatus}
-                  </span>
-                  <div className="mt-1 text-xs text-slate-500">media: {r.mediaStatus}</div>
+                  <StatusBadge status={reviewStatusForBadge(r.reviewStatus)} />
+                  <div className="mt-1 text-xs text-admin-muted">media: {r.mediaStatus}</div>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{formatWhen(r.createdAt)}</td>
+                <td className="px-4 py-3 font-mono text-xs text-admin-muted">{formatWhen(r.createdAt)}</td>
                 <td className="px-4 py-3 text-right">
                   <QueueActions
                     canAct={canAct && !blocked && !catalogosHandoff}
@@ -485,17 +488,17 @@ function ClipboardTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[960px] border-collapse text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead className={cn(adminTableHead, "border-b border-admin-border")}>
           <tr>
-            <th className="px-4 py-3">Preview</th>
-            <th className="px-4 py-3">Title</th>
-            <th className="px-4 py-3">Source</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Created</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Preview</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Title</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Source</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Status</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3")}>Created</th>
+            <th className={cn(adminTableHeadCell, "px-4 py-3 text-right")}>Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className={adminTableBody}>
           {rows.map((r) => {
             const ex = (r.extracted ?? {}) as Record<string, unknown>;
             const catalogosRef = parseClipboardCatalogosStagingRef(ex);
@@ -516,19 +519,17 @@ function ClipboardTable({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="h-12 w-12 rounded-lg border object-cover" />
                   ) : (
-                    <div className="h-12 w-12 rounded-lg border border-dashed border-slate-300" />
+                    <div className="h-12 w-12 rounded-lg border border-dashed border-admin-border" />
                   )}
                 </td>
-                <td className="px-4 py-3 font-semibold">{title}</td>
+                <td className="px-4 py-3 font-semibold text-admin-primary">{title}</td>
                 <td className="px-4 py-3">
-                  <a href={r.product_page_url} target="_blank" rel="noreferrer" className="font-mono text-xs text-[#c2410c]">
+                  <a href={r.product_page_url} target="_blank" rel="noreferrer" className={cn("font-mono text-xs", adminLink)}>
                     {r.product_page_url}
                   </a>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${statusBadgeClass(r.review_status)}`}>
-                    {r.review_status}
-                  </span>
+                  <StatusBadge status={reviewStatusForBadge(r.review_status)} />
                 </td>
                 <td className="px-4 py-3 font-mono text-xs">{formatWhen(r.created_at)}</td>
                 <td className="px-4 py-3 text-right">
@@ -608,11 +609,11 @@ function QueueActions({
   editHref: string | null;
 }) {
   if (blocked) {
-    return <span className="text-xs text-slate-500">Blocked — cannot promote</span>;
+    return <span className="text-xs text-admin-muted">Blocked — cannot promote</span>;
   }
   if (catalogosHandoff) {
     return (
-      <div className="flex max-w-[220px] flex-col items-end gap-1.5 text-xs text-slate-700">
+      <div className="flex max-w-[220px] flex-col items-end gap-1.5 text-xs text-admin-secondary">
         <span className="text-right leading-snug">
           This URL import should be reviewed and published in CatalogOS.
         </span>
@@ -621,7 +622,7 @@ function QueueActions({
             href={catalogosBatchUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#c2410c] hover:underline"
+            className={adminLink}
           >
             Open batch in CatalogOS review
           </a>
@@ -631,7 +632,7 @@ function QueueActions({
             href={catalogosJobUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#c2410c] hover:underline"
+            className={adminLink}
           >
             View URL import job
           </a>
@@ -641,7 +642,7 @@ function QueueActions({
             href={catalogosReviewUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#c2410c] hover:underline"
+            className={adminLink}
           >
             CatalogOS review dashboard
           </a>
@@ -651,20 +652,20 @@ function QueueActions({
   }
   if (!canAct) {
     return editHref ? (
-      <Link href={editHref} className="text-xs font-semibold text-[#c2410c] hover:underline">
+      <Link href={editHref} className={cn("text-xs font-semibold", adminLink)}>
         Review / edit draft
       </Link>
     ) : (
-      <span className="text-xs text-slate-400">—</span>
+      <span className="text-xs text-admin-muted">—</span>
     );
   }
   if (promoteId === rowId) {
     return (
-      <div className="flex w-[220px] flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left">
+      <div className={cn(adminCardSurface, "flex w-[220px] flex-col gap-2 p-3 text-left")}>
         <select
           value={promoteCategory}
           onChange={(e) => onSetPromoteCategory(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+          className={cn(adminFormInput, "w-full")}
         >
           <option value="">Category…</option>
           {categories.map((c) => (
@@ -674,7 +675,7 @@ function QueueActions({
           ))}
         </select>
         {showAwaitingConfirm ? (
-          <label className="flex items-start gap-2 text-xs text-amber-950">
+          <label className="flex items-start gap-2 text-xs text-admin-warning">
             <input
               type="checkbox"
               checked={confirmAwaitingHuman}
@@ -688,11 +689,11 @@ function QueueActions({
           type="button"
           disabled={promoteBusy}
           onClick={() => void onPromote()}
-          className="rounded-lg bg-[#f06232] px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className={cn(adminPrimaryButton, "text-xs")}
         >
           {promoteBusy ? "Working…" : "Approve → draft"}
         </button>
-        <button type="button" className="text-xs text-slate-500" onClick={() => onSetPromoteId(null)}>
+        <button type="button" className="text-xs text-admin-muted" onClick={() => onSetPromoteId(null)}>
           Cancel
         </button>
       </div>
@@ -707,7 +708,7 @@ function QueueActions({
           onSetPromoteCategory("");
           onSetConfirmAwaitingHuman(false);
         }}
-        className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-sm"
+        className={cn(adminSecondaryButton, "text-xs")}
       >
         Approve / promote…
       </button>
@@ -715,7 +716,7 @@ function QueueActions({
         type="button"
         disabled={dismissId === rowId}
         onClick={() => void onDismiss()}
-        className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700"
+        className={cn(deleteButton, "text-xs")}
       >
         {dismissId === rowId ? "Dismissing…" : "Dismiss"}
       </button>

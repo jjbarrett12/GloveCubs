@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PageHeader, PageSection } from "@/components/admin";
+import { adminCardSurface, adminFocusRing, adminLink } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -50,19 +52,23 @@ export default async function ProcurementCompanyHubPage({ params }: { params: { 
             <li key={item.href}>
               <Link
                 href={item.href}
-                className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:border-gray-300 hover:shadow-md"
+                className={cn(
+                  adminCardSurface,
+                  "block p-4 transition-colors hover:bg-admin-surface-muted",
+                  adminFocusRing(),
+                )}
               >
-                <span className="font-medium text-gray-900">{item.label}</span>
-                <p className="mt-1 text-sm text-gray-500">{item.description}</p>
-                <span className="mt-2 inline-block text-sm font-medium text-blue-700">Open →</span>
+                <span className="font-medium text-admin-primary">{item.label}</span>
+                <p className="mt-1 text-sm text-admin-muted">{item.description}</p>
+                <span className={cn("mt-2 inline-block text-sm", adminLink)}>Open →</span>
               </Link>
             </li>
           ))}
         </ul>
       </PageSection>
 
-      <p className="text-sm text-gray-600">
-        <Link href="/admin/procurement" className="font-medium text-blue-700 hover:underline">
+      <p className="text-sm text-admin-secondary">
+        <Link href="/admin/procurement" className={adminLink}>
           ← Back to overview
         </Link>
       </p>

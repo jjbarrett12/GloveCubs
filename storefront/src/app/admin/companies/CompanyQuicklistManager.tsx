@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { TableCard } from "@/components/admin";
+import { EmptyState, TableCard } from "@/components/admin";
+import { DetailTableShell, adminTableRowHover } from "@/components/admin/DetailTableShell";
+import {
+  adminFormInput,
+  adminFormLabel,
+  adminLink,
+  adminPrimaryButton,
+  adminStatusBadgeClasses,
+  adminStatusTone,
+  adminTableCell,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import type { CompanyQuicklistItemRow, QuicklistCatalogSearchRow } from "@/lib/admin/admin-company-quicklist";
 
 type Props = {
@@ -9,12 +20,19 @@ type Props = {
   initialItems: CompanyQuicklistItemRow[];
 };
 
-function availabilityLabel(row: CompanyQuicklistItemRow): { text: string; className: string } {
+function availabilityStatus(row: CompanyQuicklistItemRow): string {
   const productOk = row.product_status === "active";
   const variantOk = row.variant_is_active;
-  if (productOk && variantOk) return { text: "Available", className: "bg-emerald-100 text-emerald-900" };
-  if (!productOk) return { text: "Product inactive", className: "bg-amber-100 text-amber-900" };
-  return { text: "Variant inactive", className: "bg-amber-100 text-amber-900" };
+  if (productOk && variantOk) return "active";
+  return "warning";
+}
+
+function availabilityText(row: CompanyQuicklistItemRow): string {
+  const productOk = row.product_status === "active";
+  const variantOk = row.variant_is_active;
+  if (productOk && variantOk) return "Available";
+  if (!productOk) return "Product inactive";
+  return "Variant inactive";
 }
 
 export function CompanyQuicklistManager({ companyId, initialItems }: Props) {
@@ -138,17 +156,18 @@ export function CompanyQuicklistManager({ companyId, initialItems }: Props) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        <strong>Customer glove quicklist</strong> — curated variants this customer is likely to reorder for{" "}
-        <strong>quote requests</strong>. Pricing is resolved server-side when quotes are requested; nothing here is a
-        price guarantee. This list is separate from procurement reorder memory.
+      <p className="text-sm text-admin-secondary">
+        <strong className="text-admin-primary">Customer glove quicklist</strong> — curated variants this customer is
+        likely to reorder for <strong className="text-admin-primary">quote requests</strong>. Pricing is resolved
+        server-side when quotes are requested; nothing here is a price guarantee. This list is separate from procurement
+        reorder memory.
       </p>
 
-      {msg ? <p className="text-sm text-green-700">{msg}</p> : null}
-      {err ? <p className="text-sm text-red-600">{err}</p> : null}
+      {msg ? <p className="text-sm text-admin-success">{msg}</p> : null}
+      {err ? <p className="text-sm text-admin-danger">{err}</p> : null}
 
       <div>
-        <label htmlFor="ql-search" className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <label htmlFor="ql-search" className={adminFormLabel}>
           Search active catalog (variants only)
         </label>
         <input
@@ -157,127 +176,115 @@ export function CompanyQuicklistManager({ companyId, initialItems }: Props) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Product name, slug, SKU, or size — pick a variant row to add"
-          className="mt-1 w-full max-w-xl rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm"
+          className={cn(adminFormInput, "mt-1 w-full max-w-xl")}
         />
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-admin-muted">
           Results are active catalog products/variants only. You must add a specific variant — no silent default size.
         </p>
-        {searchPending ? <p className="mt-2 text-xs text-slate-500">Searching…</p> : null}
+        {searchPending ? <p className="mt-2 text-xs text-admin-muted">Searching…</p> : null}
         {searchResults.length > 0 ? (
           <TableCard className="mt-3">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Product</th>
-                    <th className="px-3 py-2">Brand</th>
-                    <th className="px-3 py-2">SKU</th>
-                    <th className="px-3 py-2">Size</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {searchResults.map((v) => (
-                    <tr key={v.catalog_variant_id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-3 py-2 text-slate-900">{v.product_name}</td>
-                      <td className="px-3 py-2 text-slate-700">{v.brand_name ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-700">{v.variant_sku}</td>
-                      <td className="px-3 py-2 text-slate-700">{v.size_code ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="rounded-md bg-[#f06232] px-2 py-1 text-xs font-semibold text-white hover:bg-[#d8552a]"
-                          onClick={() => void addVariant(v)}
-                        >
-                          Add
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DetailTableShell
+              headers={[
+                { label: "Product" },
+                { label: "Brand" },
+                { label: "SKU" },
+                { label: "Size" },
+                { label: "" },
+              ]}
+            >
+              {searchResults.map((v) => (
+                <tr key={v.catalog_variant_id} className={adminTableRowHover}>
+                  <td className={cn(adminTableCell, "px-3 py-2")}>{v.product_name}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2")}>{v.brand_name ?? "—"}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2 font-mono text-xs")}>{v.variant_sku}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2")}>{v.size_code ?? "—"}</td>
+                  <td className={cn(adminTableCell, "px-3 py-2")}>
+                    <button type="button" className={adminPrimaryButton} onClick={() => void addVariant(v)}>
+                      Add
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </DetailTableShell>
           </TableCard>
         ) : null}
       </div>
 
       <TableCard>
         {items.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-600">
-            No glove quicklist items yet. Add variants so this customer can request quotes without searching the full
-            catalog.
-          </p>
+          <EmptyState
+            title="No glove quicklist items yet"
+            description="Add variants so this customer can request quotes without searching the full catalog."
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Product</th>
-                  <th className="px-3 py-2">Brand</th>
-                  <th className="px-3 py-2">SKU</th>
-                  <th className="px-3 py-2">Size</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Sort</th>
-                  <th className="px-3 py-2">Admin note</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((row) => {
-                  const badge = availabilityLabel(row);
-                  return (
-                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-3 py-2 font-medium text-slate-900">{row.product_name}</td>
-                      <td className="px-3 py-2 text-slate-700">{row.brand_name ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.variant_sku}</td>
-                      <td className="px-3 py-2 text-slate-700">{row.size_code ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}>
-                          {badge.text}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          defaultValue={row.sort_order}
-                          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-xs"
-                          onBlur={(e) => {
-                            const n = parseInt(e.target.value, 10);
-                            if (Number.isNaN(n) || n < 0 || n === row.sort_order) return;
-                            void saveSort(row.id, n);
-                          }}
-                        />
-                      </td>
-                      <td className="max-w-[200px] px-3 py-2">
-                        <textarea
-                          key={`${row.id}-${row.updated_at}`}
-                          defaultValue={row.admin_note ?? ""}
-                          rows={2}
-                          className="w-full rounded border border-slate-200 px-2 py-1 text-xs"
-                          onBlur={(e) => {
-                            const next = e.target.value;
-                            const prev = row.admin_note ?? "";
-                            if (next.trim() === prev.trim()) return;
-                            void saveNote(row.id, next);
-                          }}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-red-700 underline"
-                          onClick={() => void archiveItem(row.id)}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DetailTableShell
+            headers={[
+              { label: "Product" },
+              { label: "Brand" },
+              { label: "SKU" },
+              { label: "Size" },
+              { label: "Status" },
+              { label: "Sort" },
+              { label: "Admin note" },
+              { label: "" },
+            ]}
+          >
+            {items.map((row) => (
+              <tr key={row.id} className={adminTableRowHover}>
+                <td className={cn(adminTableCell, "px-3 py-2 font-medium")}>{row.product_name}</td>
+                <td className={cn(adminTableCell, "px-3 py-2")}>{row.brand_name ?? "—"}</td>
+                <td className={cn(adminTableCell, "px-3 py-2 font-mono text-xs")}>{row.variant_sku}</td>
+                <td className={cn(adminTableCell, "px-3 py-2")}>{row.size_code ?? "—"}</td>
+                <td className={cn(adminTableCell, "px-3 py-2")}>
+                  <span
+                    className={cn(
+                      "inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+                      adminStatusBadgeClasses(adminStatusTone(availabilityStatus(row))),
+                    )}
+                  >
+                    {availabilityText(row)}
+                  </span>
+                </td>
+                <td className={cn(adminTableCell, "px-3 py-2")}>
+                  <input
+                    type="number"
+                    min={0}
+                    defaultValue={row.sort_order}
+                    className={cn(adminFormInput, "w-16 px-1 py-0.5 text-xs")}
+                    onBlur={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (Number.isNaN(n) || n < 0 || n === row.sort_order) return;
+                      void saveSort(row.id, n);
+                    }}
+                  />
+                </td>
+                <td className={cn(adminTableCell, "max-w-[200px] px-3 py-2")}>
+                  <textarea
+                    key={`${row.id}-${row.updated_at}`}
+                    defaultValue={row.admin_note ?? ""}
+                    rows={2}
+                    className={cn(adminFormInput, "w-full px-2 py-1 text-xs")}
+                    onBlur={(e) => {
+                      const next = e.target.value;
+                      const prev = row.admin_note ?? "";
+                      if (next.trim() === prev.trim()) return;
+                      void saveNote(row.id, next);
+                    }}
+                  />
+                </td>
+                <td className={cn(adminTableCell, "px-3 py-2")}>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-admin-danger underline"
+                    onClick={() => void archiveItem(row.id)}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </DetailTableShell>
         )}
       </TableCard>
     </div>

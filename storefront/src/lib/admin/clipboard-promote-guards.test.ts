@@ -14,7 +14,7 @@ import {
 
 describe("clipboard-promote-guards", () => {
   it("rejects active/published status in promote body", () => {
-    expect(clipboardPromoteStatusOverrideError({ status: "active" })).toContain("cannot be published");
+    expect(clipboardPromoteStatusOverrideError({ status: "active" })).toContain("must be reviewed");
     expect(clipboardPromoteStatusOverrideError({ status: "published" })).toBeTruthy();
     expect(clipboardPromoteStatusOverrideError({ status: "draft" })).toBeNull();
   });
@@ -37,11 +37,12 @@ describe("clipboard-promote-guards", () => {
     expect(meta.import_source_url).toBe("https://example.com/glove");
   });
 
-  it("detects clipboard URL import metadata and blocks active status", () => {
+  it("detects clipboard URL import metadata and blocks non-admin active status", () => {
     const meta = { import_staging_id: "staging-1" };
     expect(isClipboardUrlImportProductMetadata(meta)).toBe(true);
     expect(isCatalogosUrlImportProductMetadata(meta)).toBe(false);
-    expect(clipboardUrlImportActiveStatusError(meta, "active")).toContain("cannot be published");
+    expect(clipboardUrlImportActiveStatusError(meta, "active")).toContain("admin review");
+    expect(clipboardUrlImportActiveStatusError(meta, "active", { adminReviewPublish: true })).toBeNull();
     expect(clipboardUrlImportActiveStatusError(meta, "draft")).toBeNull();
   });
 
@@ -63,6 +64,6 @@ describe("clipboard-promote-guards", () => {
     const meta = { catalogos_url_import_job_id: "job-456" };
     expect(isClipboardUrlImportProductMetadata(meta)).toBe(false);
     expect(isUrlImportProductMetadata(meta)).toBe(true);
-    expect(clipboardUrlImportActiveStatusError(meta, "active")).toContain("cannot be published");
+    expect(clipboardUrlImportActiveStatusError(meta, "active")).toContain("admin review");
   });
 });

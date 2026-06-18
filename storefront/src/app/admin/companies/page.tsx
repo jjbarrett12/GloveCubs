@@ -1,4 +1,4 @@
-import { PageHeader, PageSection } from "@/components/admin";
+import { ErrorState, PageHeader, PageSection } from "@/components/admin";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminCompaniesDirectory } from "@/lib/admin/admin-companies-read-model";
 import { CompaniesDirectoryClient } from "./CompaniesDirectoryClient";
@@ -26,7 +26,7 @@ export default async function AdminCompaniesPage() {
     return (
       <div>
         <PageHeader title="Customer accounts" description="Could not load customer accounts." />
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <ErrorState title="Could not load directory" message={error} />
       </div>
     );
   }

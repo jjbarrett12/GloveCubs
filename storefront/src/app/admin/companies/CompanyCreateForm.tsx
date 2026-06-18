@@ -3,6 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { OnboardingCard } from "@/components/admin";
+import {
+  adminFormInput,
+  adminFormLabel,
+  adminPrimaryButton,
+  adminSecondaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { slugifyCompanySlug } from "@/lib/admin/admin-company-write";
 
 const STATUSES = [
@@ -69,7 +76,7 @@ export function CompanyCreateForm() {
     }
   }
 
-  const fieldCls = "mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-[#f06232] focus:outline-none focus:ring-1 focus:ring-[#f06232]/30";
+  const fieldCls = cn(adminFormInput, "w-full");
 
   return (
     <div className="space-y-4">
@@ -80,8 +87,8 @@ export function CompanyCreateForm() {
         >
           <div className="space-y-4">
             <div>
-              <label htmlFor="trade_name" className="block text-sm font-medium text-slate-700">
-                Company name <span className="text-red-600">*</span>
+              <label htmlFor="trade_name" className={adminFormLabel}>
+                Company name <span className="text-admin-danger">*</span>
               </label>
               <input
                 id="trade_name"
@@ -92,14 +99,14 @@ export function CompanyCreateForm() {
               />
             </div>
             <div>
-              <label htmlFor="legal_name" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="legal_name" className={adminFormLabel}>
                 Legal name
               </label>
               <input id="legal_name" value={legalName} onChange={(e) => setLegalName(e.target.value)} className={fieldCls} />
             </div>
             <div>
-              <label htmlFor="slug" className="block text-sm font-medium text-slate-700">
-                Slug <span className="text-red-600">*</span>
+              <label htmlFor="slug" className={adminFormLabel}>
+                Slug <span className="text-admin-danger">*</span>
               </label>
               <input
                 id="slug"
@@ -109,12 +116,12 @@ export function CompanyCreateForm() {
                   setSlugTouched(true);
                   setSlug(e.target.value.toLowerCase());
                 }}
-                className={`${fieldCls} font-mono`}
+                className={cn(fieldCls, "font-mono")}
               />
-              <p className="mt-1 text-xs text-slate-500">Lowercase letters, numbers, and hyphens (2–64 characters).</p>
+              <p className="mt-1 text-xs text-admin-muted">Lowercase letters, numbers, and hyphens (2–64 characters).</p>
             </div>
             <div>
-              <label htmlFor="country_code" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="country_code" className={adminFormLabel}>
                 Country code
               </label>
               <input
@@ -123,11 +130,11 @@ export function CompanyCreateForm() {
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value.toUpperCase())}
                 placeholder="US"
-                className={`${fieldCls} w-28`}
+                className={cn(fieldCls, "w-28")}
               />
             </div>
             <div>
-              <label htmlFor="status" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="status" className={adminFormLabel}>
                 Account status
               </label>
               <select
@@ -151,7 +158,7 @@ export function CompanyCreateForm() {
           description="B2B volume tier used for site-list-derived pricing. Unit math is enforced server-side."
         >
           <div>
-            <label htmlFor="tier" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="tier" className={adminFormLabel}>
               Tier
             </label>
             <select
@@ -169,48 +176,40 @@ export function CompanyCreateForm() {
           </div>
         </OnboardingCard>
 
-        {err ? <p className="text-sm text-red-600">{err}</p> : null}
+        {err ? <p className="text-sm text-admin-danger">{err}</p> : null}
         <div className="flex flex-wrap gap-3 pt-1">
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#d8552a] disabled:opacity-50"
-          >
+          <button type="submit" disabled={pending} className={adminPrimaryButton}>
             {pending ? "Creating…" : "Create customer account"}
           </button>
-          <button
-            type="button"
-            onClick={() => router.push("/admin/companies")}
-            className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-          >
+          <button type="button" onClick={() => router.push("/admin/companies")} className={adminSecondaryButton}>
             Cancel
           </button>
         </div>
       </form>
 
       <OnboardingCard variant="disabled" title="Delivery locations" description="Next step after the account exists.">
-        <p className="text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed text-admin-secondary">
           Add delivery locations after the customer account is created. You&apos;ll manage ship-to addresses from the
           account workspace.
         </p>
       </OnboardingCard>
 
       <OnboardingCard variant="disabled" title="Preferred products" description="Next step after the account exists.">
-        <p className="text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed text-admin-secondary">
           Assign approved glove variants after the customer account is created. Preferred products are maintained
           separately from procurement reorder memory.
         </p>
       </OnboardingCard>
 
       <OnboardingCard variant="disabled" title="Team access" description="Not available in this phase.">
-        <p className="text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed text-admin-secondary">
           Invite buyers and manage roles in a future phase. Team rows always reflect sign-in identities linked to the
           customer account — not a separate CRM contact list.
         </p>
       </OnboardingCard>
 
       <OnboardingCard variant="disabled" title="Billing & payment" description="Not enabled in this phase.">
-        <p className="text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed text-admin-secondary">
           Online payment setup and billing workflows are not enabled yet. Do not enter card details or bank information
           here.
         </p>

@@ -4,11 +4,17 @@ import {
   CustomerDetailHeader,
   CustomerDetailMetrics,
   CustomerDetailTabNav,
+  EmptyState,
+  ErrorState,
   PageHeader,
   PlaceholderPanel,
   PremiumSectionCard,
+  StatusBadge,
   TableCard,
 } from "@/components/admin";
+import { DetailTableShell, adminTableRowHover } from "@/components/admin/DetailTableShell";
+import { adminLink, adminTableCell } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminCompanyDetail } from "@/lib/admin/admin-companies-read-model";
 import { fetchCompanyQuicklistItems } from "@/lib/admin/admin-company-quicklist";
@@ -47,6 +53,15 @@ function lastActivityIso(detail: {
   return maxIso(times);
 }
 
+function SummaryDt({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-admin-muted">{label}</dt>
+      <dd className="mt-0.5 text-sm text-admin-primary">{children}</dd>
+    </div>
+  );
+}
+
 export default async function AdminCompanyDetailPage({
   params,
   searchParams,
@@ -79,8 +94,11 @@ export default async function AdminCompanyDetailPage({
   if (error) {
     return (
       <div>
-        <PageHeader title="Customer detail" description="Could not load customer." />
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <PageHeader
+          title="Customer detail"
+          breadcrumb={[{ label: "Customers", href: "/admin/companies" }]}
+        />
+        <ErrorState title="Could not load customer" message={error} />
       </div>
     );
   }
@@ -99,12 +117,12 @@ export default async function AdminCompanyDetailPage({
 
   return (
     <div className="mx-auto max-w-[1480px]">
-      <nav className="mb-4 text-sm text-slate-500" aria-label="Breadcrumb">
-        <Link href="/admin/companies" className="font-medium text-slate-600 hover:text-[#f06232]">
+      <nav className="mb-4 text-sm" aria-label="Breadcrumb">
+        <Link href="/admin/companies" className={adminLink}>
           Customers
         </Link>
-        <span className="mx-1.5 text-slate-300">/</span>
-        <span className="text-slate-900">{company.trade_name}</span>
+        <span className="mx-1.5 text-admin-muted">/</span>
+        <span className="text-admin-primary">{company.trade_name}</span>
       </nav>
 
       <CustomerDetailHeader
@@ -140,23 +158,13 @@ export default async function AdminCompanyDetailPage({
           </div>
 
           <PremiumSectionCard title="Account summary" dense>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Customer account ID</dt>
-                <dd className="mt-0.5 font-mono text-xs text-slate-800">{company.id}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Country</dt>
-                <dd className="mt-0.5 text-slate-800">{company.country_code ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Created</dt>
-                <dd className="mt-0.5 text-slate-800">{new Date(company.created_at).toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Updated</dt>
-                <dd className="mt-0.5 text-slate-800">{new Date(company.updated_at).toLocaleString()}</dd>
-              </div>
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryDt label="Customer account ID">
+                <span className="font-mono text-xs">{company.id}</span>
+              </SummaryDt>
+              <SummaryDt label="Country">{company.country_code ?? "—"}</SummaryDt>
+              <SummaryDt label="Created">{new Date(company.created_at).toLocaleString()}</SummaryDt>
+              <SummaryDt label="Updated">{new Date(company.updated_at).toLocaleString()}</SummaryDt>
             </dl>
           </PremiumSectionCard>
 
@@ -167,82 +175,62 @@ export default async function AdminCompanyDetailPage({
             <div className="grid gap-5 lg:grid-cols-2">
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Quote requests</h4>
-                  <Link
-                    href={`/admin/companies/${companyId}?tab=activity`}
-                    scroll={false}
-                    className="text-xs font-semibold text-[#f06232] hover:underline"
-                  >
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Quote requests</h4>
+                  <Link href={`/admin/companies/${companyId}?tab=activity`} scroll={false} className={cn("text-xs font-semibold", adminLink)}>
                     View all
                   </Link>
                 </div>
                 <TableCard>
                   {previewQuotes.length === 0 ? (
-                    <p className="px-4 py-6 text-center text-sm text-slate-500">No linked quote requests.</p>
+                    <EmptyState title="No linked quote requests" className="py-6" />
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2">Status</th>
-                            <th className="px-3 py-2">Contact</th>
-                            <th className="px-3 py-2">Submitted</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewQuotes.map((q) => (
-                            <tr key={q.id} className="border-b border-slate-100 last:border-0">
-                              <td className="px-3 py-2 text-slate-800">{q.status}</td>
-                              <td className="px-3 py-2 text-slate-700">
-                                {[q.contact_name, q.email].filter(Boolean).join(" · ") || "—"}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-slate-600">
-                                {q.submitted_at
-                                  ? new Date(q.submitted_at).toLocaleString()
-                                  : new Date(q.created_at).toLocaleString()}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DetailTableShell headers={[{ label: "Status" }, { label: "Contact" }, { label: "Submitted" }]}>
+                      {previewQuotes.map((q) => (
+                        <tr key={q.id} className={adminTableRowHover}>
+                          <td className={cn(adminTableCell, "px-3 py-2")}>
+                            <StatusBadge status={q.status} />
+                          </td>
+                          <td className={cn(adminTableCell, "px-3 py-2")}>
+                            {[q.contact_name, q.email].filter(Boolean).join(" · ") || "—"}
+                          </td>
+                          <td className={cn(adminTableCell, "px-3 py-2 text-xs")}>
+                            {q.submitted_at
+                              ? new Date(q.submitted_at).toLocaleString()
+                              : new Date(q.created_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </DetailTableShell>
                   )}
                 </TableCard>
               </div>
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Order records</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Order records</h4>
                   <Link
                     href={`/admin/orders?company_id=${encodeURIComponent(companyId)}`}
-                    className="text-xs font-semibold text-[#f06232] hover:underline"
+                    className={cn("text-xs font-semibold", adminLink)}
                   >
                     View order records
                   </Link>
                 </div>
                 <TableCard>
                   {previewOrders.length === 0 ? (
-                    <p className="px-4 py-6 text-center text-sm text-slate-500">No order records.</p>
+                    <EmptyState title="No order records" className="py-6" />
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2">Order #</th>
-                            <th className="px-3 py-2">Status</th>
-                            <th className="px-3 py-2">Placed</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewOrders.map((o) => (
-                            <tr key={o.id} className="border-b border-slate-100 last:border-0">
-                              <td className="px-3 py-2 font-mono text-slate-800">{o.order_number}</td>
-                              <td className="px-3 py-2 text-slate-700">{o.status}</td>
-                              <td className="px-3 py-2 text-xs text-slate-600">{new Date(o.placed_at).toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DetailTableShell headers={[{ label: "Order #" }, { label: "Status" }, { label: "Placed" }]}>
+                      {previewOrders.map((o) => (
+                        <tr key={o.id} className={adminTableRowHover}>
+                          <td className={cn(adminTableCell, "px-3 py-2 font-mono")}>{o.order_number}</td>
+                          <td className={cn(adminTableCell, "px-3 py-2")}>
+                            <StatusBadge status={o.status} />
+                          </td>
+                          <td className={cn(adminTableCell, "px-3 py-2 text-xs")}>
+                            {new Date(o.placed_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </DetailTableShell>
                   )}
                 </TableCard>
               </div>
@@ -250,9 +238,9 @@ export default async function AdminCompanyDetailPage({
           </PremiumSectionCard>
 
           {latest_quote_contact?.email || latest_quote_contact?.contact_name ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-admin-muted">
               Latest quote contact (snapshot):{" "}
-              <span className="font-medium text-slate-700">
+              <span className="font-medium text-admin-secondary">
                 {[latest_quote_contact.contact_name, latest_quote_contact.email].filter(Boolean).join(" · ")}
               </span>
             </p>
@@ -266,7 +254,7 @@ export default async function AdminCompanyDetailPage({
           description="Ship-to destinations for this customer account. Changes apply to operational fulfillment context only."
         >
           {shipTos.error ? (
-            <p className="text-sm text-red-600">Could not load delivery locations: {shipTos.error}</p>
+            <ErrorState title="Could not load delivery locations" message={shipTos.error} className="py-6" />
           ) : (
             <CompanyShipToAddressesManager companyId={companyId} initialAddresses={shipTos.rows} />
           )}
@@ -290,36 +278,28 @@ export default async function AdminCompanyDetailPage({
           >
             <TableCard>
               {recent_quotes.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-slate-500">No linked quote requests.</p>
+                <EmptyState title="No linked quote requests" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-2.5">Status</th>
-                        <th className="px-4 py-2.5">Contact</th>
-                        <th className="px-4 py-2.5">Lines</th>
-                        <th className="px-4 py-2.5">Submitted</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recent_quotes.map((q) => (
-                        <tr key={q.id} className="border-b border-slate-100 last:border-0">
-                          <td className="px-4 py-2.5 text-slate-800">{q.status}</td>
-                          <td className="px-4 py-2.5 text-slate-700">
-                            {[q.contact_name, q.email].filter(Boolean).join(" · ") || "—"}
-                          </td>
-                          <td className="px-4 py-2.5 tabular-nums text-slate-800">{q.line_count}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-600">
-                            {q.submitted_at
-                              ? new Date(q.submitted_at).toLocaleString()
-                              : new Date(q.created_at).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DetailTableShell
+                  headers={[{ label: "Status" }, { label: "Contact" }, { label: "Lines" }, { label: "Submitted" }]}
+                >
+                  {recent_quotes.map((q) => (
+                    <tr key={q.id} className={adminTableRowHover}>
+                      <td className={cn(adminTableCell, "px-4 py-2.5")}>
+                        <StatusBadge status={q.status} />
+                      </td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5")}>
+                        {[q.contact_name, q.email].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 tabular-nums")}>{q.line_count}</td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 text-xs")}>
+                        {q.submitted_at
+                          ? new Date(q.submitted_at).toLocaleString()
+                          : new Date(q.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </DetailTableShell>
               )}
             </TableCard>
           </PremiumSectionCard>
@@ -331,46 +311,40 @@ export default async function AdminCompanyDetailPage({
             <div className="mb-3 flex justify-end">
               <Link
                 href={`/admin/orders?company_id=${encodeURIComponent(companyId)}`}
-                className="text-sm font-semibold text-[#f06232] hover:underline"
+                className={cn("text-sm font-semibold", adminLink)}
               >
                 View order records
               </Link>
             </div>
             <TableCard>
               {recent_orders.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-slate-500">No order records.</p>
+                <EmptyState title="No order records" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-2.5">Order #</th>
-                        <th className="px-4 py-2.5">Status</th>
-                        <th className="px-4 py-2.5">Placed</th>
-                        <th className="px-4 py-2.5">View</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recent_orders.map((o) => (
-                        <tr key={o.id} className="border-b border-slate-100 last:border-0">
-                          <td className="px-4 py-2.5 font-mono text-slate-800">{o.order_number}</td>
-                          <td className="px-4 py-2.5 text-slate-700">{o.status}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-600">
-                            {new Date(o.placed_at).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <Link
-                              href={`/admin/orders/${o.id}`}
-                              className="text-xs font-medium text-[#f06232] underline"
-                            >
-                              Open
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DetailTableShell
+                  headers={[
+                    { label: "Order #" },
+                    { label: "Status" },
+                    { label: "Placed" },
+                    { label: "View" },
+                  ]}
+                >
+                  {recent_orders.map((o) => (
+                    <tr key={o.id} className={adminTableRowHover}>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 font-mono")}>{o.order_number}</td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5")}>
+                        <StatusBadge status={o.status} />
+                      </td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 text-xs")}>
+                        {new Date(o.placed_at).toLocaleString()}
+                      </td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5")}>
+                        <Link href={`/admin/orders/${o.id}`} className={cn("text-xs font-medium", adminLink)}>
+                          Open
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </DetailTableShell>
               )}
             </TableCard>
           </PremiumSectionCard>
@@ -385,37 +359,29 @@ export default async function AdminCompanyDetailPage({
           >
             <TableCard>
               {members.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-slate-500">No team members linked to this customer account.</p>
+                <EmptyState title="No team members" description="No team members linked to this customer account." />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-2.5">Role</th>
-                        <th className="px-4 py-2.5">Email</th>
-                        <th className="px-4 py-2.5">User ID</th>
-                        <th className="px-4 py-2.5">Joined</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {members.map((m) => (
-                        <tr key={m.id} className="border-b border-slate-100 last:border-0">
-                          <td className="px-4 py-2.5 capitalize text-slate-800">{m.role}</td>
-                          <td className="px-4 py-2.5 text-slate-700">{m.email ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{m.user_id}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-600">{new Date(m.joined_at).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DetailTableShell
+                  headers={[{ label: "Role" }, { label: "Email" }, { label: "User ID" }, { label: "Joined" }]}
+                >
+                  {members.map((m) => (
+                    <tr key={m.id} className={adminTableRowHover}>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 capitalize")}>{m.role}</td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5")}>{m.email ?? "—"}</td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 font-mono text-xs text-admin-muted")}>{m.user_id}</td>
+                      <td className={cn(adminTableCell, "px-4 py-2.5 text-xs")}>
+                        {new Date(m.joined_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </DetailTableShell>
               )}
             </TableCard>
           </PremiumSectionCard>
 
           <PlaceholderPanel title="Invites coming soon">
             <p>Self-service invites and role management for team access are not enabled in this phase.</p>
-            <p className="text-slate-500">Operators continue to manage access through your established identity processes.</p>
+            <p className="text-admin-muted">Operators continue to manage access through your established identity processes.</p>
           </PlaceholderPanel>
         </div>
       ) : null}
@@ -425,14 +391,16 @@ export default async function AdminCompanyDetailPage({
           <PremiumSectionCard title="Online payments" description="Card capture and saved payment methods are not available here.">
             <PlaceholderPanel title="Not enabled">
               <p>Online payment setup is not enabled yet. Do not enter card details in the admin workspace.</p>
-              <p className="text-slate-500">When enabled, payment setup will use hosted provider flows only (no raw card data in GloveCubs).</p>
+              <p className="text-admin-muted">
+                When enabled, payment setup will use hosted provider flows only (no raw card data in GloveCubs).
+              </p>
             </PlaceholderPanel>
           </PremiumSectionCard>
 
           <PremiumSectionCard title="Billing profile" description="Accounts payable context for this customer account.">
             <PlaceholderPanel title="Future phase">
               <p>Billing workflows will be configured in a future phase.</p>
-              <p className="text-slate-500">There is no billing address or terms editor connected to this screen yet.</p>
+              <p className="text-admin-muted">There is no billing address or terms editor connected to this screen yet.</p>
             </PlaceholderPanel>
           </PremiumSectionCard>
         </div>

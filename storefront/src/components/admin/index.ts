@@ -21,3 +21,5 @@ export { OnboardingCard } from "./OnboardingCard";
 export { SetupChecklist } from "./SetupChecklist";
 export { CustomerAccountCard } from "./CustomerAccountCard";
 export { ContaminationExclusionNotice } from "./ContaminationExclusionNotice";
+export { AdminHealthBanner } from "./AdminHealthBanner";
+export { ModuleUnavailableState } from "./ModuleUnavailableState";

@@ -1,12 +1,18 @@
-import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
+import type { ImportDraftProductV1, ImportDraftVariantV1 } from "@/lib/admin/import-draft-types";
 import { normalizeSizeCode } from "@/lib/admin/import-draft-mapper";
+import { sortGloveSizeCodes } from "@/lib/admin/glove-size-normalization";
 import { SKU_PROPOSAL_SAFE_CONFIDENCE } from "@/lib/admin/variant-sku-intelligence";
+
+export type ManufacturerSkuSource = "imported" | "derived" | "manual" | "missing";
 
 export type EditorVariantRow = {
   id?: string;
   sizeCode: string;
   variantSku: string;
   listPrice: string;
+  manufacturerSku?: string;
+  manufacturerSkuSource?: ManufacturerSkuSource;
+  manufacturerSkuNeedsReview?: boolean;
 };
 
 export type VariantProposal = {
@@ -17,10 +23,54 @@ export type VariantProposal = {
   warnings: string[];
 };
 
-const STANDARD_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
+const STANDARD_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"] as const;
 
 function normSize(code: string): string {
   return code.trim().toUpperCase();
+}
+
+/** Sort variant rows in canonical glove size order; unknown sizes last. */
+export function sortVariantsByGloveSize(rows: EditorVariantRow[]): EditorVariantRow[] {
+  const codes = rows.map((r) => normSize(r.sizeCode || "UNKNOWN"));
+  const sortedCodes = sortGloveSizeCodes(codes);
+  const order = new Map(sortedCodes.map((c, i) => [c, i]));
+  return [...rows].sort((a, b) => {
+    const ak = normSize(a.sizeCode || "UNKNOWN");
+    const bk = normSize(b.sizeCode || "UNKNOWN");
+    const ra = order.get(ak) ?? 999;
+    const rb = order.get(bk) ?? 999;
+    if (ra !== rb) return ra - rb;
+    return ak.localeCompare(bk);
+  });
+}
+
+function inferManufacturerSkuSource(draftVar?: ImportDraftVariantV1): ManufacturerSkuSource {
+  if (!draftVar?.manufacturer_sku?.trim() && !draftVar?.source_sku?.trim()) return "missing";
+  const src = draftVar.sku_proposal_source?.trim().toLowerCase() ?? "";
+  if (src.includes("family") || src.includes("deriv")) return "derived";
+  return "imported";
+}
+
+export function manufacturerFieldsFromDraftVariant(
+  draftVar?: ImportDraftVariantV1
+): Pick<EditorVariantRow, "manufacturerSku" | "manufacturerSkuSource" | "manufacturerSkuNeedsReview"> {
+  const sku = draftVar?.manufacturer_sku?.trim() || draftVar?.source_sku?.trim() || "";
+  if (!sku) {
+    return { manufacturerSku: "", manufacturerSkuSource: "missing", manufacturerSkuNeedsReview: true };
+  }
+  return {
+    manufacturerSku: sku,
+    manufacturerSkuSource: inferManufacturerSkuSource(draftVar),
+    manufacturerSkuNeedsReview: false,
+  };
+}
+
+export function hasManualVariantSkuEdits(rows: EditorVariantRow[]): boolean {
+  return rows.some((r) => r.manufacturerSkuSource === "manual" || Boolean(r.variantSku.trim()));
+}
+
+export function hasManualManufacturerSkuEdits(rows: EditorVariantRow[]): boolean {
+  return rows.some((r) => r.manufacturerSkuSource === "manual");
 }
 
 function dedupeBySize(rows: EditorVariantRow[]): EditorVariantRow[] {
@@ -73,7 +123,7 @@ function hasExplicitOneSizeEvidence(draft: ImportDraftProductV1): boolean {
 export function proposeVariantsFromImport(
   draft: ImportDraftProductV1,
   existing: EditorVariantRow[],
-  options?: { sizesAvailable?: string[] | null; replaceOs?: boolean }
+  options?: { sizesAvailable?: string[] | null; replaceOs?: boolean; preserveManualSkus?: boolean }
 ): VariantProposal {
   const warnings: string[] = [];
   let importCodes = collectImportSizeCodes(draft, options?.sizesAvailable);
@@ -106,10 +156,20 @@ export function proposeVariantsFromImport(
   const added: string[] = [];
   const preserved: string[] = [];
 
+  importCodes = sortGloveSizeCodes(importCodes);
+
   for (const code of importCodes) {
     const prev = existingBySize.get(code);
     if (prev) {
-      proposed.push({ ...prev, sizeCode: code });
+      const draftVar = draft.variants.find((v) => normSize(v.normalized_size_code) === code);
+      const preserveManual = options?.preserveManualSkus !== false;
+      const preserveMfr = preserveManual && prev.manufacturerSkuSource === "manual";
+      proposed.push({
+        ...prev,
+        sizeCode: code,
+        ...(preserveMfr ? {} : manufacturerFieldsFromDraftVariant(draftVar)),
+        variantSku: preserveManual && prev.variantSku.trim() ? prev.variantSku : prev.variantSku,
+      });
       preserved.push(code);
     } else {
       const draftVar = draft.variants.find((v) => normSize(v.normalized_size_code) === code);
@@ -123,6 +183,7 @@ export function proposeVariantsFromImport(
         sizeCode: code,
         variantSku: proposedSku,
         listPrice: draftVar?.list_price ?? "",
+        ...manufacturerFieldsFromDraftVariant(draftVar),
       });
       added.push(code);
     }
@@ -137,7 +198,7 @@ export function proposeVariantsFromImport(
   }
 
   return {
-    proposed: dedupeBySize(proposed),
+    proposed: sortVariantsByGloveSize(dedupeBySize(proposed)),
     added,
     preserved,
     removedOs,
@@ -154,6 +215,12 @@ export function variantReadinessIssues(rows: EditorVariantRow[]): string[] {
   const dupeSkus = skus.filter((s, i) => skus.indexOf(s) !== i);
   if (dupeSkus.length > 0) {
     issues.push(`Duplicate variant SKUs: ${Array.from(new Set(dupeSkus)).join(", ")}`);
+  }
+  const mfrSkus = rows
+    .map((r) => r.manufacturerSku?.trim().toUpperCase())
+    .filter(Boolean) as string[];
+  if (mfrSkus.length > 1 && new Set(mfrSkus).size < mfrSkus.length) {
+    issues.push(`Duplicate manufacturer SKUs across sizes: ${Array.from(new Set(mfrSkus.filter((s, i) => mfrSkus.indexOf(s) !== i))).join(", ")}`);
   }
   if (rows.some((r) => normSize(r.sizeCode) === "UNKNOWN")) {
     issues.push("UNKNOWN size variant present");

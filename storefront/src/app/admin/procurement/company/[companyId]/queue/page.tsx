@@ -1,11 +1,18 @@
-import Link from "next/link";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchApprovedRecommendations, fetchRecommendationReviewQueueEnriched } from "@/lib/procurement/procurement-workspace-read-models";
 import { ReviewQueueRow } from "@/app/admin/procurement/ReviewQueueRow";
 import { ApprovedReorderRow } from "@/app/admin/procurement/ApprovedReorderRow";
-import { PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
+import { ProcurementTableShell } from "@/app/admin/procurement/_ProcurementTableShell";
+import { ErrorState, PageHeader, PageSection, TableCard, EmptyState } from "@/components/admin";
 
 export const dynamic = "force-dynamic";
+
+const NOT_CONFIGURED = (
+  <ErrorState
+    title="Database not configured"
+    message="Procurement review data cannot be loaded in this environment. Review Admin Health for configuration status."
+  />
+);
 
 export default async function ProcurementQueuePage({ params }: { params: { companyId: string } }) {
   const { companyId } = params;
@@ -20,9 +27,7 @@ export default async function ProcurementQueuePage({ params }: { params: { compa
             { label: "Queue" },
           ]}
         />
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Supabase not configured.
-        </div>
+        {NOT_CONFIGURED}
       </div>
     );
   }
@@ -46,25 +51,21 @@ export default async function ProcurementQueuePage({ params }: { params: { compa
           {queue.length === 0 ? (
             <EmptyState title="No items in review queue" description="Nothing pending for this company." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="p-3">Id</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Source product</th>
-                    <th className="p-3">Candidate</th>
-                    <th className="p-3 text-right">Δ / basis</th>
-                    <th className="p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {queue.map((row) => (
-                    <ReviewQueueRow key={String(row.id)} row={row} companyId={companyId} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProcurementTableShell
+              minWidth="min-w-[720px]"
+              headers={[
+                { label: "Id" },
+                { label: "Status" },
+                { label: "Source product" },
+                { label: "Candidate" },
+                { label: "Δ / basis", align: "right" },
+                { label: "Actions" },
+              ]}
+            >
+              {queue.map((row) => (
+                <ReviewQueueRow key={String(row.id)} row={row} companyId={companyId} />
+              ))}
+            </ProcurementTableShell>
           )}
         </TableCard>
       </PageSection>
@@ -77,23 +78,19 @@ export default async function ProcurementQueuePage({ params }: { params: { compa
           {approved.length === 0 ? (
             <EmptyState title="None approved yet" description="Approved rows appear here before reorder promotion." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="p-3">Id</th>
-                    <th className="p-3">Source product</th>
-                    <th className="p-3 text-right">Δ / basis</th>
-                    <th className="p-3">Reorder</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {approved.map((row) => (
-                    <ApprovedReorderRow key={String(row.id)} row={row} companyId={companyId} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProcurementTableShell
+              minWidth="min-w-[560px]"
+              headers={[
+                { label: "Id" },
+                { label: "Source product" },
+                { label: "Δ / basis", align: "right" },
+                { label: "Reorder" },
+              ]}
+            >
+              {approved.map((row) => (
+                <ApprovedReorderRow key={String(row.id)} row={row} companyId={companyId} />
+              ))}
+            </ProcurementTableShell>
           )}
         </TableCard>
       </PageSection>

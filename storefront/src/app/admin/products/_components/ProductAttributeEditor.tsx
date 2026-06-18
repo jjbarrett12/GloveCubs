@@ -2,6 +2,14 @@
 
 import * as React from "react";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
+import {
+  adminAlertSurface,
+  adminFormInput,
+  adminLink,
+  adminMutedPanel,
+  adminStatusBadgeClasses,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import type { AttributeDefinitionRow } from "@/lib/admin/product-attribute-sync";
 import { GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS } from "@/lib/catalog/catalog-facet-registry";
 import {
@@ -21,13 +29,14 @@ import {
 } from "@/lib/admin/disposable-attribute-controls";
 import type { LegacyMetadataField } from "@/lib/admin/legacy-metadata-migration";
 
-const lbl = "text-xs font-semibold text-slate-600";
-const field =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20";
-const fieldBlocking =
-  "mt-1 w-full rounded-lg border-2 border-red-400 bg-red-50/40 px-2.5 py-2 text-sm text-slate-900 shadow-inner focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200";
-const wrapBlocking = "rounded-lg border-2 border-red-400 bg-red-50/40 p-2.5";
-const wrapMissing = "rounded-lg border border-amber-300 bg-amber-50/60 p-2.5";
+const lbl = "text-xs font-semibold text-admin-secondary";
+const field = cn(adminFormInput, "mt-1 w-full rounded-lg shadow-inner");
+const fieldBlocking = cn(
+  adminFormInput,
+  "mt-1 w-full rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] shadow-inner focus:border-admin-danger focus:ring-admin-danger/30",
+);
+const wrapBlocking = "rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] p-2.5";
+const wrapMissing = "rounded-lg border border-admin-warning/30 bg-[var(--admin-warning-surface)] p-2.5";
 
 const DISPOSABLE_CATEGORY_SLUG = "disposable_gloves";
 
@@ -62,7 +71,7 @@ function YesNoSelect({
     <label className={`block ${blocked ? wrapBlocking : ""}`}>
       <span className={lbl}>
         {label}
-        {blocked ? <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span> : null}
+        {blocked ? <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span> : null}
       </span>
       <select
         value={value}
@@ -87,8 +96,8 @@ function DisposableQuickControls({
   blockingKeys: Set<string>;
 }) {
   return (
-    <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Quick specs</p>
+    <div className={cn(adminMutedPanel, "mb-4 p-3")}>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-admin-muted">Quick specs</p>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <YesNoSelect
           label="Powder Free"
@@ -168,11 +177,12 @@ function CertificationChipGroups({
         key={v}
         type="button"
         onClick={() => onToggle(v)}
-        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+        className={cn(
+          "rounded-full border px-2.5 py-1 text-xs font-medium transition",
           on
-            ? "border-[#f06232]/40 bg-[#fff7f2] text-[#c2410c]"
-            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-        }`}
+            ? cn("border-admin-accent/40 bg-admin-accent-soft text-admin-accent", adminStatusBadgeClasses("accent"))
+            : "border-admin-border bg-admin-surface text-admin-secondary hover:border-admin-accent/40",
+        )}
       >
         {formatAttributeValueLabel(def.attributeKey, v)}
       </button>
@@ -183,17 +193,17 @@ function CertificationChipGroups({
     <div className={`sm:col-span-2 ${isBlocking ? wrapBlocking : isMissingFilter ? wrapMissing : ""}`}>
       <span className={lbl}>
         {def.label}
-        {def.isRequired ? <span className="text-red-600"> *</span> : null}
+        {def.isRequired ? <span className="text-admin-danger"> *</span> : null}
         {isBlocking ? (
-          <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
         ) : isMissingFilter ? (
-          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-warning">Missing filter</span>
         ) : null}
       </span>
       <div className="mt-2 space-y-3">
         {groups.map((g) => (
           <div key={g.title}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{g.title}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-muted">{g.title}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">{g.slugs.map(renderChip)}</div>
           </div>
         ))}
@@ -231,7 +241,7 @@ export function ProductAttributeEditor({
   if (!categoryId.trim()) {
     return (
       <PremiumSectionCard title="Storefront filter attributes" description="Select a category to load governed attributes." dense>
-        <p className="text-sm text-slate-500">Category is required before filter attributes can be edited.</p>
+        <p className="text-sm text-admin-muted">Category is required before filter attributes can be edited.</p>
       </PremiumSectionCard>
     );
   }
@@ -239,7 +249,7 @@ export function ProductAttributeEditor({
   if (definitions.length === 0) {
     return (
       <PremiumSectionCard title="Storefront filter attributes" dense>
-        <p className="text-sm text-slate-500">No filterable attribute definitions for this category.</p>
+        <p className="text-sm text-admin-muted">No filterable attribute definitions for this category.</p>
       </PremiumSectionCard>
     );
   }
@@ -268,15 +278,15 @@ export function ProductAttributeEditor({
       dense
     >
       {legacyFields.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+        <div className={cn(adminAlertSurface("warning", "mb-4 text-sm"))}>
           <p className="font-medium">Legacy metadata values detected</p>
-          <p className="mt-1 text-xs text-amber-900/90">
+          <p className="mt-1 text-xs text-admin-secondary">
             {legacyFields.map((f) => `${f.attrKey} (${f.rawValue})`).join(", ")} — not in product_attributes yet.
           </p>
           <button
             type="button"
             onClick={onMigrateLegacy}
-            className="mt-2 text-xs font-semibold text-[#c2410c] hover:underline"
+            className={cn("mt-2 text-xs font-semibold", adminLink)}
           >
             Migrate legacy metadata → storefront attributes
           </button>
@@ -290,7 +300,7 @@ export function ProductAttributeEditor({
       <div className="space-y-5">
         {grouped.map(([group, defs]) => (
           <div key={group}>
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{group}</h4>
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-admin-muted">{group}</h4>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {defs.map((def) => {
                 const key = def.attributeKey;
@@ -322,11 +332,11 @@ export function ProductAttributeEditor({
                     >
                       <span className={lbl}>
                         {def.label}
-                        {def.isRequired ? <span className="text-red-600"> *</span> : null}
+                        {def.isRequired ? <span className="text-admin-danger"> *</span> : null}
                         {isBlocking ? (
-                          <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                          <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
                         ) : isMissingFilter ? (
-                          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
+                          <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-warning">Missing filter</span>
                         ) : null}
                       </span>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -337,11 +347,15 @@ export function ProductAttributeEditor({
                               key={v}
                               type="button"
                               onClick={() => toggleMulti(key, v)}
-                              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                              className={cn(
+                                "rounded-full border px-2.5 py-1 text-xs font-medium transition",
                                 on
-                                  ? "border-[#f06232]/40 bg-[#fff7f2] text-[#c2410c]"
-                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                              }`}
+                                  ? cn(
+                                      "border-admin-accent/40 bg-admin-accent-soft text-admin-accent",
+                                      adminStatusBadgeClasses("accent"),
+                                    )
+                                  : "border-admin-border bg-admin-surface text-admin-secondary hover:border-admin-accent/40",
+                              )}
                             >
                               {formatAttributeValueLabel(key, v)}
                             </button>
@@ -360,11 +374,11 @@ export function ProductAttributeEditor({
                   >
                     <span className={lbl}>
                       {def.label}
-                      {def.isRequired ? <span className="text-red-600"> *</span> : null}
+                      {def.isRequired ? <span className="text-admin-danger"> *</span> : null}
                       {isBlocking ? (
-                        <span className="ml-1.5 text-[10px] font-bold uppercase text-red-700">Required</span>
+                        <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
                       ) : isMissingFilter ? (
-                        <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">Missing filter</span>
+                        <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-warning">Missing filter</span>
                       ) : null}
                     </span>
                     <select

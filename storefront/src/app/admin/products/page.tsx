@@ -11,7 +11,18 @@ import {
   TableCard,
   TableToolbar,
   EmptyState,
+  ErrorState,
 } from "@/components/admin";
+import {
+  adminAlertSurface,
+  adminFormInput,
+  adminFormLabel,
+  adminLink,
+  adminMutedPanel,
+  adminPrimaryButton,
+  adminSecondaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { ProductsCommandActions } from "@/app/admin/products/_components/ProductsCommandActions";
 import { ProductsWorkspaceTabs } from "@/app/admin/products/_components/ProductsWorkspaceTabs";
 import { listClipboardStaging } from "@/lib/admin/clipboard-url-staging";
@@ -55,6 +66,7 @@ export default async function AdminProductsPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const tab = parseWorkspaceTab(searchParams);
+  const published = searchParams.published === "1" || searchParams.published === "true";
   const qs = parseAdminProductListQuery(searchParams);
   const listQs = { ...qs, filters: { ...qs.filters } };
   if (tab === "products") listQs.status = "active";
@@ -116,7 +128,7 @@ export default async function AdminProductsPage({
   const withWarnings = result.rows.filter((r) => r.warnings.length > 0).length;
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Products"
         description="Manage parents, variants, and media. Clipboard staging never auto-publishes; use Import for deeper supplier URL runs."
@@ -128,7 +140,7 @@ export default async function AdminProductsPage({
                 href={`${catalogosBase}/dashboard/url-import`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+                className={cn(adminSecondaryButton, "inline-flex w-full items-center justify-center text-xs sm:w-auto")}
               >
                 Open catalog sync (URL import)
               </a>
@@ -137,7 +149,14 @@ export default async function AdminProductsPage({
         }
       />
 
-      <ProductsWorkspaceTabs activeTab={tab} variant="default" />
+      <ProductsWorkspaceTabs activeTab={tab} />
+
+      {published ? (
+        <div role="status" className={cn(adminAlertSurface("success", "mb-4"))}>
+          Product published to the active catalog. Find it under the <strong>Products</strong> tab (published /
+          active). Draft imports remain under <strong>Drafts</strong> until you publish them.
+        </div>
+      ) : null}
 
       {!isUrlImports && catalogOverview?.configured ? (
         <StatGrid columns={5} className="mb-6 gap-4">
@@ -175,27 +194,29 @@ export default async function AdminProductsPage({
       ) : null}
 
       {!result.configured ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Supabase is not configured. Set credentials to load the product grid.
-        </div>
+        <ErrorState
+          className="mb-4"
+          title="Database not configured"
+          message="Product grid cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
       ) : null}
 
       {result.error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{result.error}</div>
+        <div className={cn(adminAlertSurface("critical", "mb-4"))}>{result.error}</div>
       ) : null}
 
       {result.scanLimited ? (
-        <div className="mb-4 rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+        <div className={cn(adminAlertSurface("warning", "mb-4"))}>
           Governance or search scan capped at 5,000 products by recency. Refine filters or search to narrow results.
         </div>
       ) : null}
 
       {isUrlImports ? (
         <div className="mb-6 space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-700">
-            <strong className="text-slate-900">Clipboard URLs</strong> — stage distributor or manufacturer PDP links, review extracted evidence,
-            then promote to a <em className="font-semibold text-[#c2410c]">draft</em> catalog product. For full-site crawls, use{" "}
-            <Link href="/admin/products/import/url" className="font-semibold text-[#e5582d] underline decoration-[#f06232]/40 underline-offset-2 hover:text-[#c2410c]">
+          <div className={cn(adminMutedPanel, "border-solid px-4 py-4 text-sm text-admin-secondary")}>
+            <strong className="text-admin-primary">Clipboard URLs</strong> — stage distributor or manufacturer PDP links, review extracted evidence,
+            then promote to a <em className="font-semibold text-admin-accent">draft</em> catalog product. For full-site crawls, use{" "}
+            <Link href="/admin/products/import/url" className={adminLink}>
               Import from URL (tools)
             </Link>{" "}
             or Catalog sync tools.
@@ -221,26 +242,26 @@ export default async function AdminProductsPage({
           </StatGrid>
 
           <TableCard className="mb-6">
-        <form method="get" className="space-y-5 border-b border-slate-100 bg-slate-50/50 p-5">
+        <form method="get" className={cn(adminMutedPanel, "space-y-5 border-solid border-b border-admin-border p-5")}>
           {tab ? <input type="hidden" name="tab" value={tab} /> : null}
           <div className="grid gap-4 md:grid-cols-12 md:items-end">
             <div className="md:col-span-4">
-              <label className="block text-xs font-semibold text-slate-600">Search</label>
+              <label className={adminFormLabel}>Search</label>
               <input
                 name="q"
                 type="search"
                 defaultValue={qs.q}
                 placeholder="Name, slug, SKU, GTIN, brand, category…"
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(adminFormInput, "mt-1.5 w-full py-2.5")}
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600">Status</label>
+              <label className={adminFormLabel}>Status</label>
               <select
                 name="status"
                 defaultValue={listQs.status}
                 disabled={Boolean(tab)}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                className={cn(adminFormInput, "mt-1.5 w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-60")}
               >
                 <option value="all">All</option>
                 <option value="active">Active</option>
@@ -249,11 +270,11 @@ export default async function AdminProductsPage({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600">Sort</label>
+              <label className={adminFormLabel}>Sort</label>
               <select
                 name="sort"
                 defaultValue={qs.sort}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(adminFormInput, "mt-1.5 w-full py-2.5")}
               >
                 <option value="newest">Newest updated</option>
                 <option value="oldest">Oldest updated</option>
@@ -265,34 +286,34 @@ export default async function AdminProductsPage({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600">Category ID</label>
+              <label className={adminFormLabel}>Category ID</label>
               <input
                 name="category"
                 defaultValue={qs.categoryId ?? ""}
                 placeholder="UUID"
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(adminFormInput, "mt-1.5 w-full py-2.5 font-mono text-xs")}
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600">Brand contains</label>
+              <label className={adminFormLabel}>Brand contains</label>
               <input
                 name="brand"
                 defaultValue={qs.brand}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-[#f06232]/50 focus:outline-none focus:ring-2 focus:ring-[#f06232]/20"
+                className={cn(adminFormInput, "mt-1.5 w-full py-2.5")}
               />
             </div>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-600">Governance filters</p>
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2.5 text-sm text-slate-700">
+            <p className={adminFormLabel}>Governance filters</p>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2.5 text-sm text-admin-secondary">
               <label className="inline-flex cursor-pointer items-center gap-2.5">
                 <input
                   type="checkbox"
                   name="missing_images"
                   value="1"
                   defaultChecked={listQs.filters.missing_images}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Missing images
               </label>
@@ -302,7 +323,7 @@ export default async function AdminProductsPage({
                   name="placeholder_only_images"
                   value="1"
                   defaultChecked={listQs.filters.placeholder_only_images}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Placeholder-only
               </label>
@@ -312,7 +333,7 @@ export default async function AdminProductsPage({
                   name="thin_pdp"
                   value="1"
                   defaultChecked={listQs.filters.thin_pdp}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Thin PDP
               </label>
@@ -322,7 +343,7 @@ export default async function AdminProductsPage({
                   name="missing_glove_attributes"
                   value="1"
                   defaultChecked={listQs.filters.missing_glove_attributes}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Missing glove attrs
               </label>
@@ -332,7 +353,7 @@ export default async function AdminProductsPage({
                   name="orphan_category"
                   value="1"
                   defaultChecked={listQs.filters.orphan_category}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Orphan category
               </label>
@@ -342,7 +363,7 @@ export default async function AdminProductsPage({
                   name="variant_issues"
                   value="1"
                   defaultChecked={listQs.filters.variant_issues}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Variant issues
               </label>
@@ -352,7 +373,7 @@ export default async function AdminProductsPage({
                   name="duplicate_warnings"
                   value="1"
                   defaultChecked={listQs.filters.duplicate_warnings}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Duplicate warnings
               </label>
@@ -362,7 +383,7 @@ export default async function AdminProductsPage({
                   name="pending_match_reviews"
                   value="1"
                   defaultChecked={listQs.filters.pending_match_reviews}
-                  className="rounded border-slate-300 text-[#f06232] focus:ring-[#f06232]/30"
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-focus-ring"
                 />
                 Pending match reviews
               </label>
@@ -371,34 +392,31 @@ export default async function AdminProductsPage({
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <input type="hidden" name="limit" value={String(qs.limit)} />
-            <button
-              type="submit"
-              className="rounded-lg bg-[#f06232] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d]"
-            >
+            <button type="submit" className={adminPrimaryButton}>
               Apply filters
             </button>
-            <Link href="/admin/products" className="text-sm font-medium text-slate-500 hover:text-[#e5582d]">
+            <Link href="/admin/products" className={cn("text-sm font-medium", adminLink)}>
               Reset
             </Link>
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-admin-muted">
               {result.configured ? (
                 <>
-                  <span className="font-mono font-medium text-slate-800">{result.total}</span> matching
+                  <span className="font-mono font-medium text-admin-primary">{result.total}</span> matching
                 </>
               ) : null}
             </span>
           </div>
         </form>
 
-        <TableToolbar className="text-slate-600">
+        <TableToolbar className="text-admin-secondary">
           <span>
-            Page <span className="font-mono font-medium text-slate-800">{qs.page}</span> of{" "}
-            <span className="font-mono font-medium text-slate-800">{totalPages}</span>
+            Page <span className="font-mono font-medium text-admin-primary">{qs.page}</span> of{" "}
+            <span className="font-mono font-medium text-admin-primary">{totalPages}</span>
           </span>
           <span className="ml-auto inline-flex gap-2">
             {qs.page > 1 ? (
               <Link
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50"
+                className={adminSecondaryButton}
                 href={`/admin/products${buildQuery(baseQs, { page: String(qs.page - 1) })}`}
               >
                 Previous
@@ -406,7 +424,7 @@ export default async function AdminProductsPage({
             ) : null}
             {qs.page < totalPages ? (
               <Link
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50"
+                className={adminSecondaryButton}
                 href={`/admin/products${buildQuery(baseQs, { page: String(qs.page + 1) })}`}
               >
                 Next
@@ -426,16 +444,10 @@ export default async function AdminProductsPage({
             action={
               tab === "products" ? (
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <Link
-                    href="/admin/products/new"
-                    className="inline-flex rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#e5582d]"
-                  >
+                  <Link href="/admin/products/new" className={adminPrimaryButton}>
                     Add first product
                   </Link>
-                  <Link
-                    href="/admin/products/import/url"
-                    className="inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
-                  >
+                  <Link href="/admin/products/import/url" className={adminSecondaryButton}>
                     Import from URL
                   </Link>
                 </div>
@@ -447,8 +459,8 @@ export default async function AdminProductsPage({
         )}
 
         {result.total > 0 && withWarnings > 0 ? (
-          <div className="border-t border-slate-100 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
-            <span className="font-semibold text-amber-900">{withWarnings}</span> of {result.rows.length} products on this page have
+          <div className={cn(adminAlertSurface("warning", "border-t border-admin-border"))}>
+            <span className="font-semibold">{withWarnings}</span> of {result.rows.length} products on this page have
             governance warnings.
           </div>
         ) : null}

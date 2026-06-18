@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { adminFormInput } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 const TIERS = ["standard", "bronze", "silver", "gold", "platinum"] as const;
 const TERMS = ["credit_card", "ach", "net30"] as const;
@@ -52,7 +54,7 @@ export function UserRowActions({ userId, isApproved, discountTier, paymentTerms 
 
   return (
     <div className="flex flex-col gap-2 text-xs">
-      <label className="flex items-center gap-2">
+      <label className="flex items-center gap-2 text-admin-secondary">
         <input
           type="checkbox"
           checked={approved}
@@ -62,12 +64,13 @@ export function UserRowActions({ userId, isApproved, discountTier, paymentTerms 
             setApproved(next);
             void save({ is_approved: next }, "approve");
           }}
+          className="rounded border-admin-border"
         />
         <span>Approved for checkout</span>
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <select
-          className="rounded border border-gray-300 px-1.5 py-1"
+          className={adminFormInput}
           value={tier}
           disabled={pending !== null}
           onChange={(e) => {
@@ -83,7 +86,7 @@ export function UserRowActions({ userId, isApproved, discountTier, paymentTerms 
           ))}
         </select>
         <select
-          className="rounded border border-gray-300 px-1.5 py-1"
+          className={adminFormInput}
           value={terms}
           disabled={pending !== null}
           onChange={(e) => {
@@ -99,8 +102,10 @@ export function UserRowActions({ userId, isApproved, discountTier, paymentTerms 
           ))}
         </select>
       </div>
-      {pending ? <span className="text-gray-500">Saving {pending}…</span> : null}
-      {msg ? <span className={msg === "Saved." ? "text-green-800" : "text-red-700"}>{msg}</span> : null}
+      {pending ? <span className="text-admin-muted">Saving {pending}…</span> : null}
+      {msg ? (
+        <span className={cn("text-xs", msg === "Saved." ? "text-admin-success" : "text-admin-danger")}>{msg}</span>
+      ) : null}
     </div>
   );
 }

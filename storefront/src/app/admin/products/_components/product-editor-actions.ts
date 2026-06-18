@@ -54,6 +54,14 @@ function parseProductWrite(body: Record<string, unknown>): { ok: true; value: Pr
         variantSku: typeof o.variant_sku === "string" ? o.variant_sku : "",
         listPrice: typeof o.list_price === "string" ? o.list_price : typeof o.list_price === "number" ? String(o.list_price) : "",
         manufacturerSku: typeof o.manufacturer_sku === "string" ? o.manufacturer_sku : null,
+        manufacturerSkuSource:
+          o.manufacturer_sku_source === "imported" ||
+          o.manufacturer_sku_source === "derived" ||
+          o.manufacturer_sku_source === "manual" ||
+          o.manufacturer_sku_source === "missing"
+            ? o.manufacturer_sku_source
+            : undefined,
+        manufacturerSkuNeedsReview: o.manufacturer_sku_needs_review === true,
       });
     }
   }

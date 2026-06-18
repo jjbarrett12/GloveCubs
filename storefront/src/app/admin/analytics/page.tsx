@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fetchAdminHomeSnapshot } from "@/lib/admin/admin-home-snapshot";
 import { ContaminationExclusionNotice, PageHeader, StatCard, StatGrid } from "@/components/admin";
+import { adminLink } from "@/components/admin/admin-theme-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const metadata = {
 };
 
 function fmt(n: number | null | undefined) {
-  if (n == null) return "n/a";
+  if (n == null) return "—";
   return n.toLocaleString();
 }
 
@@ -60,13 +61,13 @@ export default async function AdminAnalyticsPage() {
         />
       </StatGrid>
 
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-admin-muted">
         Full catalog quality breakdown:{" "}
-        <Link href="/admin/catalog" className="font-medium text-blue-700 hover:underline">
+        <Link href="/admin/catalog" className={adminLink}>
           Catalog overview
         </Link>{" "}
         ·{" "}
-        <Link href="/admin" className="font-medium text-blue-700 hover:underline">
+        <Link href="/admin" className={adminLink}>
           Dashboard
         </Link>
         .

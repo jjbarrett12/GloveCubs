@@ -14,5 +14,7 @@ describe("AdminShell navigation", () => {
     expect(s).toContain('href: "/admin/orders"');
     expect(s).toContain('href: "/admin/companies"');
     expect(s).toContain('href: "/admin/settings"');
+    expect(s).toContain("Procurement");
+    expect(s).toContain("Fulfillment");
   });
 });

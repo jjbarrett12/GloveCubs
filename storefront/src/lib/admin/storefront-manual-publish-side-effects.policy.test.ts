@@ -74,9 +74,7 @@ describe("storefront manual active publish side-effect policy", () => {
 
 
 
-  it("manual post-active helper blocks URL-import metadata", () => {
-
-    expect(POST_ACTIVE).toContain("isUrlImportProductMetadata");
+  it("manual post-active helper allows URL-import after admin review", () => {
 
     expect(POST_ACTIVE).toContain("shouldRunManualPostActiveSideEffects");
 
@@ -98,13 +96,15 @@ describe("storefront manual active publish side-effect policy", () => {
 
 
 
-  it("URL-import catalog products must publish through CatalogOS, not storefront active save", () => {
+  it("URL-import catalog products publish through admin review editor, not staging promote", () => {
 
     expect(PRODUCT_WRITE).toContain("importStagingId");
 
     expect(PRODUCT_WRITE).toContain("evaluateActivePublishReadiness");
 
     expect(PRODUCT_WRITE).toMatch(/importStagingId\?\.trim\(\)\s*\?\s*"draft"\s*:\s*input\.status/);
+
+    expect(PRODUCT_WRITE).toContain("adminReviewPublish: true");
 
     const guards = readFileSync(join(__dirname, "clipboard-promote-guards.ts"), "utf8");
 

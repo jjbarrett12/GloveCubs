@@ -2,11 +2,11 @@
 
 /**
  * Admin Filter Tabs Component
- * 
+ *
  * URL-based filter navigation for admin tables.
- * Supports both client-side state and server-side searchParams.
  */
 
+import { adminFocusRing } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -39,23 +39,23 @@ export function FilterTabs({
 
   const buildHref = (value: string) => {
     const params = new URLSearchParams();
-    
+
     preserveParams.forEach((key) => {
       const val = searchParams.get(key);
       if (val) params.set(key, val);
     });
-    
+
     if (value !== defaultValue) {
       params.set(paramName, value);
     }
-    
+
     const query = params.toString();
     const base = baseHref || "";
     return query ? `${base}?${query}` : base || "?";
   };
 
   return (
-    <div className={cn("flex items-center gap-1 flex-wrap", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1", className)}>
       {options.map((option) => {
         const isActive = currentValue === option.value;
         return (
@@ -63,23 +63,24 @@ export function FilterTabs({
             key={option.value}
             href={buildHref(option.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              adminFocusRing(),
               isActive
-                ? "bg-gray-900 text-white"
-                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                ? "bg-admin-accent text-white shadow-sm"
+                : "text-admin-secondary hover:bg-admin-surface-muted hover:text-admin-primary",
             )}
           >
             {option.label}
-            {option.count !== undefined && (
+            {option.count !== undefined ? (
               <span
                 className={cn(
-                  "text-xs tabular-nums px-1.5 py-0.5 rounded-full",
-                  isActive ? "bg-white/20" : "bg-gray-200/80"
+                  "rounded-full px-1.5 py-0.5 text-xs tabular-nums",
+                  isActive ? "bg-white/20 text-white" : "bg-admin-surface-muted text-admin-muted",
                 )}
               >
                 {option.count}
               </span>
-            )}
+            ) : null}
           </Link>
         );
       })}
@@ -98,9 +99,7 @@ export function FilterGroup({
 }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-        {label}:
-      </span>
+      <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-admin-muted">{label}:</span>
       {children}
     </div>
   );

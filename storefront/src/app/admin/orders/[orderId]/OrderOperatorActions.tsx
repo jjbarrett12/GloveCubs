@@ -3,6 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ADMIN_SETTABLE_ORDER_STATUSES } from "@/lib/admin/admin-order-express-statuses";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminFormInput,
+  adminFormLabel,
+  adminPrimaryButton,
+  adminSecondaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 type Props = {
   orderId: string;
@@ -105,21 +114,24 @@ export function OrderOperatorActions({
   }
 
   return (
-    <div className="space-y-6 rounded-lg border border-amber-200/80 bg-amber-50/40 p-4">
+    <div className={cn(adminCardSurface, "space-y-6 p-4")}>
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">Operator actions</h3>
-        <p className="mt-1 text-xs text-slate-600">
+        <h3 className="text-sm font-semibold text-admin-primary">Operator actions</h3>
+        <p className="mt-1 text-xs text-admin-secondary">
           Changes run through the transitional Express admin API (same rules as legacy admin). Refresh after success.
         </p>
         {paymentIntegrityHold ? (
-          <p className="mt-2 text-xs font-medium text-amber-900">
+          <p className={cn("mt-2 text-xs font-medium", adminAlertSurface("warning", "inline-block px-2 py-1"))}>
             Payment integrity hold is active — shipping and PO creation may be blocked until resolved.
           </p>
         ) : null}
       </div>
 
       {msg ? (
-        <p className={`text-sm ${msg.kind === "ok" ? "text-green-800" : "text-red-700"}`} role="status">
+        <p
+          className={cn("text-sm", msg.kind === "ok" ? "text-admin-success" : "text-admin-danger")}
+          role="status"
+        >
           {msg.text}
         </p>
       ) : null}
@@ -142,11 +154,11 @@ export function OrderOperatorActions({
           );
         }}
       >
-        <div className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Fulfillment</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-admin-muted sm:col-span-2">Fulfillment</div>
         <div>
-          <label className="block text-xs font-medium text-slate-600">Status</label>
+          <label className={adminFormLabel}>Status</label>
           <select
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            className={cn(adminFormInput, "w-full")}
             value={status}
             onChange={(e) => setStatus(e.target.value)}
             disabled={pending !== null}
@@ -160,38 +172,34 @@ export function OrderOperatorActions({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600">Carrier (optional)</label>
+          <label className={adminFormLabel}>Carrier (optional)</label>
           <input
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            className={cn(adminFormInput, "w-full")}
             value={carrier}
             onChange={(e) => setCarrier(e.target.value)}
             disabled={pending !== null}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600">Tracking number</label>
+          <label className={adminFormLabel}>Tracking number</label>
           <input
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            className={cn(adminFormInput, "w-full")}
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
             disabled={pending !== null}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600">Tracking URL</label>
+          <label className={adminFormLabel}>Tracking URL</label>
           <input
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            className={cn(adminFormInput, "w-full")}
             value={trackingUrl}
             onChange={(e) => setTrackingUrl(e.target.value)}
             disabled={pending !== null}
           />
         </div>
         <div className="sm:col-span-2">
-          <button
-            type="submit"
-            disabled={pending !== null}
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-          >
+          <button type="submit" disabled={pending !== null} className={adminPrimaryButton}>
             {pending === "update" ? "Saving…" : "Save fulfillment"}
           </button>
         </div>
@@ -199,7 +207,7 @@ export function OrderOperatorActions({
 
       {isNet30 && remaining != null ? (
         <form
-          className="max-w-xl space-y-3 border-t border-amber-200/60 pt-4"
+          className="max-w-xl space-y-3 border-t border-admin-border-subtle pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             const amount = Number(payAmount);
@@ -216,27 +224,27 @@ export function OrderOperatorActions({
             );
           }}
         >
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net-30 invoice payment</div>
-          <p className="text-xs text-slate-600">
-            Remaining balance: <strong>{fmtUsd(remaining)}</strong>
+          <div className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Net-30 invoice payment</div>
+          <p className="text-xs text-admin-secondary">
+            Remaining balance: <strong className="text-admin-primary">{fmtUsd(remaining)}</strong>
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-slate-600">Amount (USD)</label>
+              <label className={adminFormLabel}>Amount (USD)</label>
               <input
                 type="number"
                 min="0.01"
                 step="0.01"
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                className={cn(adminFormInput, "w-full")}
                 value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
                 disabled={pending !== null}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600">Note (optional)</label>
+              <label className={adminFormLabel}>Note (optional)</label>
               <input
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                className={cn(adminFormInput, "w-full")}
                 value={payNote}
                 onChange={(e) => setPayNote(e.target.value)}
                 disabled={pending !== null}
@@ -244,26 +252,22 @@ export function OrderOperatorActions({
               />
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={pending !== null}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-          >
+          <button type="submit" disabled={pending !== null} className={adminSecondaryButton}>
             {pending === "invoice_payment" ? "Recording…" : "Record payment"}
           </button>
         </form>
       ) : null}
 
-      <div className="border-t border-amber-200/60 pt-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Purchase order</div>
-        <p className="mt-1 text-xs text-slate-600">
+      <div className="border-t border-admin-border-subtle pt-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Purchase order</div>
+        <p className="mt-1 text-xs text-admin-secondary">
           Creates a drop-ship PO from this order (Express validation). For multi-manufacturer orders, pass manufacturer id.
         </p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <div>
-            <label className="block text-xs font-medium text-slate-600">Manufacturer id (optional)</label>
+            <label className={adminFormLabel}>Manufacturer id (optional)</label>
             <input
-              className="mt-1 w-32 rounded border border-slate-300 px-2 py-1.5 text-sm"
+              className={cn(adminFormInput, "mt-1 w-32")}
               value={mfrId}
               onChange={(e) => setMfrId(e.target.value)}
               disabled={pending !== null}
@@ -273,7 +277,7 @@ export function OrderOperatorActions({
           <button
             type="button"
             disabled={pending !== null}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            className={adminSecondaryButton}
             onClick={() => {
               const payload: { manufacturer_id?: number } = {};
               const n = parseInt(mfrId.trim(), 10);

@@ -3,6 +3,8 @@ import { computeProductsImportConnectionStatus } from "@/lib/admin/products-impo
 import { adaptUrlImportJobDetail } from "@/lib/admin/url-import-adapter";
 import { UrlJobDetailClient } from "@/app/admin/products/import/_components/UrlJobDetailClient";
 import { PageHeader } from "@/components/admin";
+import { adminAlertSurface } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +47,7 @@ export default async function AdminProductsImportJobDetailPage({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Import run"
         description={idValid ? `Run ${jobId}` : "Invalid run id"}
@@ -58,11 +60,9 @@ export default async function AdminProductsImportJobDetailPage({
       />
 
       {!idValid ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          Invalid job id.
-        </div>
+        <div className={cn(adminAlertSurface("critical"))}>Invalid job id.</div>
       ) : offline ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className={cn(adminAlertSurface("critical"))}>
           <strong className="font-semibold">Catalog sync offline.</strong> <span>{conn.message}</span>
         </div>
       ) : loadError && !initial ? (

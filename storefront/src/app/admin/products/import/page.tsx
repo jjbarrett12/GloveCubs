@@ -11,6 +11,13 @@ import {
   StatGrid,
   StatusBadge,
 } from "@/components/admin";
+import {
+  adminAlertSurface,
+  adminCardSurface,
+  adminLink,
+  adminMutedPanel,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { ImportStatusBadge } from "./_components/ImportStatusBadge";
 import { UrlImportPanel } from "./_components/UrlImportPanel";
 import { UrlJobsPanel } from "./_components/UrlJobsPanel";
@@ -50,7 +57,7 @@ export default async function AdminProductsImportPage() {
   const failedCount = jobs.filter((j) => j.status === "failed").length;
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Product import"
         description="Bring in new items from supplier URLs, track import runs, or export your grid for offline work. Publishing always stays operator-controlled."
@@ -60,29 +67,29 @@ export default async function AdminProductsImportPage() {
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <Link
           href="/admin/products/import/url"
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
+          className={cn(adminCardSurface, "p-5 transition-colors hover:bg-admin-surface-muted hover:border-admin-accent/35")}
         >
-          <div className="text-sm font-semibold text-slate-900">Import from URL</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">Paste links, stage rows for review, then promote to drafts when ready.</p>
+          <div className="text-sm font-semibold text-admin-primary">Import from URL</div>
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">Paste links, stage rows for review, then promote to drafts when ready.</p>
         </Link>
         <Link
           href="/admin/products/import/jobs"
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
+          className={cn(adminCardSurface, "p-5 transition-colors hover:bg-admin-surface-muted hover:border-admin-accent/35")}
         >
-          <div className="text-sm font-semibold text-slate-900">Import activity</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">See queued, running, and finished import runs.</p>
+          <div className="text-sm font-semibold text-admin-primary">Import activity</div>
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">See queued, running, and finished import runs.</p>
         </Link>
         <Link
           href="/admin/products/import/csv"
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#f06232]/35 hover:shadow-md"
+          className={cn(adminCardSurface, "p-5 transition-colors hover:bg-admin-surface-muted hover:border-admin-accent/35")}
         >
-          <div className="text-sm font-semibold text-slate-900">CSV import (coming soon)</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">Spreadsheet ingest is not in this console yet—export CSV from Products for now.</p>
+          <div className="text-sm font-semibold text-admin-primary">CSV import (coming soon)</div>
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">Spreadsheet ingest is not in this console yet—export CSV from Products for now.</p>
         </Link>
       </div>
 
       {offline ? (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className={cn(adminAlertSurface("critical", "mb-6"))}>
           <strong className="font-semibold">Catalog sync is offline.</strong>{" "}
           <span>{conn.message}</span>
         </div>
@@ -110,8 +117,8 @@ export default async function AdminProductsImportPage() {
         />
       </StatGrid>
 
-      <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-        <strong className="text-slate-900">Imports are staged first.</strong>{" "}
+      <div className={cn(adminMutedPanel, "mb-8 border-solid px-4 py-4 text-sm text-admin-secondary")}>
+        <strong className="text-admin-primary">Imports are staged first.</strong>{" "}
         Heavy extraction and matching run in the catalog sync service; this console is where your team reviews, approves,
         and publishes.
       </div>
@@ -125,24 +132,24 @@ export default async function AdminProductsImportPage() {
       </div>
 
       <section aria-label="Coming next" className="mb-8 grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-          <h3 className="text-sm font-semibold text-slate-900">CSV / spreadsheet import</h3>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+        <div className={cn(adminMutedPanel, "border-solid p-5")}>
+          <h3 className="text-sm font-semibold text-admin-primary">CSV / spreadsheet import</h3>
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
             Upload feeds, map columns, and preview rows before they hit the catalog. Planned for a future release.
           </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Coming soon</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-admin-muted">Coming soon</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-          <h3 className="text-sm font-semibold text-slate-900">Publish from review</h3>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+        <div className={cn(adminMutedPanel, "border-solid p-5")}>
+          <h3 className="text-sm font-semibold text-admin-primary">Publish from review</h3>
+          <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
             Operator review with publish checks stays the gate for anything customer-facing.
           </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">In progress</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-admin-muted">In progress</p>
         </div>
       </section>
 
-      <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-        <ImportStatusBadge status="completed" /> marks a finished remote crawl. Use <strong className="text-slate-800">Review &amp; staging</strong>{" "}
+      <p className="flex flex-wrap items-center gap-2 text-sm text-admin-secondary">
+        <ImportStatusBadge status="completed" /> marks a finished remote crawl. Use <strong className="text-admin-primary">Review &amp; staging</strong>{" "}
         for URL clipboard rows stored here; deep crawl batches open from each import run detail.
       </p>
     </div>

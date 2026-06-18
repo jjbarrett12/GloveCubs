@@ -2,7 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductImage } from "@/components/store/ProductImage";
 import { ADMIN_PRODUCT_UUID_RE, fetchAdminProductDetail } from "@/lib/admin/product-operations";
-import { PageHeader, PageSection, StatCard, StatGrid, StatusBadge, TableCard } from "@/components/admin";
+import { PageHeader, PageSection, StatCard, StatGrid, StatusBadge, TableCard, ErrorState } from "@/components/admin";
+import {
+  adminCardSurface,
+  adminEyebrow,
+  adminLink,
+  adminPrimaryButton,
+  adminTableBody,
+  adminTableCell,
+  adminTableHead,
+  adminTableHeadCell,
+  adminTableRowHover,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +36,8 @@ function metaStr(meta: Record<string, unknown> | null | undefined, keys: string[
   return null;
 }
 
-const panel = "rounded-xl border border-slate-200 bg-white p-5 shadow-sm";
-const dt = "text-xs font-semibold uppercase tracking-wide text-slate-500";
-const dd = "mt-1 text-sm text-slate-900";
+const dt = adminEyebrow;
+const dd = "mt-1 text-sm text-admin-primary";
 
 export default async function AdminProductDetailPage({ params }: { params: { productId: string } }) {
   const { productId } = params;
@@ -37,11 +48,12 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
   const data = await fetchAdminProductDetail(productId);
   if (!data.configured) {
     return (
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
+      <div>
         <PageHeader title="Product" breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "Detail" }]} />
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Supabase is not configured for this environment.
-        </div>
+        <ErrorState
+          title="Database not configured"
+          message="Product detail cannot be loaded in this environment. Review Admin Health for configuration status."
+        />
       </div>
     );
   }
@@ -58,7 +70,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
       : "";
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title={p.name}
         description={p.id}
@@ -67,17 +79,14 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
           { label: p.name.length > 48 ? `${p.name.slice(0, 48)}…` : p.name },
         ]}
         actions={
-          <Link
-            href={`/admin/products/${p.id}/edit`}
-            className="inline-flex items-center rounded-lg bg-[#f06232] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#e5582d]"
-          >
+          <Link href={`/admin/products/${p.id}/edit`} className={adminPrimaryButton}>
             Edit product
           </Link>
         }
       />
 
       <PageSection title="Product identity">
-        <div className={panel}>
+        <div className={cn(adminCardSurface, "p-5")}>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className={dt}>Slug</dt>
@@ -103,11 +112,11 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
             </div>
             <div>
               <dt className={dt}>Created</dt>
-              <dd className={`${dd} font-mono text-xs text-slate-500`}>{p.createdAt ?? "—"}</dd>
+              <dd className={`${dd} font-mono text-xs text-admin-muted`}>{p.createdAt ?? "—"}</dd>
             </div>
             <div>
               <dt className={dt}>Updated</dt>
-              <dd className={`${dd} font-mono text-xs text-slate-500`}>{p.updatedAt ?? "—"}</dd>
+              <dd className={`${dd} font-mono text-xs text-admin-muted`}>{p.updatedAt ?? "—"}</dd>
             </div>
           </dl>
         </div>
@@ -117,10 +126,14 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
         title="Imagery"
         description={`${(data.images ?? []).length} image(s). Provenance from metadata.image_provenance.`}
       >
-        <div className={panel}>
+        <div className={cn(adminCardSurface, "p-5")}>
           <div className="grid gap-4 sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))]">
             {(data.images ?? []).length === 0 ? (
-              <ProductImage src={null} alt={p.name} containerClassName="max-w-[160px] !rounded-lg !border !border-slate-200 !bg-slate-100" />
+              <ProductImage
+                src={null}
+                alt={p.name}
+                containerClassName="max-w-[160px] !rounded-lg !border !border-admin-border !bg-admin-surface-muted"
+              />
             ) : (
               (data.images ?? []).map((im, i) => (
                 <div key={`${im.url}-${i}`} className="space-y-1">
@@ -128,11 +141,11 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
                     src={im.url}
                     alt={`${p.name} — image ${i + 1}`}
                     loading={i === 0 ? "eager" : "lazy"}
-                    containerClassName="max-w-[180px] !rounded-lg !border !border-slate-200 !bg-slate-100"
+                    containerClassName="max-w-[180px] !rounded-lg !border !border-admin-border !bg-admin-surface-muted"
                   />
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-admin-secondary">
                     {im.isPrimary ? "Primary · " : ""}
-                    provenance: <span className="font-mono text-slate-800">{im.provenance ?? "—"}</span>
+                    provenance: <span className="font-mono text-admin-primary">{im.provenance ?? "—"}</span>
                   </p>
                 </div>
               ))
@@ -145,31 +158,33 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
         <TableCard>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead className={cn(adminTableHead, "border-b border-admin-border")}>
                 <tr>
-                  <th className="p-3">Active</th>
-                  <th className="p-3">Size</th>
-                  <th className="p-3">Material / color</th>
-                  <th className="p-3">Variant SKU</th>
-                  <th className="p-3">GTIN</th>
-                  <th className="p-3">Signature</th>
-                  <th className="p-3">Duplicate flags</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Active</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Size</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Material / color</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Variant SKU</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>GTIN</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Signature</th>
+                  <th className={cn(adminTableHeadCell, "p-3")}>Duplicate flags</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
+              <tbody className={adminTableBody}>
                 {(data.variants ?? []).map((v) => (
-                  <tr key={v.id} className="hover:bg-slate-50/80">
-                    <td className="p-3">{v.isActive ? "Yes" : "No"}</td>
-                    <td className="p-3 font-mono text-xs">{v.sizeCode ?? "—"}</td>
-                    <td className="p-3 text-slate-600">
+                  <tr key={v.id} className={adminTableRowHover}>
+                    <td className={cn(adminTableCell, "p-3")}>{v.isActive ? "Yes" : "No"}</td>
+                    <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>{v.sizeCode ?? "—"}</td>
+                    <td className={cn(adminTableCell, "p-3 text-admin-secondary")}>
                       {metaStr(v.metadata, ["material", "primary_material", "glove_material", "color"]) ?? "—"}
                     </td>
-                    <td className="p-3 font-mono text-xs text-slate-900">{v.variantSku}</td>
-                    <td className="p-3 font-mono text-xs text-slate-500">{v.gtin?.trim() || "—"}</td>
-                    <td className="max-w-[180px] truncate p-3 font-mono text-xs text-slate-500">
+                    <td className={cn(adminTableCell, "p-3 font-mono text-xs")}>{v.variantSku}</td>
+                    <td className={cn(adminTableCell, "p-3 font-mono text-xs text-admin-muted")}>
+                      {v.gtin?.trim() || "—"}
+                    </td>
+                    <td className={cn(adminTableCell, "max-w-[180px] truncate p-3 font-mono text-xs text-admin-muted")}>
                       {v.attributeSignature?.trim() || "—"}
                     </td>
-                    <td className="p-3 text-amber-800">
+                    <td className={cn(adminTableCell, "p-3 text-admin-warning")}>
                       {[v.gtinDuplicateRisk ? "GTIN" : null, v.signatureDuplicateRisk ? "Signature" : null]
                         .filter(Boolean)
                         .join(" · ") || "—"}
@@ -186,13 +201,13 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
         title="Product quality"
         description={`Attribute rows on file: ${data.attributeRowCount ?? 0}`}
       >
-        <div className={panel}>
-          <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
+        <div className={cn(adminCardSurface, "p-5")}>
+          <ul className="list-inside list-disc space-y-1 text-sm text-admin-secondary">
             {(data.warnings ?? []).length === 0 ? (
-              <li className="text-slate-500">No data-quality warnings for this product.</li>
+              <li className="text-admin-muted">No data-quality warnings for this product.</li>
             ) : (
               (data.warnings ?? []).map((w) => (
-                <li key={w.code} className="text-amber-900">
+                <li key={w.code} className="text-admin-warning">
                   {w.label}
                 </li>
               ))
@@ -222,17 +237,17 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
             accentBorder
           />
         </StatGrid>
-        <div className={panel}>
+        <div className={cn(adminCardSurface, "p-5")}>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className={dt}>Preview</dt>
               <dd className="mt-0.5">
                 {data.storefrontPdpPath ? (
-                  <Link href={data.storefrontPdpPath} className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+                  <Link href={data.storefrontPdpPath} className={adminLink}>
                     Open storefront PDP
                   </Link>
                 ) : (
-                  <span className="text-slate-500">—</span>
+                  <span className="text-admin-muted">—</span>
                 )}
               </dd>
             </div>
@@ -241,8 +256,8 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
       </PageSection>
 
       <PageSection title="Catalog sync tools" description="Read-only shortcuts. No ingestion or edits from this page.">
-        <div className={panel}>
-          <ul className="list-inside list-disc space-y-2 text-sm text-slate-700">
+        <div className={cn(adminCardSurface, "p-5")}>
+          <ul className="list-inside list-disc space-y-2 text-sm text-admin-secondary">
             {catalogosBase ? (
               <>
                 {catalogosJobId ? (
@@ -251,7 +266,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
                       href={`${catalogosBase}/dashboard/url-import/${encodeURIComponent(catalogosJobId)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
+                      className={adminLink}
                     >
                       Open CatalogOS URL import job (canonical review)
                     </a>
@@ -262,40 +277,32 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
                     href={`${catalogosBase}/dashboard/url-import`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
+                    className={adminLink}
                   >
                     Open catalog sync — URL import
                   </a>
                 </li>
                 <li>
-                  <a
-                    href={catalogosBase}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline"
-                  >
+                  <a href={catalogosBase} target="_blank" rel="noopener noreferrer" className={adminLink}>
                     Catalog sync home
                   </a>
                 </li>
               </>
             ) : (
-              <li className="text-slate-600">
-                Set <code className="rounded border border-slate-200 bg-slate-100 px-1 font-mono text-xs text-slate-800">
-                  NEXT_PUBLIC_CATALOGOS_URL
-                </code>{" "}
-                for deep links.
+              <li className="text-admin-secondary">
+                Configure catalog sync URL in environment settings for deep links.
               </li>
             )}
           </ul>
         </div>
       </PageSection>
 
-      <p className="text-sm text-slate-600">
-        <Link href="/admin/catalog" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+      <p className="text-sm text-admin-secondary">
+        <Link href="/admin/catalog" className={adminLink}>
           Catalog overview
         </Link>
         {" · "}
-        <Link href="/admin/products" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <Link href="/admin/products" className={adminLink}>
           Back to grid
         </Link>
       </p>

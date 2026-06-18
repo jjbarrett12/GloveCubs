@@ -2,6 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  adminFormInput,
+  adminFormLabel,
+  adminPrimaryButton,
+} from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 
 const STATUSES = [
   { value: "active", label: "Active" },
@@ -68,14 +74,14 @@ export function CompanyProfileForm({ company }: Props) {
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
-      <dl className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+      <dl className="grid gap-2 text-xs text-admin-muted sm:grid-cols-2">
         <div>
           <dt className="font-medium uppercase tracking-wide">Company ID</dt>
-          <dd className="mt-0.5 font-mono text-slate-700">{company.id}</dd>
+          <dd className="mt-0.5 font-mono text-admin-secondary">{company.id}</dd>
         </div>
         <div>
           <dt className="font-medium uppercase tracking-wide">Timestamps</dt>
-          <dd className="mt-0.5 text-slate-700">
+          <dd className="mt-0.5 text-admin-secondary">
             Created {new Date(company.created_at).toLocaleString()} · Updated{" "}
             {new Date(company.updated_at).toLocaleString()}
           </dd>
@@ -83,42 +89,42 @@ export function CompanyProfileForm({ company }: Props) {
       </dl>
 
       <div>
-        <label htmlFor="edit_trade_name" className="block text-sm font-medium text-slate-700">
-          Company name <span className="text-red-600">*</span>
+        <label htmlFor="edit_trade_name" className={adminFormLabel}>
+          Company name <span className="text-admin-danger">*</span>
         </label>
         <input
           id="edit_trade_name"
           required
           value={tradeName}
           onChange={(e) => setTradeName(e.target.value)}
-          className="mt-1 w-full max-w-md rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm"
+          className={cn(adminFormInput, "w-full max-w-md")}
         />
       </div>
       <div>
-        <label htmlFor="edit_legal_name" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="edit_legal_name" className={adminFormLabel}>
           Legal name
         </label>
         <input
           id="edit_legal_name"
           value={legalName}
           onChange={(e) => setLegalName(e.target.value)}
-          className="mt-1 w-full max-w-md rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm"
+          className={cn(adminFormInput, "w-full max-w-md")}
         />
       </div>
       <div>
-        <label htmlFor="edit_slug" className="block text-sm font-medium text-slate-700">
-          Slug <span className="text-red-600">*</span>
+        <label htmlFor="edit_slug" className={adminFormLabel}>
+          Slug <span className="text-admin-danger">*</span>
         </label>
         <input
           id="edit_slug"
           required
           value={slug}
           onChange={(e) => setSlug(e.target.value.toLowerCase())}
-          className="mt-1 w-full max-w-md rounded-md border border-slate-200 px-3 py-2 font-mono text-sm shadow-sm"
+          className={cn(adminFormInput, "w-full max-w-md font-mono")}
         />
       </div>
       <div>
-        <label htmlFor="edit_country" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="edit_country" className={adminFormLabel}>
           Country code
         </label>
         <input
@@ -126,18 +132,18 @@ export function CompanyProfileForm({ company }: Props) {
           maxLength={2}
           value={countryCode}
           onChange={(e) => setCountryCode(e.target.value.toUpperCase())}
-          className="mt-1 w-24 rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm"
+          className={cn(adminFormInput, "w-24")}
         />
       </div>
       <div>
-        <label htmlFor="edit_status" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="edit_status" className={adminFormLabel}>
           Account status
         </label>
         <select
           id="edit_status"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="mt-1 w-full max-w-xs rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm"
+          className={cn(adminFormInput, "w-full max-w-xs")}
         >
           {STATUSES.map((s) => (
             <option key={s.value} value={s.value}>
@@ -146,14 +152,10 @@ export function CompanyProfileForm({ company }: Props) {
           ))}
         </select>
       </div>
-      {err ? <p className="text-sm text-red-600">{err}</p> : null}
-      {msg ? <p className="text-sm text-green-700">{msg}</p> : null}
+      {err ? <p className="text-sm text-admin-danger">{err}</p> : null}
+      {msg ? <p className="text-sm text-admin-success">{msg}</p> : null}
       <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-lg bg-[#f06232] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#d8552a] disabled:opacity-50"
-        >
+        <button type="submit" disabled={pending} className={adminPrimaryButton}>
           {pending ? "Saving…" : "Save profile"}
         </button>
       </div>

@@ -2,6 +2,8 @@ import { catalogosInternalRequest } from "@/lib/admin/catalogos-internal-client"
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
 import { adaptUrlImportJobList } from "@/lib/admin/url-import-adapter";
 import { PageHeader, StatCard, StatGrid, StatusBadge } from "@/components/admin";
+import { adminAlertSurface, adminLink } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { UrlJobsPanel } from "../_components/UrlJobsPanel";
 import Link from "next/link";
 
@@ -40,7 +42,7 @@ export default async function AdminProductsImportJobsPage() {
   const failedCount = jobs.filter((j) => j.status === "failed").length;
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Import activity"
         description="Open a run to inspect extracted lines before anything is published."
@@ -53,13 +55,13 @@ export default async function AdminProductsImportJobsPage() {
       />
 
       <div className="mb-6 text-sm">
-        <Link href="/admin/products/import/url" className="font-semibold text-[#c2410c] hover:text-[#e5582d] hover:underline">
+        <Link href="/admin/products/import/url" className={adminLink}>
           ← Back to URL import
         </Link>
       </div>
 
       {offline ? (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className={cn(adminAlertSurface("critical", "mb-6"))}>
           <strong className="font-semibold">Catalog sync offline.</strong> <span>{conn.message}</span>
         </div>
       ) : null}

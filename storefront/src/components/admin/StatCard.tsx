@@ -1,7 +1,8 @@
 ﻿/**
  * Admin Stat Card Component
- * 
- * Compact metric display for dashboard summaries
+ *
+ * Compact metric display for dashboard summaries.
+ * Uses admin semantic tokens (scoped via data-admin-theme).
  */
 
 import { cn } from "@/lib/utils";
@@ -17,84 +18,38 @@ interface StatCardProps {
   onClick?: () => void;
   className?: string;
   accentBorder?: boolean;
-  /** Dark command-center surfaces */
+  /** @deprecated Prefer admin theme tokens; kept for compatibility */
   variant?: "default" | "dark";
 }
 
-const COLORS = {
-  default: {
-    text: "text-gray-900",
-    accent: "border-l-gray-400",
-    icon: "text-gray-400",
-  },
-  blue: {
-    text: "text-blue-600",
-    accent: "border-l-blue-500",
-    icon: "text-blue-500",
-  },
-  green: {
-    text: "text-emerald-600",
-    accent: "border-l-emerald-500",
-    icon: "text-emerald-500",
-  },
-  amber: {
-    text: "text-amber-600",
-    accent: "border-l-amber-500",
-    icon: "text-amber-500",
-  },
-  red: {
-    text: "text-red-600",
-    accent: "border-l-red-500",
-    icon: "text-red-500",
-  },
-  purple: {
-    text: "text-purple-600",
-    accent: "border-l-purple-500",
-    icon: "text-purple-500",
-  },
-  orange: {
-    text: "text-orange-600",
-    accent: "border-l-orange-500",
-    icon: "text-orange-500",
-  },
+const VALUE_COLORS = {
+  default: "text-admin-primary",
+  blue: "text-admin-info",
+  green: "text-admin-success",
+  amber: "text-admin-warning",
+  red: "text-admin-danger",
+  purple: "text-admin-info",
+  orange: "text-admin-accent",
 };
 
-const COLORS_DARK: typeof COLORS = {
-  default: {
-    text: "text-neutral-100",
-    accent: "border-l-neutral-500",
-    icon: "text-neutral-500",
-  },
-  blue: {
-    text: "text-sky-400",
-    accent: "border-l-sky-500",
-    icon: "text-sky-400",
-  },
-  green: {
-    text: "text-emerald-400",
-    accent: "border-l-emerald-500",
-    icon: "text-emerald-400",
-  },
-  amber: {
-    text: "text-amber-400",
-    accent: "border-l-amber-500",
-    icon: "text-amber-400",
-  },
-  red: {
-    text: "text-red-400",
-    accent: "border-l-red-500",
-    icon: "text-red-400",
-  },
-  purple: {
-    text: "text-purple-400",
-    accent: "border-l-purple-500",
-    icon: "text-purple-400",
-  },
-  orange: {
-    text: "text-[#f06232]",
-    accent: "border-l-[#f06232]",
-    icon: "text-[#f06232]",
-  },
+const ACCENT_BORDERS = {
+  default: "border-l-admin-muted",
+  blue: "border-l-admin-info",
+  green: "border-l-admin-success",
+  amber: "border-l-admin-warning",
+  red: "border-l-admin-danger",
+  purple: "border-l-admin-info",
+  orange: "border-l-admin-accent",
+};
+
+const ICON_COLORS = {
+  default: "text-admin-muted",
+  blue: "text-admin-info",
+  green: "text-admin-success",
+  amber: "text-admin-warning",
+  red: "text-admin-danger",
+  purple: "text-admin-info",
+  orange: "text-admin-accent",
 };
 
 export function StatCard({
@@ -107,59 +62,40 @@ export function StatCard({
   onClick,
   className,
   accentBorder = false,
-  variant = "default",
 }: StatCardProps) {
-  const dark = variant === "dark";
-  const palette = dark ? COLORS_DARK : COLORS;
-  const colors = palette[color];
   const isInteractive = !!href || !!onClick;
 
   const content = (
     <div
       className={cn(
-        "rounded-lg border p-4 transition-all",
-        dark ? "border-white/10 bg-[#161616] ring-1 ring-white/[0.03]" : "border-gray-200 bg-white",
-        accentBorder && `border-l-4 ${colors.accent}`,
-        isInteractive && (dark ? "cursor-pointer hover:border-white/20 hover:bg-[#1c1c1c]" : "cursor-pointer hover:border-gray-300 hover:shadow-md"),
+        "rounded-lg border border-admin-border bg-admin-surface p-4 ring-1 ring-admin-border-subtle transition-all",
+        accentBorder && `border-l-4 ${ACCENT_BORDERS[color]}`,
+        isInteractive && "cursor-pointer hover:border-admin-border hover:bg-admin-surface-muted",
         className,
       )}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className={cn("text-xs font-medium uppercase tracking-wide truncate", dark ? "text-neutral-500" : "text-gray-500")}>
-            {label}
-          </p>
-          <p className={cn("mt-1 text-2xl font-semibold tabular-nums", colors.text)}>
-            {value}
-          </p>
-          {trend && (
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-admin-muted">{label}</p>
+          <p className={cn("mt-1 text-2xl font-semibold tabular-nums", VALUE_COLORS[color])}>{value}</p>
+          {trend ? (
             <p
               className={cn(
                 "mt-1 text-xs font-medium",
                 trend.value > 0
-                  ? dark
-                    ? "text-emerald-400"
-                    : "text-emerald-600"
+                  ? "text-admin-success"
                   : trend.value < 0
-                    ? dark
-                      ? "text-red-400"
-                      : "text-red-600"
-                    : dark
-                      ? "text-neutral-500"
-                      : "text-gray-500",
+                    ? "text-admin-danger"
+                    : "text-admin-muted",
               )}
             >
               {trend.value > 0 ? "\u2191" : trend.value < 0 ? "\u2193" : "\u2192"} {Math.abs(trend.value)}%
-              {trend.label && <span className={cn("ml-1", dark ? "text-neutral-600" : "text-gray-400")}>{trend.label}</span>}
+              {trend.label ? <span className="ml-1 text-admin-muted">{trend.label}</span> : null}
             </p>
-          )}
+          ) : null}
         </div>
-        {icon && (
-          <div className={cn("ml-3 flex-shrink-0", colors.icon)}>
-            {icon}
-          </div>
-        )}
+        {icon ? <div className={cn("ml-3 flex-shrink-0", ICON_COLORS[color])}>{icon}</div> : null}
       </div>
     </div>
   );

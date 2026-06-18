@@ -44,10 +44,10 @@ describe("shouldRunManualPostActiveSideEffects", () => {
     expect(shouldRunManualPostActiveSideEffects({}, "draft")).toBe(false);
   });
 
-  it("does not run for URL-import metadata", () => {
+  it("runs for URL-import metadata after admin review", () => {
     expect(
       shouldRunManualPostActiveSideEffects({ import_staging_id: "st-1" }, "active")
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not run when importStagingId is set", () => {

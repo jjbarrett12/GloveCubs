@@ -2,14 +2,21 @@
 
 /**
  * Admin Data Table Component
- * 
- * Reusable table with:
- * - Compact, scannable rows
- * - Click-to-select behavior
- * - Loading/empty states
- * - Responsive horizontal scroll
+ *
+ * Reusable table with compact rows, click-to-select, loading/empty states.
+ * Uses admin semantic tokens (scoped via data-admin-theme).
  */
 
+import {
+  adminCardSurface,
+  adminTableBody,
+  adminTableCell,
+  adminTableHead,
+  adminTableHeadCell,
+  adminTableRowHover,
+  adminTableRowSelected,
+  adminTableShell,
+} from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
@@ -58,17 +65,17 @@ export function DataTable<T extends Record<string, unknown>>({
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-        {emptyIcon && <div className="mb-3 text-gray-400">{emptyIcon}</div>}
-        <p className="text-sm">{emptyMessage}</p>
+      <div className="flex flex-col items-center justify-center py-12 text-admin-muted">
+        {emptyIcon ? <div className="mb-3 text-admin-muted">{emptyIcon}</div> : null}
+        <p className="text-sm text-admin-secondary">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className={cn("bg-gray-50", stickyHeader && "sticky top-0 z-10")}>
+      <table className={adminTableShell}>
+        <thead className={cn(adminTableHead, stickyHeader && "sticky top-0 z-10")}>
           <tr>
             {columns.map((col) => (
               <th
@@ -76,11 +83,11 @@ export function DataTable<T extends Record<string, unknown>>({
                 scope="col"
                 style={{ width: col.width }}
                 className={cn(
-                  "text-left text-xs font-medium text-gray-500 uppercase tracking-wider",
+                  adminTableHeadCell,
                   compact ? "px-3 py-2" : "px-4 py-3",
                   col.align === "center" && "text-center",
                   col.align === "right" && "text-right",
-                  col.headerClassName
+                  col.headerClassName,
                 )}
               >
                 {col.header}
@@ -88,38 +95,36 @@ export function DataTable<T extends Record<string, unknown>>({
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-100">
+        <tbody className={adminTableBody}>
           {data.map((row, index) => {
             const key = row[keyField] as string | number;
             const isSelected = selectedId !== undefined && key === selectedId;
-            
+
             return (
               <tr
                 key={key}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   "transition-colors",
-                  onRowClick && "cursor-pointer hover:bg-blue-50",
-                  isSelected && "bg-blue-50 ring-1 ring-inset ring-blue-200"
+                  onRowClick && cn("cursor-pointer", adminTableRowHover),
+                  isSelected && adminTableRowSelected,
                 )}
               >
                 {columns.map((col) => (
                   <td
                     key={col.key}
                     className={cn(
-                      "text-sm text-gray-900",
+                      adminTableCell,
                       compact ? "px-3 py-2" : "px-4 py-3",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
-                      col.mono && "font-mono text-xs",
+                      col.mono && "font-mono text-xs text-admin-secondary",
                       col.truncate && "max-w-xs truncate",
-                      col.className
+                      col.className,
                     )}
                     title={col.truncate ? String(row[col.key] ?? "") : undefined}
                   >
-                    {col.render
-                      ? col.render(row, index)
-                      : String(row[col.key] ?? "-")}
+                    {col.render ? col.render(row, index) : String(row[col.key] ?? "-")}
                   </td>
                 ))}
               </tr>
@@ -134,11 +139,11 @@ export function DataTable<T extends Record<string, unknown>>({
 function TableSkeleton({ columns, rows }: { columns: number; rows: number }) {
   return (
     <div className="animate-pulse">
-      <div className="h-10 bg-gray-100 rounded-t" />
+      <div className="h-10 rounded-t bg-admin-surface-muted" />
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-4 px-3 py-3 border-b border-gray-100">
+        <div key={i} className="flex gap-4 border-b border-admin-border-subtle px-3 py-3">
           {Array.from({ length: columns }).map((_, j) => (
-            <div key={j} className="h-4 bg-gray-100 rounded flex-1" />
+            <div key={j} className="h-4 flex-1 rounded bg-admin-surface-muted" />
           ))}
         </div>
       ))}
@@ -153,21 +158,11 @@ export function TableCard({
 }: {
   children: ReactNode;
   className?: string;
+  /** @deprecated Theme follows data-admin-theme */
   variant?: "default" | "dark";
 }) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border shadow-sm overflow-hidden",
-        variant === "dark"
-          ? "border-white/10 bg-[#141414] ring-1 ring-white/[0.04]"
-          : "border-gray-200 bg-white",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
+  void variant;
+  return <div className={cn(adminCardSurface, "overflow-hidden", className)}>{children}</div>;
 }
 
 export function TableToolbar({
@@ -177,13 +172,14 @@ export function TableToolbar({
 }: {
   children: ReactNode;
   className?: string;
+  /** @deprecated Theme follows data-admin-theme */
   variant?: "default" | "dark";
 }) {
+  void variant;
   return (
     <div
       className={cn(
-        "px-4 py-3 border-b flex items-center gap-4 flex-wrap",
-        variant === "dark" ? "border-white/10 bg-[#181818] text-xs text-neutral-400" : "border-gray-200 bg-gray-50 text-xs text-gray-500",
+        "flex flex-wrap items-center gap-4 border-b border-admin-border-subtle bg-admin-surface-muted px-4 py-3 text-xs text-admin-muted",
         className,
       )}
     >

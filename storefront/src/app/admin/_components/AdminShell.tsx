@@ -5,6 +5,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { AdminThemeToggle } from "@/app/admin/_components/AdminThemeToggle";
+import type { AdminHealthIssue, AdminHealthSeverity, AdminHealthStatus } from "@/lib/admin/admin-health";
+import { getAdminHealthShellDisplay, type AdminHealthShellTone } from "@/lib/admin/admin-health";
+import { adminFocusRing } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -215,13 +219,14 @@ function NavLink({
       href={item.href}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        adminFocusRing(),
         active
-          ? "bg-[#fff7f2] text-slate-900 shadow-sm ring-1 ring-[#f06232]/20"
-          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+          ? "border-l-2 border-admin-accent bg-admin-accent-soft pl-[10px] text-admin-primary shadow-sm"
+          : "border-l-2 border-transparent text-admin-secondary hover:bg-admin-surface-muted hover:text-admin-primary",
       )}
     >
-      <span className={cn("shrink-0", active ? "text-[#e5582d]" : "text-slate-400")}>{item.icon}</span>
+      <span className={cn("shrink-0", active ? "text-admin-accent" : "text-admin-muted")}>{item.icon}</span>
       <span className="truncate">{item.label}</span>
     </Link>
   );
@@ -240,7 +245,7 @@ function NavBlock({
 }) {
   return (
     <div className="mt-6 first:mt-0">
-      <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</p>
+      <p className="px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-admin-muted">{title}</p>
       <nav className="mt-2 flex flex-col gap-0.5" aria-label={title}>
         {items.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
@@ -255,9 +260,24 @@ type Props = {
   adminUserId: string;
   adminEmail: string | null;
   deployEnv: string;
+  health: {
+    status: AdminHealthStatus;
+    severity: AdminHealthSeverity;
+    issues: AdminHealthIssue[];
+  };
 };
 
-export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Props) {
+function healthPillClasses(tone: AdminHealthShellTone): string {
+  if (tone === "success") {
+    return "border-admin-success/30 bg-[var(--admin-success-surface)] text-admin-success";
+  }
+  if (tone === "critical") {
+    return "border-admin-danger/30 bg-[var(--admin-danger-surface)] text-admin-danger";
+  }
+  return "border-admin-warning/30 bg-[var(--admin-warning-surface)] text-admin-warning";
+}
+
+export function AdminShell({ children, adminUserId, adminEmail, deployEnv, health }: Props) {
   const pathname = usePathname() || "";
   const [signingOut, setSigningOut] = React.useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -284,12 +304,19 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
 
   const identity = adminEmail?.trim() || `User ${adminUserId.slice(0, 8)}…`;
   const envIsProd = deployEnv === "production";
+  const healthDisplay = getAdminHealthShellDisplay(health);
+  const topIssue = health.issues[0];
 
   const closeMobile = () => setMobileMenuOpen(false);
 
   const brandBlock = (
-    <Link href="/admin" className="flex items-center gap-3 rounded-lg px-2 py-2" aria-label="GloveCubs admin home" onClick={closeMobile}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
+    <Link
+      href="/admin"
+      className={cn("flex items-center gap-3 rounded-lg px-2 py-2", adminFocusRing())}
+      aria-label="GloveCubs admin home"
+      onClick={closeMobile}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-admin-border bg-admin-surface shadow-sm ring-1 ring-admin-border-subtle">
         <Image
           src="/images/glovecubs-header-logo.png"
           alt=""
@@ -301,27 +328,44 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
         />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold leading-tight text-slate-900">GloveCubs</span>
-        <span className="block text-xs font-medium text-slate-500">Admin</span>
+        <span className="block text-sm font-semibold leading-tight text-admin-primary">GloveCubs</span>
+        <span className="block text-[11px] font-medium uppercase tracking-wide text-admin-muted">Operator</span>
       </span>
     </Link>
   );
 
+  const envBadge = (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
+        envIsProd
+          ? "border border-admin-success/30 bg-[var(--admin-success-surface)] text-admin-success"
+          : "border border-admin-border bg-admin-surface-muted text-admin-secondary",
+      )}
+      title="Deployment environment"
+    >
+      {deployEnv}
+    </span>
+  );
+
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
-      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-slate-200/90 bg-white lg:flex">
-        <div className="flex h-14 items-center border-b border-slate-100 px-3">{brandBlock}</div>
+    <div className="flex min-h-screen bg-admin-canvas text-admin-primary">
+      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-admin-border bg-admin-canvas-raised lg:flex">
+        <div className="flex h-14 items-center border-b border-admin-border-subtle px-3">{brandBlock}</div>
         <div className="flex-1 overflow-y-auto px-2 py-4">
           <AdminNavSections pathname={pathname} />
         </div>
-        <div className="border-t border-slate-100 p-3">
-          <p className="truncate px-1 text-xs text-slate-500" title={identity}>
+        <div className="border-t border-admin-border-subtle p-3">
+          <p className="truncate px-1 text-xs text-admin-muted" title={identity}>
             {identity}
           </p>
           <div className="mt-2 flex flex-col gap-1.5">
             <Link
               href="/store"
-              className="rounded-md px-2 py-1.5 text-center text-xs font-medium text-slate-600 ring-1 ring-slate-200/90 hover:bg-slate-50"
+              className={cn(
+                "rounded-md px-2 py-1.5 text-center text-xs font-medium text-admin-secondary ring-1 ring-admin-border hover:bg-admin-surface-muted hover:text-admin-primary",
+                adminFocusRing(),
+              )}
             >
               View store
             </Link>
@@ -329,7 +373,10 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
               type="button"
               disabled={signingOut}
               onClick={() => void onSignOut()}
-              className="rounded-md bg-slate-900 px-2 py-1.5 text-center text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              className={cn(
+                "rounded-md bg-admin-accent px-2 py-1.5 text-center text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50",
+                adminFocusRing(),
+              )}
             >
               {signingOut ? "Signing out…" : "Sign out"}
             </button>
@@ -338,53 +385,95 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 lg:hidden"
-              aria-label="Open navigation"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
-            </button>
-            <div className="min-w-0 lg:hidden">{brandBlock}</div>
-            <span
-              className={cn(
-                "hidden items-center rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide sm:inline-flex",
-                envIsProd
-                  ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border border-slate-200 bg-slate-50 text-slate-600",
-              )}
-              title="Deployment environment"
-            >
-              {deployEnv}
-            </span>
+        <header className="sticky top-0 z-40 border-b border-admin-border bg-admin-canvas-raised/95 backdrop-blur supports-[backdrop-filter]:bg-admin-canvas-raised/80">
+          <div className="flex h-14 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className={cn(
+                  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-admin-border bg-admin-surface text-admin-secondary hover:bg-admin-surface-muted hover:text-admin-primary lg:hidden",
+                  adminFocusRing(),
+                )}
+                aria-label="Open navigation"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              </button>
+              <div className="min-w-0 lg:hidden">{brandBlock}</div>
+              <div className="hidden sm:block">{envBadge}</div>
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <Link
+                href="/admin/settings#health"
+                className={cn(
+                  "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:inline-flex",
+                  healthPillClasses(healthDisplay.pillTone),
+                  adminFocusRing(),
+                )}
+                title="View Admin Health"
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    healthDisplay.pillTone === "success"
+                      ? "bg-admin-success"
+                      : healthDisplay.pillTone === "critical"
+                        ? "bg-admin-danger"
+                        : "bg-admin-warning",
+                  )}
+                  aria-hidden
+                />
+                {healthDisplay.pillLabel}
+              </Link>
+              <div className="hidden md:block">
+                <AdminThemeToggle variant="compact" />
+              </div>
+              <span className="hidden max-w-[140px] truncate text-xs text-admin-muted lg:inline" title={identity}>
+                {identity}
+              </span>
+              <Link
+                href="/store"
+                className={cn(
+                  "hidden shrink-0 text-xs font-medium text-admin-secondary hover:text-admin-primary sm:inline",
+                  adminFocusRing(),
+                )}
+              >
+                Store
+              </Link>
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={() => void onSignOut()}
+                className={cn(
+                  "hidden shrink-0 rounded-md border border-admin-border bg-admin-surface px-3 py-1.5 text-xs font-medium text-admin-primary shadow-sm hover:bg-admin-surface-muted disabled:opacity-50 md:inline",
+                  adminFocusRing(),
+                )}
+              >
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
           </div>
-          <div className="hidden items-center gap-4 truncate text-xs text-slate-500 md:flex">
-            <span className="truncate" title={identity}>
-              {identity}
-            </span>
-            <Link href="/store" className="shrink-0 font-medium text-slate-600 hover:text-slate-900">
-              Store
-            </Link>
-            <button
-              type="button"
-              disabled={signingOut}
-              onClick={() => void onSignOut()}
-              className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-            >
-              {signingOut ? "Signing out…" : "Sign out"}
-            </button>
-          </div>
+
+          {healthDisplay.showStrip && topIssue ? (
+            <div className="border-t border-admin-border-subtle bg-admin-surface-muted px-4 py-2 sm:px-6 lg:px-8">
+              <p className="text-xs leading-snug text-admin-secondary">
+                <span className="font-medium text-admin-primary">{topIssue.title}</span>
+                {health.issues.length > 1 ? ` · ${health.issues.length - 1} more` : null}.{" "}
+                <Link href="/admin/settings#health" className="font-medium text-admin-accent underline-offset-2 hover:underline">
+                  View Admin Health
+                </Link>
+              </p>
+            </div>
+          ) : null}
         </header>
 
-        <div className="border-b border-slate-200/80 bg-slate-50/90">
+        <div className="border-b border-admin-border-subtle bg-admin-surface-muted/50">
           <div className="mx-auto max-w-[1400px] px-4 py-2.5 sm:px-6 lg:px-10">
-            <p className="text-sm leading-snug text-slate-700">
-              Signed-in operators only. Product edits here follow your team&apos;s publishing rules.
+            <p className="text-xs leading-snug text-admin-secondary sm:text-sm">
+              Signed-in operators only. Product edits follow your team&apos;s publishing rules.
             </p>
           </div>
         </div>
@@ -396,17 +485,20 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-900/40"
+            className="absolute inset-0 bg-black/50"
             aria-label="Close navigation"
             onClick={closeMobile}
           />
-          <div className="absolute inset-y-0 left-0 flex w-[min(280px,88vw)] flex-col border-r border-slate-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-3 py-3">
+          <div className="absolute inset-y-0 left-0 flex w-[min(280px,88vw)] flex-col border-r border-admin-border bg-admin-canvas-raised shadow-xl">
+            <div className="flex items-center justify-between border-b border-admin-border-subtle px-3 py-3">
               {brandBlock}
               <button
                 type="button"
                 onClick={closeMobile}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-admin-border text-admin-secondary hover:bg-admin-surface-muted",
+                  adminFocusRing(),
+                )}
                 aria-label="Close"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
@@ -414,24 +506,34 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
                 </svg>
               </button>
             </div>
+            <div className="border-b border-admin-border-subtle px-3 py-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {envBadge}
+                <Link
+                  href="/admin/settings#health"
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                    healthPillClasses(healthDisplay.pillTone),
+                  )}
+                >
+                  {healthDisplay.pillLabel}
+                </Link>
+              </div>
+              <AdminThemeToggle variant="compact" />
+            </div>
             <div className="flex-1 overflow-y-auto px-2 py-3">
               <AdminNavSections pathname={pathname} onNavigate={closeMobile} />
             </div>
-            <div className="border-t border-slate-100 p-3">
-              <span
-                className={cn(
-                  "mb-2 inline-flex rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-                  envIsProd ? "border border-emerald-200 bg-emerald-50 text-emerald-800" : "border border-slate-200 bg-slate-50 text-slate-600",
-                )}
-              >
-                {deployEnv}
-              </span>
-              <p className="truncate text-xs text-slate-500">{identity}</p>
+            <div className="border-t border-admin-border-subtle p-3">
+              <p className="truncate text-xs text-admin-muted">{identity}</p>
               <div className="mt-2 flex flex-col gap-1.5">
                 <Link
                   href="/store"
                   onClick={closeMobile}
-                  className="rounded-md px-2 py-1.5 text-center text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                  className={cn(
+                    "rounded-md px-2 py-1.5 text-center text-xs font-medium text-admin-secondary ring-1 ring-admin-border hover:bg-admin-surface-muted",
+                    adminFocusRing(),
+                  )}
                 >
                   View store
                 </Link>
@@ -439,7 +541,10 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv }: Pro
                   type="button"
                   disabled={signingOut}
                   onClick={() => void onSignOut()}
-                  className="rounded-md bg-slate-900 px-2 py-1.5 text-center text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  className={cn(
+                    "rounded-md bg-admin-accent px-2 py-1.5 text-center text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50",
+                    adminFocusRing(),
+                  )}
                 >
                   {signingOut ? "Signing out…" : "Sign out"}
                 </button>

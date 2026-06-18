@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { adminFocusRing } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 
 const tabs: { id: string | null; label: string; href: string }[] = [
@@ -12,18 +13,13 @@ const tabs: { id: string | null; label: string; href: string }[] = [
 
 export function ProductsWorkspaceTabs({
   activeTab,
-  variant = "default",
 }: {
   activeTab: string | undefined;
   variant?: "default" | "dark";
 }) {
-  const dark = variant === "dark";
   return (
     <div
-      className={cn(
-        "mb-6 flex flex-wrap gap-1 rounded-xl border p-1 shadow-sm",
-        dark ? "border-white/10 bg-[#141414]" : "border-slate-200/90 bg-slate-100/80",
-      )}
+      className="mb-6 flex flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface-muted p-1 shadow-sm"
       role="tablist"
       aria-label="Product workspace"
     >
@@ -37,13 +33,10 @@ export function ProductsWorkspaceTabs({
             aria-selected={active}
             className={cn(
               "inline-flex min-h-[40px] items-center rounded-lg px-3.5 py-2 text-sm font-medium transition",
-              dark
-                ? active
-                  ? "bg-[#f06232] text-white shadow-sm"
-                  : "text-neutral-400 hover:bg-white/[0.06] hover:text-white"
-                : active
-                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/90"
-                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900",
+              adminFocusRing(),
+              active
+                ? "bg-admin-accent text-white shadow-sm"
+                : "text-admin-muted hover:bg-admin-surface hover:text-admin-primary",
             )}
           >
             {t.label}

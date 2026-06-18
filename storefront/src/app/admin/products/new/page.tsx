@@ -1,4 +1,6 @@
-import { PageHeader } from "@/components/admin";
+import { PageHeader, ErrorState } from "@/components/admin";
+import { adminAlertSurface } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ProductEditorForm } from "@/app/admin/products/_components/ProductEditorForm";
 
@@ -11,7 +13,7 @@ export default async function AdminNewProductPage() {
   const categories = await fetchAdminCategoriesForProductForm();
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 pb-10 shadow-sm sm:p-8">
+    <div>
       <PageHeader
         title="Add product"
         description="Draft first, publish later: new rows default to draft. Publishing requires category, a non-placeholder image, and at least one active variant per database guardrails."
@@ -21,8 +23,8 @@ export default async function AdminNewProductPage() {
         ]}
       />
       {categories.length === 0 ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          No categories returned from Supabase. Confirm catalogos.categories is populated before assigning products.
+        <div className={cn(adminAlertSurface("warning", "mb-4"))}>
+          No categories returned from the catalog. Confirm categories are populated before assigning products.
         </div>
       ) : null}
       <ProductEditorForm categories={categories} mode="create" />
