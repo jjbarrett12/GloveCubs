@@ -71,15 +71,22 @@ describe("Admin products review page", () => {
     const p = join(__dirname, "page.tsx");
     const s = readFileSync(p, "utf8");
     expect(s).toContain("isUnifiedReviewQueueEnabled");
-    expect(s).toContain("listUnifiedReviewQueue");
+    expect(s).toContain("loadAdminProductsReviewPageData");
     expect(s).toContain("useUnifiedQueue");
     expect(s).toContain("CatalogOS URL import batch");
   });
 
-  it("falls back to clipboard when unified flag off", () => {
-    const p = join(__dirname, "page.tsx");
-    const s = readFileSync(p, "utf8");
-    expect(s).toContain("listClipboardStaging");
+  it("does not pass server functions into the client review queue", () => {
+    const page = readFileSync(join(__dirname, "page.tsx"), "utf8");
+    const client = readFileSync(join(__dirname, "_components/ProductReviewQueueClient.tsx"), "utf8");
+    expect(page).not.toMatch(/modeLabel=\{/);
+    expect(client).toContain('from "@/lib/unified-ingestion/labels"');
+  });
+
+  it("labels CatalogOS runPublish as canonical publish path", () => {
+    const page = readFileSync(join(__dirname, "page.tsx"), "utf8");
+    expect(page).toContain("Canonical publish");
+    expect(page).toContain("runPublish");
   });
 });
 

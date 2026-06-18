@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
 import type { UnifiedReviewQueueRow } from "@/lib/admin/unified-ingestion-review-queue";
-import type { IngestionMode } from "@/lib/unified-ingestion/types";
+import { modeLabel } from "@/lib/unified-ingestion/labels";
 import type { AdminCategoryOption } from "@/lib/admin/product-form-options";
 import {
   parseClipboardCatalogosStagingRef,
@@ -61,7 +61,6 @@ export function ProductReviewQueueClient({
   clipboardRows,
   categories,
   supabaseConfigured,
-  modeLabel,
   catalogosBaseUrl = "",
   batchId = "",
 }: {
@@ -70,7 +69,6 @@ export function ProductReviewQueueClient({
   clipboardRows: ClipboardStagingRow[];
   categories: AdminCategoryOption[];
   supabaseConfigured: boolean;
-  modeLabel: (mode: IngestionMode) => string;
   catalogosBaseUrl?: string;
   batchId?: string;
 }) {
@@ -272,7 +270,6 @@ export function ProductReviewQueueClient({
           <UnifiedTable
             rows={unifiedRows}
             categories={categories}
-            modeLabel={modeLabel}
             catalogosBaseUrl={catalogosBaseUrl}
             promoteId={promoteId}
             promoteCategory={promoteCategory}
@@ -308,7 +305,6 @@ export function ProductReviewQueueClient({
 function UnifiedTable({
   rows,
   categories,
-  modeLabel,
   catalogosBaseUrl,
   promoteId,
   promoteCategory,
@@ -323,7 +319,6 @@ function UnifiedTable({
 }: {
   rows: UnifiedReviewQueueRow[];
   categories: AdminCategoryOption[];
-  modeLabel: (mode: IngestionMode) => string;
   catalogosBaseUrl: string;
   promoteId: string | null;
   promoteCategory: string;

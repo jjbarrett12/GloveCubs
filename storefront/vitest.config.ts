@@ -6,7 +6,7 @@ const gloveSkuRoot = path.resolve(__dirname, "../lib/glove-sku-intelligence");
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "../lib/commerce-packaging/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs", "../lib/commerce-packaging/**/*.test.ts"],
     globals: false,
   },
   resolve: {

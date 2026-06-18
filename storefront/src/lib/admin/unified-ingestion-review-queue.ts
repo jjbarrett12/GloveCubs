@@ -4,7 +4,10 @@
 
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import type { IngestionJobStatus, IngestionMode } from "@/lib/unified-ingestion/types";
+import { modeLabel as unifiedIngestionModeLabel } from "@/lib/unified-ingestion/labels";
 import { parseIngestionJobLineage } from "@/lib/admin/review-queue-catalogos-handoff";
+import type { ReviewFetchWarning } from "@/lib/admin/review-fetch-errors";
+import { classifyReviewFetchError, sanitizeReviewFetchMessage } from "@/lib/admin/review-fetch-errors";
 
 export type FieldEvidenceSummary = {
   value: unknown;
@@ -90,17 +93,29 @@ export function dedupeUnifiedQueueRows(rows: UnifiedReviewQueueRow[]): UnifiedRe
   return Array.from(byFp.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
-export function modeLabel(mode: IngestionMode): string {
-  return mode === "quick_draft" ? "Quick Draft" : "Deep Supplier Crawl";
+export { unifiedIngestionModeLabel as modeLabel };
+
+function unifiedQueueFetchError(message: string, code?: string | null): ReviewFetchWarning {
+  return {
+    area: "unified_queue",
+    code: code?.trim() || "query_failed",
+    message: sanitizeReviewFetchMessage(message),
+  };
 }
 
-export async function listUnifiedReviewQueue(
+export async function fetchUnifiedReviewQueue(
   filters: ReviewQueueFilters = {}
-): Promise<UnifiedReviewQueueRow[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<{ rows: UnifiedReviewQueueRow[]; error: ReviewFetchWarning | null }> {
+  if (!isSupabaseConfigured()) return { rows: [], error: null };
+
+  let supabase: any;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    return { rows: [], error: classifyReviewFetchError("unified_queue", err) };
+  }
 
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500);
-  const supabase = getSupabaseAdmin() as any;
 
   let variantQuery = supabase
     .schema("catalog_v2")
@@ -151,7 +166,7 @@ export async function listUnifiedReviewQueue(
   const { data: variants, error: vErr } = await variantQuery;
   if (vErr) {
     console.error("[unified-review-queue] variants", vErr.message);
-    return [];
+    return { rows: [], error: unifiedQueueFetchError(vErr.message, vErr.code) };
   }
 
   const variantIds: string[] = [];
@@ -216,7 +231,7 @@ export async function listUnifiedReviewQueue(
     variantIds.push(String(v.id));
   }
 
-  if (variantIds.length === 0) return dedupeUnifiedQueueRows(rows);
+  if (variantIds.length === 0) return { rows: dedupeUnifiedQueueRows(rows), error: null };
 
   const { data: evidenceRows, error: eErr } = await supabase
     .schema("catalog_v2")
@@ -228,7 +243,7 @@ export async function listUnifiedReviewQueue(
 
   if (eErr) {
     console.error("[unified-review-queue] evidence", eErr.message);
-    return dedupeUnifiedQueueRows(rows);
+    return { rows: dedupeUnifiedQueueRows(rows), error: null };
   }
 
   const evidenceByVariant = new Map<string, EvidenceRow[]>();
@@ -251,7 +266,14 @@ export async function listUnifiedReviewQueue(
     }
   }
 
-  return dedupeUnifiedQueueRows(rows);
+  return { rows: dedupeUnifiedQueueRows(rows), error: null };
+}
+
+export async function listUnifiedReviewQueue(
+  filters: ReviewQueueFilters = {}
+): Promise<UnifiedReviewQueueRow[]> {
+  const { rows } = await fetchUnifiedReviewQueue(filters);
+  return rows;
 }
 
 export async function getUnifiedIngestionJobDetail(jobId: string) {

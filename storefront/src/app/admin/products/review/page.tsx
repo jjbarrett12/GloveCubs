@@ -1,14 +1,8 @@
 import { computeProductsImportConnectionStatus } from "@/lib/admin/products-import-connection";
+import { loadAdminProductsReviewPageData } from "@/lib/admin/review-page-load";
 import { PageHeader, StatCard, StatGrid } from "@/components/admin";
 import { adminAlertSurface } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
-import { listClipboardStaging, type ClipboardStagingRow } from "@/lib/admin/clipboard-url-staging";
-import {
-  listUnifiedReviewQueue,
-  modeLabel,
-  type UnifiedReviewQueueRow,
-} from "@/lib/admin/unified-ingestion-review-queue";
-import { fetchAdminCategoriesForProductForm, type AdminCategoryOption } from "@/lib/admin/product-form-options";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { isUnifiedReviewQueueEnabled } from "@/lib/unified-ingestion/config";
 import { ProductReviewQueueClient } from "./_components/ProductReviewQueueClient";
@@ -31,30 +25,14 @@ export default async function AdminProductsReviewPage({
     process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/+$/, "") ||
     conn.catalogos_base_url?.replace(/\/+$/, "") ||
     "";
-  const configured = isSupabaseConfigured();
   const useUnifiedQueue = isUnifiedReviewQueueEnabled();
 
   const rawBatch = searchParams.batchId;
   const batchId =
     typeof rawBatch === "string" ? rawBatch.trim() : Array.isArray(rawBatch) ? (rawBatch[0] ?? "").trim() : "";
 
-  let unifiedRows: UnifiedReviewQueueRow[] = [];
-  let clipboardRows: ClipboardStagingRow[] = [];
-  let categories: AdminCategoryOption[] = [];
-
-  if (configured) {
-    if (useUnifiedQueue) {
-      [unifiedRows, categories] = await Promise.all([
-        listUnifiedReviewQueue({ limit: 200 }),
-        fetchAdminCategoriesForProductForm(),
-      ]);
-    } else {
-      [clipboardRows, categories] = await Promise.all([
-        listClipboardStaging(200),
-        fetchAdminCategoriesForProductForm(),
-      ]);
-    }
-  }
+  const { unifiedRows, clipboardRows, categories, warnings, queueError } =
+    await loadAdminProductsReviewPageData({ useUnifiedQueue });
 
   const needsReview = useUnifiedQueue
     ? unifiedRows.filter((r) => r.reviewStatus === "needs_review").length
@@ -65,6 +43,9 @@ export default async function AdminProductsReviewPage({
   const dismissed = useUnifiedQueue
     ? unifiedRows.filter((r) => r.reviewStatus === "dismissed").length
     : clipboardRows.filter((r) => r.review_status === "dismissed").length;
+
+  const optionalWarnings = warnings.filter((warning) => warning.area === "categories");
+  const queueLabel = useUnifiedQueue ? "Unified ingestion queue" : "Clipboard staging queue";
 
   return (
     <div>
@@ -84,6 +65,40 @@ export default async function AdminProductsReviewPage({
         <StatCard label="Promoted to draft" value={promoted} color="green" accentBorder />
         <StatCard label="Dismissed" value={dismissed} color="default" accentBorder />
       </StatGrid>
+
+      <div className={cn(adminAlertSurface("info", "mb-6"))}>
+        <strong className="text-admin-accent">Canonical publish</strong> — production go-live uses CatalogOS{" "}
+        <span className="font-mono text-xs">runPublish</span> from review/publish. Storefront review queues are visibility
+        and draft promotion only; they do not replace CatalogOS publish for variants, offers, images, attributes, or
+        pricing.
+        {catalogosBaseUrl ? (
+          <span className="mt-2 block">
+            <a href={`${catalogosBaseUrl}/dashboard/publish`} target="_blank" rel="noopener noreferrer" className="font-semibold text-admin-accent underline">
+              Open CatalogOS publish
+            </a>
+          </span>
+        ) : null}
+      </div>
+
+      {queueError ? (
+        <div className={cn(adminAlertSurface("critical", "mb-6"))}>
+          <strong className="text-admin-danger">{queueLabel} unavailable.</strong>{" "}
+          <span className="text-admin-secondary">{queueError.message}</span>
+          <div className="mt-2 font-mono text-xs text-admin-muted">
+            area={queueError.area} code={queueError.code}
+          </div>
+        </div>
+      ) : null}
+
+      {optionalWarnings.map((warning) => (
+        <div key={`${warning.area}-${warning.code}`} className={cn(adminAlertSurface("warning", "mb-6"))}>
+          <strong className="text-admin-warning">Category list unavailable.</strong>{" "}
+          <span className="text-admin-secondary">{warning.message}</span>
+          <div className="mt-2 font-mono text-xs text-admin-muted">
+            area={warning.area} code={warning.code}
+          </div>
+        </div>
+      ))}
 
       {useUnifiedQueue ? (
         <div className={cn(adminAlertSurface("info", "mb-6"))}>
@@ -123,8 +138,7 @@ export default async function AdminProductsReviewPage({
         unifiedRows={unifiedRows}
         clipboardRows={clipboardRows}
         categories={categories}
-        supabaseConfigured={configured}
-        modeLabel={modeLabel}
+        supabaseConfigured={isSupabaseConfigured()}
         catalogosBaseUrl={catalogosBaseUrl}
         batchId={batchId}
       />

@@ -1,4 +1,6 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import type { ReviewFetchWarning } from "@/lib/admin/review-fetch-errors";
+import { sanitizeReviewFetchMessage } from "@/lib/admin/review-fetch-errors";
 import { assertUrlSafeForServerFetch } from "@/lib/admin/url-fetch-guard";
 import { fetchHtmlForImport } from "@/lib/admin/import-draft-fetch";
 import {
@@ -41,9 +43,25 @@ export type ClipboardStagingRow = {
   last_edited_at: string | null;
 };
 
-export async function listClipboardStaging(limit = 50): Promise<ClipboardStagingRow[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabaseAdmin() as any;
+function clipboardQueueFetchError(message: string, code?: string | null): ReviewFetchWarning {
+  return {
+    area: "clipboard_queue",
+    code: code?.trim() || "query_failed",
+    message: sanitizeReviewFetchMessage(message),
+  };
+}
+
+export async function listClipboardStaging(
+  limit = 50
+): Promise<{ rows: ClipboardStagingRow[]; error: ReviewFetchWarning | null }> {
+  if (!isSupabaseConfigured()) return { rows: [], error: null };
+  let supabase: any;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Review data could not be loaded.";
+    return { rows: [], error: clipboardQueueFetchError(message) };
+  }
   const { data, error } = await supabase
     .schema("catalog_v2")
     .from("admin_url_clipboard_staging")
@@ -53,7 +71,7 @@ export async function listClipboardStaging(limit = 50): Promise<ClipboardStaging
     .limit(limit);
   if (error) {
     console.error("[clipboard-staging] list failed", error.message);
-    return [];
+    return { rows: [], error: clipboardQueueFetchError(error.message, error.code) };
   }
 
   const rows = (data ?? []) as Omit<ClipboardStagingRow, "last_edited_at">[];
@@ -78,13 +96,16 @@ export async function listClipboardStaging(limit = 50): Promise<ClipboardStaging
     }
   }
 
-  return rows.map((r) => {
-    const productId = r.created_catalog_product_id?.trim();
-    return {
-      ...r,
-      last_edited_at: (productId && productUpdatedAt.get(productId)) || r.created_at || null,
-    };
-  });
+  return {
+    rows: rows.map((r) => {
+      const productId = r.created_catalog_product_id?.trim();
+      return {
+        ...r,
+        last_edited_at: (productId && productUpdatedAt.get(productId)) || r.created_at || null,
+      };
+    }),
+    error: null,
+  };
 }
 
 export type CreateClipboardStagingResult =
