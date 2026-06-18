@@ -28,12 +28,15 @@ import {
   SKU_PROPOSAL_SAFE_CONFIDENCE,
 } from "@/lib/admin/variant-sku-intelligence";
 import {
-  clipboardUrlImportActiveStatusError,
   isUrlImportProductMetadata,
-  URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
   URL_IMPORT_REVIEW_GUIDANCE,
   URL_IMPORT_REVIEW_REQUIRED_MESSAGE,
 } from "@/lib/admin/clipboard-promote-guards";
+import {
+  CATALOGOS_CANONICAL_PUBLISH_MESSAGE,
+  isStorefrontManualActivePublishAllowed,
+  URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
+} from "@/lib/admin/canonical-publish-policy";
 
 export type ReadinessItem = {
   code: string;
@@ -113,11 +116,19 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
 
   const attrKeys = attributeKeysWithValues(input.attributes);
 
-  if (input.publishIntent && isUrlImportProductMetadata(input.metadata) && !input.adminReviewPublish) {
+  if (input.publishIntent && isUrlImportProductMetadata(input.metadata)) {
     publishBlockers.push({
-      code: "url_import_non_admin_publish_blocked",
-      label: clipboardUrlImportActiveStatusError(input.metadata, "active") ?? URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
+      code: "url_import_catalogos_publish_required",
+      label: URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
       severity: "blocker",
+      recommendedAction: "Open CatalogOS review and publish with runPublish.",
+    });
+  } else if (input.publishIntent && !isStorefrontManualActivePublishAllowed()) {
+    publishBlockers.push({
+      code: "canonical_catalogos_publish_required",
+      label: CATALOGOS_CANONICAL_PUBLISH_MESSAGE,
+      severity: "blocker",
+      recommendedAction: "Publish from CatalogOS review/publish after staging is ready.",
     });
   }
 

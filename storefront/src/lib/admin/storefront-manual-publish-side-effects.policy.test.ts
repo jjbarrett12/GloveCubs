@@ -140,6 +140,15 @@ describe("storefront manual active publish side-effect policy", () => {
 
   });
 
+  it("storefront .env.example documents emergency manual publish flag", () => {
+    const envExample = readFileSync(join(__dirname, "../../../.env.example"), "utf8");
+    expect(envExample).toContain("GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH");
+  });
+
+  it("product-write enforces canonical publish guard", () => {
+    expect(PRODUCT_WRITE).toContain("evaluateStorefrontManualActivePublishGuard");
+  });
+
 });
 
 

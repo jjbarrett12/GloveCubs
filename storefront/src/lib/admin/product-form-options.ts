@@ -1,10 +1,29 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import type { ReviewFetchWarning } from "@/lib/admin/review-fetch-errors";
+import { sanitizeReviewFetchMessage } from "@/lib/admin/review-fetch-errors";
 
 export type AdminCategoryOption = { id: string; name: string; slug: string | null };
 
-export async function fetchAdminCategoriesForProductForm(): Promise<AdminCategoryOption[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabaseAdmin() as any;
+function categoriesFetchError(message: string, code?: string | null): ReviewFetchWarning {
+  return {
+    area: "categories",
+    code: code?.trim() || "query_failed",
+    message: sanitizeReviewFetchMessage(message),
+  };
+}
+
+export async function fetchAdminCategoriesForProductForm(): Promise<{
+  rows: AdminCategoryOption[];
+  error: ReviewFetchWarning | null;
+}> {
+  if (!isSupabaseConfigured()) return { rows: [], error: null };
+  let supabase: any;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Review data could not be loaded.";
+    return { rows: [], error: categoriesFetchError(message) };
+  }
   const { data, error } = await supabase
     .schema("catalogos")
     .from("categories")
@@ -13,7 +32,7 @@ export async function fetchAdminCategoriesForProductForm(): Promise<AdminCategor
     .limit(500);
   if (error) {
     console.error("[admin categories]", error.message);
-    return [];
+    return { rows: [], error: categoriesFetchError(error.message, error.code) };
   }
-  return (data ?? []) as AdminCategoryOption[];
+  return { rows: (data ?? []) as AdminCategoryOption[], error: null };
 }

@@ -107,7 +107,7 @@ describe("computeEditorReadiness", () => {
       brandName: "Brand",
       categoryId: "cat-1",
       primaryImageUrl: "https://img.example/live.jpg",
-      publishIntent: true,
+      publishIntent: false,
       quoteOnly: true,
       attributes: { color: "blue_violet" },
       variants: [{ sizeCode: "M", variantSku: "SKU", listPrice: "" }],
@@ -119,6 +119,7 @@ describe("computeEditorReadiness", () => {
     });
     expect(result.warnings.some((w) => w.code === "missing_images")).toBe(false);
     expect(hasPublishBlockers(result)).toBe(false);
+    expect(result.publishBlockers.some((b) => b.code === "canonical_catalogos_publish_required")).toBe(false);
   });
 
   it("surfaces missing color from import evidence", () => {
@@ -401,7 +402,7 @@ describe("computeEditorReadiness", () => {
     );
   });
 
-  it("allows admin review publish for clipboard URL-import metadata when readiness passes", () => {
+  it("blocks URL-import publish on storefront — CatalogOS required", () => {
     const result = computeEditorReadiness({
       brandName: "Acme",
       categoryId: "cat-1",
@@ -433,10 +434,8 @@ describe("computeEditorReadiness", () => {
       ),
       internalSku: "GLV-TEST",
     });
-    expect(result.publishBlockers.some((b) => b.code === "url_import_non_admin_publish_blocked")).toBe(
-      false
-    );
-    expect(hasPublishBlockers(result)).toBe(false);
+    expect(result.publishBlockers.some((b) => b.code === "url_import_catalogos_publish_required")).toBe(true);
+    expect(hasPublishBlockers(result)).toBe(true);
   });
 
   it("blocks non-admin publish for URL-import metadata", () => {
@@ -462,9 +461,7 @@ describe("computeEditorReadiness", () => {
       ),
       internalSku: "GLV-TEST",
     });
-    expect(result.publishBlockers.some((b) => b.code === "url_import_non_admin_publish_blocked")).toBe(
-      true
-    );
+    expect(result.publishBlockers.some((b) => b.code === "url_import_catalogos_publish_required")).toBe(true);
   });
 
   it("does not warn GLV format for GC parent SKU", () => {

@@ -34,6 +34,8 @@ type Props = {
   onSaveDraft: () => void;
   onPublish: () => void;
   urlImportReview?: boolean;
+  storefrontPublishBlocked?: boolean;
+  catalogosPublishUrl?: string | null;
 };
 
 export function ProductCommandHeader({
@@ -51,8 +53,10 @@ export function ProductCommandHeader({
   onSaveDraft,
   onPublish,
   urlImportReview,
+  storefrontPublishBlocked = false,
+  catalogosPublishUrl = null,
 }: Props) {
-  const publishBlocked = hasPublishBlockers(readiness);
+  const publishBlocked = hasPublishBlockers(readiness) || storefrontPublishBlocked;
   const draftSaveBlocked = hasDraftSaveBlockers(readiness);
   const readinessText = readinessLabel(readiness);
   const readinessTooltip = readinessDetail(readiness);
@@ -132,7 +136,13 @@ export function ProductCommandHeader({
             type="button"
             disabled={pending || publishBlocked}
             onClick={onPublish}
-            title={publishBlocked ? readinessTooltip : undefined}
+            title={
+              storefrontPublishBlocked
+                ? "Use CatalogOS publish for production go-live."
+                : publishBlocked
+                  ? readinessTooltip
+                  : undefined
+            }
             className={adminPrimaryButton}
           >
             {pending && pendingAction === "publish"
@@ -141,6 +151,16 @@ export function ProductCommandHeader({
                 ? "Approve & publish to catalog"
                 : "Publish"}
           </button>
+          {storefrontPublishBlocked && catalogosPublishUrl ? (
+            <Link
+              href={catalogosPublishUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(adminSecondaryButton, "text-xs")}
+            >
+              Publish in CatalogOS
+            </Link>
+          ) : null}
         </div>
       </div>
     </header>

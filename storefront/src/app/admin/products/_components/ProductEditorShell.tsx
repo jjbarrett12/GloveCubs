@@ -74,6 +74,8 @@ export type ProductEditorShellProps = {
   storefrontPdpPath: string | null;
   editor: NonNullable<AdminProductDetailResult["editor"]>;
   primaryImageUrl: string;
+  storefrontPublishBlocked?: boolean;
+  catalogosPublishUrl?: string | null;
 };
 
 function variantsFromDb(
@@ -128,6 +130,8 @@ export function ProductEditorShell({
   storefrontPdpPath,
   editor,
   primaryImageUrl: initialPrimaryImageUrl,
+  storefrontPublishBlocked = false,
+  catalogosPublishUrl = null,
 }: ProductEditorShellProps) {
   const router = useRouter();
   const meta = (product.metadata ?? {}) as Record<string, unknown>;
@@ -488,6 +492,10 @@ export function ProductEditorShell({
         dirty={dirty}
         onSaveDraft={() => save("draft")}
         onPublish={() => {
+          if (storefrontPublishBlocked) {
+            setError("Production publish must use CatalogOS publish to preserve variants, offers, images, attributes, and pricing.");
+            return;
+          }
           if (hasPublishBlockers(publishReadiness)) {
             setError(
               `Cannot publish: ${publishReadiness.publishBlockers.map((b) => b.label).join("; ")}`
@@ -497,7 +505,25 @@ export function ProductEditorShell({
           save("active");
         }}
         urlImportReview={isUrlImport}
+        storefrontPublishBlocked={storefrontPublishBlocked}
+        catalogosPublishUrl={catalogosPublishUrl}
       />
+
+      {storefrontPublishBlocked ? (
+        <div className={cn(adminAlertSurface("warning", "mt-4"))}>
+          <strong className="text-admin-warning">CatalogOS publish required for go-live.</strong>{" "}
+          Save drafts here, then publish from CatalogOS review/publish so variants, offers, images, attributes, and
+          pricing stay aligned.
+          {catalogosPublishUrl ? (
+            <>
+              {" "}
+              <Link href={catalogosPublishUrl} target="_blank" rel="noopener noreferrer" className={adminLink}>
+                Open CatalogOS publish
+              </Link>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {successMessage ? (
         <div role="status" className={cn(adminAlertSurface("success", "sticky top-[5.5rem] z-10 mt-4"))}>

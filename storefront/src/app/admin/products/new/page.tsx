@@ -3,6 +3,12 @@ import { adminAlertSurface } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ProductEditorForm } from "@/app/admin/products/_components/ProductEditorForm";
+import {
+  CATALOGOS_CANONICAL_PUBLISH_MESSAGE,
+  catalogosPublishDashboardUrl,
+  isStorefrontManualActivePublishAllowed,
+  resolveCatalogosPublicBaseUrl,
+} from "@/lib/admin/canonical-publish-policy";
 
 export const metadata = {
   title: "New product | GloveCubs admin",
@@ -10,13 +16,16 @@ export const metadata = {
 };
 
 export default async function AdminNewProductPage() {
-  const categories = await fetchAdminCategoriesForProductForm();
+  const { rows: categories } = await fetchAdminCategoriesForProductForm();
+  const allowStorefrontActivePublish = isStorefrontManualActivePublishAllowed();
+  const catalogosBase = resolveCatalogosPublicBaseUrl();
+  const catalogosPublishUrl = catalogosBase ? catalogosPublishDashboardUrl(catalogosBase) : null;
 
   return (
     <div>
       <PageHeader
         title="Add product"
-        description="Draft first, publish later: new rows default to draft. Publishing requires category, a non-placeholder image, and at least one active variant per database guardrails."
+        description="Draft first. Production go-live publish uses CatalogOS runPublish — not storefront active status."
         breadcrumb={[
           { label: "Products", href: "/admin/products" },
           { label: "New" },
@@ -27,7 +36,13 @@ export default async function AdminNewProductPage() {
           No categories returned from the catalog. Confirm categories are populated before assigning products.
         </div>
       ) : null}
-      <ProductEditorForm categories={categories} mode="create" />
+      <ProductEditorForm
+        categories={categories}
+        mode="create"
+        allowStorefrontActivePublish={allowStorefrontActivePublish}
+        catalogosPublishUrl={catalogosPublishUrl}
+        canonicalPublishMessage={CATALOGOS_CANONICAL_PUBLISH_MESSAGE}
+      />
     </div>
   );
 }

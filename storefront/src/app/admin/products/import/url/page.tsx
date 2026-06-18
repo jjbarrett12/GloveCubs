@@ -28,7 +28,10 @@ export default async function AdminProductsImportUrlPage() {
   const offline = conn.status !== "online";
   const catalogosProbe = !offline ? await probeCatalogosHealth() : null;
   const catalogosUnreachable = catalogosProbe != null && !catalogosProbe.ok;
-  const [stagingRows, categories] = await Promise.all([listClipboardStaging(50), fetchAdminCategoriesForProductForm()]);
+  const [{ rows: stagingRows }, { rows: categories }] = await Promise.all([
+    listClipboardStaging(50),
+    fetchAdminCategoriesForProductForm(),
+  ]);
 
   const catalogosBaseUrl =
     process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/+$/, "") ||

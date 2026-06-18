@@ -93,12 +93,15 @@ export default async function AdminProductsPage({
       }
     : await fetchAdminProductsPage(listQs);
 
-  let stagingRows: Awaited<ReturnType<typeof listClipboardStaging>> = [];
-  let stagingCategories: Awaited<ReturnType<typeof fetchAdminCategoriesForProductForm>> = [];
+  let stagingRows: Awaited<ReturnType<typeof listClipboardStaging>>["rows"] = [];
+  let stagingCategories: Awaited<ReturnType<typeof fetchAdminCategoriesForProductForm>>["rows"] = [];
   if (isUrlImports) {
-    const pair = await Promise.all([listClipboardStaging(50), fetchAdminCategoriesForProductForm()]);
-    stagingRows = pair[0];
-    stagingCategories = pair[1];
+    const [stagingResult, categoriesResult] = await Promise.all([
+      listClipboardStaging(50),
+      fetchAdminCategoriesForProductForm(),
+    ]);
+    stagingRows = stagingResult.rows;
+    stagingCategories = categoriesResult.rows;
   }
 
   const baseQs: Record<string, string | undefined> = {

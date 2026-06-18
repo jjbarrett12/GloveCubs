@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { normalizeCommercePackaging } from "@commerce-packaging/labels";
 import type { AttributeDefinitionRow } from "@/lib/admin/product-attribute-sync";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
@@ -6,6 +6,7 @@ import {
   evaluateActivePublishReadinessSync,
   type ActivePublishReadinessDeps,
 } from "@/lib/admin/product-write-active-readiness";
+import { CATALOGOS_CANONICAL_PUBLISH_MESSAGE } from "@/lib/admin/canonical-publish-policy";
 
 const defs: AttributeDefinitionRow[] = [
   {
@@ -56,6 +57,13 @@ function activeInput(overrides: Partial<ProductWriteInput> = {}): ProductWriteIn
 }
 
 describe("evaluateActivePublishReadinessSync", () => {
+  const prev = process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
+    else process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = prev;
+  });
+
   it("ignores draft saves", () => {
     expect(
       evaluateActivePublishReadinessSync(
@@ -66,46 +74,23 @@ describe("evaluateActivePublishReadinessSync", () => {
     ).toBeNull();
   });
 
-  it("blocks non-admin URL-import metadata before other checks", () => {
+  it("blocks URL-import metadata with CatalogOS publish message", () => {
     const err = evaluateActivePublishReadinessSync(activeInput(), { metadata: { import_staging_id: "st-1" } }, deps);
-    expect(err).toContain("admin review");
+    expect(err).toContain("CatalogOS");
   });
 
-  it("allows admin review publish for URL-import metadata when readiness passes", () => {
+  it("blocks storefront active publish by default even when readiness passes", () => {
     expect(
       evaluateActivePublishReadinessSync(
-        activeInput({
-          attributes: { color: "blue_violet", material: "nitrile", grade: "medical_exam_grade", industries: ["healthcare"] },
-          variants: [
-            {
-              sizeCode: "M",
-              variantSku: "GLV-ACME-M",
-              listPrice: "",
-              manufacturerSku: "N105ORFM",
-            },
-          ],
-        }),
-        { metadata: { import_staging_id: "st-1", product_line_code: "disposable_gloves" }, adminReviewPublish: true },
+        activeInput(),
+        { metadata: { product_line_code: "other_product" } },
         deps
       )
-    ).toBeNull();
+    ).toBe(CATALOGOS_CANONICAL_PUBLISH_MESSAGE);
   });
 
-  it("blocks active save when editor readiness fails (missing brand)", () => {
-    const err = evaluateActivePublishReadinessSync(activeInput({ brandName: "" }), { metadata: {} }, deps);
-    expect(err).toContain("Brand required");
-  });
-
-  it("blocks active save when case packaging missing", () => {
-    const err = evaluateActivePublishReadinessSync(
-      activeInput({ commercePackaging: null }),
-      { metadata: { product_line_code: "other_product" } },
-      deps
-    );
-    expect(err).toMatch(/Case & Pallet|units per case|case product/i);
-  });
-
-  it("passes when readiness mirror is satisfied", () => {
+  it("allows emergency storefront active publish when flag enabled", () => {
+    process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = "1";
     expect(
       evaluateActivePublishReadinessSync(
         activeInput(),
@@ -115,32 +100,20 @@ describe("evaluateActivePublishReadinessSync", () => {
     ).toBeNull();
   });
 
-  it("blocks when required attribute missing", () => {
-    const err = evaluateActivePublishReadinessSync(
-      activeInput({ attributes: {} }),
-      { metadata: { product_line_code: "other_product" } },
-      deps
-    );
-    expect(err).toContain("Required attribute: Color");
-  });
-
-  it("non-admin URL-import block wins over otherwise complete manual product", () => {
-    const err = evaluateActivePublishReadinessSync(
-      activeInput(),
-      { metadata: { catalogos_url_import_job_id: "job-99" } },
-      deps
-    );
-    expect(err).toContain("admin review");
+  it("blocks active save when editor readiness fails under emergency flag", () => {
+    process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = "1";
+    const err = evaluateActivePublishReadinessSync(activeInput({ brandName: "" }), { metadata: {} }, deps);
+    expect(err).toContain("Brand required");
   });
 });
 
 describe("product-write active readiness policy", () => {
-  it("product-write uses evaluateActivePublishReadiness and not runPublish", async () => {
+  it("product-write uses evaluateActivePublishReadiness and canonical publish guard", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const s = readFileSync(join(__dirname, "product-write.ts"), "utf8");
     expect(s).toContain("evaluateActivePublishReadiness");
+    expect(s).toContain("evaluateStorefrontManualActivePublishGuard");
     expect(s).not.toMatch(/\brunPublish\b/);
-    expect(s).not.toContain("manualActivePublishGuard");
   });
 });

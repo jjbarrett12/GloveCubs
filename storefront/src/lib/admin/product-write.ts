@@ -8,6 +8,10 @@ import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
 import { evaluateActivePublishReadiness } from "@/lib/admin/product-write-active-readiness";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import {
+  evaluateStorefrontManualActivePublishGuard,
+  URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
+} from "@/lib/admin/canonical-publish-policy";
+import {
   isUrlImportProductMetadata,
   URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
 } from "@/lib/admin/clipboard-promote-guards";
@@ -903,6 +907,13 @@ async function finalizeManualActivePublish(
   metadata: Record<string, unknown>,
   internalSku: string
 ): Promise<{ error?: string }> {
+  const canonicalBlock = evaluateStorefrontManualActivePublishGuard("active");
+  if (canonicalBlock) return { error: canonicalBlock };
+
+  if (isUrlImportProductMetadata(metadata)) {
+    return { error: URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE };
+  }
+
   if (!shouldRunManualPostActiveSideEffects(metadata, input.status, input.importStagingId)) {
     return { error: "Active publish blocked: product is not eligible for manual storefront active publish." };
   }

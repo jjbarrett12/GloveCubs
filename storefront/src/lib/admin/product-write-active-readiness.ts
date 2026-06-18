@@ -18,8 +18,11 @@ import {
 import type { ProductWriteInput } from "@/lib/admin/product-write";
 import {
   isUrlImportProductMetadata,
-  URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE,
 } from "@/lib/admin/clipboard-promote-guards";
+import {
+  evaluateStorefrontManualActivePublishGuard,
+  URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
+} from "@/lib/admin/canonical-publish-policy";
 import {
   lookupSkuCollisions,
   normalizeSkuCollisionQuery,
@@ -134,9 +137,12 @@ export function evaluateActivePublishReadinessSync(
 ): string | null {
   if (input.status !== "active") return null;
 
-  if (isUrlImportProductMetadata(ctx.metadata) && !ctx.adminReviewPublish) {
-    return URL_IMPORT_NON_ADMIN_PUBLISH_BLOCKED_MESSAGE;
+  if (isUrlImportProductMetadata(ctx.metadata)) {
+    return URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE;
   }
+
+  const canonicalBlock = evaluateStorefrontManualActivePublishGuard("active");
+  if (canonicalBlock) return canonicalBlock;
 
   if (!input.name.trim()) return "Product name is required to publish.";
 

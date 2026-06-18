@@ -3,6 +3,11 @@ import { ADMIN_PRODUCT_UUID_RE, fetchAdminProductDetail } from "@/lib/admin/prod
 import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-options";
 import { ProductEditorShell } from "@/app/admin/products/_components/ProductEditorShell";
 import { ErrorState } from "@/components/admin";
+import {
+  catalogosPublishDashboardUrl,
+  isStorefrontManualActivePublishAllowed,
+  resolveCatalogosPublicBaseUrl,
+} from "@/lib/admin/canonical-publish-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +20,11 @@ export default async function AdminEditProductPage({ params }: { params: { produ
   const { productId } = params;
   if (!ADMIN_PRODUCT_UUID_RE.test(productId)) notFound();
 
-  const [data, categories] = await Promise.all([
+  const [data, categoryResult] = await Promise.all([
     fetchAdminProductDetail(productId),
     fetchAdminCategoriesForProductForm(),
   ]);
+  const categories = categoryResult.rows;
 
   if (!data.configured) {
     return (
@@ -33,6 +39,7 @@ export default async function AdminEditProductPage({ params }: { params: { produ
 
   const primary =
     (data.images ?? []).find((im) => im.isPrimary)?.url ?? (data.images ?? [])[0]?.url ?? "";
+  const catalogosBase = resolveCatalogosPublicBaseUrl();
 
   return (
     <ProductEditorShell
@@ -44,6 +51,8 @@ export default async function AdminEditProductPage({ params }: { params: { produ
       storefrontPdpPath={data.storefrontPdpPath ?? null}
       editor={data.editor}
       primaryImageUrl={primary}
+      storefrontPublishBlocked={!isStorefrontManualActivePublishAllowed()}
+      catalogosPublishUrl={catalogosBase ? catalogosPublishDashboardUrl(catalogosBase) : null}
     />
   );
 }

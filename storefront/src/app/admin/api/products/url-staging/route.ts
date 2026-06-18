@@ -20,7 +20,7 @@ export async function GET() {
   const access = await resolveAdminAccess();
   const denied = adminGateResponse(access);
   if (denied) return denied;
-  const rows = await listClipboardStaging(100);
+  const { rows } = await listClipboardStaging(100);
   return NextResponse.json(rows);
 }
 

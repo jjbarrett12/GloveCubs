@@ -45,10 +45,16 @@ export function ProductEditorForm({
   categories,
   initial,
   mode,
+  allowStorefrontActivePublish = false,
+  catalogosPublishUrl = null,
+  canonicalPublishMessage = "Production publish must use CatalogOS publish.",
 }: {
   categories: AdminCategoryOption[];
   initial?: ProductEditorInitial;
   mode: "create" | "edit";
+  allowStorefrontActivePublish?: boolean;
+  catalogosPublishUrl?: string | null;
+  canonicalPublishMessage?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -106,6 +112,10 @@ export function ProductEditorForm({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (status === "active" && !allowStorefrontActivePublish) {
+      setError(canonicalPublishMessage);
+      return;
+    }
     if (status === "active") {
       if (!categoryId.trim()) {
         setError("Category is required to publish (store guard).");
@@ -149,9 +159,18 @@ export function ProductEditorForm({
     >
       {mode === "create" ? (
         <div className={adminAlertSurface("info", "text-sm")}>
-          <strong className="text-admin-accent">Draft first, publish later.</strong> New rows default to draft. Switch to{" "}
-          <span className="font-semibold text-admin-primary">Published</span> only after category, primary image, and variants satisfy database
-          guards.
+          <strong className="text-admin-accent">Draft first.</strong> Save as draft here.{" "}
+          {allowStorefrontActivePublish
+            ? "Emergency storefront publish is enabled for this deployment only."
+            : canonicalPublishMessage}
+          {!allowStorefrontActivePublish && catalogosPublishUrl ? (
+            <>
+              {" "}
+              <Link href={catalogosPublishUrl} target="_blank" rel="noopener noreferrer" className={adminLink}>
+                Open CatalogOS publish
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -223,16 +242,20 @@ export function ProductEditorForm({
                 />
                 Draft (not on public store)
               </label>
-              <label className="inline-flex cursor-pointer items-center gap-2">
-                <input
-                  type="radio"
-                  name="pub"
-                  checked={status === "active"}
-                  onChange={() => setStatus("active")}
-                  className="border-admin-border text-admin-accent focus:ring-admin-accent/30"
-                />
-                Published (active on store when guards pass)
-              </label>
+              {allowStorefrontActivePublish ? (
+                <label className="inline-flex cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="pub"
+                    checked={status === "active"}
+                    onChange={() => setStatus("active")}
+                    className="border-admin-border text-admin-accent focus:ring-admin-accent/30"
+                  />
+                  Published (emergency storefront active only)
+                </label>
+              ) : (
+                <span className="text-admin-muted">Published — use CatalogOS publish for go-live</span>
+              )}
             </div>
           </fieldset>
           <label className="inline-flex cursor-pointer items-center gap-2 sm:col-span-2 text-sm text-admin-secondary">
