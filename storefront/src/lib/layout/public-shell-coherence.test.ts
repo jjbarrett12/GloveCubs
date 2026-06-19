@@ -33,6 +33,7 @@ describe("public shell coherence (Slice 1B)", () => {
       "app/store/layout.tsx",
       "app/quote-cart/layout.tsx",
       "app/glove-finder/layout.tsx",
+      "app/compare-wizard/layout.tsx",
       "app/invoice-savings/layout.tsx",
       "app/request-pricing/layout.tsx",
       "app/industries/layout.tsx",

@@ -743,6 +743,9 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                       <Link href="/glove-finder" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Guided Glove Finder
                       </Link>
+                      <Link href="/compare-wizard" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Compare Wizard
+                      </Link>
                       <Link href="/invoice-savings" className={dropdownLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Invoice review
                       </Link>
@@ -759,6 +762,11 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     <li>
                       <Link href="/glove-finder" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
                         Guided Glove Finder
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/compare-wizard" className={mobileNavLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                        Compare Wizard
                       </Link>
                     </li>
                     <li>
