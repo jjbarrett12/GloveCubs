@@ -1,15 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpMail } from "@/lib/email/smtp";
+import type { PurchaseOrderType } from "@/lib/fulfillment/variant-fulfillment-config";
+import type { PoLineVariantCandidate } from "@/lib/fulfillment/po-line-variant-resolution";
+import { resolvePoLineVariants } from "@/lib/fulfillment/po-line-variant-resolution";
 
 const GC = "gc_commerce";
+const V2 = "catalog_v2";
 
 export type AdminPurchaseOrderLine = {
   product_id?: string;
   canonical_product_id?: string;
+  catalog_variant_id?: string;
   sku?: string;
   name?: string;
   quantity?: number;
   unit_cost?: number;
+  needs_sku_assignment?: boolean;
+  quantity_uom?: string;
 };
 
 export type AdminPurchaseOrderRow = {
@@ -20,6 +27,10 @@ export type AdminPurchaseOrderRow = {
   order_id?: number | string | null;
   order_number: string | null;
   status: string;
+  purchase_order_type: PurchaseOrderType;
+  fulfillment_status: string;
+  supplier_confirmed_at?: string | null;
+  supplier_tracking_number?: string | null;
   subtotal?: number | null;
   created_at: string;
   sent_at?: string | null;
@@ -29,7 +40,7 @@ export type AdminPurchaseOrderRow = {
   shipping_address?: unknown;
   customer_order_number?: string | null;
   lines?: AdminPurchaseOrderLine[];
-  received_lines?: { canonical_product_id?: string; quantity_received?: number }[];
+  received_lines?: { catalog_variant_id?: string; quantity_received?: number }[];
   order?: Record<string, unknown> | null;
 };
 
@@ -39,11 +50,26 @@ export const PO_INVALID_STATUS = "PO_INVALID_STATUS";
 export const PO_PARTIAL_UNSUPPORTED = "PO_PARTIAL_UNSUPPORTED";
 export const PO_LINES_MISMATCH = "PO_LINES_MISMATCH";
 export const PO_LINE_CANONICAL_REQUIRED = "PO_LINE_CANONICAL_REQUIRED";
+export const PO_LINE_VARIANT_REQUIRED = "PO_LINE_VARIANT_REQUIRED";
+export const PO_OVER_RECEIPT = "PO_OVER_RECEIPT";
+export const PO_INVALID_TYPE = "PO_INVALID_TYPE";
+export const PO_LINES_NEED_SKU_ASSIGNMENT = "PO_LINES_NEED_SKU_ASSIGNMENT";
 
 const PO_SENDABLE_STATUSES = new Set(["draft"]);
-const PO_RECEIVABLE_STATUSES = new Set(["draft", "sent"]);
+const PO_RECEIVABLE_STATUSES = new Set(["draft", "sent", "partially_received"]);
+const INBOUND_STOCK_TYPE: PurchaseOrderType = "inbound_stock";
 
 export type AdminPurchaseOrderReceiveLine = {
+  catalog_variant_id: string;
+  quantity_received: number;
+  quantity_damaged?: number;
+  bin_location?: string;
+  notes?: string;
+  unit_cost?: number;
+};
+
+/** @deprecated Legacy full-receive shape — prefer catalog_variant_id lines. */
+export type AdminPurchaseOrderReceiveLineLegacy = {
   canonical_product_id: string;
   quantity_received: number;
 };
@@ -87,6 +113,12 @@ function mapPoRow(
     order_id: po.order_id as number | string | null | undefined,
     order_number: orderNumber,
     status: po.status != null ? String(po.status) : "draft",
+    purchase_order_type:
+      po.purchase_order_type === "inbound_stock" ? "inbound_stock" : "dropship_fulfillment",
+    fulfillment_status: po.fulfillment_status != null ? String(po.fulfillment_status) : "pending",
+    supplier_confirmed_at: po.supplier_confirmed_at != null ? String(po.supplier_confirmed_at) : null,
+    supplier_tracking_number:
+      po.supplier_tracking_number != null ? String(po.supplier_tracking_number) : null,
     subtotal,
     created_at: po.created_at != null ? String(po.created_at) : "",
     sent_at: po.sent_at != null ? String(po.sent_at) : null,
@@ -248,7 +280,7 @@ export async function sendAdminPurchaseOrder(
         status: 409,
       };
     }
-    if (po.status === "received" || po.received_at) {
+    if (po.status === "received") {
       return {
         success: false,
         error: "Purchase order has already been received",
@@ -344,23 +376,37 @@ function mapRpcReceiveFailure(result: RpcReceiveResult): {
   const code = result.code ?? null;
   const error = result.error ?? "Failed to receive PO";
   if (code === PO_ALREADY_RECEIVED) return { error, code, status: 409 };
-  if (code === PO_INVALID_STATUS || code === PO_PARTIAL_UNSUPPORTED || code === PO_LINES_MISMATCH) {
+  if (
+    code === PO_INVALID_STATUS ||
+    code === PO_PARTIAL_UNSUPPORTED ||
+    code === PO_LINES_MISMATCH ||
+    code === PO_OVER_RECEIPT ||
+    code === PO_LINE_VARIANT_REQUIRED ||
+    code === PO_LINES_NEED_SKU_ASSIGNMENT
+  ) {
     return { error, code, status: 400 };
   }
+  if (code === PO_INVALID_TYPE) return { error, code, status: 400 };
   if (code === PO_LINE_CANONICAL_REQUIRED) return { error, code, status: 400 };
   if (code === "PO_NOT_FOUND") return { error, code, status: 404 };
   return { error, code, status: 500 };
 }
 
+export type ReceivePurchaseOrderOptions = {
+  idempotencyKey?: string;
+  receiptNotes?: string;
+  allowOverage?: boolean;
+};
+
 /**
- * Full PO receive via atomic RPC (row lock + inventory + stock_history + status).
- * Partial receive is rejected unless request lines match all PO line quantities exactly.
+ * PO shipment receive via atomic RPC (partial/multi-receipt, variant inventory ledger).
  */
 export async function receiveAdminPurchaseOrder(
   supabase: SupabaseClient,
   poId: number,
   operatorId: string,
   receivedLines: AdminPurchaseOrderReceiveLine[],
+  options: ReceivePurchaseOrderOptions = {},
 ): Promise<{
   success: boolean;
   po: AdminPurchaseOrderRow | null;
@@ -376,7 +422,7 @@ export async function receiveAdminPurchaseOrder(
     return {
       success: false,
       po: null,
-      error: "lines array required: [{ canonical_product_id (UUID), quantity_received }]",
+      error: "lines array required: [{ catalog_variant_id (UUID), quantity_received }]",
       code: null,
       status: 400,
     };
@@ -396,13 +442,31 @@ export async function receiveAdminPurchaseOrder(
         status: previewStatus,
       };
     }
-    if (preview.status === "received" || preview.received_at) {
+    if (preview.status === "received") {
       return {
         success: false,
         po: null,
-        error: "Purchase order has already been received",
+        error: "Purchase order has already been fully received",
         code: PO_ALREADY_RECEIVED,
         status: 409,
+      };
+    }
+    if (preview.status === "cancelled") {
+      return {
+        success: false,
+        po: null,
+        error: "Cancelled purchase orders cannot be received",
+        code: PO_INVALID_STATUS,
+        status: 400,
+      };
+    }
+    if (preview.purchase_order_type !== INBOUND_STOCK_TYPE) {
+      return {
+        success: false,
+        po: null,
+        error: "Only inbound_stock POs may receive warehouse inventory",
+        code: PO_INVALID_TYPE,
+        status: 400,
       };
     }
     if (!PO_RECEIVABLE_STATUSES.has(preview.status)) {
@@ -415,10 +479,13 @@ export async function receiveAdminPurchaseOrder(
       };
     }
 
-    const { data, error: rpcErr } = await supabase.rpc("admin_receive_purchase_order_full_atomic", {
+    const { data, error: rpcErr } = await supabase.rpc("admin_receive_purchase_order_shipment_atomic", {
       p_po_id: id,
       p_operator_user_id: operatorId,
       p_lines: receivedLines,
+      p_idempotency_key: options.idempotencyKey ?? null,
+      p_receipt_notes: options.receiptNotes ?? null,
+      p_allow_overage: options.allowOverage === true,
     });
     if (rpcErr) {
       return { success: false, po: null, error: rpcErr.message, code: null, status: 500 };
@@ -451,16 +518,155 @@ export async function receiveAdminPurchaseOrder(
 }
 
 export function buildReceiveLinesFromPo(po: {
-  lines?: { canonical_product_id?: string; product_id?: string; quantity?: number }[];
+  lines?: {
+    catalog_variant_id?: string;
+    canonical_product_id?: string;
+    product_id?: string;
+    quantity?: number;
+  }[];
+  received_lines?: { catalog_variant_id?: string; quantity_received?: number }[];
 }): AdminPurchaseOrderReceiveLine[] {
   const out: AdminPurchaseOrderReceiveLine[] = [];
+  const receivedByVariant = new Map<string, number>();
+  for (const r of po.received_lines ?? []) {
+    const vid = r.catalog_variant_id;
+    if (!vid) continue;
+    receivedByVariant.set(vid, (receivedByVariant.get(vid) ?? 0) + Math.max(0, Number(r.quantity_received ?? 0) || 0));
+  }
+
   for (const line of po.lines ?? []) {
-    const canon = line.canonical_product_id || line.product_id;
-    if (!canon || typeof canon !== "string") continue;
-    const qty = Math.max(1, parseInt(String(line.quantity ?? 1), 10) || 1);
-    out.push({ canonical_product_id: canon, quantity_received: qty });
+    const variantId = line.catalog_variant_id;
+    if (!variantId || typeof variantId !== "string") continue;
+    const ordered = Math.max(0, parseInt(String(line.quantity ?? 0), 10) || 0);
+    const already = receivedByVariant.get(variantId) ?? 0;
+    const remaining = Math.max(0, ordered - already);
+    if (remaining <= 0) continue;
+    out.push({ catalog_variant_id: variantId, quantity_received: remaining });
   }
   return out;
+}
+
+export function summarizePoLineReceipt(po: {
+  lines?: AdminPurchaseOrderLine[];
+  received_lines?: { catalog_variant_id?: string; quantity_received?: number }[];
+}): {
+  line_index: number;
+  catalog_variant_id: string | null;
+  sku?: string;
+  name?: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  quantity_remaining: number;
+  unit_cost?: number;
+  needs_sku_assignment: boolean;
+  quantity_uom: string;
+}[] {
+  const receivedByVariant = new Map<string, number>();
+  for (const r of po.received_lines ?? []) {
+    const vid = r.catalog_variant_id;
+    if (!vid) continue;
+    receivedByVariant.set(vid, (receivedByVariant.get(vid) ?? 0) + Math.max(0, Number(r.quantity_received ?? 0) || 0));
+  }
+  return (po.lines ?? []).map((l, line_index) => {
+    const vid = l.catalog_variant_id ? String(l.catalog_variant_id) : null;
+    const ordered = Math.max(0, Number(l.quantity ?? 0) || 0);
+    const received = vid ? receivedByVariant.get(vid) ?? 0 : 0;
+    return {
+      line_index,
+      catalog_variant_id: vid,
+      sku: l.sku,
+      name: l.name,
+      quantity_ordered: ordered,
+      quantity_received: received,
+      quantity_remaining: vid ? Math.max(0, ordered - received) : ordered,
+      unit_cost: l.unit_cost,
+      needs_sku_assignment: Boolean(l.needs_sku_assignment) || !vid,
+      quantity_uom: l.quantity_uom ?? "case",
+    };
+  });
+}
+
+export async function loadPoLineVariantCandidates(
+  supabase: SupabaseClient,
+  productIds: string[],
+): Promise<Map<string, PoLineVariantCandidate[]>> {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const map = new Map<string, PoLineVariantCandidate[]>();
+  if (ids.length === 0) return map;
+
+  const { data, error } = await supabase
+    .schema(V2)
+    .from("catalog_variants")
+    .select("id, catalog_product_id, variant_sku, size_code")
+    .in("catalog_product_id", ids)
+    .eq("is_active", true);
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    const pid = String(row.catalog_product_id);
+    const list = map.get(pid) ?? [];
+    list.push({
+      catalog_variant_id: String(row.id),
+      variant_sku: String(row.variant_sku ?? ""),
+      size_code: row.size_code != null ? String(row.size_code) : null,
+    });
+    map.set(pid, list);
+  }
+  return map;
+}
+
+export async function assignPoLineVariant(
+  supabase: SupabaseClient,
+  poId: number,
+  lineIndex: number,
+  catalogVariantId: string,
+  operatorId: string,
+): Promise<{ success: boolean; error: string | null; code: string | null; status: number }> {
+  const { data, error } = await supabase.rpc("admin_assign_po_line_variant_atomic", {
+    p_po_id: poId,
+    p_line_index: lineIndex,
+    p_catalog_variant_id: catalogVariantId,
+    p_operator_user_id: operatorId,
+  });
+  if (error) return { success: false, error: error.message, code: null, status: 500 };
+  const result = (data ?? {}) as { ok?: boolean; code?: string; error?: string };
+  if (!result.ok) {
+    return { success: false, error: result.error ?? "Assign failed", code: result.code ?? null, status: 400 };
+  }
+  return { success: true, error: null, code: null, status: 200 };
+}
+
+export async function updateDropshipFulfillmentPo(
+  supabase: SupabaseClient,
+  poId: number,
+  operatorId: string,
+  input: {
+    supplier_confirmed?: boolean;
+    supplier_tracking_number?: string;
+    fulfillment_status?: string;
+  },
+): Promise<{ success: boolean; error: string | null; status: number }> {
+  const { po, error, status } = await fetchAdminPurchaseOrderById(supabase, poId);
+  if (error || !po) return { success: false, error: error ?? "Not found", status };
+  if (po.purchase_order_type !== "dropship_fulfillment") {
+    return { success: false, error: "Not a dropship fulfillment PO", status: 400 };
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.supplier_confirmed) {
+    patch.supplier_confirmed_at = new Date().toISOString();
+    patch.supplier_confirmed_by_user_id = operatorId;
+    patch.fulfillment_status = "confirmed";
+  }
+  if (input.supplier_tracking_number?.trim()) {
+    patch.supplier_tracking_number = input.supplier_tracking_number.trim();
+    patch.fulfillment_status = input.fulfillment_status ?? "shipped";
+  }
+  if (input.fulfillment_status) patch.fulfillment_status = input.fulfillment_status;
+
+  const { error: upErr } = await supabase.from("purchase_orders").update(patch).eq("id", poId);
+  if (upErr) return { success: false, error: upErr.message, status: 500 };
+  return { success: true, error: null, status: 200 };
 }
 
 export { parsePoId };

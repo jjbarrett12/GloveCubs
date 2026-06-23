@@ -38,6 +38,7 @@ import { ProductCommandHeader } from "@/app/admin/products/_components/ProductCo
 import { ProductAttributeEditor } from "@/app/admin/products/_components/ProductAttributeEditor";
 import { ImportIntelligencePanel } from "@/app/admin/products/_components/ImportIntelligencePanel";
 import { VariantSizeMatrix } from "@/app/admin/products/_components/VariantSizeMatrix";
+import { VariantFulfillmentPanel } from "@/app/admin/products/_components/VariantFulfillmentPanel";
 import { PublishReadinessPanel } from "@/app/admin/products/_components/PublishReadinessPanel";
 import { CasePalletSetupPanel } from "@/app/admin/products/_components/CasePalletSetupPanel";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
@@ -70,6 +71,7 @@ export type ProductEditorShellProps = {
   productId: string;
   product: NonNullable<AdminProductDetailResult["product"]>;
   variants: NonNullable<AdminProductDetailResult["variants"]>;
+  variantFulfillmentRows: NonNullable<AdminProductDetailResult["variants"]>;
   warnings: GovernanceWarning[];
   storefrontPdpPath: string | null;
   editor: NonNullable<AdminProductDetailResult["editor"]>;
@@ -126,6 +128,7 @@ export function ProductEditorShell({
   productId,
   product,
   variants: dbVariants,
+  variantFulfillmentRows,
   warnings,
   storefrontPdpPath,
   editor,
@@ -722,6 +725,22 @@ export function ProductEditorShell({
               setVariants(sortVariantsByGloveSize(v));
               markDirty();
             }}
+          />
+
+          <VariantFulfillmentPanel
+            productId={productId}
+            variants={variantFulfillmentRows
+              .filter((v) => v.isActive)
+              .map((v) => ({
+                id: v.id,
+                variantSku: v.variantSku,
+                sizeCode: v.sizeCode,
+                fulfillmentMode: v.fulfillmentMode,
+                inventoryVisibility: v.inventoryVisibility,
+                stockEnforcement: v.stockEnforcement,
+                reorderPoint: v.reorderPoint,
+                defaultBinLocation: v.defaultBinLocation,
+              }))}
           />
         </div>
 

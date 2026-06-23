@@ -60,8 +60,16 @@ export function PurchaseOrdersTable({ rows }: { rows: AdminPurchaseOrderRow[] })
             header: "Actions",
             render: (po) => {
               const lineCount = Array.isArray(po.lines) ? po.lines.length : 0;
-              const canReceive = lineCount > 0 && po.status !== "received";
-              return <PoRowActions poId={po.id} status={po.status || "draft"} canReceive={canReceive} />;
+              const canReceive =
+                lineCount > 0 && po.status !== "received" && po.status !== "cancelled";
+              return (
+                <PoRowActions
+                  poId={po.id}
+                  status={po.status || "draft"}
+                  canReceive={canReceive}
+                  purchaseOrderType={po.purchase_order_type ?? "inbound_stock"}
+                />
+              );
             },
           },
         ]}

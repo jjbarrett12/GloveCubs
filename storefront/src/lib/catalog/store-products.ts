@@ -67,6 +67,11 @@ export type StoreProductRow = {
   protectionHint: string | null;
   /** Active catalog_variants count for this product (server-derived). */
   activeVariantCount: number;
+  /** Variant fulfillment mode; defaults to dropship when unset (launch posture). */
+  fulfillmentMode?: "dropship" | "stocked";
+  stockEnforcement?: boolean;
+  /** Local warehouse available qty when loaded; omitted on storefront by default. */
+  localAvailableStock?: number | null;
 };
 
 export type StoreBrandOption = {
@@ -119,6 +124,8 @@ type CatalogVariant = {
   is_active: boolean;
   size_code: string | null;
   metadata: Record<string, unknown> | null;
+  fulfillment_mode?: string | null;
+  stock_enforcement?: boolean | null;
 };
 
 function activeVariantCountByProduct(variants: CatalogVariant[]): Map<string, number> {
@@ -356,6 +363,11 @@ function mapProductsToRows(
     const activeVariantCount = variantCounts.get(p.id) ?? 0;
     const bestPrice = validDisplayPrice(bestPriceByProduct.get(p.id) ?? null);
     const commerce = commerceDisplayFromProductMetadata(meta, bestPrice);
+    const fulfillmentMode =
+      (v?.fulfillment_mode as StoreProductRow["fulfillmentMode"]) ??
+      (typeof vMeta?.fulfillment_mode === "string"
+        ? (vMeta.fulfillment_mode as StoreProductRow["fulfillmentMode"])
+        : "dropship");
     return {
       id: p.id,
       name: p.name,
@@ -385,6 +397,9 @@ function mapProductsToRows(
       certificationHints: card.certificationHints,
       protectionHint: card.protectionHint,
       activeVariantCount,
+      fulfillmentMode: fulfillmentMode ?? "dropship",
+      stockEnforcement: v?.stock_enforcement === true,
+      localAvailableStock: null,
     };
   });
 }
@@ -630,7 +645,7 @@ async function hydrateProductPage(
     supabase
       .schema("catalog_v2")
       .from("catalog_variants")
-      .select("id, catalog_product_id, variant_sku, sort_order, is_active, size_code, metadata")
+      .select("id, catalog_product_id, variant_sku, sort_order, is_active, size_code, metadata, fulfillment_mode, stock_enforcement")
       .in("catalog_product_id", productIds)
       .eq("is_active", true) as Promise<{ data: CatalogVariant[] | null }>,
     supabase

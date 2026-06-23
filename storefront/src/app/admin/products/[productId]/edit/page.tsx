@@ -47,6 +47,7 @@ export default async function AdminEditProductPage({ params }: { params: { produ
       productId={productId}
       product={data.product}
       variants={data.variants ?? []}
+      variantFulfillmentRows={data.variants ?? []}
       warnings={data.warnings ?? []}
       storefrontPdpPath={data.storefrontPdpPath ?? null}
       editor={data.editor}

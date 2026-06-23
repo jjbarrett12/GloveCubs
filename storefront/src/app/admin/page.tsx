@@ -113,7 +113,7 @@ function SystemPulseRow({ health, snap }: { health: AdminHealthSummary; snap: Aw
             {bridgeReady ? "Configured" : "Requires setup"}
           </span>
         </div>
-        <p className="mt-1 text-xs text-admin-muted">PO, inventory, users, net terms</p>
+        <p className="mt-1 text-xs text-admin-muted">Order fulfillment actions</p>
       </div>
 
       <div className={cn(adminCardSurface, "p-3")}>
@@ -385,15 +385,23 @@ export default async function AdminDashboardPage() {
           />
           <StatCard
             label="Purchase orders"
-            value={isExpressBridgeConfigured(health) ? "Bridge ready" : "Requires bridge"}
-            color={isExpressBridgeConfigured(health) ? "green" : "amber"}
+            value={
+              getAdminModuleAvailability(health, "purchase-orders").available
+                ? "Connected"
+                : "Requires database"
+            }
+            color={
+              getAdminModuleAvailability(health, "purchase-orders").available ? "green" : "amber"
+            }
             accentBorder
             href="/admin/purchase-orders"
           />
           <StatCard
             label="Inventory"
-            value={isExpressBridgeConfigured(health) ? "Bridge ready" : "Requires bridge"}
-            color={isExpressBridgeConfigured(health) ? "green" : "amber"}
+            value={
+              getAdminModuleAvailability(health, "inventory").available ? "Connected" : "Requires database"
+            }
+            color={getAdminModuleAvailability(health, "inventory").available ? "green" : "amber"}
             accentBorder
             href="/admin/inventory"
           />

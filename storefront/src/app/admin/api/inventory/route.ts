@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { fetchAdminInventory } from "@/lib/admin/admin-inventory";
+import { fetchAdminInventory } from "@/lib/admin/admin-variant-inventory";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 

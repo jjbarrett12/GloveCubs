@@ -33,6 +33,7 @@
     "smoke:staging": "node scripts/smoke-staging.mjs --all",
     "smoke:reconcile": "node scripts/smoke-staging.mjs --reconcile-only",
     "smoke:commerce-truth": "node scripts/staging-commerce-truth-smoke.mjs",
+    "smoke:warehouse-staging": "node storefront/scripts/warehouse-staging-smoke.mjs",
     "report:contamination": "node scripts/contamination-report.mjs",
     "report:contamination:strict": "cross-env GC_CONTAMINATION_REPORT_STRICT=1 node scripts/contamination-report.mjs",
     "plan:contamination-quarantine": "node scripts/contamination-quarantine-plan.mjs",

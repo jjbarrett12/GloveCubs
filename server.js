@@ -118,6 +118,7 @@ const {
 const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
+const { sendWarehouseMigrationGone } = require('./lib/legacy-warehouse-deprecation');
 const {
     validateAdminOrderStatusTransition,
     ABANDON_STATUSES,
@@ -135,36 +136,6 @@ const { enqueueBulkUrls, runWorker, approveDraft } = require('./lib/bulk-import'
 const Stripe = require('stripe');
 const paymentLog = require('./lib/payment-logger');
 const { dispatchEmail, dispatchEmailInBackground } = require('./lib/email-dispatch');
-const webhookIdempotency = require('./lib/webhook-idempotency');
-const { sortByRelevance } = require('./lib/search-relevance');
-const cartLineContract = require('./lib/contracts/cart-line');
-const {
-    sanitizeProductForPublicApi,
-    sanitizeProductsArrayForPublicApi,
-} = require('./lib/public-product-api');
-const { mapPostgrestOrDatabaseError } = require('./lib/postgrestSchema');
-
-const app = express();
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
-const PORT = parseInt(process.env.PORT, 10) || 3004;
-const JWT_SECRET = (process.env.JWT_SECRET || '').trim() || JWT_SECRET_DEFAULT;
-
-function sendCatalogApiError(res, err, logLabel) {
-    const pg =
-        err && typeof err === 'object'
-            ? {
-                  message: err.message,
-                  code: err.code,
-                  details: err.details,
-                  hint: err.hint,
-              }
-            : { message: String(err) };
-    console.error(logLabel, pg);
-    if (err && err.stack) console.error(logLabel + ' stack', err.stack);
-    const mapped = mapPostgrestOrDatabaseError(err);
-    res.status(mapped.status).json(mapped.body);
-}
 
 /** Product listing must not 500 if public.inventory is missing or PostgREST rejects it. */
 async function getInventoryForCatalogRoutes() {
@@ -681,6 +652,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                     note: 'exception_before_or_during_dispatch',
                 });
             }
+
 
             await webhookIdempotency.markEventProcessed(eventId, eventType, ord.id, 'processed');
             paymentLog.webhookProcessed(eventId, eventType, ord.id, Date.now() - startTime);
@@ -2913,47 +2885,7 @@ app.get('/api/fishbowl/status', (req, res) => {
 
 app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => {
     if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required to sync inventory' });
-    if (!fishbowl.isConfigured()) return res.status(400).json({ error: 'Fishbowl not configured. Set FISHBOWL_BASE_URL, FISHBOWL_USERNAME, FISHBOWL_PASSWORD in .env' });
-    try {
-        const inventoryList = await fishbowl.getAllInventory(true);
-        const GLV_PREFIX = 'GLV-';
-        const qtyByPartNumber = {};
-        for (const row of inventoryList) {
-            const num = (row.partNumber || row.number || '').toString().trim().toUpperCase();
-            if (!num || !num.startsWith(GLV_PREFIX)) continue;
-            qtyByPartNumber[num] = (qtyByPartNumber[num] || 0) + (row.quantity || 0);
-        }
-        const { products: productList } = await productsService.getProducts({ limit: 10000 });
-        let updated = 0;
-        for (const product of productList || []) {
-            const mainSku = (product.sku || '').toString().trim().toUpperCase();
-            if (!mainSku) continue;
-            let totalQty = qtyByPartNumber[mainSku] || 0;
-            const sizes = (product.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-            for (const size of sizes) {
-                totalQty += qtyByPartNumber[mainSku + '-' + size.toUpperCase().replace(/\s+/g, '')] || 0;
-            }
-            const inStock = totalQty > 0 ? 1 : 0;
-            const currentQoh = product.quantity_on_hand ?? 0;
-            if (product.in_stock !== inStock || currentQoh !== totalQty) {
-                const invCanon = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-                if (!invCanon) continue;
-                await dataService.upsertInventory(invCanon, {
-                    quantity_on_hand: totalQty,
-                    canonical_product_id: invCanon,
-                });
-                await productsService.updateProduct(product.id, { in_stock: inStock });
-                updated++;
-            }
-        }
-        res.json({ success: true, updated, totalProducts: (productList || []).length, message: `Synced: ${updated} product(s) updated from Fishbowl (GLV- only)` });
-    } catch (err) {
-        console.error('Fishbowl sync error:', err);
-        res.status(500).json({
-            error: err.message || 'Fishbowl sync failed',
-            mfaRequired: err.mfaRequired === true
-        });
-    }
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
 app.get('/api/fishbowl/export-customers', authenticateToken, async (req, res) => {
@@ -5918,106 +5850,12 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res
     }
 });
 
-app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const listingId = normalizeCanonicalUuidInput(req.params.product_id);
-        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
-        const product = await productsService.getProductById(listingId);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
-        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-
-        let bodyCanon = null;
-        if (req.body.canonical_product_id != null && String(req.body.canonical_product_id).trim() !== '') {
-            bodyCanon = normalizeCanonicalUuidInput(req.body.canonical_product_id);
-            if (!bodyCanon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
-        }
-        const lookupKey = bodyCanon || v2;
-        const existing = lookupKey ? await dataService.getInventoryByProductId(lookupKey) : null;
-        const existingRowCanon = existing ? normalizeCanonicalUuidInput(existing.canonical_product_id) : null;
-        const resolvedCanon = bodyCanon || v2 || existingRowCanon;
-
-        if (!resolvedCanon) {
-            return res.status(422).json({
-                error:
-                    'Could not resolve catalog_v2 id for this listing; set canonical_product_id on the request body or fix listing→v2 mapping.',
-                code: 'INVENTORY_CANONICAL_REQUIRED',
-            });
-        }
-
-        if (req.body.quantity_on_hand !== undefined) {
-            const newQ = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
-            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
-            if (newQ < reserved) {
-                return res.status(400).json({
-                    error: `quantity_on_hand (${newQ}) cannot be less than quantity_reserved (${reserved}).`,
-                    code: 'ON_HAND_BELOW_RESERVED',
-                });
-            }
-            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
-            const delta = newQ - current;
-            if (delta !== 0) {
-                await inventory.adjustStock(resolvedCanon, delta, 'Admin inventory PUT', { type: 'admin_put' }, req.user.id);
-            }
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('inventory')
-                .update({ last_count_at: new Date().toISOString() })
-                .eq('canonical_product_id', resolvedCanon);
-        }
-
-        const fresh = resolvedCanon ? await dataService.getInventoryByProductId(resolvedCanon) : null;
-        const payload = {
-            quantity_on_hand: fresh ? (fresh.quantity_on_hand ?? 0) : 0,
-            reorder_point:
-                req.body.reorder_point !== undefined
-                    ? Math.max(0, parseInt(req.body.reorder_point, 10) || 0)
-                    : fresh
-                      ? (fresh.reorder_point ?? 0)
-                      : (product.reorder_point ?? 0),
-            bin_location:
-                req.body.bin_location !== undefined
-                    ? String(req.body.bin_location || '').trim()
-                    : fresh
-                      ? (fresh.bin_location || '')
-                      : '',
-        };
-        if (fresh && fresh.quantity_reserved != null) payload.quantity_reserved = fresh.quantity_reserved;
-        if (bodyCanon) payload.canonical_product_id = bodyCanon;
-        else if (v2) payload.canonical_product_id = v2;
-        else if (existingRowCanon) payload.canonical_product_id = existingRowCanon;
-
-        await dataService.upsertInventory(resolvedCanon, payload);
-        const inv = await dataService.getInventoryByProductId(resolvedCanon);
-        res.json(inv || { product_id: listingId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
-    } catch (err) {
-        console.error('[admin/inventory PUT]', err);
-        res.status(500).json({ error: err.message || 'Failed to update inventory' });
-    }
+app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
-app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const { product_id, delta, reason } = req.body;
-        const listingId = normalizeCanonicalUuidInput(product_id);
-        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
-        const product = await productsService.getProductById(listingId);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
-        const d = parseInt(delta, 10);
-        if (isNaN(d) || d === 0) return res.status(400).json({ error: 'delta must be a non-zero integer (positive to add, negative to subtract)' });
-        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-        if (!v2) {
-            return res.status(422).json({
-                error: 'Product must resolve to catalog_v2 (listing → v2) before stock adjustments.',
-                code: 'INVENTORY_CANONICAL_REQUIRED',
-            });
-        }
-        await inventory.adjustStock(v2, d, reason || 'Admin adjustment', { type: 'admin' }, req.user.id);
-        const stock = await inventory.getStock(v2);
-        res.json({ success: true, stock: stock || { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 } });
-    } catch (err) {
-        console.error('[admin/inventory/adjust]', err);
-        res.status(500).json({ error: err.message || 'Failed to adjust inventory' });
-    }
+app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/api/inventory/adjust');
 });
 
 app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (req, res) => {
@@ -6045,72 +5883,8 @@ app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (
     }
 });
 
-app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
-        const updated = [];
-        const skipped = [];
-        const rowErrors = [];
-        for (const row of counts) {
-            const listingId = normalizeCanonicalUuidInput(row.product_id);
-            if (!listingId) {
-                skipped.push({ reason: 'invalid_product_id' });
-                continue;
-            }
-            const product = await productsService.getProductById(listingId);
-            if (!product) {
-                skipped.push({ product_id: listingId, reason: 'product_not_found' });
-                continue;
-            }
-            const rowCanon =
-                row.canonical_product_id != null && String(row.canonical_product_id).trim() !== ''
-                    ? normalizeCanonicalUuidInput(row.canonical_product_id)
-                    : null;
-            if (row.canonical_product_id != null && String(row.canonical_product_id).trim() !== '' && !rowCanon) {
-                skipped.push({ product_id: listingId, reason: 'invalid_canonical_product_id' });
-                continue;
-            }
-            const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-            const resolvedCanon = rowCanon || v2;
-            if (!resolvedCanon) {
-                skipped.push({ product_id: listingId, reason: 'missing_canonical_product_id' });
-                continue;
-            }
-            const existing = await dataService.getInventoryByProductId(resolvedCanon);
-            const target = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
-            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
-            if (target < reserved) {
-                rowErrors.push({
-                    product_id: listingId,
-                    code: 'count_below_reserved',
-                    quantity_reserved: reserved,
-                    quantity_on_hand_requested: target,
-                });
-                continue;
-            }
-            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
-            const delta = target - current;
-            if (delta !== 0) {
-                await inventory.adjustStock(resolvedCanon, delta, 'Cycle count', { type: 'cycle_count' }, req.user.id);
-            }
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('inventory')
-                .update({ last_count_at: new Date().toISOString() })
-                .eq('canonical_product_id', resolvedCanon);
-            updated.push(listingId);
-        }
-        res.json({
-            success: true,
-            updated_product_ids: updated,
-            skipped,
-            errors: rowErrors,
-            counts_submitted: counts.length,
-        });
-    } catch (err) {
-        console.error('[admin/inventory/cycle]', err);
-        res.status(500).json({ error: err.message || 'Failed to cycle count' });
-    }
+app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
 // ============ STALE ORDER CLEANUP ============
@@ -6425,23 +6199,8 @@ app.post('/api/admin/purchase-orders/:id/send', authenticateToken, requireAdmin,
     }
 });
 
-app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const poId = parseInt(req.params.id, 10);
-        if (isNaN(poId)) return res.status(400).json({ error: 'Invalid PO ID' });
-        const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
-        if (lines.length === 0) {
-            return res.status(400).json({
-                error: 'lines array required: [{ canonical_product_id (UUID), quantity_received }]',
-            });
-        }
-        await inventory.receivePurchaseOrder(poId, lines);
-        const updated = await dataService.getPurchaseOrderById(poId);
-        res.json({ success: true, po: updated });
-    } catch (err) {
-        console.error('[admin/purchase-orders/:id/receive]', err);
-        res.status(500).json({ error: err.message || 'Failed to receive PO' });
-    }
+app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/purchase-orders');
 });
 
 // Create PO from customer order and send to vendor (drop-ship)
