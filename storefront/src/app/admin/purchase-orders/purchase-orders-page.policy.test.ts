@@ -13,9 +13,10 @@ describe("Admin health UI policy", () => {
     expect(s).toContain("View Admin Health");
   });
 
-  it("purchase-orders page does not show raw bridge env errors in module UI", () => {
+  it("purchase-orders page does not require Express env and gates on Supabase health", () => {
     const s = readFileSync(join(__dirname, "page.tsx"), "utf8");
-    expect(s).toContain("ModuleUnavailableState");
+    expect(s).toContain("fetchAdminPurchaseOrders");
+    expect(s).not.toContain("fetchAdminPurchaseOrdersFromExpress");
     expect(s).toContain("getAdminModuleAvailability");
     expect(s).not.toContain("JWT_SECRET");
     expect(s).not.toContain("NEXT_PUBLIC_GLOVECUBS_API");
@@ -28,16 +29,29 @@ describe("Admin health UI policy", () => {
     expect(s).not.toContain("NEXT_PUBLIC_GLOVECUBS_API");
   });
 
-  it("users page does not show raw bridge env errors in module UI", () => {
-    const s = readFileSync(join(__dirname, "../users/page.tsx"), "utf8");
-    expect(s).toContain("ModuleUnavailableState");
+  it("inventory page does not require Express env and gates on Supabase health", () => {
+    const s = readFileSync(join(__dirname, "../inventory/page.tsx"), "utf8");
+    expect(s).toContain("fetchAdminInventory");
+    expect(s).not.toContain("fetchAdminInventoryFromExpress");
+    expect(s).toContain("getAdminModuleAvailability");
     expect(s).not.toContain("JWT_SECRET");
     expect(s).not.toContain("NEXT_PUBLIC_GLOVECUBS_API");
   });
 
-  it("net-terms page does not show raw bridge env errors in module UI", () => {
+  it("users page does not require Express env and gates on Supabase health", () => {
+    const s = readFileSync(join(__dirname, "../users/page.tsx"), "utf8");
+    expect(s).toContain("fetchAdminUsers");
+    expect(s).not.toContain("fetchAdminUsersFromExpress");
+    expect(s).toContain("getAdminModuleAvailability");
+    expect(s).not.toContain("JWT_SECRET");
+    expect(s).not.toContain("NEXT_PUBLIC_GLOVECUBS_API");
+  });
+
+  it("net-terms page does not require Express env and gates on Supabase health", () => {
     const s = readFileSync(join(__dirname, "../net-terms/page.tsx"), "utf8");
-    expect(s).toContain("ModuleUnavailableState");
+    expect(s).toContain("fetchAdminNetTermsApplications");
+    expect(s).not.toContain("fetchAdminNetTermsApplicationsFromExpress");
+    expect(s).toContain("getAdminModuleAvailability");
     expect(s).not.toContain("JWT_SECRET");
     expect(s).not.toContain("NEXT_PUBLIC_GLOVECUBS_API");
   });

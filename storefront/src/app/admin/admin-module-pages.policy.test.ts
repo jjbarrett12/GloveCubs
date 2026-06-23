@@ -42,7 +42,7 @@ const BANNED_LIGHT_PATTERNS = [
   /\bbg-green-50\b/,
 ];
 
-const EXPRESS_PAGES = ["purchase-orders/page.tsx", "inventory/page.tsx", "users/page.tsx", "net-terms/page.tsx"];
+const EXPRESS_PAGES: string[] = [];
 
 const MODULE_LINKS = [
   "/admin/leads",

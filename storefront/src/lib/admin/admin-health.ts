@@ -65,12 +65,10 @@ export type AdminModuleAvailability = {
   reason?: "setup_required" | "unavailable" | "production_blocking" | "degraded";
 };
 
-export const EXPRESS_ADMIN_MODULE_IDS: AdminModuleId[] = [
-  "purchase-orders",
-  "inventory",
-  "users",
-  "net-terms",
-];
+export const EXPRESS_ADMIN_MODULE_IDS: AdminModuleId[] = [];
+
+/** Order fulfillment actions still proxied to Express (ship/status, invoice payment, create PO). */
+export const EXPRESS_BRIDGE_ACTION_MODULE_IDS: AdminModuleId[] = ["orders"];
 
 export const MODULE_UNAVAILABLE_COPY: Record<
   AdminModuleId,
@@ -79,22 +77,22 @@ export const MODULE_UNAVAILABLE_COPY: Record<
   "purchase-orders": {
     title: "Purchase orders are unavailable in this environment",
     description:
-      "This module needs the fulfillment API bridge before purchase orders can be loaded or managed.",
+      "This module needs database access before purchase orders can be loaded or managed.",
   },
   inventory: {
     title: "Inventory is unavailable in this environment",
     description:
-      "This module needs the fulfillment API bridge before stock positions can be viewed or adjusted.",
+      "This module needs database access before stock positions can be viewed or adjusted.",
   },
   users: {
     title: "Buyer users are unavailable in this environment",
     description:
-      "This module needs the fulfillment API bridge before buyer accounts can be reviewed or approved.",
+      "This module needs database access before buyer accounts can be reviewed or approved.",
   },
   "net-terms": {
     title: "Net terms are unavailable in this environment",
     description:
-      "This module needs the fulfillment API bridge before net terms applications can be reviewed.",
+      "This module needs database access before net terms applications can be reviewed.",
   },
   products: {
     title: "Products are unavailable in this environment",
@@ -128,6 +126,10 @@ const SUPABASE_MODULE_IDS: AdminModuleId[] = [
   "customers",
   "messages",
   "products",
+  "users",
+  "net-terms",
+  "inventory",
+  "purchase-orders",
   "settings",
 ];
 
@@ -235,8 +237,8 @@ export function resolveAdminHealth(): AdminHealthSummary {
       configured: expressOrigin,
       status: expressOrigin ? "healthy" : missingIntegrationStatus(),
       severity: expressOrigin ? "info" : missingIntegrationSeverity(),
-      moduleIds: EXPRESS_ADMIN_MODULE_IDS,
-      description: "Fulfillment admin API host for purchase orders, inventory, users, and net terms.",
+      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
+      description: "Fulfillment admin API bridge for order ship/status, invoice payment, and create PO actions.",
       settingsEnvHint: "NEXT_PUBLIC_GLOVECUBS_API",
     },
     {
@@ -245,8 +247,8 @@ export function resolveAdminHealth(): AdminHealthSummary {
       configured: expressJwt,
       status: expressJwt ? "healthy" : missingIntegrationStatus(),
       severity: expressJwt ? "info" : missingIntegrationSeverity(),
-      moduleIds: EXPRESS_ADMIN_MODULE_IDS,
-      description: "Short-lived operator tokens for the fulfillment admin API bridge.",
+      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
+      description: "Short-lived operator tokens for order fulfillment actions on the Express admin API bridge.",
       settingsEnvHint: "JWT_SECRET",
     },
     {
@@ -294,8 +296,8 @@ export function resolveAdminHealth(): AdminHealthSummary {
       status: missingIntegrationStatus(),
       severity: missingIntegrationSeverity(),
       title: "Express API origin not configured",
-      message: "Fulfillment modules cannot reach the admin API without an Express API origin.",
-      moduleIds: EXPRESS_ADMIN_MODULE_IDS,
+      message: "Fulfillment order actions cannot reach the admin API without an Express API origin.",
+      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
       settingsOnlyDetails: "Set NEXT_PUBLIC_GLOVECUBS_API to your Express API host (see .env.example).",
     });
   }
@@ -307,8 +309,8 @@ export function resolveAdminHealth(): AdminHealthSummary {
       status: missingIntegrationStatus(),
       severity: missingIntegrationSeverity(),
       title: "Express JWT signing not configured",
-      message: "Fulfillment modules cannot authenticate to the admin API without JWT signing.",
-      moduleIds: EXPRESS_ADMIN_MODULE_IDS,
+      message: "Order fulfillment actions cannot authenticate to the admin API without JWT signing.",
+      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
       settingsOnlyDetails:
         "Set JWT_SECRET on the storefront server to match the Express admin API (see .env.example).",
     });
@@ -426,21 +428,13 @@ export function sanitizeExpressModuleRuntimeError(error: string | null, httpStat
 }
 
 export const MODULE_IMPACT_ROWS: { moduleId: AdminModuleId; label: string; requires: string }[] = [
-  {
-    moduleId: "purchase-orders",
-    label: "Purchase orders",
-    requires: "Express API origin + Express JWT signing",
-  },
-  {
-    moduleId: "inventory",
-    label: "Inventory",
-    requires: "Express API origin + Express JWT signing",
-  },
-  { moduleId: "users", label: "Users", requires: "Express API origin + Express JWT signing" },
+  { moduleId: "purchase-orders", label: "Purchase orders", requires: "Supabase" },
+  { moduleId: "inventory", label: "Inventory", requires: "Supabase" },
+  { moduleId: "users", label: "Users", requires: "Supabase" },
   {
     moduleId: "net-terms",
     label: "Net terms",
-    requires: "Express API origin + Express JWT signing",
+    requires: "Supabase",
   },
   {
     moduleId: "products",

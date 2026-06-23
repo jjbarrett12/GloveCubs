@@ -10,12 +10,9 @@ import {
   adminTableShell,
 } from "@/components/admin/admin-theme-utils";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import {
-  getAdminModuleAvailability,
-  resolveAdminHealth,
-  sanitizeExpressModuleRuntimeError,
-} from "@/lib/admin/admin-health";
-import { fetchAdminInventoryFromExpress, type ExpressInventoryRow } from "@/lib/admin/admin-inventory-express";
+import { getAdminModuleAvailability, resolveAdminHealth } from "@/lib/admin/admin-health";
+import { fetchAdminInventory, type AdminInventoryRow } from "@/lib/admin/admin-inventory";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { InventoryAdjustPanel } from "./InventoryAdjustPanel";
 import { cn } from "@/lib/utils";
 
@@ -52,24 +49,37 @@ export default async function AdminInventoryPage() {
     <div>
       <PageHeader
         title="Inventory"
-        description="Stock positions from the transitional Express admin API. Adjustments use the same rules as legacy admin."
+        description="Stock positions from Supabase. Manual adjustments write stock history with operator attribution."
       />
 
       {!availability.available ? (
         <ModuleUnavailableState moduleId="inventory" reason={availability.reason} />
       ) : (
-        <InventoryContent operator={operator} />
+        <InventoryContent />
       )}
     </div>
   );
 }
 
-async function InventoryContent({ operator }: { operator: { id: string; email: string | null } }) {
-  const { rows, error, status } = await fetchAdminInventoryFromExpress(operator);
+async function InventoryContent() {
+  if (!isSupabaseConfigured()) {
+    return (
+      <ErrorState
+        title="Could not load inventory"
+        message="Database credentials are not configured. Review Admin Health for configuration status."
+      />
+    );
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { rows, error, status } = await fetchAdminInventory(supabase);
 
   if (error) {
     return (
-      <ErrorState title="Could not load inventory" message={sanitizeExpressModuleRuntimeError(error, status)} />
+      <ErrorState
+        title="Could not load inventory"
+        message={status >= 500 ? "This module could not be loaded. Try again in a moment." : error}
+      />
     );
   }
 
@@ -79,7 +89,7 @@ async function InventoryContent({ operator }: { operator: { id: string; email: s
         {rows.length === 0 ? (
           <EmptyState
             title="No inventory rows yet"
-            description="Stock positions will appear here once the fulfillment API returns inventory records."
+            description="Stock positions will appear here once active catalog products have sellable listings."
           />
         ) : (
           <TableCard>
@@ -100,7 +110,7 @@ async function InventoryContent({ operator }: { operator: { id: string; email: s
                   </tr>
                 </thead>
                 <tbody className={adminTableBody}>
-                  {(rows as ExpressInventoryRow[]).slice(0, 200).map((r) => (
+                  {(rows as AdminInventoryRow[]).slice(0, 200).map((r) => (
                     <tr key={r.product_id} className={adminTableRowHover}>
                       <td className={cn(adminTableCell, "px-3 py-2 font-mono text-xs")}>{r.sku || "—"}</td>
                       <td className={cn(adminTableCell, "max-w-[200px] px-3 py-2")}>
@@ -131,7 +141,7 @@ async function InventoryContent({ operator }: { operator: { id: string; email: s
         <PageSection title="Adjust stock">
           <p className="mb-3 text-xs text-admin-secondary">
             Enter a listing product UUID (product_id from the table source) and integer delta. Uses POST
-            /api/admin/inventory/adjust.
+            /admin/api/inventory/adjust.
           </p>
           <div className={cn(adminCardSurface, "p-3")}>
             <AdjustByProductIdPicker rows={rows} />
@@ -142,7 +152,7 @@ async function InventoryContent({ operator }: { operator: { id: string; email: s
   );
 }
 
-function AdjustByProductIdPicker({ rows }: { rows: ExpressInventoryRow[] }) {
+function AdjustByProductIdPicker({ rows }: { rows: AdminInventoryRow[] }) {
   const first = rows[0];
   if (!first) return null;
   return (

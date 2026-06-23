@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { expressAdminFetch } from "@/lib/admin/express-admin-bridge";
+import {
+  buildReceiveLinesFromPo,
+  fetchAdminPurchaseOrderById,
+  parsePoId,
+  receiveAdminPurchaseOrder,
+} from "@/lib/admin/admin-purchase-orders";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
-import { fetchAdminPurchaseOrderDetailFromExpress } from "@/lib/admin/admin-purchase-orders-express";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const lineSchema = z.object({
   canonical_product_id: z.string().uuid(),
@@ -14,27 +19,13 @@ const bodySchema = z.object({
   lines: z.array(lineSchema).optional(),
 });
 
-function parsePoId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function buildReceiveLinesFromPo(po: {
-  lines?: { canonical_product_id?: string; product_id?: string; quantity?: number }[];
-}): { canonical_product_id: string; quantity_received: number }[] {
-  const out: { canonical_product_id: string; quantity_received: number }[] = [];
-  for (const line of po.lines ?? []) {
-    const canon = line.canonical_product_id || line.product_id;
-    if (!canon || typeof canon !== "string") continue;
-    const qty = Math.max(1, parseInt(String(line.quantity ?? 1), 10) || 1);
-    out.push({ canonical_product_id: canon, quantity_received: qty });
-  }
-  return out;
-}
-
 export async function POST(request: NextRequest, ctx: { params: { poId: string } }) {
   const operator = await getAdminOperator();
   if (!operator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  }
 
   const poId = parsePoId(ctx.params.poId);
   if (poId == null) return NextResponse.json({ error: "Invalid purchase order id" }, { status: 400 });
@@ -52,13 +43,14 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
   }
 
+  const supabase = getSupabaseAdmin();
   let lines = parsed.data.lines;
   if (!lines?.length) {
-    const detail = await fetchAdminPurchaseOrderDetailFromExpress(operator, poId);
+    const detail = await fetchAdminPurchaseOrderById(supabase, poId);
     if (detail.error || !detail.po) {
       return NextResponse.json(
         { error: detail.error || "Could not load PO for receive" },
-        { status: detail.status >= 400 ? detail.status : 502 },
+        { status: detail.status >= 400 ? detail.status : 500 },
       );
     }
     lines = buildReceiveLinesFromPo(detail.po);
@@ -70,12 +62,9 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
     }
   }
 
-  const result = await expressAdminFetch(operator, `/api/admin/purchase-orders/${poId}/receive`, {
-    method: "POST",
-    json: { lines },
-  });
+  const result = await receiveAdminPurchaseOrder(supabase, poId, operator.id, lines);
 
-  if (!result.ok) {
+  if (!result.success) {
     logAdminExpressMutation({
       operatorId: operator.id,
       operatorEmail: operator.email,
@@ -83,12 +72,12 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
       targetId: String(poId),
       success: false,
       httpStatus: result.status,
-      error: result.error,
+      error: result.error ?? undefined,
       detail: { line_count: lines.length },
     });
     return NextResponse.json(
       { error: result.error, code: result.code ?? null },
-      { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
+      { status: result.status >= 400 && result.status < 600 ? result.status : 500 },
     );
   }
 
@@ -102,5 +91,5 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
     detail: { line_count: lines.length },
   });
 
-  return NextResponse.json(result.data ?? { success: true });
+  return NextResponse.json({ success: true, po: result.po });
 }

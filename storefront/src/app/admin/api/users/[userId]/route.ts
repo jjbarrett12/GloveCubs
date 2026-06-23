@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { expressAdminFetch } from "@/lib/admin/express-admin-bridge";
+import { updateAdminUser } from "@/lib/admin/admin-users";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const DISCOUNT_TIERS = ["standard", "bronze", "silver", "gold", "platinum"] as const;
 const PAYMENT_TERMS = ["credit_card", "ach", "net30"] as const;
@@ -21,6 +22,10 @@ export async function PUT(request: NextRequest, ctx: { params: { userId: string 
   const operator = await getAdminOperator();
   if (!operator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  }
+
   const userId = ctx.params.userId.trim();
   if (!z.string().uuid().safeParse(userId).success) {
     return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
@@ -38,17 +43,10 @@ export async function PUT(request: NextRequest, ctx: { params: { userId: string 
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const payload: Record<string, unknown> = {};
-  if (parsed.data.is_approved !== undefined) payload.is_approved = parsed.data.is_approved;
-  if (parsed.data.discount_tier !== undefined) payload.discount_tier = parsed.data.discount_tier;
-  if (parsed.data.payment_terms !== undefined) payload.payment_terms = parsed.data.payment_terms;
+  const supabase = getSupabaseAdmin();
+  const result = await updateAdminUser(supabase, userId, parsed.data);
 
-  const result = await expressAdminFetch(operator, `/api/admin/users/${encodeURIComponent(userId)}`, {
-    method: "PUT",
-    json: payload,
-  });
-
-  if (!result.ok) {
+  if (result.error) {
     logAdminExpressMutation({
       operatorId: operator.id,
       operatorEmail: operator.email,
@@ -59,8 +57,8 @@ export async function PUT(request: NextRequest, ctx: { params: { userId: string 
       error: result.error,
     });
     return NextResponse.json(
-      { error: result.error, code: result.code ?? null },
-      { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
+      { error: result.error },
+      { status: result.status >= 400 && result.status < 600 ? result.status : 500 },
     );
   }
 
@@ -71,8 +69,8 @@ export async function PUT(request: NextRequest, ctx: { params: { userId: string 
     targetId: userId,
     success: true,
     httpStatus: result.status,
-    detail: { fields: Object.keys(payload) },
+    detail: { fields: Object.keys(parsed.data) },
   });
 
-  return NextResponse.json(result.data ?? { success: true });
+  return NextResponse.json({ success: true, user: result.user });
 }

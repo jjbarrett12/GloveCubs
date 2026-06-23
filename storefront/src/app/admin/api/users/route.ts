@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { fetchAdminUsersFromExpress } from "@/lib/admin/admin-users-express";
+import { fetchAdminUsers } from "@/lib/admin/admin-users";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 export async function GET() {
   const operator = await getAdminOperator();
   if (!operator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { rows, error, status } = await fetchAdminUsersFromExpress(operator);
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { rows, error, status } = await fetchAdminUsers(supabase);
 
   logAdminExpressMutation({
     operatorId: operator.id,
@@ -21,7 +27,7 @@ export async function GET() {
   });
 
   if (error) {
-    return NextResponse.json({ error }, { status: status >= 400 && status < 600 ? status : 502 });
+    return NextResponse.json({ error }, { status: status >= 400 && status < 600 ? status : 500 });
   }
 
   return NextResponse.json({ users: rows });

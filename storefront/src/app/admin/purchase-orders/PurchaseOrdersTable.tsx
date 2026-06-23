@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { DataTable, StatusBadge, TableCard } from "@/components/admin";
 import { adminLink } from "@/components/admin/admin-theme-utils";
-import type { ExpressPurchaseOrderRow } from "@/lib/admin/admin-purchase-orders-express";
+import type { AdminPurchaseOrderRow } from "@/lib/admin/admin-purchase-orders";
 import { PoRowActions } from "./PoRowActions";
 
 function fmtMoney(n: number | null | undefined): string {
@@ -11,10 +11,10 @@ function fmtMoney(n: number | null | undefined): string {
   return `$${Number(n).toFixed(2)}`;
 }
 
-export function PurchaseOrdersTable({ rows }: { rows: ExpressPurchaseOrderRow[] }) {
+export function PurchaseOrdersTable({ rows }: { rows: AdminPurchaseOrderRow[] }) {
   return (
     <TableCard>
-      <DataTable<ExpressPurchaseOrderRow & Record<string, unknown>>
+      <DataTable<AdminPurchaseOrderRow & Record<string, unknown>>
         columns={[
           {
             key: "po_number",

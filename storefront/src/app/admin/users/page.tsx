@@ -10,12 +10,9 @@ import {
   adminTableShell,
 } from "@/components/admin/admin-theme-utils";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import {
-  getAdminModuleAvailability,
-  resolveAdminHealth,
-  sanitizeExpressModuleRuntimeError,
-} from "@/lib/admin/admin-health";
-import { fetchAdminUsersFromExpress, type ExpressAdminUserRow } from "@/lib/admin/admin-users-express";
+import { getAdminModuleAvailability, resolveAdminHealth } from "@/lib/admin/admin-health";
+import { fetchAdminUsers, type AdminUserRow } from "@/lib/admin/admin-users";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { UserRowActions } from "./UserRowActions";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +23,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-function isApproved(u: ExpressAdminUserRow): boolean {
+function isApproved(u: AdminUserRow): boolean {
   return u.is_approved === 1 || u.is_approved === true;
 }
 
@@ -47,24 +44,39 @@ export default async function AdminUsersPage() {
     <div>
       <PageHeader
         title="Buyer users"
-        description="Approve accounts and set payment terms / discount tiers via the transitional Express admin API."
+        description="Approve accounts and set payment terms / discount tiers for B2B buyer profiles."
       />
 
       {!availability.available ? (
         <ModuleUnavailableState moduleId="users" reason={availability.reason} />
       ) : (
-        <UsersContent operator={operator} />
+        <UsersContent />
       )}
     </div>
   );
 }
 
-async function UsersContent({ operator }: { operator: { id: string; email: string | null } }) {
-  const { rows, error, status } = await fetchAdminUsersFromExpress(operator);
+async function UsersContent() {
+  if (!isSupabaseConfigured()) {
+    return (
+      <ErrorState
+        title="Could not load users"
+        message="Database credentials are not configured. Review Admin Health for configuration status."
+      />
+    );
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { rows, error, status } = await fetchAdminUsers(supabase);
   const pending = rows.filter((u) => !isApproved(u));
 
   if (error) {
-    return <ErrorState title="Could not load users" message={sanitizeExpressModuleRuntimeError(error, status)} />;
+    return (
+      <ErrorState
+        title="Could not load users"
+        message={status >= 500 ? "This module could not be loaded. Try again in a moment." : error}
+      />
+    );
   }
 
   return (
@@ -79,7 +91,7 @@ async function UsersContent({ operator }: { operator: { id: string; email: strin
         {rows.length === 0 ? (
           <EmptyState
             title="No buyer users yet"
-            description="Buyer accounts will appear here once the fulfillment API returns user records."
+            description="Buyer accounts will appear here once portal sign-ups create public.users profiles."
           />
         ) : (
           <TableCard>

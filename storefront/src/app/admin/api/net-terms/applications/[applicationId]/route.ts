@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { expressAdminFetch } from "@/lib/admin/express-admin-bridge";
+import { applyAdminNetTermsDecision } from "@/lib/admin/admin-net-terms";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   action: z.enum(["approve", "deny", "hold", "resume"]),
@@ -17,6 +18,10 @@ const bodySchema = z.object({
 export async function PATCH(request: NextRequest, ctx: { params: { applicationId: string } }) {
   const operator = await getAdminOperator();
   if (!operator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  }
 
   const applicationId = ctx.params.applicationId.trim();
   if (!z.string().uuid().safeParse(applicationId).success) {
@@ -35,13 +40,10 @@ export async function PATCH(request: NextRequest, ctx: { params: { applicationId
     return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const result = await expressAdminFetch(
-    operator,
-    `/api/admin/net-terms/applications/${encodeURIComponent(applicationId)}`,
-    { method: "PATCH", json: parsed.data },
-  );
+  const supabase = getSupabaseAdmin();
+  const result = await applyAdminNetTermsDecision(supabase, operator.id, applicationId, parsed.data);
 
-  if (!result.ok) {
+  if (result.error) {
     logAdminExpressMutation({
       operatorId: operator.id,
       operatorEmail: operator.email,
@@ -53,8 +55,8 @@ export async function PATCH(request: NextRequest, ctx: { params: { applicationId
       detail: { action: parsed.data.action },
     });
     return NextResponse.json(
-      { error: result.error, code: result.code ?? null },
-      { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
+      { error: result.error },
+      { status: result.status >= 400 && result.status < 600 ? result.status : 500 },
     );
   }
 
@@ -68,5 +70,5 @@ export async function PATCH(request: NextRequest, ctx: { params: { applicationId
     detail: { action: parsed.data.action },
   });
 
-  return NextResponse.json(result.data ?? { success: true });
+  return NextResponse.json({ success: true, application: result.application });
 }

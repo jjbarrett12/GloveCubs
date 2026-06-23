@@ -6,29 +6,34 @@ function read(rel: string): string {
   return readFileSync(join(__dirname, rel), "utf8");
 }
 
-describe("Phase 1C-ops slice 2 — purchase orders BFF", () => {
-  it("GET purchase-orders requires operator and calls Express list", () => {
+describe("Phase 2c — purchase orders BFF (Supabase-native)", () => {
+  it("GET purchase-orders requires operator and uses native list", () => {
     const s = read("route.ts");
     expect(s).toContain("getAdminOperator");
     expect(s).toContain("401");
-    expect(s).toContain("fetchAdminPurchaseOrdersFromExpress");
+    expect(s).toContain("fetchAdminPurchaseOrders");
     expect(s).toContain("purchase_orders_list");
+    expect(s).not.toContain("fetchAdminPurchaseOrdersFromExpress");
+    expect(s).not.toContain("expressAdminFetch");
   });
 
-  it("send route proxies Express POST send", () => {
+  it("send route uses native send with operator gate", () => {
     const s = read("[poId]/send/route.ts");
     expect(s).toContain("getAdminOperator");
-    expect(s).toContain("/purchase-orders/");
-    expect(s).toContain("/send");
+    expect(s).toContain("sendAdminPurchaseOrder");
+    expect(s).toContain("operator.id");
     expect(s).toContain("purchase_order_send");
+    expect(s).not.toContain("expressAdminFetch");
   });
 
-  it("receive route proxies Express POST receive", () => {
+  it("receive route uses native receive with operator gate", () => {
     const s = read("[poId]/receive/route.ts");
     expect(s).toContain("getAdminOperator");
-    expect(s).toContain("/receive");
+    expect(s).toContain("receiveAdminPurchaseOrder");
+    expect(s).toContain("operator.id");
     expect(s).toContain("purchase_order_receive");
-    expect(s).toContain("canonical_product_id");
+    expect(s).toContain("code: result.code");
+    expect(s).not.toContain("expressAdminFetch");
   });
 
   it("PO actions use Next BFF only", () => {

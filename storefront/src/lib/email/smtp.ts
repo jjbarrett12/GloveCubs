@@ -34,6 +34,7 @@ export async function sendSmtpMail(params: {
   to: string | string[];
   subject: string;
   text: string;
+  html?: string;
 }): Promise<{ sent: boolean; error?: string }> {
   const t = getTransporter();
   if (!t) {
@@ -46,6 +47,7 @@ export async function sendSmtpMail(params: {
       to: params.to,
       subject: params.subject,
       text: params.text,
+      html: params.html ?? params.text.replace(/\n/g, "<br>"),
     });
     return { sent: true };
   } catch (e) {

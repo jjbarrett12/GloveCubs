@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
-import { expressAdminFetch } from "@/lib/admin/express-admin-bridge";
+import { adjustAdminInventory } from "@/lib/admin/admin-inventory";
 import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   product_id: z.string().uuid(),
@@ -13,6 +14,10 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   const operator = await getAdminOperator();
   if (!operator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  }
 
   let body: unknown;
   try {
@@ -27,12 +32,14 @@ export async function POST(request: NextRequest) {
   }
 
   const { product_id, delta, reason } = parsed.data;
-  const result = await expressAdminFetch(operator, "/api/admin/inventory/adjust", {
-    method: "POST",
-    json: { product_id, delta, reason: reason?.trim() || "Admin adjustment (Next)" },
+  const supabase = getSupabaseAdmin();
+  const result = await adjustAdminInventory(supabase, operator.id, {
+    product_id,
+    delta,
+    reason: reason?.trim() || "Admin adjustment (Next)",
   });
 
-  if (!result.ok) {
+  if (!result.success) {
     logAdminExpressMutation({
       operatorId: operator.id,
       operatorEmail: operator.email,
@@ -40,12 +47,12 @@ export async function POST(request: NextRequest) {
       targetId: product_id,
       success: false,
       httpStatus: result.status,
-      error: result.error,
+      error: result.error ?? undefined,
       detail: { code: result.code ?? null, delta },
     });
     return NextResponse.json(
       { error: result.error, code: result.code ?? null },
-      { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
+      { status: result.status >= 400 && result.status < 600 ? result.status : 500 },
     );
   }
 
@@ -59,5 +66,5 @@ export async function POST(request: NextRequest) {
     detail: { delta },
   });
 
-  return NextResponse.json(result.data ?? { success: true });
+  return NextResponse.json({ success: true, stock: result.stock });
 }

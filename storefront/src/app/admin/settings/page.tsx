@@ -115,7 +115,8 @@ export default function AdminSettingsPage() {
       <section className={cn(adminCardSurface, "mb-6 p-4")}>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Local development</h2>
         <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
-          Purchase orders, inventory, users, and net terms require the Express admin bridge before they can load data.
+          Purchase orders, buyer users, net terms, and inventory load directly from Supabase.
+          Order ship/status, invoice payment, and create PO from an order still use the Express admin bridge.
           Configure the Express API origin and JWT signing in <span className="font-mono text-xs">storefront/.env.local</span>{" "}
           using <span className="font-mono text-xs">storefront/.env.example</span> as a guide. Restart the storefront dev
           server after changing environment variables.
@@ -131,9 +132,9 @@ export default function AdminSettingsPage() {
         <section className={cn(adminAlertSurface("warning", "mb-6"))}>
           <h2 className="text-xs font-semibold uppercase tracking-wide">Production guidance</h2>
           <p className="mt-2 text-sm leading-relaxed">
-            If fulfillment modules are unavailable in production, update deployment environment variables for the
+            If order fulfillment actions are unavailable in production, update deployment environment variables for the
             storefront service. Missing Express API origin or JWT signing is treated as production-blocking for those
-            modules. Contact your deployment owner — secret values are never shown here.
+            actions. Contact your deployment owner — secret values are never shown here.
           </p>
         </section>
       ) : null}
