@@ -17,9 +17,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@commerce-packaging/*": ["../lib/commerce-packaging/*"],
-      "@glove-sku-intelligence": ["../lib/glove-sku-intelligence/index.ts"],
-      "@glove-sku-intelligence/*": ["../lib/glove-sku-intelligence/*"],
+      "@commerce-packaging/*": ["./lib/commerce-packaging/*", "../lib/commerce-packaging/*"],
+      "@glove-sku-intelligence": ["./lib/glove-sku-intelligence/index.ts", "../lib/glove-sku-intelligence/index.ts"],
+      "@glove-sku-intelligence/*": ["./lib/glove-sku-intelligence/*", "../lib/glove-sku-intelligence/*"],
       "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
     }
   },
