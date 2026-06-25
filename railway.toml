@@ -1,0 +1,13 @@
+# GloveCubs Express API (server.js) — deploy from repo root.
+# Railway sets PORT automatically; do not hardcode in env.
+# Health: GET /api/config (200 JSON, no auth).
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/api/config"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
