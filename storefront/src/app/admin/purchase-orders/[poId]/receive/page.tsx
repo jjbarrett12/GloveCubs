@@ -4,9 +4,9 @@ import {
   fetchAdminPurchaseOrderById,
   loadPoLineVariantCandidates,
   parsePoId,
-  resolvePoLineVariants,
   summarizePoLineReceipt,
 } from "@/lib/admin/admin-purchase-orders";
+import { resolvePoLineVariants } from "@/lib/fulfillment/po-line-variant-resolution";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PoReceiveForm } from "./PoReceiveForm";
 

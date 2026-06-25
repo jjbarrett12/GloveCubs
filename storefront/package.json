@@ -13,7 +13,7 @@
     "clean:next": "node ./scripts/clean-next.mjs",
     "clean:dev": "npm run clean:next && npm run dev",
     "dev:clean": "npm run clean:dev",
-    "prebuild": "node ./scripts/check-required-env.mjs && node ./scripts/guard-next-cache.mjs",
+    "prebuild": "node ./scripts/check-required-env.mjs && node ./scripts/guard-next-cache.mjs && node ./scripts/sync-vendor-lib.mjs",
     "build": "next build",
     "build:clean": "npm run clean:next && npm run build",
     "start": "next start -p 3005",

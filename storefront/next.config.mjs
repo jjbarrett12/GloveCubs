@@ -90,13 +90,22 @@ const nextConfig = {
     }
     const storefrontNodeModules = path.resolve(__dirname, "node_modules");
     config.resolve = config.resolve || {};
+    const vendorLib = path.resolve(__dirname, "lib");
+    const repoLib = path.resolve(__dirname, "../lib");
+    const commercePackagingRoot = fs.existsSync(path.join(vendorLib, "commerce-packaging"))
+      ? path.join(vendorLib, "commerce-packaging")
+      : path.join(repoLib, "commerce-packaging");
+    const gloveSkuRoot = fs.existsSync(path.join(vendorLib, "glove-sku-intelligence"))
+      ? path.join(vendorLib, "glove-sku-intelligence")
+      : path.join(repoLib, "glove-sku-intelligence");
     config.resolve.alias = {
       ...config.resolve.alias,
       "@supabase/supabase-js": path.join(storefrontNodeModules, "@supabase/supabase-js"),
-      "@glove-sku-intelligence": path.resolve(__dirname, "../lib/glove-sku-intelligence/index.ts"),
-      "@glove-sku-intelligence/glove-size-normalization": path.resolve(
-        __dirname,
-        "../lib/glove-sku-intelligence/glove-size-normalization.ts"
+      "@commerce-packaging": commercePackagingRoot,
+      "@glove-sku-intelligence": path.join(gloveSkuRoot, "index.ts"),
+      "@glove-sku-intelligence/glove-size-normalization": path.join(
+        gloveSkuRoot,
+        "glove-size-normalization.ts",
       ),
     };
     const existing = Array.isArray(config.resolve.modules)
