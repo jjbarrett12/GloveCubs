@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
 import { expressAdminFetch } from "@/lib/admin/express-admin-bridge";
 import { logAdminOrderMutation } from "@/lib/admin/admin-order-mutation-log";
+import {
+  ORDER_FULFILLMENT_ACTIONS_UNAVAILABLE_MESSAGE,
+  resolveOrderFulfillmentAvailability,
+} from "@/lib/admin/order-fulfillment-policy";
 
 const uuidSchema = z.string().uuid();
 
@@ -18,6 +22,26 @@ export async function POST(request: NextRequest, ctx: { params: { orderId: strin
   const orderId = ctx.params.orderId;
   if (!uuidSchema.safeParse(orderId).success) {
     return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+  }
+
+  // Containment: fail closed before any Express bridge call so no AR/invoice
+  // side effect occurs while the bridge is intentionally unavailable.
+  const availability = resolveOrderFulfillmentAvailability();
+  if (!availability.available) {
+    logAdminOrderMutation({
+      operatorId: operator.id,
+      operatorEmail: operator.email,
+      action: "invoice_payment",
+      orderId,
+      success: false,
+      httpStatus: 503,
+      error: availability.reason,
+      detail: { code: availability.code },
+    });
+    return NextResponse.json(
+      { error: ORDER_FULFILLMENT_ACTIONS_UNAVAILABLE_MESSAGE, code: availability.code },
+      { status: 503 },
+    );
   }
 
   let body: unknown = {};

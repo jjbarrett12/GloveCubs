@@ -22,6 +22,10 @@ type Props = {
   invoiceAmountPaid: number | null;
   trackingNumber: string;
   trackingUrl: string;
+  /** Server-computed: are Express-bridged fulfillment actions intentionally available? */
+  fulfillmentActionsAvailable: boolean;
+  /** Operator-safe hint shown next to disabled controls. */
+  unavailableReason: string;
 };
 
 function fmtUsd(n: number): string {
@@ -37,6 +41,8 @@ export function OrderOperatorActions({
   invoiceAmountPaid,
   trackingNumber: initialTrackingNumber,
   trackingUrl: initialTrackingUrl,
+  fulfillmentActionsAvailable,
+  unavailableReason,
 }: Props) {
   const router = useRouter();
   const [status, setStatus] = React.useState(currentStatus);
@@ -67,7 +73,13 @@ export function OrderOperatorActions({
     }
   }, [remaining, payAmount]);
 
+  const controlsDisabled = pending !== null || !fulfillmentActionsAvailable;
+
   async function run(action: string, fn: () => Promise<Response>) {
+    if (!fulfillmentActionsAvailable) {
+      setMsg({ kind: "err", text: unavailableReason });
+      return;
+    }
     setPending(action);
     setMsg(null);
     try {
@@ -120,6 +132,16 @@ export function OrderOperatorActions({
         <p className="mt-1 text-xs text-admin-secondary">
           Changes run through the transitional Express admin API (same rules as legacy admin). Refresh after success.
         </p>
+        {!fulfillmentActionsAvailable ? (
+          <p
+            role="status"
+            className={cn("mt-2 text-xs font-medium", adminAlertSurface("warning", "block px-3 py-2"))}
+          >
+            Order fulfillment actions are temporarily unavailable. You can still view this order record, but
+            status changes, shipping, invoice payments, and purchase order creation are disabled until native
+            fulfillment is enabled.
+          </p>
+        ) : null}
         {paymentIntegrityHold ? (
           <p className={cn("mt-2 text-xs font-medium", adminAlertSurface("warning", "inline-block px-2 py-1"))}>
             Payment integrity hold is active — shipping and PO creation may be blocked until resolved.
@@ -161,7 +183,7 @@ export function OrderOperatorActions({
             className={cn(adminFormInput, "w-full")}
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            disabled={pending !== null}
+            disabled={controlsDisabled}
           >
             <option value={currentStatus}>{currentStatus} (current)</option>
             {ADMIN_SETTABLE_ORDER_STATUSES.filter((s) => s !== currentStatus).map((s) => (
@@ -177,7 +199,7 @@ export function OrderOperatorActions({
             className={cn(adminFormInput, "w-full")}
             value={carrier}
             onChange={(e) => setCarrier(e.target.value)}
-            disabled={pending !== null}
+            disabled={controlsDisabled}
           />
         </div>
         <div>
@@ -186,7 +208,7 @@ export function OrderOperatorActions({
             className={cn(adminFormInput, "w-full")}
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
-            disabled={pending !== null}
+            disabled={controlsDisabled}
           />
         </div>
         <div>
@@ -195,17 +217,20 @@ export function OrderOperatorActions({
             className={cn(adminFormInput, "w-full")}
             value={trackingUrl}
             onChange={(e) => setTrackingUrl(e.target.value)}
-            disabled={pending !== null}
+            disabled={controlsDisabled}
           />
         </div>
         <div className="sm:col-span-2">
-          <button type="submit" disabled={pending !== null} className={adminPrimaryButton}>
+          <button type="submit" disabled={controlsDisabled} className={adminPrimaryButton}>
             {pending === "update" ? "Saving…" : "Save fulfillment"}
           </button>
+          {!fulfillmentActionsAvailable ? (
+            <p className="mt-2 text-xs text-admin-muted">{unavailableReason}</p>
+          ) : null}
         </div>
       </form>
 
-      {isNet30 && remaining != null ? (
+      {fulfillmentActionsAvailable && isNet30 && remaining != null ? (
         <form
           className="max-w-xl space-y-3 border-t border-admin-border-subtle pt-4"
           onSubmit={(e) => {
@@ -270,13 +295,13 @@ export function OrderOperatorActions({
               className={cn(adminFormInput, "mt-1 w-32")}
               value={mfrId}
               onChange={(e) => setMfrId(e.target.value)}
-              disabled={pending !== null}
+              disabled={controlsDisabled}
               placeholder="e.g. 12"
             />
           </div>
           <button
             type="button"
-            disabled={pending !== null}
+            disabled={controlsDisabled}
             className={adminSecondaryButton}
             onClick={() => {
               const payload: { manufacturer_id?: number } = {};
@@ -294,6 +319,9 @@ export function OrderOperatorActions({
             {pending === "create_po" ? "Creating…" : "Create PO"}
           </button>
         </div>
+        {!fulfillmentActionsAvailable ? (
+          <p className="mt-2 text-xs text-admin-muted">{unavailableReason}</p>
+        ) : null}
       </div>
     </div>
   );

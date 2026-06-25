@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { fetchAdminOrderDetail, formatMinorAmount, type OrderProvenance } from "@/lib/admin/admin-orders-read-model";
 import { buildReorderQuotePayload } from "@/lib/account/reorder-to-quote-read-model";
+import { resolveOrderFulfillmentAvailability } from "@/lib/admin/order-fulfillment-policy";
 import { OrderOperatorActions } from "./OrderOperatorActions";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +78,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
   const shipJson = h.shipping_address != null ? JSON.stringify(h.shipping_address, null, 2) : null;
 
   const reorderDry = await buildReorderQuotePayload(supabase, h.company_id, params.orderId);
+  const fulfillmentAvailability = resolveOrderFulfillmentAvailability();
 
   return (
     <div>
@@ -99,6 +101,10 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
           invoiceAmountPaid={h.invoice_amount_paid}
           trackingNumber={typeof h.metadata.tracking_number === "string" ? h.metadata.tracking_number : ""}
           trackingUrl={typeof h.metadata.tracking_url === "string" ? h.metadata.tracking_url : ""}
+          fulfillmentActionsAvailable={fulfillmentAvailability.available}
+          unavailableReason={
+            fulfillmentAvailability.available ? "" : fulfillmentAvailability.reason
+          }
         />
       </div>
 

@@ -22,6 +22,7 @@ import {
   type AdminModuleAvailability,
 } from "@/lib/admin/admin-health";
 import { fetchAdminHomeSnapshot } from "@/lib/admin/admin-home-snapshot";
+import { isOrderFulfillmentAvailable } from "@/lib/admin/order-fulfillment-policy";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,10 @@ function QuickActionLink({ href, children }: { href: string; children: React.Rea
 
 function SystemPulseRow({ health, snap }: { health: AdminHealthSummary; snap: Awaited<ReturnType<typeof fetchAdminHomeSnapshot>> }) {
   const shell = getAdminHealthShellDisplay(health);
-  const bridgeReady = isExpressBridgeConfigured(health);
+  // Env presence (isExpressBridgeConfigured) is necessary but NOT sufficient: order
+  // fulfillment actions are gated by an explicit availability policy and fail closed.
+  const bridgeEnvConfigured = isExpressBridgeConfigured(health);
+  const fulfillmentActionsAvailable = isOrderFulfillmentAvailable();
   const catalogos = health.integrations.find((i) => i.id === "catalogos");
   const importKey = health.integrations.find((i) => i.id === "import_internal_key");
   const catalogImportReady = Boolean(catalogos?.configured && importKey?.configured);
@@ -106,14 +110,19 @@ function SystemPulseRow({ health, snap }: { health: AdminHealthSummary; snap: Aw
       </div>
 
       <div className={cn(adminCardSurface, "p-3")}>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-admin-muted">Fulfillment bridge</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-admin-muted">
+          Order fulfillment actions
+        </span>
         <div className="mt-2 flex items-center gap-2">
-          <StatusBadge status={bridgeReady ? "success" : "warning"} dot />
+          <StatusBadge status={fulfillmentActionsAvailable ? "success" : "warning"} dot />
           <span className="text-sm font-medium text-admin-primary">
-            {bridgeReady ? "Configured" : "Requires setup"}
+            {fulfillmentActionsAvailable ? "Available" : "Unavailable"}
           </span>
         </div>
-        <p className="mt-1 text-xs text-admin-muted">PO, inventory, users, net terms</p>
+        <p className="mt-1 text-xs text-admin-muted">
+          ship/status, invoice payment, create PO
+          {!fulfillmentActionsAvailable && bridgeEnvConfigured ? " — disabled pending native migration" : ""}
+        </p>
       </div>
 
       <div className={cn(adminCardSurface, "p-3")}>

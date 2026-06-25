@@ -92,6 +92,15 @@ describe("Admin dashboard V2 command center", () => {
     expect(page).not.toMatch(/inventoryCount|poCount|purchaseOrderCount/i);
   });
 
+  it("scopes the fulfillment-actions warning to order actions only (not users/net terms/inventory/PO)", () => {
+    const page = read("page.tsx");
+    // Truthful: keyed on the order fulfillment availability policy, not mere env presence.
+    expect(page).toContain("isOrderFulfillmentAvailable");
+    expect(page).toContain("ship/status, invoice payment, create PO");
+    // The fulfillment card must not describe native Supabase modules as bridge-dependent.
+    expect(page).not.toContain("PO, inventory, users, net terms");
+  });
+
   it("prioritizes priority queues before catalog readiness", () => {
     const page = read("page.tsx");
     const queueIdx = page.indexOf("Priority queues");
