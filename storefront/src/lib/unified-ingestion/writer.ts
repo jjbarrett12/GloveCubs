@@ -1,1 +1,1 @@
-export * from "../../../../lib/unified-ingestion/writer";
+export * from "../../../lib/unified-ingestion/writer";

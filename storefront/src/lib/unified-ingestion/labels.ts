@@ -1,1 +1,1 @@
-export * from "../../../../lib/unified-ingestion/labels";
+export * from "../../../lib/unified-ingestion/labels";

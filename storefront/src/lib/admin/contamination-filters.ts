@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 // eslint-disable-next-line -- CJS heuristics module; createRequire bridge from ESM storefront
-const heuristics = require("../../../../lib/contamination-heuristics.js") as typeof import("../../../../lib/contamination-heuristics");
+const heuristics = require("../../../lib/contamination-heuristics.js") as typeof import("../../../lib/contamination-heuristics");
 
 export type ContaminationEntityType =
   | "user"

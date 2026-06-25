@@ -5,7 +5,7 @@
 
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { resolveEffectiveCasePriceFromPackaging } from "@commerce-packaging/pricing";
-import { buildSupplierOfferUpsertRow } from "../../../../lib/supplier-offer-normalization";
+import { buildSupplierOfferUpsertRow } from "../../../lib/supplier-offer-normalization";
 import { refreshProductAttributesJsonSnapshot } from "@/lib/admin/product-attributes-json-snapshot";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
 

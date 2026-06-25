@@ -1,1 +1,1 @@
-export * from "../../../../lib/unified-ingestion/evidence-mappers";
+export * from "../../../lib/unified-ingestion/evidence-mappers";

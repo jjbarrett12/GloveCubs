@@ -36,7 +36,7 @@ import {
 } from "@/lib/admin/commerce-packaging-editor";
 
 const require = createRequire(import.meta.url);
-const { deleteInventoryForCanonicalProduct } = require("../../../../lib/inventory.js") as {
+const { deleteInventoryForCanonicalProduct } = require("../../../lib/inventory.js") as {
   deleteInventoryForCanonicalProduct: (
     canonicalProductId: string
   ) => Promise<{ ok: true } | { error: string }>;

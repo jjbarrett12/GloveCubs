@@ -102,11 +102,8 @@ const nextConfig = {
       ...config.resolve.alias,
       "@supabase/supabase-js": path.join(storefrontNodeModules, "@supabase/supabase-js"),
       "@commerce-packaging": commercePackagingRoot,
-      "@glove-sku-intelligence": path.join(gloveSkuRoot, "index.ts"),
-      "@glove-sku-intelligence/glove-size-normalization": path.join(
-        gloveSkuRoot,
-        "glove-size-normalization.ts",
-      ),
+      "@glove-sku-intelligence$": path.join(gloveSkuRoot, "index.ts"),
+      "@glove-sku-intelligence": gloveSkuRoot,
     };
     const existing = Array.isArray(config.resolve.modules)
       ? config.resolve.modules
