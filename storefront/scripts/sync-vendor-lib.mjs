@@ -26,7 +26,12 @@ function copyDir(src, dest) {
 for (const pkg of PACKAGES) {
   const src = path.join(repoLib, pkg);
   const dest = path.join(vendorLib, pkg);
-  if (!fs.existsSync(src)) continue;
-  fs.rmSync(dest, { recursive: true, force: true });
-  copyDir(src, dest);
+  if (fs.existsSync(src)) {
+    fs.rmSync(dest, { recursive: true, force: true });
+    copyDir(src, dest);
+  }
+  if (!fs.existsSync(dest)) {
+    console.error(`[sync-vendor-lib] missing ${pkg} — run from monorepo root or commit storefront/lib/${pkg}`);
+    process.exit(1);
+  }
 }
