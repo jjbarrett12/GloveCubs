@@ -7,7 +7,7 @@ import { parseImportDraftFromExtracted } from "@/lib/admin/import-draft-mapper";
 import { importDraftToProductWriteInput } from "@/lib/admin/import-draft-promote";
 import { lookupSkuCollisions } from "@/lib/admin/sku-collision-lookup";
 import { normalizeSkuCollisionQuery, skuCollisionSetsForReadiness } from "@/lib/admin/sku-collision-lookup";
-import { detectSkuCollisionIssues } from "@/lib/admin/variant-sku-intelligence";
+import { detectSkuCollisionIssues, type SkuCollisionIssue } from "@/lib/admin/variant-sku-intelligence";
 import {
   clipboardImportMetadataFromStagingExtracted,
   clipboardPromoteStatusOverrideError,
@@ -163,7 +163,7 @@ export async function POST(
     existingParentSkus: collisionSets.existingParentSkus,
     existingVariantSkus: collisionSets.existingVariantSkus,
   });
-  const blockingCollision = collisionIssues.find((i) => i.severity === "blocker");
+  const blockingCollision = collisionIssues.find((i: SkuCollisionIssue) => i.severity === "blocker");
   if (blockingCollision) {
     const existingProductId =
       collisionResult.parent?.productId ??
