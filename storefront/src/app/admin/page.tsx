@@ -16,7 +16,6 @@ import { adminCardSurface, adminFocusRing } from "@/components/admin/admin-theme
 import {
   getAdminHealthShellDisplay,
   getAdminModuleAvailability,
-  isExpressBridgeConfigured,
   resolveAdminHealth,
   type AdminHealthSummary,
   type AdminModuleAvailability,
@@ -45,8 +44,9 @@ function queueBadgeStatus(count: number | null | undefined): string | undefined 
 
 function moduleBridgeLabel(availability: AdminModuleAvailability): string {
   if (availability.available && availability.status === "healthy") return "Connected";
-  if (availability.reason === "setup_required") return "Requires bridge";
-  if (availability.reason === "production_blocking") return "Blocked";
+  // Purchase orders and inventory are Supabase-backed native modules — never "bridge".
+  if (availability.reason === "setup_required") return "Requires database";
+  if (availability.reason === "production_blocking") return "Requires database";
   if (availability.reason === "degraded") return "Degraded";
   return "Unavailable";
 }
@@ -74,13 +74,13 @@ function QuickActionLink({ href, children }: { href: string; children: React.Rea
 
 function SystemPulseRow({ health, snap }: { health: AdminHealthSummary; snap: Awaited<ReturnType<typeof fetchAdminHomeSnapshot>> }) {
   const shell = getAdminHealthShellDisplay(health);
-  // Env presence (isExpressBridgeConfigured) is necessary but NOT sufficient: order
-  // fulfillment actions are gated by an explicit availability policy and fail closed.
-  const bridgeEnvConfigured = isExpressBridgeConfigured(health);
+  // Order fulfillment actions are gated by the canonical availability policy and
+  // fail closed. The reason is always shown, regardless of legacy Express env presence.
   const fulfillmentActionsAvailable = isOrderFulfillmentAvailable();
   const catalogos = health.integrations.find((i) => i.id === "catalogos");
   const importKey = health.integrations.find((i) => i.id === "import_internal_key");
   const catalogImportReady = Boolean(catalogos?.configured && importKey?.configured);
+  const catalogImportPartial = Boolean(catalogos?.configured || importKey?.configured) && !catalogImportReady;
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -121,19 +121,25 @@ function SystemPulseRow({ health, snap }: { health: AdminHealthSummary; snap: Aw
         </div>
         <p className="mt-1 text-xs text-admin-muted">
           ship/status, invoice payment, create PO
-          {!fulfillmentActionsAvailable && bridgeEnvConfigured ? " — disabled pending native migration" : ""}
+          {!fulfillmentActionsAvailable ? " — disabled pending native migration" : ""}
         </p>
       </div>
 
       <div className={cn(adminCardSurface, "p-3")}>
         <span className="text-[10px] font-semibold uppercase tracking-wide text-admin-muted">Catalog import</span>
         <div className="mt-2 flex items-center gap-2">
-          <StatusBadge status={catalogImportReady ? "success" : catalogos?.configured || importKey?.configured ? "warning" : "neutral"} dot />
+          <StatusBadge status={catalogImportReady ? "success" : catalogImportPartial ? "neutral" : "neutral"} dot />
           <span className="text-sm font-medium text-admin-primary">
-            {catalogImportReady ? "Ready" : catalogos?.configured || importKey?.configured ? "Partial" : "Not configured"}
+            {catalogImportReady ? "Ready" : catalogImportPartial ? "Partial" : "Not configured"}
           </span>
         </div>
-        <p className="mt-1 text-xs text-admin-muted">URL import &amp; sync dependencies</p>
+        <p className="mt-1 text-xs text-admin-muted">
+          {catalogImportReady
+            ? "Catalog import & sync available."
+            : catalogImportPartial
+              ? "Optional — catalog sync or import credentials are only partially configured."
+              : "Optional — URL import & catalog sync not set up. Storefront and catalog reads are unaffected."}
+        </p>
       </div>
     </div>
   );
@@ -394,15 +400,15 @@ export default async function AdminDashboardPage() {
           />
           <StatCard
             label="Purchase orders"
-            value={isExpressBridgeConfigured(health) ? "Bridge ready" : "Requires bridge"}
-            color={isExpressBridgeConfigured(health) ? "green" : "amber"}
+            value={getAdminModuleAvailability(health, "purchase-orders").available ? "Connected" : "Requires database"}
+            color={getAdminModuleAvailability(health, "purchase-orders").available ? "green" : "amber"}
             accentBorder
             href="/admin/purchase-orders"
           />
           <StatCard
             label="Inventory"
-            value={isExpressBridgeConfigured(health) ? "Bridge ready" : "Requires bridge"}
-            color={isExpressBridgeConfigured(health) ? "green" : "amber"}
+            value={getAdminModuleAvailability(health, "inventory").available ? "Connected" : "Requires database"}
+            color={getAdminModuleAvailability(health, "inventory").available ? "green" : "amber"}
             accentBorder
             href="/admin/inventory"
           />

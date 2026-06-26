@@ -49,6 +49,9 @@ function IntegrationRow({ integration }: { integration: AdminHealthIntegration }
 
 export default function AdminSettingsPage() {
   const health = resolveAdminHealth();
+  const catalogosConfigured = health.integrations.find((i) => i.id === "catalogos")?.configured ?? false;
+  const importKeyConfigured = health.integrations.find((i) => i.id === "import_internal_key")?.configured ?? false;
+  const optionalImportUnconfigured = !catalogosConfigured && !importKeyConfigured;
 
   return (
     <div>
@@ -83,6 +86,15 @@ export default function AdminSettingsPage() {
             <IntegrationRow key={integration.id} integration={integration} />
           ))}
         </div>
+
+        <div className="border-t border-admin-border-subtle px-4 py-3">
+          <p className="text-sm font-medium text-admin-primary">CatalogOS / import (optional)</p>
+          <p className="mt-1 text-xs leading-relaxed text-admin-secondary">
+            {optionalImportUnconfigured ? "Not configured. " : ""}
+            These power supplier URL import and catalog sync only. The live storefront and admin reads do not depend on
+            them.
+          </p>
+        </div>
       </section>
 
       <AdminThemeAppearanceSection />
@@ -115,11 +127,9 @@ export default function AdminSettingsPage() {
       <section className={cn(adminCardSurface, "mb-6 p-4")}>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Local development</h2>
         <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
-          Purchase orders, buyer users, net terms, and inventory load directly from Supabase.
-          Order ship/status, invoice payment, and create PO from an order still use the Express admin bridge.
-          Configure the Express API origin and JWT signing in <span className="font-mono text-xs">storefront/.env.local</span>{" "}
-          using <span className="font-mono text-xs">storefront/.env.example</span> as a guide. Restart the storefront dev
-          server after changing environment variables.
+          Purchase orders, buyer users, net terms, and inventory load directly from Supabase. Order ship/status, invoice
+          payment, and create PO are paused while these actions migrate from the legacy bridge to native GloveCubs
+          fulfillment — this is an intentional limitation, not a missing configuration.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-admin-secondary">
           Supabase keys are required for dashboard, catalog, customers, orders, and messages. Run{" "}
@@ -130,11 +140,12 @@ export default function AdminSettingsPage() {
 
       {health.isProduction ? (
         <section className={cn(adminAlertSurface("warning", "mb-6"))}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide">Production guidance</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide">Order fulfillment actions</h2>
           <p className="mt-2 text-sm leading-relaxed">
-            If order fulfillment actions are unavailable in production, update deployment environment variables for the
-            storefront service. Missing Express API origin or JWT signing is treated as production-blocking for those
-            actions. Contact your deployment owner — secret values are never shown here.
+            Ship/status updates, invoice payments, and PO creation are intentionally paused while they migrate from the
+            legacy bridge to native GloveCubs fulfillment. This is a planned limitation, not a deployment
+            misconfiguration — no legacy environment variables need to be added. Order records, catalog, customers, and
+            quoting remain fully live.
           </p>
         </section>
       ) : null}

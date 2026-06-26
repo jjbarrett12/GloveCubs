@@ -1,4 +1,5 @@
 import { getExpressCommerceApiOrigin } from "@/lib/api";
+import { isOrderFulfillmentAvailable } from "./order-fulfillment-policy";
 
 export type AdminHealthStatus =
   | "healthy"
@@ -11,8 +12,7 @@ export type AdminHealthSeverity = "info" | "warning" | "critical";
 
 export type AdminHealthIntegrationId =
   | "supabase"
-  | "express_api_origin"
-  | "express_jwt_signing"
+  | "order_fulfillment"
   | "catalogos"
   | "import_internal_key";
 
@@ -195,11 +195,14 @@ export function isExpressJwtSigningConfigured(): boolean {
   return Boolean(process.env.JWT_SECRET?.trim());
 }
 
-export function isExpressBridgeConfigured(summary?: AdminHealthSummary): boolean {
-  const s = summary ?? resolveAdminHealth();
-  const origin = s.integrations.find((i) => i.id === "express_api_origin");
-  const jwt = s.integrations.find((i) => i.id === "express_jwt_signing");
-  return Boolean(origin?.configured && jwt?.configured);
+/**
+ * Internal input to the canonical order-fulfillment policy only. The legacy
+ * Express env vars (`NEXT_PUBLIC_GLOVECUBS_API`, `JWT_SECRET`) are read here but
+ * are intentionally NOT surfaced as their own admin-health integrations or
+ * banners — the dashboard must never imply that adding them is the remedy.
+ */
+export function isExpressBridgeConfigured(_summary?: AdminHealthSummary): boolean {
+  return isExpressApiOriginConfigured() && isExpressJwtSigningConfigured();
 }
 
 export function resolveAdminHealth(): AdminHealthSummary {
@@ -208,8 +211,7 @@ export function resolveAdminHealth(): AdminHealthSummary {
 
   const supabasePublic = isSupabasePublicConfigured();
   const supabaseService = isSupabaseServiceConfigured();
-  const expressOrigin = isExpressApiOriginConfigured();
-  const expressJwt = isExpressJwtSigningConfigured();
+  const fulfillmentAvailable = isOrderFulfillmentAvailable();
   const catalogosInternal = Boolean(process.env.CATALOGOS_INTERNAL_URL?.trim());
   const catalogosPublic = Boolean(process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim());
   const catalogosConfigured = catalogosInternal || catalogosPublic;
@@ -232,43 +234,36 @@ export function resolveAdminHealth(): AdminHealthSummary {
         "NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY",
     },
     {
-      id: "express_api_origin",
-      label: "Express API origin",
-      configured: expressOrigin,
-      status: expressOrigin ? "healthy" : missingIntegrationStatus(),
-      severity: expressOrigin ? "info" : missingIntegrationSeverity(),
+      id: "order_fulfillment",
+      label: "Order fulfillment actions",
+      configured: fulfillmentAvailable,
+      // Intentional operational limitation, never a broken-config error.
+      status: fulfillmentAvailable ? "healthy" : "unavailable",
+      severity: fulfillmentAvailable ? "info" : "warning",
       moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
-      description: "Fulfillment admin API bridge for order ship/status, invoice payment, and create PO actions.",
-      settingsEnvHint: "NEXT_PUBLIC_GLOVECUBS_API",
-    },
-    {
-      id: "express_jwt_signing",
-      label: "Express JWT signing",
-      configured: expressJwt,
-      status: expressJwt ? "healthy" : missingIntegrationStatus(),
-      severity: expressJwt ? "info" : missingIntegrationSeverity(),
-      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
-      description: "Short-lived operator tokens for order fulfillment actions on the Express admin API bridge.",
-      settingsEnvHint: "JWT_SECRET",
+      description:
+        "Ship/status updates, invoice payments, and PO creation. Migrating from the legacy bridge to native GloveCubs fulfillment.",
     },
     {
       id: "catalogos",
       label: "Catalog sync (CatalogOS)",
       configured: catalogosConfigured,
-      status: catalogosConfigured ? "healthy" : "degraded",
-      severity: catalogosConfigured ? "info" : "warning",
+      // Optional integration: neutral when unconfigured, never an error.
+      status: catalogosConfigured ? "healthy" : "setup_required",
+      severity: "info",
       moduleIds: ["products"],
-      description: "Supplier URL import and catalog sync workflows.",
+      description: "Optional — supplier URL import and catalog sync workflows.",
       settingsEnvHint: "CATALOGOS_INTERNAL_URL and/or NEXT_PUBLIC_CATALOGOS_URL",
     },
     {
       id: "import_internal_key",
       label: "Server import API key",
       configured: importKey,
-      status: importKey ? "healthy" : "degraded",
-      severity: importKey ? "info" : "warning",
+      // Optional integration: neutral when unconfigured, never an error.
+      status: importKey ? "healthy" : "setup_required",
+      severity: "info",
       moduleIds: ["products"],
-      description: "Protected server-to-server import and admin API workflows.",
+      description: "Optional — protected server-to-server import and admin API workflows.",
       settingsEnvHint: "INTERNAL_API_KEY",
     },
   ];
@@ -289,58 +284,27 @@ export function resolveAdminHealth(): AdminHealthSummary {
     });
   }
 
-  if (!expressOrigin) {
+  // Intentional operational limitation — the single, truthful fulfillment signal.
+  // Sourced from the canonical fulfillment policy; never escalated to a core error
+  // and never tied to legacy Express env presence as a remedy.
+  if (!fulfillmentAvailable) {
     issues.push({
-      id: "express-origin-missing",
-      integrationId: "express_api_origin",
-      status: missingIntegrationStatus(),
-      severity: missingIntegrationSeverity(),
-      title: "Express API origin not configured",
-      message: "Fulfillment order actions cannot reach the admin API without an Express API origin.",
-      moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
-      settingsOnlyDetails: "Set NEXT_PUBLIC_GLOVECUBS_API to your Express API host (see .env.example).",
-    });
-  }
-
-  if (!expressJwt) {
-    issues.push({
-      id: "express-jwt-missing",
-      integrationId: "express_jwt_signing",
-      status: missingIntegrationStatus(),
-      severity: missingIntegrationSeverity(),
-      title: "Express JWT signing not configured",
-      message: "Order fulfillment actions cannot authenticate to the admin API without JWT signing.",
+      id: "order-fulfillment-paused",
+      integrationId: "order_fulfillment",
+      status: "unavailable",
+      severity: "warning",
+      title: "Order fulfillment actions are paused",
+      message:
+        "Ship/status updates, invoice payments, and PO creation are intentionally disabled while these actions are migrated from the legacy bridge to native GloveCubs fulfillment. Order records, catalog, customers, and quoting are fully live and unaffected.",
       moduleIds: EXPRESS_BRIDGE_ACTION_MODULE_IDS,
       settingsOnlyDetails:
-        "Set JWT_SECRET on the storefront server to match the Express admin API (see .env.example).",
+        "Intentional limitation pending native fulfillment migration. No configuration change is required.",
     });
   }
 
-  if (!catalogosConfigured) {
-    issues.push({
-      id: "catalogos-missing",
-      integrationId: "catalogos",
-      status: "degraded",
-      severity: "warning",
-      title: "Catalog sync not configured",
-      message: "URL import and catalog sync may be limited until CatalogOS URLs are set.",
-      moduleIds: ["products"],
-      settingsOnlyDetails: "Set CATALOGOS_INTERNAL_URL and/or NEXT_PUBLIC_CATALOGOS_URL.",
-    });
-  }
-
-  if (!importKey) {
-    issues.push({
-      id: "import-key-missing",
-      integrationId: "import_internal_key",
-      status: "degraded",
-      severity: "warning",
-      title: "Server import API key not set",
-      message: "Some protected import workflows may be unavailable.",
-      moduleIds: ["products"],
-      settingsOnlyDetails: "Set INTERNAL_API_KEY for server-to-server import routes.",
-    });
-  }
+  // Optional integrations (CatalogOS sync, server import key) are neutral when
+  // unconfigured: they are NOT pushed as issues, so they never enter the top
+  // banner or trigger "Action required". Their status is shown in Settings only.
 
   let status: AdminHealthStatus = "healthy";
   let severity: AdminHealthSeverity = "info";
@@ -454,19 +418,17 @@ export function getAdminHealthShellDisplay(health: {
   severity: AdminHealthSeverity;
   issues: AdminHealthIssue[];
 }): { pillLabel: string; pillTone: AdminHealthShellTone; showStrip: boolean } {
-  if (health.status === "healthy" && health.issues.length === 0) {
-    return { pillLabel: "All systems", pillTone: "success", showStrip: false };
-  }
-  if (health.severity === "critical" || health.status === "production_blocking") {
+  // Error: a broken required live workflow (e.g. Supabase down) — only this is "Action required".
+  const hasCoreError =
+    health.status === "production_blocking" || health.issues.some((i) => i.severity === "critical");
+  if (hasCoreError) {
     return { pillLabel: "Action required", pillTone: "critical", showStrip: true };
   }
-  const count = health.issues.length;
-  if (count > 0) {
-    return {
-      pillLabel: count === 1 ? "1 issue" : `${count} issues`,
-      pillTone: "warning",
-      showStrip: true,
-    };
+  // Warning: a known operator limitation, such as paused fulfillment actions.
+  const hasWarning = health.issues.some((i) => i.severity === "warning");
+  if (hasWarning) {
+    return { pillLabel: "Operating with limits", pillTone: "warning", showStrip: true };
   }
-  return { pillLabel: "Needs setup", pillTone: "warning", showStrip: true };
+  // Healthy core + at most optional integrations unconfigured (neutral, not surfaced here).
+  return { pillLabel: "All core systems healthy", pillTone: "success", showStrip: false };
 }

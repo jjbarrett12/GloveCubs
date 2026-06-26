@@ -85,10 +85,15 @@ describe("Admin dashboard V2 command center", () => {
     expect(page).not.toMatch(/\bborder-gray-200\b/);
   });
 
-  it("shows honest fulfillment bridge status without fake PO/inventory counts", () => {
+  it("shows native PO/inventory availability without legacy bridge wording", () => {
     const page = read("page.tsx");
-    expect(page).toContain("isExpressBridgeConfigured");
-    expect(page).toContain("Requires bridge");
+    // PO and inventory are Supabase-backed native modules — keyed on module availability.
+    expect(page).toContain('getAdminModuleAvailability(health, "purchase-orders")');
+    expect(page).toContain('getAdminModuleAvailability(health, "inventory")');
+    expect(page).toContain("Connected");
+    // No legacy "bridge" framing and no fabricated counts for these modules.
+    expect(page).not.toContain("Requires bridge");
+    expect(page).not.toContain("isExpressBridgeConfigured");
     expect(page).not.toMatch(/inventoryCount|poCount|purchaseOrderCount/i);
   });
 
@@ -99,6 +104,13 @@ describe("Admin dashboard V2 command center", () => {
     expect(page).toContain("ship/status, invoice payment, create PO");
     // The fulfillment card must not describe native Supabase modules as bridge-dependent.
     expect(page).not.toContain("PO, inventory, users, net terms");
+  });
+
+  it("always explains the fulfillment pause and treats catalog import as optional/neutral", () => {
+    const page = read("page.tsx");
+    // The reason is shown unconditionally, even when legacy Express env is absent.
+    expect(page).toContain("disabled pending native migration");
+    expect(page).toContain("Optional — URL import & catalog sync not set up. Storefront and catalog reads are unaffected.");
   });
 
   it("prioritizes priority queues before catalog readiness", () => {
