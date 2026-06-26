@@ -329,8 +329,28 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv, healt
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold leading-tight text-admin-primary">GloveCubs</span>
-        <span className="block text-[11px] font-medium uppercase tracking-wide text-admin-muted">Operator</span>
+        <span className="block text-[11px] font-medium uppercase tracking-wide text-admin-muted">Admin</span>
       </span>
+    </Link>
+  );
+
+  const sidebarBrandBlock = (
+    <Link
+      href="/admin"
+      className={cn("flex w-full flex-col items-center gap-1 rounded-lg px-2 py-1", adminFocusRing())}
+      aria-label="GloveCubs admin home"
+      onClick={closeMobile}
+    >
+      <Image
+        src="/images/glovecubs-header-logo.png"
+        alt="GloveCubs"
+        width={747}
+        height={99}
+        priority
+        unoptimized
+        className="h-auto w-full"
+      />
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-admin-muted">Admin</span>
     </Link>
   );
 
@@ -351,7 +371,7 @@ export function AdminShell({ children, adminUserId, adminEmail, deployEnv, healt
   return (
     <div className="flex min-h-screen bg-admin-canvas text-admin-primary">
       <aside className="hidden w-[240px] shrink-0 flex-col border-r border-admin-border bg-admin-canvas-raised lg:flex">
-        <div className="flex h-14 items-center border-b border-admin-border-subtle px-3">{brandBlock}</div>
+        <div className="flex items-center border-b border-admin-border-subtle px-3 py-3">{sidebarBrandBlock}</div>
         <div className="flex-1 overflow-y-auto px-2 py-4">
           <AdminNavSections pathname={pathname} />
         </div>
