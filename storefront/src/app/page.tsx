@@ -2,12 +2,10 @@ import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 import { HomeHeroExpress } from "@/components/home/HomeHeroExpress";
 import { BrandCarousel } from "@/components/home/BrandCarousel";
-import { HomeWhyExistsSection } from "@/components/home/HomeWhyExistsSection";
 import { HomeGloveEducationHubWithBridge } from "@/components/home/HomeGloveEducationHubBridge";
 import { HomeProcurementMapSection } from "@/components/home/HomeProcurementMapSection";
 import { HomeNationwideServiceSection } from "@/components/home/HomeNationwideServiceSection";
 import { HomeIndustrySolutionsSection } from "@/components/home/HomeIndustrySolutionsSection";
-import { HomeScienceOfGlovesSection } from "@/components/home/HomeScienceOfGlovesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
 import { HomeFinalCtaStrip } from "@/components/home/HomeFinalCtaStrip";
 import { HomeBridge } from "@/components/home/authority/HomeAuthorityPrimitives";
@@ -33,11 +31,11 @@ export default function HomePage() {
         >
           <BrandCarousel compact />
         </section>
-        <HomeWhyExistsSection />
         <HomeGloveEducationHubWithBridge />
         <HomeProcurementMapSection />
+        <HomeBridge variant="to-light" className="h-20 sm:h-28" />
         <HomeIndustrySolutionsSection />
-        <HomeScienceOfGlovesSection />
+        <HomeBridge variant="light-to-dark" className="h-20 sm:h-28" />
         <HomeNationwideServiceSection />
         <HomeFinalCtaStrip />
         <HomeBridge variant="to-light" />

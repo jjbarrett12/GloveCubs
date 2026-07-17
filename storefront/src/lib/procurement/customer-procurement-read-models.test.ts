@@ -122,6 +122,7 @@ describe("fetchCustomerApprovedOpportunities stale exclusion", () => {
         certificationHints: [],
         protectionHint: null,
         activeVariantCount: 1,
+        availableSizeCodes: [],
       },
       {
         id: "00000000-0000-4000-8000-000000000002",
@@ -147,6 +148,7 @@ describe("fetchCustomerApprovedOpportunities stale exclusion", () => {
         certificationHints: [],
         protectionHint: null,
         activeVariantCount: 1,
+        availableSizeCodes: [],
       },
     ]);
 

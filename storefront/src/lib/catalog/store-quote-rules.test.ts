@@ -33,6 +33,7 @@ function row(overrides: Partial<StoreProductRow> = {}): StoreProductRow {
     certificationHints: [],
     protectionHint: null,
     activeVariantCount: 1,
+    availableSizeCodes: ["S"],
     ...overrides,
   };
 }

@@ -99,6 +99,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
           paymentIntegrityHold={h.payment_integrity_hold}
           invoiceAmountDue={h.invoice_amount_due}
           invoiceAmountPaid={h.invoice_amount_paid}
+          paymentConfirmedAt={h.payment_confirmed_at}
           trackingNumber={typeof h.metadata.tracking_number === "string" ? h.metadata.tracking_number : ""}
           trackingUrl={typeof h.metadata.tracking_url === "string" ? h.metadata.tracking_url : ""}
           fulfillmentActionsAvailable={fulfillmentAvailability.available}
@@ -196,7 +197,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { order
 
         <PremiumSectionCard title="Identifiers" dense>
           <p className="font-mono text-xs text-admin-muted">Order id: {h.id}</p>
-          <p className="mt-1 font-mono text-xs text-admin-muted">Created by user: {h.created_by_user_id || "—"}</p>
+          <p className="mt-1 font-mono text-xs text-admin-muted">Placed by user: {h.placed_by_user_id || "—"}</p>
           <p className="mt-1 font-mono text-xs text-admin-muted">Idempotency key: {h.idempotency_key || "—"}</p>
         </PremiumSectionCard>
       </div>

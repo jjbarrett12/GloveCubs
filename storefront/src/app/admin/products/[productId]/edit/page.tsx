@@ -4,9 +4,8 @@ import { fetchAdminCategoriesForProductForm } from "@/lib/admin/product-form-opt
 import { ProductEditorShell } from "@/app/admin/products/_components/ProductEditorShell";
 import { ErrorState } from "@/components/admin";
 import {
-  catalogosPublishDashboardUrl,
   isStorefrontManualActivePublishAllowed,
-  resolveCatalogosPublicBaseUrl,
+  resolveCatalogosEditorHandoff,
 } from "@/lib/admin/canonical-publish-policy";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +38,7 @@ export default async function AdminEditProductPage({ params }: { params: { produ
 
   const primary =
     (data.images ?? []).find((im) => im.isPrimary)?.url ?? (data.images ?? [])[0]?.url ?? "";
-  const catalogosBase = resolveCatalogosPublicBaseUrl();
+  const catalogosHandoff = resolveCatalogosEditorHandoff((data.product.metadata ?? {}) as Record<string, unknown>);
 
   return (
     <ProductEditorShell
@@ -47,12 +46,13 @@ export default async function AdminEditProductPage({ params }: { params: { produ
       productId={productId}
       product={data.product}
       variants={data.variants ?? []}
+      variantFulfillmentRows={data.variants ?? []}
       warnings={data.warnings ?? []}
       storefrontPdpPath={data.storefrontPdpPath ?? null}
       editor={data.editor}
       primaryImageUrl={primary}
       storefrontPublishBlocked={!isStorefrontManualActivePublishAllowed()}
-      catalogosPublishUrl={catalogosBase ? catalogosPublishDashboardUrl(catalogosBase) : null}
+      catalogosHandoff={catalogosHandoff}
     />
   );
 }

@@ -11,6 +11,11 @@ import type { StoreFacetCounts } from "@/lib/catalog/store-filter-types";
 import { getAttributeDefinitionIdsByKeys } from "@/lib/catalog/store-attribute-defs";
 import { commerceDisplayFromProductMetadata } from "@/lib/catalog/store-product-commerce";
 import { catalogBestOfferPriceQuery } from "@/lib/catalog/store-best-offer-price-query";
+import {
+  parseImpactPerformanceFromMetadata,
+  type ProductImpactPerformance,
+} from "@/lib/admin/derive-product-impact-performance";
+import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
 
 const MAX_PRODUCT_IDS_FOR_PRICE = 10_000;
 const MAX_CATEGORIES_OR_BRANDS = 500;
@@ -67,6 +72,17 @@ export type StoreProductRow = {
   protectionHint: string | null;
   /** Active catalog_variants count for this product (server-derived). */
   activeVariantCount: number;
+  /** Distinct size codes from active variants, sorted for card display. */
+  availableSizeCodes: string[];
+  /** Short storefront description when published. */
+  description: string | null;
+  /** Admin-configured impact bars (`metadata.impact_performance`). */
+  impactPerformance: ProductImpactPerformance | null;
+  /** Variant fulfillment mode; defaults to dropship when unset (launch posture). */
+  fulfillmentMode?: "dropship" | "stocked";
+  stockEnforcement?: boolean;
+  /** Local warehouse available qty when loaded; omitted on storefront by default. */
+  localAvailableStock?: number | null;
 };
 
 export type StoreBrandOption = {
@@ -119,6 +135,8 @@ type CatalogVariant = {
   is_active: boolean;
   size_code: string | null;
   metadata: Record<string, unknown> | null;
+  fulfillment_mode?: string | null;
+  stock_enforcement?: boolean | null;
 };
 
 function activeVariantCountByProduct(variants: CatalogVariant[]): Map<string, number> {
@@ -128,6 +146,28 @@ function activeVariantCountByProduct(variants: CatalogVariant[]): Map<string, nu
     counts.set(v.catalog_product_id, (counts.get(v.catalog_product_id) ?? 0) + 1);
   }
   return counts;
+}
+
+const SIZE_CODE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL"];
+
+function sortSizeCodes(codes: string[]): string[] {
+  return [...codes].sort((a, b) => {
+    const ai = SIZE_CODE_ORDER.indexOf(a.toUpperCase());
+    const bi = SIZE_CODE_ORDER.indexOf(b.toUpperCase());
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+}
+
+function sizeCodesByProduct(variants: CatalogVariant[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const v of variants) {
+    if (!v.is_active || !v.size_code?.trim()) continue;
+    const code = v.size_code.trim();
+    const arr = map.get(v.catalog_product_id) ?? [];
+    if (!arr.includes(code)) arr.push(code);
+    map.set(v.catalog_product_id, arr);
+  }
+  return map;
 }
 
 type ProductImage = {
@@ -224,12 +264,22 @@ function commercialCardFieldsFromBucket(bucket: CommercialAttrBucket | undefined
   }
   const useSummary =
     bucket.uses.length > 0
-      ? bucket.uses.slice(0, 2).join(" · ")
+      ? bucket.uses
+          .slice(0, 2)
+          .map((u) => formatAttributeValueLabel("uses", u))
+          .join(" · ")
       : bucket.industries.length > 0
-        ? bucket.industries.slice(0, 2).join(" · ")
+        ? bucket.industries
+            .slice(0, 2)
+            .map((i) => formatAttributeValueLabel("industries", i))
+            .join(" · ")
         : null;
-  const certificationHints = bucket.certifications.slice(0, 2);
-  const protectionHint = bucket.protection_tags[0] ?? null;
+  const certificationHints = bucket.certifications
+    .slice(0, 2)
+    .map((c) => formatAttributeValueLabel("certifications", c));
+  const protectionHint = bucket.protection_tags[0]
+    ? formatAttributeValueLabel("protection_tags", bucket.protection_tags[0])
+    : null;
   return { commercialUseSummary: useSummary, certificationHints, protectionHint };
 }
 
@@ -348,6 +398,7 @@ function mapProductsToRows(
   commercialByProduct: Map<string, CommercialAttrBucket>
 ): StoreProductRow[] {
   const variantCounts = activeVariantCountByProduct(variants);
+  const sizeCodesMap = sizeCodesByProduct(variants);
   return products.map((p) => {
     const meta = (p.metadata ?? null) as Record<string, unknown> | null;
     const v = pickDefaultVariant(variants, p.id);
@@ -356,6 +407,11 @@ function mapProductsToRows(
     const activeVariantCount = variantCounts.get(p.id) ?? 0;
     const bestPrice = validDisplayPrice(bestPriceByProduct.get(p.id) ?? null);
     const commerce = commerceDisplayFromProductMetadata(meta, bestPrice);
+    const fulfillmentMode =
+      (v?.fulfillment_mode as StoreProductRow["fulfillmentMode"]) ??
+      (typeof vMeta?.fulfillment_mode === "string"
+        ? (vMeta.fulfillment_mode as StoreProductRow["fulfillmentMode"])
+        : "dropship");
     return {
       id: p.id,
       name: p.name,
@@ -367,7 +423,10 @@ function mapProductsToRows(
       catalogVariantId: v?.id ?? null,
       variantSku: v?.variant_sku ?? null,
       sizeCode: v?.size_code ?? null,
-      materialHint: materialHint(meta, vMeta),
+      materialHint: (() => {
+        const raw = materialHint(meta, vMeta);
+        return raw ? formatAttributeValueLabel("material", raw) : null;
+      })(),
       badges: badgesFromProductMetadata(meta),
       bestPrice,
       casePrice: commerce.casePrice,
@@ -385,6 +444,12 @@ function mapProductsToRows(
       certificationHints: card.certificationHints,
       protectionHint: card.protectionHint,
       activeVariantCount,
+      availableSizeCodes: sortSizeCodes(sizeCodesMap.get(p.id) ?? []),
+      description: p.description?.trim() || null,
+      impactPerformance: parseImpactPerformanceFromMetadata(meta),
+      fulfillmentMode: fulfillmentMode ?? "dropship",
+      stockEnforcement: v?.stock_enforcement === true,
+      localAvailableStock: null,
     };
   });
 }
@@ -630,7 +695,7 @@ async function hydrateProductPage(
     supabase
       .schema("catalog_v2")
       .from("catalog_variants")
-      .select("id, catalog_product_id, variant_sku, sort_order, is_active, size_code, metadata")
+      .select("id, catalog_product_id, variant_sku, sort_order, is_active, size_code, metadata, fulfillment_mode, stock_enforcement")
       .in("catalog_product_id", productIds)
       .eq("is_active", true) as Promise<{ data: CatalogVariant[] | null }>,
     supabase

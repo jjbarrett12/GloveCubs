@@ -39,6 +39,12 @@ describe("Phase 2a admin orders (read-only, honest copy)", () => {
     expect(s).toContain('eq("payment_integrity_hold", true)');
   });
 
+  it("admin orders read model uses placed_by_user_id column", () => {
+    const s = read("admin-orders-read-model.ts");
+    expect(s).toContain("placed_by_user_id");
+    expect(s).not.toContain("created_by_user_id");
+  });
+
   it("admin orders read model stays schema-read-only", () => {
     const s = read("admin-orders-read-model.ts");
     expect(s).toContain('.schema("gc_commerce")');

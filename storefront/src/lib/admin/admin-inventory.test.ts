@@ -4,9 +4,11 @@ import {
   fetchAdminInventory,
   INVENTORY_CANONICAL_REQUIRED,
   normalizeCanonicalUuidInput,
+  VARIANT_SELECTION_REQUIRED,
 } from "./admin-inventory";
 
 const PRODUCT_ID = "00000000-0000-4000-8000-000000000001";
+const VARIANT_ID = "00000000-0000-4000-8000-000000000010";
 const ADMIN_ID = "00000000-0000-4000-8000-000000000099";
 
 type InventoryHandlers = {
@@ -87,6 +89,20 @@ function mockSupabase(handlers: InventoryHandlers = {}, initialOnHand = 10) {
       if (name === "catalog_v2") {
         return {
           from: vi.fn((table: string) => {
+            if (table === "catalog_variants") {
+              return {
+                select: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(async () => ({
+                        data: [{ id: VARIANT_ID, fulfillment_mode: "stocked" }],
+                        error: null,
+                      })),
+                    })),
+                  })),
+                })),
+              };
+            }
             if (table !== "catalog_products") throw new Error(`unexpected v2 table ${table}`);
             return {
               select: vi.fn(() => ({
@@ -175,6 +191,15 @@ function mockSupabase(handlers: InventoryHandlers = {}, initialOnHand = 10) {
       }
       throw new Error(`unexpected schema ${name}`);
     }),
+    rpc: vi.fn(async (name: string) => {
+      if (name === "admin_adjust_variant_inventory_atomic") {
+        return {
+          data: { ok: true, quantity_on_hand: inventoryOnHand + 5, quantity_reserved: 2 },
+          error: null,
+        };
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    }),
     __getStockHistoryRow: () => stockHistoryRow,
     __getInventoryOnHand: () => inventoryOnHand,
   };
@@ -235,6 +260,7 @@ describe("admin-inventory", () => {
     const result = await adjustAdminInventory(supabase, ADMIN_ID, {
       product_id: PRODUCT_ID,
       delta: 5,
+      reason: "Test",
     });
     expect(result.status).toBe(404);
   });
@@ -246,6 +272,7 @@ describe("admin-inventory", () => {
     const result = await adjustAdminInventory(supabase, ADMIN_ID, {
       product_id: PRODUCT_ID,
       delta: 5,
+      reason: "Test",
     });
     expect(result.status).toBe(404);
   });
@@ -254,7 +281,7 @@ describe("admin-inventory", () => {
     expect(INVENTORY_CANONICAL_REQUIRED).toBe("INVENTORY_CANONICAL_REQUIRED");
   });
 
-  it("adjustAdminInventory handles positive adjustment and writes stock history", async () => {
+  it("adjustAdminInventory delegates to variant RPC (no public stock_history)", async () => {
     const supabase = mockSupabase();
     const result = await adjustAdminInventory(supabase, ADMIN_ID, {
       product_id: PRODUCT_ID,
@@ -265,37 +292,21 @@ describe("admin-inventory", () => {
     expect(result.status).toBe(200);
     expect(result.success).toBe(true);
     expect(result.stock?.stock_on_hand).toBe(15);
-
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "admin_adjust_variant_inventory_atomic",
+      expect.objectContaining({ p_catalog_variant_id: VARIANT_ID, p_reason: "Cycle count correction" }),
+    );
     const history = (supabase as ReturnType<typeof mockSupabase>).__getStockHistoryRow();
-    expect(history).toMatchObject({
-      canonical_product_id: PRODUCT_ID.toLowerCase(),
-      delta: 5,
-      type: "adjust",
-      reference_type: "admin",
-      notes: "Cycle count correction",
-      user_id: ADMIN_ID,
-    });
+    expect(history).toBeNull();
   });
 
-  it("adjustAdminInventory clamps negative adjustment to zero (Express parity)", async () => {
-    const supabase = mockSupabase({}, 3);
+  it("adjustAdminInventory requires reason", async () => {
+    const supabase = mockSupabase();
     const result = await adjustAdminInventory(supabase, ADMIN_ID, {
       product_id: PRODUCT_ID,
-      delta: -10,
-      reason: "Damage",
+      delta: 5,
     });
-    expect(result.status).toBe(200);
-    expect((supabase as ReturnType<typeof mockSupabase>).__getInventoryOnHand()).toBe(0);
-    expect(result.stock?.stock_on_hand).toBe(0);
-  });
-
-  it("adjustAdminInventory records operator metadata on stock history", async () => {
-    const supabase = mockSupabase();
-    await adjustAdminInventory(supabase, ADMIN_ID, {
-      product_id: PRODUCT_ID,
-      delta: 1,
-    });
-    const history = (supabase as ReturnType<typeof mockSupabase>).__getStockHistoryRow();
-    expect(history?.user_id).toBe(ADMIN_ID);
+    expect(result.status).toBe(400);
+    expect(result.error).toContain("reason");
   });
 });

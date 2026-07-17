@@ -42,7 +42,7 @@ export function evaluateCommercePackagingReadiness(
 
   const casePrice = resolveEffectiveCasePriceFromPackaging(cp) ?? options.casePriceFallback ?? null;
 
-  if (publishIntent && (casePrice == null || casePrice <= 0)) {
+  if (publishIntent && (casePrice == null || casePrice <= 0) && cp.sell_by_case_enabled !== false) {
     blockers.push({
       code: "missing_case_price",
       label: "Case product or sale price required to publish (or variant list price)",
@@ -53,6 +53,27 @@ export function evaluateCommercePackagingReadiness(
     blockers.push({
       code: "missing_units_per_case",
       label: "Units per case required to publish",
+      severity: "blocker",
+    });
+  }
+
+  if (publishIntent && !cp.sell_by_case_enabled && !cp.sell_by_pallet_enabled) {
+    blockers.push({
+      code: "missing_sell_unit",
+      label: "Enable sell by case and/or sell by pallet",
+      severity: "blocker",
+    });
+  }
+
+  if (
+    publishIntent &&
+    cp.sell_by_pallet_enabled &&
+    !cp.sell_by_case_enabled &&
+    resolveEffectivePalletPriceFromPackaging(cp) == null
+  ) {
+    blockers.push({
+      code: "missing_pallet_price",
+      label: "Pallet product or sale price required for pallet-only products",
       severity: "blocker",
     });
   }

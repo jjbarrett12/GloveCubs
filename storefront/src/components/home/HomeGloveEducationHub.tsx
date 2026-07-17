@@ -7,12 +7,14 @@ import {
   ArrowRight,
   Brain,
   Car,
-  Check,
+  ChevronRight,
   Factory,
   Hand,
   HeartPulse,
+  Pill,
   Route,
   Shield,
+  ShieldCheck,
   Sparkles,
   Target,
   UtensilsCrossed,
@@ -21,13 +23,28 @@ import {
 import { ProcurementSectionShell } from "@/components/procurement";
 import { HomeCtaLink, HomePanelLight } from "@/components/home/authority/HomeAuthorityPrimitives";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
-import { buildSurveyIndustryOptions, scoringIndustryBucket } from "@/config/gloveEducationSurvey";
-import { DEFAULT_SURVEY_INTAKE, type SurveyIntakeState } from "@/lib/education-hub/intake-types";
+import { AddToQuoteButton } from "@/components/quote/AddToQuoteButton";
+import {
+  canAddProductRowToQuote,
+  productRequiresSizeSelection,
+  storeProductPdpVariantsAnchor,
+} from "@/lib/catalog/store-quote-rules";
+import { buildSurveyIndustryOptions } from "@/config/gloveEducationSurvey";
+import {
+  PERF_LEVEL_LABELS,
+  SCIENCE_MOCKUP_PERF,
+  type PerfLevel,
+  type ScienceMockupPerfKey,
+} from "@/config/gloveScienceLab";
+import { EMPTY_SURVEY_INTAKE, type SurveyIntakeState } from "@/lib/education-hub/intake-types";
 import type { EducationHubCatalogCandidate } from "@/lib/education-hub/survey-catalog-matches";
 import {
   intakeToStoreCatalogFilters,
-  rankCatalogCandidatesForIntake,
+  rankScoredCatalogCandidates,
 } from "@/lib/education-hub/survey-catalog-matches";
+import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
+import type { ProductImpactPerformance } from "@/lib/admin/derive-product-impact-performance";
+import type { StoreProductRow } from "@/lib/catalog/store-products";
 import { buildStoreCatalogHref } from "@/lib/catalog/store-url";
 import { cn } from "@/lib/utils";
 
@@ -37,19 +54,14 @@ const DISCLAIMER =
 const IMG_PARAMS = "auto=format&fit=crop&w=600&h=600&q=80";
 
 const PROGRAM_THUMBNAILS: Record<string, string> = {
-  "fs-nitrile-6": `https://images.unsplash.com/photo-1579684385127-1ef15d508118?${IMG_PARAMS}`,
-  "fs-vinyl": `https://images.unsplash.com/photo-1559339352-11d035aa65de?${IMG_PARAMS}`,
-  "hc-exam": `https://images.unsplash.com/photo-1579684385127-1ef15d508118?${IMG_PARAMS}`,
-  "jan-chem": `https://images.unsplash.com/photo-1521791136064-7986c2920216?${IMG_PARAMS}`,
-  "ind-heavy": `https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?${IMG_PARAMS}`,
-  "auto-mechanic": `https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?${IMG_PARAMS}`,
   "gen-standard": `https://images.unsplash.com/photo-1579684385127-1ef15d508118?${IMG_PARAMS}`,
-  "hc-chemo-note": `https://images.unsplash.com/photo-1579684385127-1ef15d508118?${IMG_PARAMS}`,
-  "ind-supported": `https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?${IMG_PARAMS}`,
 };
 
 const STEP_COUNT = 10;
 const SURVEY_INDUSTRY_OPTIONS = buildSurveyIndustryOptions();
+
+/** Fixed lg height — survey and best-match cards stay aligned; inner regions scroll when needed. */
+const EDUCATION_HUB_PAIR_CARD_HEIGHT = "lg:h-[min(44rem,76vh)]";
 
 type StepOption = { value: string; label: string; hint?: string; icon?: LucideIcon };
 
@@ -178,224 +190,11 @@ const TRUST_ITEMS = [
   },
 ] as const;
 
-type ProgramFit = {
-  id: string;
-  name: string;
-  gloveClass: string;
-  thickness: string;
-  texture: string;
-  bestFor: string;
-  compliance: string[];
-  industries: string[];
-  tasks: string[];
-  materials: string[];
-};
+type ProgramHighlight = { icon: LucideIcon; title: string; body: string };
 
-const PROGRAM_FITS: ProgramFit[] = [
-  {
-    id: "fs-nitrile-6",
-    name: "Food-Safe Nitrile 6 mil",
-    gloveClass: "Food service nitrile",
-    thickness: "6 mil",
-    texture: "Textured fingertips",
-    bestFor: "Prep, handling, short wet tasks",
-    compliance: ["Food contact", "Powder-free"],
-    industries: ["food-service", "general"],
-    tasks: ["food-handling", "general-disposable"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "fs-vinyl",
-    name: "Vinyl Food-Service Program",
-    gloveClass: "Food service vinyl",
-    thickness: "3–4 mil",
-    texture: "Smooth",
-    bestFor: "Low-risk handling, high turnover",
-    compliance: ["Food contact"],
-    industries: ["food-service"],
-    tasks: ["food-handling"],
-    materials: ["Vinyl"],
-  },
-  {
-    id: "hc-exam",
-    name: "Exam Nitrile Program",
-    gloveClass: "Healthcare exam",
-    thickness: "3–5 mil",
-    texture: "Textured / smooth",
-    bestFor: "Patient care, exam rooms",
-    compliance: ["Exam-grade", "Latex-free"],
-    industries: ["healthcare"],
-    tasks: ["patient-care"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "jan-chem",
-    name: "Janitorial Nitrile Extended Cuff",
-    gloveClass: "Janitorial barrier",
-    thickness: "6–8 mil",
-    texture: "Textured",
-    bestFor: "Cleaning, disinfecting, wet work",
-    compliance: ["Chemical-resistant", "Powder-free"],
-    industries: ["janitorial"],
-    tasks: ["cleaning"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "ind-heavy",
-    name: "Industrial Heavy-Duty Nitrile",
-    gloveClass: "Industrial disposable",
-    thickness: "8 mil",
-    texture: "Raised grip",
-    bestFor: "Abrasion, oils, extended tasks",
-    compliance: ["Heavy-duty"],
-    industries: ["industrial", "automotive"],
-    tasks: ["mechanical", "assembly"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "auto-mechanic",
-    name: "Mechanic Nitrile Program",
-    gloveClass: "Automotive disposable",
-    thickness: "5–6 mil",
-    texture: "Diamond texture",
-    bestFor: "Shop floor, oils, tool grip",
-    compliance: ["Oil-resistant"],
-    industries: ["automotive"],
-    tasks: ["mechanical"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "gen-standard",
-    name: "General Nitrile Standard",
-    gloveClass: "General purpose",
-    thickness: "4–5 mil",
-    texture: "Standard",
-    bestFor: "Mixed tasks, program baseline",
-    compliance: ["Latex-free"],
-    industries: ["general", "industrial"],
-    tasks: ["general-disposable", "assembly"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "hc-chemo-note",
-    name: "Chemo-Rated Listing Path",
-    gloveClass: "Specialty clinical",
-    thickness: "Per published SKU",
-    texture: "Per listing",
-    bestFor: "When published chemo rating required",
-    compliance: ["Verify on SKU"],
-    industries: ["healthcare"],
-    tasks: ["patient-care"],
-    materials: ["Nitrile"],
-  },
-  {
-    id: "ind-supported",
-    name: "Supported Work Glove Class",
-    gloveClass: "Mechanical / supported",
-    thickness: "ANSI-rated",
-    texture: "Coated palm",
-    bestFor: "Cut or impact beyond disposables",
-    compliance: ["Task-specific ANSI"],
-    industries: ["industrial", "automotive"],
-    tasks: ["mechanical", "assembly"],
-    materials: ["Supported work"],
-  },
-];
-
-type ScoredProgram = {
-  program: ProgramFit;
-  score: number;
-};
-
-/** Upper bound of positive points in `scoreProgram` — used to normalize match % (rule-based, not ML). */
+/** Upper bound of positive points in catalog scoring — used to normalize match % (rule-based, not ML). */
 const SCORE_RUBRIC_MAX = 16;
 
-function deriveGloveClass(s: SurveyIntakeState): { className: string; summary: string } {
-  const industryBucket = scoringIndustryBucket(s.industry);
-  if (s.foodSafe || industryBucket === "food-service" || s.task === "food-handling") {
-    return {
-      className: "Food Service",
-      summary:
-        "Food-safe nitrile disposable guidance for prep, service, wet/oily handling, and short-duration cleaning tasks.",
-    };
-  }
-  if (industryBucket === "healthcare" || s.task === "patient-care") {
-    return {
-      className: "Healthcare Exam",
-      summary:
-        "Patient-care barrier programs with latex-free exam-grade attributes—confirm specialty ratings on each SKU.",
-    };
-  }
-  if (industryBucket === "janitorial" || s.task === "cleaning" || s.chemicalExposure) {
-    return {
-      className: "Janitorial & Chemical Barrier",
-      summary:
-        "Chemical-resistant nitrile orientation for disinfectants, wet work, and longer barrier windows.",
-    };
-  }
-  if (industryBucket === "automotive" || s.task === "mechanical") {
-    return {
-      className: "Automotive / Mechanical",
-      summary:
-        "Shop-floor disposable programs built around oil resistance, tool grip, and durable nitrile barrier.",
-    };
-  }
-  return {
-    className: "Industrial Disposable",
-    summary:
-      "General industrial disposable direction with thickness and grip tuned to your task tier and wear duration.",
-  };
-}
-
-function deriveReasons(s: SurveyIntakeState): string[] {
-  const reasons: string[] = [];
-  if (s.foodSafe) reasons.push("Food-safe materials");
-  if (texturedGripFromState(s)) reasons.push("Textured grip");
-  if (s.exposureRisks.includes("wet-oily")) reasons.push("Wet / oil grip support");
-  if (s.wearDuration === "short") reasons.push("Comfortable for frequent changes");
-  if (s.dexterity === "high") reasons.push("Strong dexterity");
-  if (s.chemicalExposure || s.exposureRisks.includes("chemicals")) reasons.push("Chemical barrier orientation");
-  if (s.powderFree) reasons.push("Powder-free program alignment");
-  if (reasons.length < 4) reasons.push("Latex-free synthetic baseline");
-  return reasons.slice(0, 4);
-}
-
-function texturedGripFromState(s: SurveyIntakeState): boolean {
-  return s.exposureRisks.includes("wet-oily") || s.exposureRisks.includes("abrasion");
-}
-
-function scoreProgram(p: ProgramFit, s: SurveyIntakeState): number {
-  let score = 0;
-  const haystack = `${p.name} ${p.gloveClass} ${p.texture} ${p.bestFor} ${p.compliance.join(" ")}`.toLowerCase();
-
-  const industryBucket = scoringIndustryBucket(s.industry);
-  if (p.industries.includes(industryBucket)) score += 4;
-  else if (p.industries.includes("general")) score += 1;
-  else score -= 3;
-
-  if (p.tasks.includes(s.task)) score += 3;
-  if (s.foodSafe && /food/.test(haystack)) score += 3;
-  if (!s.foodSafe && /food service vinyl|food-safe nitrile/i.test(p.name)) score -= 2;
-
-  const hasChem = s.chemicalExposure || s.exposureRisks.includes("chemicals");
-  if (hasChem && /chem|disinfect|janitorial/i.test(haystack)) score += 3;
-  if (s.exposureRisks.includes("wet-oily") && /textur|grip|diamond/i.test(haystack)) score += 2;
-  if (s.exposureRisks.includes("abrasion") && /heavy|8 mil|supported|industrial/i.test(haystack)) score += 2;
-  if (s.thickness === "heavy" && /8|6–8|heavy/i.test(p.thickness)) score += 2;
-  if (s.programPriority === "value" && /vinyl|value|turnover/i.test(haystack)) score += 2;
-  if (s.programPriority === "durability" && /heavy|8|extended|mechanic/i.test(haystack)) score += 2;
-
-  return Math.max(0, score);
-}
-
-function deriveScoredPrograms(s: SurveyIntakeState): ScoredProgram[] {
-  return PROGRAM_FITS.map((program) => ({ program, score: scoreProgram(program, s) })).sort((a, b) => b.score - a.score);
-}
-
-/**
- * Match % from deterministic rubric scores for the top program vs the candidate pool.
- * Capped below 100% — educational alignment index, not a safety or SKU guarantee.
- */
 function deriveMatchScorePercent(topScore: number, allScores: number[]): number {
   if (allScores.length === 0 || topScore <= 0) return 0;
   const maxInPool = Math.max(...allScores, 1);
@@ -405,8 +204,165 @@ function deriveMatchScorePercent(topScore: number, allScores: number[]): number 
   return Math.min(96, Math.max(68, Math.round(68 + blended * 28)));
 }
 
+function deriveMatchConfidence(percent: number): "High" | "Medium" | "Low" {
+  if (percent >= 85) return "High";
+  if (percent >= 75) return "Medium";
+  return "Low";
+}
+
 function programImageUrl(programId: string): string {
   return PROGRAM_THUMBNAILS[programId] ?? PROGRAM_THUMBNAILS["gen-standard"];
+}
+
+const DEFAULT_IMPACT_PERFORMANCE: ProductImpactPerformance = {
+  grip: 1,
+  abrasion: 1,
+  chemical: 1,
+  cut: 1,
+  comfort: 1,
+  costPerUse: 1,
+};
+
+type BestMatchDisplay = {
+  productId: string;
+  name: string;
+  imageUrl: string | null;
+  description: string;
+  matchScorePercent: number;
+  matchConfidence: "High" | "Medium" | "Low";
+  impactPerformance: ProductImpactPerformance;
+  highlights: ProgramHighlight[];
+};
+
+function impactPerformanceForProduct(product: StoreProductRow): ProductImpactPerformance {
+  return product.impactPerformance ?? DEFAULT_IMPACT_PERFORMANCE;
+}
+
+function deriveCatalogProductDescription(product: StoreProductRow): string {
+  const material = product.materialHint?.trim();
+  const use = product.commercialUseSummary?.trim();
+  if (material && use) {
+    return `${material} glove aligned for ${use.toLowerCase()} — verify specs on the published listing.`;
+  }
+  if (material) return `${material} glove from our published catalog — open the listing for full specs.`;
+  const raw = product.description?.trim();
+  if (raw && raw.length <= 140 && !/https?:\/\//i.test(raw)) return raw;
+  return "Published catalog listing matched to your operational answers.";
+}
+
+function formatCertificationHints(hints: string[]): string {
+  return hints
+    .map((h) => (h.includes("_") ? formatAttributeValueLabel("certifications", h) : h))
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function deriveCatalogProductHighlights(product: StoreProductRow): ProgramHighlight[] {
+  const certLabels = formatCertificationHints(product.certificationHints);
+  const foodSafe = product.certificationHints.some((c) => /food/i.test(c));
+  const examGrade = product.certificationHints.some((c) => /exam|medical/i.test(c));
+
+  const compliance: ProgramHighlight = foodSafe
+    ? { icon: Pill, title: "Food-safe & compliant", body: certLabels || "Food-contact alignment." }
+    : examGrade
+      ? { icon: Pill, title: "Exam-grade barrier", body: certLabels || "Medical exam alignment." }
+      : {
+          icon: Pill,
+          title: "Program compliance",
+          body: certLabels || "Verify ratings on the listing.",
+        };
+
+  const comfortBody = product.protectionHint
+    ? `${product.protectionHint} grip profile.`
+    : product.materialHint
+      ? `${product.materialHint} with balanced feel for mixed tasks.`
+      : "Comfort-oriented disposable fit.";
+
+  const durabilityBody = product.materialHint
+    ? `${product.materialHint}${product.commercialUseSummary ? ` · ${product.commercialUseSummary}` : ""}.`
+    : "Reliable barrier for everyday professional use.";
+
+  return [
+    compliance,
+    { icon: Hand, title: "Comfortable fit", body: comfortBody },
+    { icon: ShieldCheck, title: "Durable protection", body: durabilityBody },
+  ];
+}
+
+function buildBestMatchDisplay(
+  product: StoreProductRow,
+  score: number,
+  allScores: number[]
+): BestMatchDisplay {
+  return {
+    productId: product.id,
+    name: product.name,
+    imageUrl: product.imageUrl,
+    description: deriveCatalogProductDescription(product),
+    matchScorePercent: deriveMatchScorePercent(score, allScores),
+    matchConfidence: deriveMatchConfidence(deriveMatchScorePercent(score, allScores)),
+    impactPerformance: impactPerformanceForProduct(product),
+    highlights: deriveCatalogProductHighlights(product),
+  };
+}
+
+const PERF_BAR_FILLS: Record<ScienceMockupPerfKey, string> = {
+  grip: "linear-gradient(90deg, rgb(255 106 0 / 0.75), var(--color-accent-orange))",
+  abrasion: "linear-gradient(90deg, rgb(245 158 11 / 0.75), rgb(251 191 36))",
+  chemical: "linear-gradient(90deg, rgb(56 189 248 / 0.75), rgb(14 165 233))",
+  cut: "linear-gradient(90deg, rgb(244 63 94 / 0.75), rgb(225 29 72))",
+  comfort: "linear-gradient(90deg, rgb(167 139 250 / 0.75), rgb(139 92 246))",
+  costPerUse: "linear-gradient(90deg, rgb(52 211 153 / 0.75), rgb(16 185 129))",
+};
+
+const PERF_VALUE_HIGH: Partial<Record<ScienceMockupPerfKey, string>> = {
+  grip: "text-[var(--color-accent-orange)]",
+  abrasion: "text-amber-400",
+  chemical: "text-sky-400",
+  cut: "text-rose-400",
+  comfort: "text-violet-400",
+  costPerUse: "text-emerald-400",
+};
+
+function ProgramHighlightItem({ icon: Icon, title, body }: ProgramHighlight) {
+  return (
+    <div className="flex gap-2.5">
+      <span
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/[0.04]"
+        aria-hidden
+      >
+        <Icon className="h-3.5 w-3.5 text-[var(--color-accent-orange)]" strokeWidth={2} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold leading-snug text-white">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-white/52">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function SurveyPerfBar({ metricKey, label, level }: { metricKey: ScienceMockupPerfKey; label: string; level: PerfLevel }) {
+  const width = level === 0 ? "33%" : level === 1 ? "66%" : "100%";
+  const highClass = PERF_VALUE_HIGH[metricKey] ?? "text-[var(--color-accent-orange)]";
+
+  return (
+    <div>
+      <div className="mb-0.5 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-white/78">{label}</span>
+        <span
+          className={cn(
+            "text-[9px] font-extrabold uppercase tracking-[0.06em]",
+            level === 2 || (metricKey === "costPerUse" && level === 0) ? highClass : "text-white/45"
+          )}
+        >
+          {PERF_LEVEL_LABELS[level]}
+        </span>
+      </div>
+      <div className="h-[0.4rem] overflow-hidden rounded-full bg-white/10" role="img" aria-label={`${label}: ${PERF_LEVEL_LABELS[level]}`}>
+        <div className="h-full rounded-full" style={{ width, background: PERF_BAR_FILLS[metricKey] }} />
+      </div>
+    </div>
+  );
 }
 
 function GloveIntelligenceEyebrow() {
@@ -423,7 +379,7 @@ function ProgramThumbnail({ programId, className }: { programId: string; classNa
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0a0a0a]",
+        "relative h-full min-h-0 overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0a0a0a]",
         className
       )}
     >
@@ -461,7 +417,7 @@ function QuizOptionRow({
       aria-checked={selected}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition duration-200",
+        "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition duration-200",
         selected
           ? "border-[var(--color-accent-orange)] bg-[#fff8f3] shadow-[0_0_0_1px_rgb(255_106_0/0.22)]"
           : "border-[#e3e3e0] bg-white hover:border-[#d0d0cc] hover:bg-[#fafaf8]"
@@ -469,18 +425,18 @@ function QuizOptionRow({
     >
       <span
         className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
           selected
             ? "border-[var(--color-accent-orange)]/25 bg-[var(--color-accent-orange)]/10 text-[var(--color-accent-orange)]"
             : "border-[#ebebea] bg-[#f4f4f2] text-neutral-500"
         )}
         aria-hidden
       >
-        <Icon className="h-5 w-5" strokeWidth={2} />
+        <Icon className="h-4 w-4" strokeWidth={2} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn("block text-[15px] font-bold", selected ? "text-ink" : "text-neutral-800")}>{option.label}</span>
-        {option.hint ? <span className="mt-0.5 block text-xs text-neutral-500">{option.hint}</span> : null}
+        <span className={cn("block text-sm font-bold", selected ? "text-ink" : "text-neutral-800")}>{option.label}</span>
+        {option.hint ? <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{option.hint}</span> : null}
       </span>
       <span
         className={cn(
@@ -508,7 +464,7 @@ function CatalogProductThumbnail({
     return (
       <div
         className={cn(
-          "relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0a0a0a]",
+          "relative h-full min-h-0 overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0a0a0a]",
           className
         )}
       >
@@ -526,6 +482,42 @@ function CatalogProductThumbnail({
   return <ProgramThumbnail programId="gen-standard" className={className} />;
 }
 
+function BestMatchCardActions({ product }: { product: StoreProductRow }) {
+  const pdpHref = `/store/p/${encodeURIComponent(product.slug)}`;
+  const selectSizeHref = storeProductPdpVariantsAnchor(product.slug);
+  const showQuote = canAddProductRowToQuote(product);
+  const needsSize = productRequiresSizeSelection(product);
+
+  return (
+    <div className="shrink-0 space-y-1.5 border-t border-white/10 px-4 py-2.5 sm:px-5">
+      {needsSize ? (
+        <Link
+          href={selectSizeHref}
+          className="flex h-10 w-full items-center justify-center rounded-lg bg-[var(--color-accent-orange)] text-xs font-bold text-white transition hover:brightness-105"
+        >
+          Select size
+        </Link>
+      ) : showQuote ? (
+        <AddToQuoteButton product={product} className="h-10 w-full text-xs font-bold" />
+      ) : (
+        <Link
+          href="/request-pricing"
+          className="flex h-10 w-full items-center justify-center rounded-lg border border-white/20 text-xs font-semibold text-white/90 transition hover:border-white/35 hover:bg-white/5"
+        >
+          Request pricing
+        </Link>
+      )}
+      <Link
+        href={pdpHref}
+        className="flex items-center justify-center gap-1 py-2 text-[10px] font-semibold text-white/55 transition hover:text-[var(--color-accent-orange)]"
+      >
+        View details
+        <ChevronRight className="h-3 w-3" aria-hidden />
+      </Link>
+    </div>
+  );
+}
+
 function HomeGloveEducationHubClient({
   catalogCandidates,
   catalogUnavailable,
@@ -534,31 +526,30 @@ function HomeGloveEducationHubClient({
   catalogUnavailable: boolean;
 }) {
   const [step, setStep] = React.useState(0);
-  const [intake, setIntake] = React.useState<SurveyIntakeState>(DEFAULT_SURVEY_INTAKE);
+  const [intake, setIntake] = React.useState<SurveyIntakeState>(EMPTY_SURVEY_INTAKE);
+  const [answeredStepIds, setAnsweredStepIds] = React.useState<Set<string>>(() => new Set());
   const [surveyComplete, setSurveyComplete] = React.useState(false);
   const resultsRef = React.useRef<HTMLDivElement>(null);
 
-  const gloveClass = React.useMemo(() => deriveGloveClass(intake), [intake]);
-  const reasons = React.useMemo(() => deriveReasons(intake), [intake]);
-  const scoredPrograms = React.useMemo(() => deriveScoredPrograms(intake), [intake]);
-  const winnerEntry = scoredPrograms[0];
-  const winner = winnerEntry?.program ?? PROGRAM_FITS[0];
-  const winnerScore = winnerEntry?.score ?? 0;
-  const allScores = React.useMemo(() => scoredPrograms.map((s) => s.score), [scoredPrograms]);
-  const matchScorePercent = React.useMemo(
-    () => deriveMatchScorePercent(winnerScore, allScores),
-    [winnerScore, allScores]
+  const rankedScored = React.useMemo(
+    () => rankScoredCatalogCandidates(catalogCandidates, intake, 9, answeredStepIds),
+    [catalogCandidates, intake, answeredStepIds]
   );
-  const matchedProducts = React.useMemo(
-    () => rankCatalogCandidatesForIntake(catalogCandidates, intake, 8),
-    [catalogCandidates, intake]
-  );
-  const matchedProductsKey = matchedProducts.map((p) => p.id).join(",");
+  /** Best match is #1 in the hero panel; grid shows ranked options #2–#9. */
+  const bestMatchProduct = rankedScored[0]?.product ?? null;
+  const alternateProducts = React.useMemo(() => rankedScored.slice(1, 9).map((r) => r.product), [rankedScored]);
+  const alternateProductsKey = alternateProducts.map((p) => p.id).join(",");
+  const displayMatch = React.useMemo(() => {
+    const top = rankedScored[0];
+    if (!top?.product) return null;
+    const allScores = rankedScored.map((r) => r.score);
+    return buildBestMatchDisplay(top.product, top.score, allScores);
+  }, [rankedScored]);
+
   const storeBrowseHref = React.useMemo(
     () => buildStoreCatalogHref(intakeToStoreCatalogFilters(intake)),
     [intake]
   );
-  const topMatchedProduct = matchedProducts[0];
 
   const currentStep = STEPS[step];
   const progress = ((step + 1) / STEP_COUNT) * 100;
@@ -636,6 +627,11 @@ function HomeGloveEducationHubClient({
   const handleOptionSelect = React.useCallback(
     (value: string) => {
       applyStepValue(currentStep.id, value);
+      setAnsweredStepIds((prev) => {
+        const next = new Set(prev);
+        next.add(currentStep.id);
+        return next;
+      });
       if (!currentStep.multi && step < STEP_COUNT - 1) {
         window.setTimeout(() => goNext(), 200);
       }
@@ -672,7 +668,7 @@ function HomeGloveEducationHubClient({
                 id="education-hub-heading"
                 className="text-[2rem] font-black leading-[0.98] tracking-[-0.02em] text-ink sm:text-[2.65rem] lg:text-[2.85rem]"
               >
-                Answer a few questions. Get the right glove—faster
+                Find the right glove — Faster
                 <span className="text-[var(--color-accent-orange)]">.</span>
               </h2>
               <p className="mt-3 max-w-xl text-base leading-relaxed text-neutral-500 sm:mt-4 sm:text-[1.0625rem]">
@@ -703,16 +699,28 @@ function HomeGloveEducationHubClient({
           </div>
         </header>
 
-        <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start lg:gap-7">
-          <HomePanelLight className="flex min-w-0 flex-col overflow-hidden p-0">
-            <div className="border-b border-[#ebebea] px-4 py-3 sm:px-5">
-              <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold text-neutral-500">
+        <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-7">
+          <HomePanelLight
+            className={cn(
+              "flex min-h-0 min-w-0 flex-col overflow-hidden border-2 border-[var(--color-accent-orange)]/30 bg-gradient-to-br from-[#fff8f3] via-white to-[#fff5eb] p-0 shadow-[0_8px_36px_rgb(255_106_0/0.1)] ring-1 ring-[var(--color-accent-orange)]/10",
+              EDUCATION_HUB_PAIR_CARD_HEIGHT
+            )}
+          >
+            <div className="shrink-0 border-b border-[var(--color-accent-orange)]/15 bg-gradient-to-r from-[var(--color-accent-orange)]/10 via-[var(--color-accent-orange)]/5 to-transparent px-4 py-2.5 sm:px-5">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent-orange)] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-white shadow-[0_2px_10px_rgb(255_106_0/0.35)]">
+                  Start here
+                  <ArrowRight className="h-3 w-3" aria-hidden />
+                </span>
+                <h3 className="text-sm font-extrabold tracking-tight text-ink sm:text-[15px]">Glove Finder</h3>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs font-semibold text-neutral-500">
                 <span>
                   Step {step + 1} of {STEP_COUNT}
                 </span>
-                <span>~90 seconds</span>
+                <span>~60 seconds</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-[#ebebea]">
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#ebebea]">
                 <div
                   className="h-full rounded-full bg-[var(--color-accent-orange)] transition-all duration-300 ease-out"
                   style={{ width: `${progress}%` }}
@@ -725,22 +733,16 @@ function HomeGloveEducationHubClient({
               </div>
             </div>
 
-            <div className="flex flex-col px-4 py-4 sm:px-5 sm:py-4" role="group" aria-labelledby="quiz-question">
-              <h3 id="quiz-question" className="mb-0.5 text-base font-extrabold tracking-tight text-ink sm:text-lg">
+            <div className="flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-5" role="group" aria-labelledby="quiz-question">
+              <h3 id="quiz-question" className="mb-0.5 shrink-0 text-sm font-extrabold tracking-tight text-ink sm:text-base">
                 {step + 1}. {currentStep.title}
               </h3>
-              <p className="mb-3 text-sm text-neutral-500">{currentStep.subtitle}</p>
-              <div
-                className={cn(
-                  "overflow-y-auto pr-0.5 [scrollbar-width:thin]",
-                  currentStep.id === "industry"
-                    ? "max-h-[min(26rem,58vh)] sm:max-h-[min(22rem,52vh)]"
-                    : "flex max-h-[min(19rem,48vh)] flex-col gap-2"
-                )}
-              >
+              <p className="mb-2 shrink-0 text-xs text-neutral-500 sm:text-sm">{currentStep.subtitle}</p>
+              <div className="min-h-0 flex-1 overflow-y-auto pr-0.5 [scrollbar-width:thin] max-lg:max-h-[min(28rem,55vh)]">
                 <div
                   className={cn(
-                    currentStep.id === "industry" ? "grid grid-cols-1 gap-2 sm:grid-cols-2" : "flex flex-col gap-2"
+                    "pb-1",
+                    currentStep.id === "industry" ? "grid grid-cols-1 gap-1.5 sm:grid-cols-2" : "flex flex-col gap-1.5"
                   )}
                 >
                   {currentStep.options.map((opt) => (
@@ -756,7 +758,7 @@ function HomeGloveEducationHubClient({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#ebebea] px-4 py-3 sm:px-5">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#ebebea] px-4 py-2.5 sm:px-5">
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -779,7 +781,7 @@ function HomeGloveEducationHubClient({
                 type="button"
                 onClick={isLastStep ? completeSurvey : goNext}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-[0_4px_20px_rgb(255_106_0/0.28)] transition hover:brightness-105",
+                  "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-[0_4px_20px_rgb(255_106_0/0.28)] transition hover:brightness-105",
                   surveyComplete && isLastStep
                     ? "bg-emerald-600"
                     : "bg-[var(--color-accent-orange)]"
@@ -792,60 +794,98 @@ function HomeGloveEducationHubClient({
           </HomePanelLight>
 
           <div
-            className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#2a2a2a] bg-[#0a0a0a] text-white shadow-[0_16px_48px_rgb(0_0_0/0.22)]"
+            className={cn(
+              "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#2a2a2a] bg-gradient-to-b from-[#111111] to-[#0a0a0a] text-white shadow-[0_16px_48px_rgb(0_0_0/0.22)]",
+              EDUCATION_HUB_PAIR_CARD_HEIGHT
+            )}
             aria-live="polite"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5 sm:px-5">
               <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]">
-                Guided selection preview
+                Recommended for you
               </span>
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
-                Preview — not a final safety determination
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white/90">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgb(52_211_153/0.75)]"
+                  aria-hidden
+                />
+                Live recommendation
               </span>
             </div>
 
-            <div className="flex flex-col p-4 sm:p-5">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_minmax(0,9rem)] sm:gap-5">
+            <div key={displayMatch?.productId ?? "pending-best"} className="shrink-0 border-b border-white/10 px-4 py-3 sm:px-5">
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
                 <div className="min-w-0">
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--color-accent-orange)]/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                    Best fit
-                  </div>
-                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/45">{winner.gloveClass}</p>
-                  <h3 className="mb-2 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">{winner.name}</h3>
-                  <p className="mb-3 text-sm leading-relaxed text-white/75">{gloveClass.summary}</p>
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {reasons.map((r) => (
-                      <div
-                        key={r}
-                        className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-2"
-                      >
-                        <Check className="h-4 w-4 shrink-0 text-[var(--color-accent-orange)]" strokeWidth={2.5} aria-hidden />
-                        <span className="text-xs font-medium leading-snug text-white/88">{r}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-orange)]">Best match</p>
+                  <h3 className="mt-1 line-clamp-2 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl">
+                    {displayMatch?.name ?? "Answer to see your best match…"}
+                  </h3>
+                  <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-white/68">
+                    {displayMatch?.description ??
+                      "Your top pick updates live as you answer—same ranking logic as the cards below."}
+                  </p>
                 </div>
-
-                <div className="flex flex-col items-center sm:items-stretch">
-                  <CatalogProductThumbnail
-                    imageUrl={topMatchedProduct?.imageUrl}
-                    name={topMatchedProduct?.name ?? winner.name}
-                    className="aspect-square w-full max-w-[9rem] sm:mx-auto"
-                  />
-                  <div
-                    className="mt-3 w-full text-center sm:text-left"
-                    aria-label={`Rule-based alignment score ${matchScorePercent} percent for ${winner.name}`}
-                  >
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">Match score</p>
-                    <p className="mt-0.5 text-3xl font-black leading-none tracking-tight text-emerald-400">{matchScorePercent}%</p>
-                    <p className="mt-1.5 text-[10px] leading-relaxed text-white/40">From intake rubric · not a safety rating</p>
-                  </div>
-                </div>
+                <CatalogProductThumbnail
+                  imageUrl={displayMatch?.imageUrl ?? bestMatchProduct?.imageUrl ?? programImageUrl("gen-standard")}
+                  name={displayMatch?.name ?? "Recommended glove"}
+                  className="aspect-square w-full max-w-[7rem] justify-self-end rounded-xl shadow-[0_8px_32px_rgb(0_0_0/0.45)] ring-1 ring-white/20 sm:max-w-none"
+                />
               </div>
             </div>
 
-            <p className="shrink-0 border-t border-white/10 px-4 py-2.5 text-[11px] leading-relaxed text-white/45 sm:px-5">{DISCLAIMER}</p>
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+              <div className="grid grid-cols-1 sm:grid-cols-[8.75rem_minmax(0,1fr)]">
+                <div
+                  className="flex flex-col justify-start border-b border-white/10 px-4 py-3 sm:border-b-0 sm:border-r sm:px-5 sm:py-4"
+                  aria-label={`Rule-based match score ${displayMatch?.matchScorePercent ?? 0} percent`}
+                >
+                  <span className="text-[2.75rem] font-black leading-none tracking-tight text-emerald-400">
+                    {displayMatch?.matchScorePercent ?? "—"}
+                    {displayMatch ? "%" : null}
+                  </span>
+                  <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">Match score</span>
+                  {displayMatch ? (
+                    <span className="mt-1 text-xs text-white/45">Confidence: {displayMatch.matchConfidence}</span>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-col px-4 py-3 sm:px-5">
+                  <p className="mb-2 shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-orange)]">
+                    Recommended impact
+                  </p>
+                  <div key={displayMatch?.productId ?? "pending"} className="flex flex-col gap-2">
+                    {SCIENCE_MOCKUP_PERF.map(({ key, label }) => (
+                      <SurveyPerfBar
+                        key={key}
+                        metricKey={key}
+                        label={label}
+                        level={displayMatch?.impactPerformance[key] ?? DEFAULT_IMPACT_PERFORMANCE[key]}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 border-t border-white/10 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:px-5">
+                {displayMatch ? (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <ProgramHighlightItem {...displayMatch.highlights[0]} />
+                      <ProgramHighlightItem {...displayMatch.highlights[1]} />
+                    </div>
+                    <ProgramHighlightItem {...displayMatch.highlights[2]} />
+                  </>
+                ) : (
+                  <p className="text-sm text-white/55 sm:col-span-2">
+                    Impact bars and highlights appear when a catalog listing becomes your top match.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {bestMatchProduct ? <BestMatchCardActions product={bestMatchProduct} /> : null}
+
+            <p className="shrink-0 border-t border-white/10 px-4 py-2 text-[10px] leading-snug text-white/40 sm:px-5">{DISCLAIMER}</p>
           </div>
         </div>
 
@@ -854,10 +894,11 @@ function HomeGloveEducationHubClient({
             <div>
               <h4 className="text-lg font-extrabold text-ink sm:text-xl">Recommended operational fits</h4>
               <p className="mt-1.5 text-sm text-neutral-500">
-                Published catalog listings ranked from your answers—open any card for specs, variants, and add-to-quote.
+                Ranked options #2–#9 from your answers—the #1 match is shown above. Open any card for specs, variants, and
+                add-to-quote.
               </p>
             </div>
-            {matchedProducts.length > 0 ? (
+            {rankedScored.length > 0 ? (
               <Link
                 href={storeBrowseHref}
                 className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#e3e3e0] px-4 py-2 text-sm font-semibold text-ink transition hover:border-[var(--color-accent-orange)]/40 hover:bg-[#fafaf8]"
@@ -886,7 +927,7 @@ function HomeGloveEducationHubClient({
                 </Link>
               </div>
             </div>
-          ) : matchedProducts.length === 0 ? (
+          ) : alternateProducts.length === 0 ? (
             <div className="rounded-xl border border-[#e3e3e0] bg-white p-5 text-sm text-neutral-600">
               No published listings match your answers yet. Browse the store as operators publish more, or request pricing for
               your program.
@@ -906,9 +947,14 @@ function HomeGloveEducationHubClient({
               </div>
             </div>
           ) : (
-            <div key={matchedProductsKey} className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-              {matchedProducts.map((product) => (
-                <StoreProductCard key={product.id} product={product} surface="light" />
+            <div key={alternateProductsKey} className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+              {alternateProducts.map((product, index) => (
+                <StoreProductCard
+                  key={product.id}
+                  product={product}
+                  surface="light"
+                  rankLabel={`#${index + 2}`}
+                />
               ))}
             </div>
           )}

@@ -30,7 +30,7 @@ export default async function AdminPurchaseOrdersPage() {
     <div>
       <PageHeader
         title="Purchase orders"
-        description="Drop-ship POs from Supabase. Send vendor emails; receive posts stock using PO line quantities."
+        description="Vendor POs with variant-level lines. Send to supplier; receive shipments into warehouse stock (partial receipts supported)."
       />
 
       {!availability.available ? (

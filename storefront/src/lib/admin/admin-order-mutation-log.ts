@@ -2,8 +2,10 @@
 
 export type AdminOrderMutationAction =
   | "order_update"
+  | "order_create"
   | "invoice_payment"
-  | "create_po";
+  | "create_po"
+  | "payment_portal";
 
 export function logAdminOrderMutation(params: {
   operatorId: string;

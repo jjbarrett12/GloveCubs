@@ -124,7 +124,7 @@ export function normalizeCommercePackaging(
 
   const base: CommercePackagingV1 = {
     schema_version: COMMERCE_PACKAGING_SCHEMA_VERSION,
-    sell_by_case_enabled: true,
+    sell_by_case_enabled: input.sell_by_case_enabled ?? true,
     sell_by_pallet_enabled: input.sell_by_pallet_enabled ?? true,
     minimum_sell_unit: "case",
     bulk_sell_unit: "pallet",

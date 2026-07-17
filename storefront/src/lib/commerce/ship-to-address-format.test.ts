@@ -84,6 +84,7 @@ describe("Phase 1C quote ship-to policy", () => {
   it("quote cart shows ship-to selector only when loading addresses and includes required copy", () => {
     const s = readFileSync(quoteCart, "utf8");
     expect(s).toContain("/api/account/shipping-addresses");
+    expect(s).toContain("/api/account/quote-contact-prefill");
     expect(s).toContain("Select a delivery location for this quote request.");
     expect(s).toContain("Shipping rates are not calculated here.");
     expect(s).toContain("Your team will confirm availability, pricing, and delivery details.");

@@ -35,6 +35,7 @@ import {
 import {
   CATALOGOS_CANONICAL_PUBLISH_MESSAGE,
   isStorefrontManualActivePublishAllowed,
+  isUrlImportStorefrontPublishBlocked,
   URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
 } from "@/lib/admin/canonical-publish-policy";
 
@@ -116,7 +117,7 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
 
   const attrKeys = attributeKeysWithValues(input.attributes);
 
-  if (input.publishIntent && isUrlImportProductMetadata(input.metadata)) {
+  if (input.publishIntent && isUrlImportStorefrontPublishBlocked(input.metadata)) {
     publishBlockers.push({
       code: "url_import_catalogos_publish_required",
       label: URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
@@ -132,7 +133,7 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
     });
   }
 
-  if (isUrlImportProductMetadata(input.metadata) && !input.publishIntent) {
+  if (isUrlImportStorefrontPublishBlocked(input.metadata) && !input.publishIntent) {
     warnings.push({
       code: "url_import_review_required",
       label: URL_IMPORT_REVIEW_REQUIRED_MESSAGE,
@@ -174,14 +175,38 @@ export function computeEditorReadiness(input: EditorReadinessInput): EditorReadi
 
   const cp = input.commercePackaging ?? null;
   if (input.publishIntent && cp) {
-    const casePrice = resolveEffectiveCasePrice(cp, input.variants);
-    if (casePrice == null) {
+    if (cp.sell_by_case_enabled !== false) {
+      const casePrice = resolveEffectiveCasePrice(cp, input.variants);
+      if (casePrice == null) {
+        publishBlockers.push({
+          code: "missing_case_price",
+          label: "Case product or sale price required to publish (or variant list price)",
+          severity: "blocker",
+          fieldKey: "__case_price__",
+        });
+      }
+    }
+    if (!cp.sell_by_case_enabled && !cp.sell_by_pallet_enabled) {
       publishBlockers.push({
-        code: "missing_case_price",
-        label: "Case product or sale price required to publish (or variant list price)",
+        code: "missing_sell_unit",
+        label: "Enable sell by case and/or sell by pallet",
         severity: "blocker",
-        fieldKey: "__case_price__",
       });
+    }
+    if (
+      cp.sell_by_pallet_enabled &&
+      !cp.sell_by_case_enabled
+    ) {
+      const hasPalletPrice =
+        (cp.pallet_price != null && cp.pallet_price > 0) ||
+        (cp.compare_at_pallet_price != null && cp.compare_at_pallet_price > 0);
+      if (!hasPalletPrice) {
+        publishBlockers.push({
+          code: "missing_pallet_price",
+          label: "Pallet product or sale price required for pallet-only products",
+          severity: "blocker",
+        });
+      }
     }
     if (cp.units_per_case == null || cp.units_per_case <= 0) {
       publishBlockers.push({

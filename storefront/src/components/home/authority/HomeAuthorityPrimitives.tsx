@@ -5,16 +5,29 @@ import { cn } from "@/lib/utils";
 import { SectionEyebrow } from "@/components/procurement";
 import type { SectionEyebrowTone } from "@/components/procurement/SectionEyebrow";
 
-export function HomeBridge({ variant }: { variant: "to-light" | "to-dark" | "to-gray" | "gray-to-dark" }) {
+export function HomeBridge({
+  variant,
+  className,
+}: {
+  variant: "to-light" | "to-dark" | "to-gray" | "gray-to-dark" | "light-to-dark";
+  className?: string;
+}) {
   const gradient =
     variant === "to-light"
-      ? "from-[#0a0a0a] to-white"
+      ? "from-[#050505] to-white"
       : variant === "to-gray"
         ? "from-white to-[#f4f4f2]"
         : variant === "gray-to-dark"
-          ? "from-[#f4f4f2] to-[#0a0a0a]"
-          : "from-[#121212] to-[#0a0a0a]";
-  return <div className={cn("pointer-events-none h-12 w-full bg-gradient-to-b sm:h-16", gradient)} aria-hidden />;
+          ? "from-[#f4f4f2] to-[#050505]"
+          : variant === "light-to-dark"
+            ? "from-white to-[#121212]"
+            : "from-[#121212] to-[#0a0a0a]";
+  return (
+    <div
+      className={cn("pointer-events-none h-16 w-full bg-gradient-to-b sm:h-20", gradient, className)}
+      aria-hidden
+    />
+  );
 }
 
 type HomeSectionIntroProps = {
@@ -25,6 +38,8 @@ type HomeSectionIntroProps = {
   tone?: SectionEyebrowTone;
   eyebrowIcon?: LucideIcon;
   badge?: ReactNode;
+  /** Optional accent after the title (e.g. orange period). */
+  titleSuffix?: ReactNode;
   className?: string;
 };
 
@@ -36,6 +51,7 @@ export function HomeSectionIntro({
   tone = "light",
   eyebrowIcon,
   badge,
+  titleSuffix,
   className,
 }: HomeSectionIntroProps) {
   const isDark = tone === "dark";
@@ -53,6 +69,7 @@ export function HomeSectionIntro({
         className={cn(isDark ? "proc-display-xl max-w-4xl" : "proc-display-light max-w-4xl", "mb-4")}
       >
         {title}
+        {titleSuffix}
       </h2>
       {description ? (
         <p className={cn(isDark ? "proc-body max-w-2xl text-lg" : "proc-body-light max-w-2xl text-[17px]")}>

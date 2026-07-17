@@ -49,7 +49,7 @@ export type AdminOrderHeaderDto = {
   placed_at: string;
   created_at: string;
   updated_at: string;
-  created_by_user_id: string | null;
+  placed_by_user_id: string | null;
   idempotency_key: string | null;
   metadata: Record<string, unknown>;
   shipping_address: unknown;
@@ -241,7 +241,7 @@ export async function fetchAdminOrderDetail(
     .schema("gc_commerce")
     .from("orders")
     .select(
-      "id, company_id, order_number, status, currency_code, subtotal_minor, discount_minor, shipping_minor, tax_minor, total_minor, placed_at, created_at, updated_at, created_by_user_id, idempotency_key, metadata, shipping_address, stripe_payment_intent_id, payment_method, payment_confirmed_at, payment_integrity_hold, inventory_reserved_at, inventory_released_at, inventory_deducted_at, invoice_status, invoice_amount_due, invoice_amount_paid, invoice_due_at"
+      "id, company_id, order_number, status, currency_code, subtotal_minor, discount_minor, shipping_minor, tax_minor, total_minor, placed_at, created_at, updated_at, placed_by_user_id, idempotency_key, metadata, shipping_address, stripe_payment_intent_id, payment_method, payment_confirmed_at, payment_integrity_hold, inventory_reserved_at, inventory_released_at, inventory_deducted_at, invoice_status, invoice_amount_due, invoice_amount_paid, invoice_due_at"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -283,7 +283,7 @@ export async function fetchAdminOrderDetail(
     placed_at: String(o.placed_at),
     created_at: String(o.created_at),
     updated_at: String(o.updated_at),
-    created_by_user_id: o.created_by_user_id != null ? String(o.created_by_user_id) : null,
+    placed_by_user_id: o.placed_by_user_id != null ? String(o.placed_by_user_id) : null,
     idempotency_key: o.idempotency_key != null ? String(o.idempotency_key) : null,
     metadata: meta,
     shipping_address: o.shipping_address ?? null,

@@ -1,14 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * Legacy product-level inventory (public.inventory) is read-only compatibility.
+ * All warehouse writes go through catalog_v2.variant_inventory + variant_stock_history.
+ */
+import { adjustAdminVariantInventory } from "@/lib/admin/admin-variant-inventory";
+import { resolveSingleStockedVariantForProduct } from "@/lib/admin/variant-fulfillment-admin";
+
 const V2 = "catalog_v2";
 const COS = "catalogos";
 const GC = "gc_commerce";
 
 const CANONICAL_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const AUTH_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type AdminInventoryRow = {
   product_id: string;
@@ -37,16 +41,13 @@ export type AdminInventoryAdjustInput = {
 };
 
 export const INVENTORY_CANONICAL_REQUIRED = "INVENTORY_CANONICAL_REQUIRED";
+export const VARIANT_SELECTION_REQUIRED = "VARIANT_SELECTION_REQUIRED";
 
 export function normalizeCanonicalUuidInput(raw: unknown): string | null {
   if (raw == null || raw === "") return null;
   const s = String(raw).trim();
   if (!s || !CANONICAL_UUID_RE.test(s)) return null;
   return s.toLowerCase();
-}
-
-function isAuthUserUuid(userId: unknown): boolean {
-  return AUTH_UUID_RE.test(String(userId || "").trim());
 }
 
 function pickSellableForListing(rows: { sku?: string | null }[]): { sku?: string | null } | null {
@@ -65,17 +66,6 @@ function inventoryRowsByCanonicalProductId(
     if (key) byCanon.set(key, row);
   }
   return byCanon;
-}
-
-function stockFromRow(data: Record<string, unknown> | null | undefined): AdminInventoryStock | null {
-  if (!data) return null;
-  const onHand = Number(data.quantity_on_hand ?? 0);
-  const reserved = Number(data.quantity_reserved ?? 0);
-  return {
-    stock_on_hand: onHand,
-    stock_reserved: reserved,
-    available_stock: Math.max(0, onHand - reserved),
-  };
 }
 
 async function loadBrandNamesByIds(
@@ -121,113 +111,6 @@ async function fetchActiveSellableMap(
     if (sp) map.set(cid, sp);
   }
   return map;
-}
-
-async function ensureInventoryRow(
-  supabase: SupabaseClient,
-  canonicalProductId: string,
-): Promise<void> {
-  const { data } = await supabase
-    .from("inventory")
-    .select("id")
-    .eq("canonical_product_id", canonicalProductId)
-    .maybeSingle();
-  if (!data) {
-    const { error } = await supabase.from("inventory").insert({
-      canonical_product_id: canonicalProductId,
-      quantity_on_hand: 0,
-      quantity_reserved: 0,
-      incoming_quantity: 0,
-      reorder_point: 0,
-    });
-    if (error) throw error;
-  }
-}
-
-async function logStockHistory(
-  supabase: SupabaseClient,
-  canonicalProductId: string,
-  delta: number,
-  referenceType: string,
-  notes: string,
-  userId: string | null,
-): Promise<void> {
-  const { data: inv } = await supabase
-    .from("inventory")
-    .select("quantity_on_hand")
-    .eq("canonical_product_id", canonicalProductId)
-    .maybeSingle();
-  const balanceAfter = inv ? Number(inv.quantity_on_hand ?? 0) : 0;
-  const { error } = await supabase.from("stock_history").insert({
-    canonical_product_id: canonicalProductId,
-    delta,
-    type: "adjust",
-    reference_type: referenceType || null,
-    reference_id: null,
-    notes: notes || null,
-    user_id: userId != null && isAuthUserUuid(userId) ? String(userId) : null,
-    balance_after: balanceAfter,
-  });
-  if (error) throw error;
-}
-
-async function getStockByCanonical(
-  supabase: SupabaseClient,
-  canonicalProductId: string,
-): Promise<AdminInventoryStock | null> {
-  const { data, error } = await supabase
-    .from("inventory")
-    .select("quantity_on_hand, quantity_reserved")
-    .eq("canonical_product_id", canonicalProductId)
-    .maybeSingle();
-  if (error) throw error;
-  return stockFromRow(data as Record<string, unknown> | null);
-}
-
-/**
- * Express clamps on-hand to zero when a negative adjustment would go below zero.
- * It does not reject adjustments that would leave on-hand below reserved (unlike PUT /inventory/:id).
- */
-async function adjustStockByCanonical(
-  supabase: SupabaseClient,
-  canonicalProductId: string,
-  delta: number,
-  reason: string,
-  operatorId: string | null,
-): Promise<void> {
-  const d = Number(delta);
-  if (Number.isNaN(d) || d === 0) return;
-
-  await ensureInventoryRow(supabase, canonicalProductId);
-
-  const { data: inv } = await supabase
-    .from("inventory")
-    .select("quantity_on_hand")
-    .eq("canonical_product_id", canonicalProductId)
-    .maybeSingle();
-  const current = inv ? Number(inv.quantity_on_hand ?? 0) : 0;
-  const newOnHand = Math.max(0, current + d);
-
-  if (current + d < 0) {
-    console.warn(
-      `[admin-inventory] Adjusting catalog product ${canonicalProductId} by ${d} would go negative (current: ${current}). Clamping to 0.`,
-    );
-  }
-
-  const { error } = await supabase
-    .from("inventory")
-    .update({ quantity_on_hand: newOnHand, updated_at: new Date().toISOString() })
-    .eq("canonical_product_id", canonicalProductId);
-  if (error) throw error;
-
-  await logStockHistory(
-    supabase,
-    canonicalProductId,
-    d,
-    "admin",
-    reason || "Manual adjustment",
-    operatorId,
-  );
 }
 
 async function resolveListingProduct(
@@ -330,7 +213,7 @@ export async function fetchAdminInventory(
   return { rows, error: null, status: 200 };
 }
 
-/** Manual stock adjustment (mirrors Express POST /api/admin/inventory/adjust). */
+/** Legacy product_id adjust: resolves to sole stocked variant or returns VARIANT_SELECTION_REQUIRED. */
 export async function adjustAdminInventory(
   supabase: SupabaseClient,
   operatorId: string,
@@ -358,7 +241,18 @@ export async function adjustAdminInventory(
     return {
       success: false,
       stock: null,
-      error: "delta must be a non-zero integer (positive to add, negative to subtract)",
+      error: "delta must be a non-zero integer",
+      code: null,
+      status: 400,
+    };
+  }
+
+  const reason = input.reason?.trim();
+  if (!reason) {
+    return {
+      success: false,
+      stock: null,
+      error: "reason is required for manual adjustments",
       code: null,
       status: 400,
     };
@@ -381,30 +275,48 @@ export async function adjustAdminInventory(
     return {
       success: false,
       stock: null,
-      error: "Product must resolve to catalog_v2 (listing → v2) before stock adjustments.",
+      error: "Product must resolve to catalog_v2 before stock adjustments.",
       code: INVENTORY_CANONICAL_REQUIRED,
       status: 422,
     };
   }
 
-  try {
-    await adjustStockByCanonical(
-      supabase,
-      v2,
-      d,
-      input.reason?.trim() || "Admin adjustment",
-      operatorId,
-    );
-    const stock = await getStockByCanonical(supabase, v2);
+  const resolved = await resolveSingleStockedVariantForProduct(supabase, v2);
+  if (!resolved.variantId) {
     return {
-      success: true,
-      stock: stock ?? { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 },
-      error: null,
-      code: null,
-      status: 200,
+      success: false,
+      stock: null,
+      error: resolved.error ?? "Select exact SKU for adjustment",
+      code: resolved.code ?? VARIANT_SELECTION_REQUIRED,
+      status: 422,
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to adjust inventory";
-    return { success: false, stock: null, error: message, code: null, status: 500 };
   }
+
+  const variantResult = await adjustAdminVariantInventory(supabase, operatorId, {
+    catalog_variant_id: resolved.variantId,
+    delta: d,
+    reason,
+  });
+
+  if (!variantResult.success || !variantResult.stock) {
+    return {
+      success: false,
+      stock: null,
+      error: variantResult.error,
+      code: variantResult.code,
+      status: variantResult.status,
+    };
+  }
+
+  return {
+    success: true,
+    stock: {
+      stock_on_hand: variantResult.stock.quantity_on_hand,
+      stock_reserved: variantResult.stock.quantity_reserved,
+      available_stock: variantResult.stock.available_stock,
+    },
+    error: null,
+    code: null,
+    status: 200,
+  };
 }

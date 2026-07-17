@@ -96,85 +96,119 @@ function haystackForProduct(product: StoreProductRow): string {
     .toLowerCase();
 }
 
+function scoringStepActive(stepId: string, answeredSteps?: ReadonlySet<string>): boolean {
+  return !answeredSteps || answeredSteps.has(stepId);
+}
+
 /** Score a published catalog row against survey intake (rule-based, not ML). */
-export function scoreCatalogCandidate(candidate: EducationHubCatalogCandidate, intake: SurveyIntakeState): number {
+export function scoreCatalogCandidate(
+  candidate: EducationHubCatalogCandidate,
+  intake: SurveyIntakeState,
+  answeredSteps?: ReadonlySet<string>,
+): number {
   const { product, attrs } = candidate;
   let score = 0;
   const haystack = haystackForProduct(product);
 
-  const industrySlug = intakeIndustrySlug(intake.industry);
-  const industryBucket = scoringIndustryBucket(intake.industry);
-  const bucketSlugs = industrySlugsForBucket(industryBucket);
+  if (scoringStepActive("industry", answeredSteps) && intake.industry.trim()) {
+    const industrySlug = intakeIndustrySlug(intake.industry);
+    const industryBucket = scoringIndustryBucket(intake.industry);
+    const bucketSlugs = industrySlugsForBucket(industryBucket);
 
-  if (attrs.industries.includes(industrySlug)) score += 4;
-  else if (bucketSlugs.some((s) => attrs.industries.includes(s))) score += 3;
-  else if (industryBucket === "general") score += 1;
-  else score -= 2;
-
-  const primaryUse = primaryUseForTask(intake.task);
-  const taskUses = [primaryUse, ...secondaryUsesForTask(intake.task)].filter(Boolean) as string[];
-  if (taskUses.some((u) => attrs.uses.includes(u))) score += 3;
-
-  if (intake.foodSafe) {
-    if (attrsIncludeAny(attrs, "uses", ["food_handling", "food_preparation"])) score += 2;
-    if (attrsIncludeAny(attrs, "certifications", [...FOOD_CERT_SLUGS])) score += 3;
-    if (/food/i.test(haystack)) score += 1;
-  } else if (/food handling|food preparation|food safe/i.test(haystack)) {
-    score -= 2;
+    if (attrs.industries.includes(industrySlug)) score += 4;
+    else if (bucketSlugs.some((s) => attrs.industries.includes(s))) score += 3;
+    else if (industryBucket === "general") score += 1;
+    else score -= 2;
   }
 
-  const hasChem = intake.chemicalExposure || intake.exposureRisks.includes("chemicals");
-  if (hasChem) {
-    if (attrs.protection_tags.includes("chemical_resistant")) score += 3;
-    if (/nitrile/i.test(haystack)) score += 2;
+  if (scoringStepActive("task", answeredSteps) && intake.task.trim()) {
+    const primaryUse = primaryUseForTask(intake.task);
+    const taskUses = [primaryUse, ...secondaryUsesForTask(intake.task)].filter(Boolean) as string[];
+    if (taskUses.some((u) => attrs.uses.includes(u))) score += 3;
   }
 
-  if (intake.exposureRisks.includes("wet-oily")) {
-    if (attrs.protection_tags.includes("grip_enhanced") || /textur|grip|diamond/i.test(haystack)) score += 2;
+  if (scoringStepActive("foodSafe", answeredSteps)) {
+    if (intake.foodSafe) {
+      if (attrsIncludeAny(attrs, "uses", ["food_handling", "food_preparation"])) score += 2;
+      if (attrsIncludeAny(attrs, "certifications", [...FOOD_CERT_SLUGS])) score += 3;
+      if (/food/i.test(haystack)) score += 1;
+    } else if (/food handling|food preparation|food safe/i.test(haystack)) {
+      score -= 2;
+    }
   }
 
-  if (intake.exposureRisks.includes("abrasion")) {
-    if (attrs.protection_tags.includes("abrasion_enhanced") || /heavy|8 mil|industrial/i.test(haystack)) score += 2;
+  if (scoringStepActive("chemical", answeredSteps) || scoringStepActive("exposure", answeredSteps)) {
+    const hasChem =
+      (scoringStepActive("chemical", answeredSteps) && intake.chemicalExposure) ||
+      (scoringStepActive("exposure", answeredSteps) && intake.exposureRisks.includes("chemicals"));
+    if (hasChem) {
+      if (attrs.protection_tags.includes("chemical_resistant")) score += 3;
+      if (/nitrile/i.test(haystack)) score += 2;
+    }
   }
 
-  if (intake.exposureRisks.includes("biological")) {
-    if (attrs.protection_tags.includes("viral_barrier") || attrs.protection_tags.includes("biohazard")) score += 2;
-    if (/exam|medical|patient/i.test(haystack)) score += 1;
+  if (scoringStepActive("exposure", answeredSteps)) {
+    if (intake.exposureRisks.includes("wet-oily")) {
+      if (attrs.protection_tags.includes("grip_enhanced") || /textur|grip|diamond/i.test(haystack)) score += 2;
+    }
+
+    if (intake.exposureRisks.includes("abrasion")) {
+      if (attrs.protection_tags.includes("abrasion_enhanced") || /heavy|8 mil|industrial/i.test(haystack)) score += 2;
+    }
+
+    if (intake.exposureRisks.includes("biological")) {
+      if (attrs.protection_tags.includes("viral_barrier") || attrs.protection_tags.includes("biohazard")) score += 2;
+      if (/exam|medical|patient/i.test(haystack)) score += 1;
+    }
   }
 
-  if (intake.thickness === "heavy" && /heavy|8|6–8|6 mil|8 mil/i.test(haystack)) score += 2;
-  if (intake.thickness === "light" && /light|3|4 mil|vinyl/i.test(haystack)) score += 1;
+  if (scoringStepActive("thickness", answeredSteps)) {
+    if (intake.thickness === "heavy" && /heavy|8|6–8|6 mil|8 mil/i.test(haystack)) score += 2;
+    if (intake.thickness === "light" && /light|3|4 mil|vinyl/i.test(haystack)) score += 1;
+  }
 
-  if (intake.powderFree && attrs.certifications.includes("powder_free")) score += 2;
+  if (scoringStepActive("powder", answeredSteps) && intake.powderFree && attrs.certifications.includes("powder_free")) {
+    score += 2;
+  }
 
-  if (intake.programPriority === "value" && /vinyl|value|turnover/i.test(haystack)) score += 2;
-  if (intake.programPriority === "durability" && /heavy|nitrile|extended|mechanic/i.test(haystack)) score += 2;
+  if (scoringStepActive("priority", answeredSteps)) {
+    if (intake.programPriority === "value" && /vinyl|value|turnover/i.test(haystack)) score += 2;
+    if (intake.programPriority === "durability" && /heavy|nitrile|extended|mechanic/i.test(haystack)) score += 2;
+  }
 
-  if (intake.dexterity === "high" && /dexterity|tactile|3 mil|4 mil/i.test(haystack)) score += 1;
+  if (scoringStepActive("dexterity", answeredSteps) && intake.dexterity === "high") {
+    if (/dexterity|tactile|3 mil|4 mil/i.test(haystack)) score += 1;
+  }
 
   return Math.max(0, score);
+}
+
+/** Rank catalog candidates for intake; returns scored rows (highest first). */
+export function rankScoredCatalogCandidates(
+  candidates: EducationHubCatalogCandidate[],
+  intake: SurveyIntakeState,
+  limit = 9,
+  answeredSteps?: ReadonlySet<string>,
+): Array<{ product: StoreProductRow; score: number }> {
+  if (candidates.length === 0) return [];
+
+  const scored = candidates.map((c) => ({
+    product: c.product,
+    score: scoreCatalogCandidate(c, intake, answeredSteps),
+  }));
+  scored.sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name));
+
+  return scored.slice(0, limit);
 }
 
 /** Rank catalog candidates for intake; returns up to `limit` product rows. */
 export function rankCatalogCandidatesForIntake(
   candidates: EducationHubCatalogCandidate[],
   intake: SurveyIntakeState,
-  limit = 8
+  limit = 9,
+  answeredSteps?: ReadonlySet<string>,
 ): StoreProductRow[] {
-  if (candidates.length === 0) return [];
-
-  const scored = candidates.map((c) => ({
-    product: c.product,
-    score: scoreCatalogCandidate(c, intake),
-  }));
-  scored.sort((a, b) => b.score - a.score);
-
-  const topScore = scored[0]?.score ?? 0;
-  if (topScore <= 0) {
-    return candidates.slice(0, limit).map((c) => c.product);
-  }
-
-  return scored.slice(0, limit).map((s) => s.product);
+  return rankScoredCatalogCandidates(candidates, intake, limit, answeredSteps).map((s) => s.product);
 }
 
 /** Store URL filters aligned with survey intake for “browse more” links. */

@@ -117,7 +117,7 @@ const page = await browser.newPage();
 page.on("console", (msg) => {
   if (msg.type() === "error") report.consoleErrors.push(msg.text());
 });
-page.on("pageerror", (err) => report.pageErrors.push(String(err));
+page.on("pageerror", (err) => report.pageErrors.push(String(err)));
 
 try {
   await runDesktop(page);

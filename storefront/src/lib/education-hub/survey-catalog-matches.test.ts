@@ -38,6 +38,9 @@ function stubProduct(id: string, name: string): StoreProductRow {
     certificationHints: [],
     protectionHint: null,
     activeVariantCount: 1,
+    availableSizeCodes: [],
+    description: null,
+    impactPerformance: null,
   };
 }
 
@@ -67,7 +70,7 @@ describe("survey-catalog-matches", () => {
     expect(scoreCatalogCandidate(food, intake)).toBeGreaterThan(scoreCatalogCandidate(industrial, intake));
   });
 
-  it("ranks top matches and returns up to eight rows", () => {
+  it("ranks top matches and returns up to nine rows", () => {
     const pool = [
       candidate("1", "Low", { uses: [], industries: [], protection_tags: [], certifications: [] }),
       candidate("2", "Food", {
@@ -79,6 +82,28 @@ describe("survey-catalog-matches", () => {
     ];
     const ranked = rankCatalogCandidatesForIntake(pool, DEFAULT_SURVEY_INTAKE, 8);
     expect(ranked.map((p) => p.id)).toEqual(["2", "1"]);
+  });
+
+  it("does not bias ranking until survey steps are answered", () => {
+    const pool = [
+      candidate("1", "Alpha", { uses: [], industries: [], protection_tags: [], certifications: [] }),
+      candidate("2", "Food", {
+        uses: ["food_handling"],
+        industries: ["food_service"],
+        protection_tags: [],
+        certifications: ["food_safe"],
+      }),
+    ];
+    const unanswered = rankCatalogCandidatesForIntake(pool, DEFAULT_SURVEY_INTAKE, 2, new Set());
+    expect(unanswered.map((p) => p.id)).toEqual(["1", "2"]);
+
+    const afterIndustry = rankCatalogCandidatesForIntake(
+      pool,
+      { ...DEFAULT_SURVEY_INTAKE, task: "", exposureRisks: [], foodSafe: false, powderFree: false },
+      2,
+      new Set(["industry"]),
+    );
+    expect(afterIndustry[0]?.id).toBe("2");
   });
 
   it("maps intake to store catalog filters", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import {
   IMPORT_DRAFT_PARSER_VERSION,
   IMPORT_DRAFT_SCHEMA_VERSION,
@@ -403,6 +403,9 @@ describe("computeEditorReadiness", () => {
   });
 
   it("blocks URL-import publish on storefront — CatalogOS required", () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
     const result = computeEditorReadiness({
       brandName: "Acme",
       categoryId: "cat-1",
@@ -436,9 +439,15 @@ describe("computeEditorReadiness", () => {
     });
     expect(result.publishBlockers.some((b) => b.code === "url_import_catalogos_publish_required")).toBe(true);
     expect(hasPublishBlockers(result)).toBe(true);
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
   });
 
   it("blocks non-admin publish for URL-import metadata", () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
     const result = computeEditorReadiness({
       brandName: "Acme",
       categoryId: "cat-1",
@@ -462,6 +471,9 @@ describe("computeEditorReadiness", () => {
       internalSku: "GLV-TEST",
     });
     expect(result.publishBlockers.some((b) => b.code === "url_import_catalogos_publish_required")).toBe(true);
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
   });
 
   it("does not warn GLV format for GC parent SKU", () => {

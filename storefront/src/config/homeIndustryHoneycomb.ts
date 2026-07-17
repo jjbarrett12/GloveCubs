@@ -93,7 +93,7 @@ export const HOME_HONEYCOMB_ROWS: HomeHoneycombRow[] = [
 
 export const HOME_HONEYCOMB_COPY = {
   eyebrow: "Industries we serve",
-  headline: "Built for Every Environment Gloves Touch",
+  headline: "Thank you for your trust",
   supporting:
-    "Every industry wears gloves differently. Match protection, fit, and cost-per-use to the work in each environment—so procurement can standardize without defaulting to generic PPE.",
+    "We're honored to support procurement teams in food service, healthcare, manufacturing, and every environment in between.",
 } as const;

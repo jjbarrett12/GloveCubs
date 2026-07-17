@@ -49,7 +49,7 @@ export type PackagingFieldProvenance = {
 
 export type CommercePackagingV1 = {
   schema_version: typeof COMMERCE_PACKAGING_SCHEMA_VERSION;
-  sell_by_case_enabled: true;
+  sell_by_case_enabled: boolean;
   sell_by_pallet_enabled: boolean;
   minimum_sell_unit: "case";
   bulk_sell_unit: "pallet";
@@ -81,6 +81,6 @@ export type CommercePackagingV1 = {
   parse_warnings: string[];
 };
 
-export type CommercePackagingInput = Partial<Omit<CommercePackagingV1, "schema_version" | "sell_by_case_enabled" | "minimum_sell_unit" | "bulk_sell_unit">> & {
+export type CommercePackagingInput = Partial<Omit<CommercePackagingV1, "schema_version" | "minimum_sell_unit" | "bulk_sell_unit">> & {
   schema_version?: typeof COMMERCE_PACKAGING_SCHEMA_VERSION;
 };

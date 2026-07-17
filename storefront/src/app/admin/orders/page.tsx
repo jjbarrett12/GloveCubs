@@ -117,6 +117,11 @@ export default async function AdminOrdersPage({
       <PageHeader
         title="Order records"
         description="Fulfillment review — canonical gc_commerce order headers. Database records for validation, not finance-approved totals or checkout KPIs."
+        actions={
+          <Link href="/admin/orders/new" className={adminPrimaryButton}>
+            New order
+          </Link>
+        }
       />
 
       <PageSection title="Filters">

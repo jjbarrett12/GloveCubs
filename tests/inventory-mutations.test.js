@@ -436,125 +436,16 @@ describe('inventory mutations (mocked)', () => {
     assert.ok(orders.get(orderId).inventory_deducted_at);
   });
 
-  it('receivePurchaseOrder upserts inventory keyed by canonical_product_id', async () => {
-    const poId = 501;
-    let inserted = null;
-    const invByCanon = new Map();
-
-    require.cache[adminResolved] = {
-      id: adminResolved,
-      filename: adminResolved,
-      loaded: true,
-      exports: {
-        getSupabaseAdmin: () => ({
-          schema(schemaName) {
-            if (schemaName === 'catalogos') {
-              return {
-                from(table) {
-                  if (table === 'products') {
-                    return {
-                      select() {
-                        return {
-                          in() {
-                            return Promise.resolve({
-                              data: [{ id: UUID_A }],
-                              error: null,
-                            });
-                          },
-                        };
-                      },
-                    };
-                  }
-                  return {};
-                },
-              };
-            }
-            return { from: () => ({}) };
-          },
-          from(table) {
-            if (table === 'purchase_orders') {
-              return {
-                select() {
-                  return {
-                    eq(_f, id) {
-                      return {
-                        maybeSingle: async () =>
-                          id === poId
-                            ? { data: { lines: [], received_lines: [] }, error: null }
-                            : { data: null, error: null },
-                      };
-                    },
-                  };
-                },
-                update() {
-                  return {
-                    eq() {
-                      return Promise.resolve({ error: null });
-                    },
-                  };
-                },
-              };
-            }
-            if (table === 'inventory') {
-              return {
-                select() {
-                  return {
-                    eq(field, val) {
-                      return {
-                        maybeSingle: async () => {
-                          if (field === 'canonical_product_id' && val === UUID_A) {
-                            const row = invByCanon.get(UUID_A);
-                            return row
-                              ? { data: { ...row }, error: null }
-                              : { data: null, error: null };
-                          }
-                          if (field === 'id') {
-                            return { data: null, error: null };
-                          }
-                          return { data: null, error: null };
-                        },
-                      };
-                    },
-                  };
-                },
-                insert(row) {
-                  inserted = { ...row };
-                  invByCanon.set(UUID_A, {
-                    canonical_product_id: row.canonical_product_id,
-                    quantity_on_hand: row.quantity_on_hand ?? 0,
-                    quantity_reserved: row.quantity_reserved ?? 0,
-                    incoming_quantity: row.incoming_quantity ?? 0,
-                    reorder_point: 0,
-                    bin_location: '',
-                  });
-                  return Promise.resolve({ error: null });
-                },
-                update(payload) {
-                  return {
-                    eq(field, val) {
-                      if (field === 'canonical_product_id' && val === UUID_A) {
-                        const row = invByCanon.get(UUID_A);
-                        if (row) Object.assign(row, payload);
-                      }
-                      return Promise.resolve({ error: null });
-                    },
-                  };
-                },
-              };
-            }
-            if (table === 'stock_history') {
-              return { insert: async () => ({ error: null }) };
-            }
-            return {};
-          },
-        }),
-      },
-    };
+  it('receivePurchaseOrder is blocked (native warehouse workflow only)', async () => {
     delete require.cache[inventoryResolved];
     const inventory = require('../lib/inventory');
-    await inventory.receivePurchaseOrder(poId, [{ canonical_product_id: UUID_A, quantity_received: 3 }]);
-    assert.ok(inserted);
-    assert.strictEqual(inserted.canonical_product_id, UUID_A);
-    assert.strictEqual(invByCanon.get(UUID_A).quantity_on_hand, 3);
+    const { WAREHOUSE_MIGRATION_MESSAGE } = require('../lib/legacy-warehouse-deprecation');
+    await assert.rejects(
+      () => inventory.receivePurchaseOrder(501, [{ canonical_product_id: UUID_A, quantity_received: 3 }]),
+      (err) => {
+        assert.strictEqual(err.message, WAREHOUSE_MIGRATION_MESSAGE);
+        return true;
+      },
+    );
   });
 });

@@ -5,6 +5,10 @@ import { insertCatalogProduct, updateCatalogProduct, type ProductWriteInput } fr
 import { ADMIN_PRODUCT_UUID_RE } from "@/lib/admin/product-operations";
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { normalizeCommercePackaging } from "@commerce-packaging/labels";
+import {
+  parseImpactPerformanceFromMetadata,
+  type ProductImpactPerformance,
+} from "@/lib/admin/derive-product-impact-performance";
 
 function parseAttributes(body: Record<string, unknown>): Record<string, string | string[]> {
   const raw = body.attributes;
@@ -72,6 +76,12 @@ function parseProductWrite(body: Record<string, unknown>): { ok: true; value: Pr
     commercePackaging = normalizeCommercePackaging(cpRaw as CommercePackagingV1);
   }
 
+  let impactPerformance: ProductImpactPerformance | null = null;
+  const impactRaw = body.impact_performance;
+  if (impactRaw && typeof impactRaw === "object" && !Array.isArray(impactRaw)) {
+    impactPerformance = parseImpactPerformanceFromMetadata({ impact_performance: impactRaw });
+  }
+
   const internalSku = typeof body.internal_sku === "string" ? body.internal_sku.trim() : "";
 
   return {
@@ -87,6 +97,7 @@ function parseProductWrite(body: Record<string, unknown>): { ok: true; value: Pr
       variants,
       attributes,
       commercePackaging,
+      impactPerformance,
       internalSku: internalSku || null,
     },
   };

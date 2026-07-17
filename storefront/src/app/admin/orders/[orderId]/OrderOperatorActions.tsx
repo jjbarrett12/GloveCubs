@@ -20,6 +20,7 @@ type Props = {
   paymentIntegrityHold: boolean | null;
   invoiceAmountDue: number | null;
   invoiceAmountPaid: number | null;
+  paymentConfirmedAt: string | null;
   trackingNumber: string;
   trackingUrl: string;
   /** Server-computed: are Express-bridged fulfillment actions intentionally available? */
@@ -39,6 +40,7 @@ export function OrderOperatorActions({
   paymentIntegrityHold,
   invoiceAmountDue,
   invoiceAmountPaid,
+  paymentConfirmedAt,
   trackingNumber: initialTrackingNumber,
   trackingUrl: initialTrackingUrl,
   fulfillmentActionsAvailable,
@@ -54,6 +56,7 @@ export function OrderOperatorActions({
   const [payAmount, setPayAmount] = React.useState("");
   const [payNote, setPayNote] = React.useState("");
   const [mfrId, setMfrId] = React.useState("");
+  const [portalUrl, setPortalUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setStatus(currentStatus);
@@ -62,6 +65,14 @@ export function OrderOperatorActions({
   }, [currentStatus, initialTrackingNumber, initialTrackingUrl]);
 
   const isNet30 = String(paymentMethod || "").toLowerCase() === "net30";
+  const pm = String(paymentMethod || "").toLowerCase();
+  const canUsePaymentPortal =
+    !paymentConfirmedAt &&
+    !isNet30 &&
+    (currentStatus === "pending_payment" ||
+      currentStatus === "draft" ||
+      currentStatus === "payment_failed" ||
+      (currentStatus === "pending" && (pm === "credit_card" || pm === "ach")));
   const due = invoiceAmountDue != null ? Number(invoiceAmountDue) : NaN;
   const paid = invoiceAmountPaid != null ? Number(invoiceAmountPaid) : 0;
   const remaining =
@@ -115,7 +126,9 @@ export function OrderOperatorActions({
               : "Purchase order created."
           : action === "invoice_payment"
             ? "Invoice payment recorded."
-            : "Order updated.";
+            : action === "payment_portal"
+              ? "Payment portal link ready — copy and send to the customer."
+              : "Order updated.";
       setMsg({ kind: "ok", text: okText });
       router.refresh();
     } catch (e) {
@@ -281,6 +294,48 @@ export function OrderOperatorActions({
             {pending === "invoice_payment" ? "Recording…" : "Record payment"}
           </button>
         </form>
+      ) : null}
+
+      {canUsePaymentPortal ? (
+        <div className="border-t border-admin-border-subtle pt-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Payment portal</div>
+          <p className="mt-1 text-xs text-admin-secondary">
+            Generate a secure link for the customer to pay by card or bank transfer (Stripe). Link expires in 7 days.
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <button
+              type="button"
+              disabled={pending !== null}
+              className={adminPrimaryButton}
+              onClick={() => {
+                void (async () => {
+                  setPending("payment_portal");
+                  setMsg(null);
+                  try {
+                    const res = await fetch(`/admin/api/orders/${orderId}/payment-portal`, { method: "POST" });
+                    const j = (await res.json().catch(() => ({}))) as { error?: string; url?: string };
+                    if (!res.ok) {
+                      setMsg({ kind: "err", text: j.error || "Could not create payment link." });
+                      return;
+                    }
+                    if (j.url) setPortalUrl(j.url);
+                    setMsg({ kind: "ok", text: "Payment portal link ready — copy and send to the customer." });
+                    router.refresh();
+                  } catch (e) {
+                    setMsg({ kind: "err", text: e instanceof Error ? e.message : "Request failed" });
+                  } finally {
+                    setPending(null);
+                  }
+                })();
+              }}
+            >
+              {pending === "payment_portal" ? "Creating link…" : "Create payment link"}
+            </button>
+          </div>
+          {portalUrl ? (
+            <p className="mt-2 break-all font-mono text-xs text-admin-primary">{portalUrl}</p>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="border-t border-admin-border-subtle pt-4">

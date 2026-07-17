@@ -1,4 +1,5 @@
 import type { StoreProductRow } from "@/lib/catalog/store-products";
+import { isVariantPurchasableAtZeroLocalStock, fulfillmentConfigFromRow } from "@/lib/fulfillment/variant-fulfillment-config";
 
 /** Mirrors `quote-request` route — client may only see NEXT_PUBLIC_* at build time. */
 export function isVariantMandatoryEnforceEnabled(): boolean {
@@ -30,7 +31,21 @@ export function canAddProductRowToQuote(product: StoreProductRow): boolean {
   if (!isQuoteVariantIdentityComplete(product)) {
     return !isVariantMandatoryEnforceEnabled();
   }
+  if (!isStorefrontStockEligible(product)) return false;
   return true;
+}
+
+/** Dropship variants remain quotable at zero local inventory; stocked requires available cases unless enforcement off. */
+export function isStorefrontStockEligible(
+  product: Pick<StoreProductRow, "fulfillmentMode" | "localAvailableStock" | "stockEnforcement">,
+): boolean {
+  const cfg = fulfillmentConfigFromRow({
+    fulfillment_mode: product.fulfillmentMode ?? "dropship",
+    stock_enforcement: product.stockEnforcement === true,
+  });
+  if (isVariantPurchasableAtZeroLocalStock(cfg)) return true;
+  const available = Math.max(0, Number(product.localAvailableStock ?? 0) || 0);
+  return available > 0;
 }
 
 /** Lines safe for bulk “add page to quote” — never multi-variant parents. */

@@ -93,6 +93,7 @@ export function commerceDisplayFromProductMetadata(
   const unitNoun = unitNounFromMeta(cp, meta ?? null);
   const casePricing = casePricingWithFallback(cp, bestPrice);
   const palletPricing = resolvePalletUnitPricing(cp);
+  const sellByCase = cp?.sell_by_case_enabled !== false;
 
   const palletPricingAvailable = Boolean(
     cp?.sell_by_pallet_enabled === true &&
@@ -103,9 +104,9 @@ export function commerceDisplayFromProductMetadata(
   );
 
   return {
-    casePrice: casePricing.effectivePrice,
-    caseListPrice: casePricing.listPrice,
-    caseOnSale: casePricing.onSale,
+    casePrice: sellByCase ? casePricing.effectivePrice : null,
+    caseListPrice: sellByCase ? casePricing.listPrice : null,
+    caseOnSale: sellByCase ? casePricing.onSale : false,
     unitsPerCase,
     unitNoun,
     palletPricingAvailable,
@@ -160,7 +161,8 @@ export function pdpCommerceFromProductMetadata(
   };
 }
 
-export function defaultSellUnitForCommerce(_pkg: PdpCommercePackaging): SellUnit {
+export function defaultSellUnitForCommerce(pkg: PdpCommercePackaging): SellUnit {
+  if (!pkg.sellByCaseEnabled && pkg.palletBuyingEnabled) return "pallet";
   return "case";
 }
 

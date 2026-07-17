@@ -4,12 +4,12 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import {
   adminCardSurface,
-  adminFormInput,
   adminLink,
   adminPrimaryButton,
   adminSecondaryButton,
   adminStatusBadgeClasses,
 } from "@/components/admin/admin-theme-utils";
+import type { CatalogosEditorHandoff } from "@/lib/admin/canonical-publish-policy";
 import { cn } from "@/lib/utils";
 import {
   hasDraftSaveBlockers,
@@ -23,43 +23,51 @@ type Props = {
   name: string;
   primaryImageUrl?: string;
   imageRequired?: boolean;
-  status: "draft" | "active";
+  targetStatus: "draft" | "active";
+  onTargetStatusChange: (status: "draft" | "active") => void;
   quoteOnly: boolean;
   parserVersion: string | null;
   readiness: EditorReadinessResult;
+  draftReadiness?: EditorReadinessResult;
   storefrontPath: string | null;
   pending: boolean;
   pendingAction?: "draft" | "publish" | null;
   dirty: boolean;
-  onSaveDraft: () => void;
-  onPublish: () => void;
+  onSave: () => void;
   urlImportReview?: boolean;
   storefrontPublishBlocked?: boolean;
-  catalogosPublishUrl?: string | null;
+  catalogosHandoff?: CatalogosEditorHandoff | null;
 };
 
 export function ProductCommandHeader({
   name,
   primaryImageUrl,
   imageRequired,
-  status,
+  targetStatus,
+  onTargetStatusChange,
   quoteOnly,
   parserVersion,
   readiness,
+  draftReadiness,
   storefrontPath,
   pending,
   pendingAction,
   dirty,
-  onSaveDraft,
-  onPublish,
+  onSave,
   urlImportReview,
   storefrontPublishBlocked = false,
-  catalogosPublishUrl = null,
+  catalogosHandoff = null,
 }: Props) {
+  const saveReadiness = draftReadiness ?? readiness;
   const publishBlocked = hasPublishBlockers(readiness) || storefrontPublishBlocked;
-  const draftSaveBlocked = hasDraftSaveBlockers(readiness);
+  const draftSaveBlocked = hasDraftSaveBlockers(saveReadiness);
+  const publishIntentBlocked =
+    targetStatus === "active" && (publishBlocked || (urlImportReview && storefrontPublishBlocked));
+  const saveBlocked = draftSaveBlocked || publishIntentBlocked;
   const readinessText = readinessLabel(readiness);
   const readinessTooltip = readinessDetail(readiness);
+  const catalogosPrimaryUrl =
+    catalogosHandoff?.urlImportJobUrl ?? catalogosHandoff?.reviewUrl ?? catalogosHandoff?.publishUrl ?? null;
 
   return (
     <header
@@ -95,7 +103,7 @@ export function ProductCommandHeader({
               {name || "Untitled product"}
             </h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <StatusBadge status={status} />
+              <StatusBadge status={targetStatus} />
               {quoteOnly ? (
                 <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", adminStatusBadgeClasses("warning"))}>
                   Quote only
@@ -123,42 +131,55 @@ export function ProductCommandHeader({
               View storefront
             </Link>
           ) : null}
-          <button
-            type="button"
-            disabled={pending || draftSaveBlocked}
-            onClick={onSaveDraft}
-            title={draftSaveBlocked ? readiness.draftSaveBlockers.map((b) => b.label).join("; ") : undefined}
-            className={adminSecondaryButton}
+          <div
+            role="group"
+            aria-label="Catalog status"
+            className="inline-flex overflow-hidden rounded-lg border border-admin-border bg-admin-surface-muted p-0.5"
           >
-            {pending && pendingAction === "draft" ? "Saving…" : "Save draft"}
-          </button>
+            {(["draft", "active"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                disabled={pending}
+                onClick={() => onTargetStatusChange(value)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition-colors",
+                  targetStatus === value
+                    ? value === "active"
+                      ? "bg-admin-accent text-white shadow-sm"
+                      : "bg-admin-surface text-admin-primary shadow-sm"
+                    : "text-admin-muted hover:text-admin-primary",
+                )}
+              >
+                {value === "active" ? "Published" : "Draft"}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
-            disabled={pending || publishBlocked}
-            onClick={onPublish}
+            disabled={pending || saveBlocked}
+            onClick={onSave}
             title={
-              storefrontPublishBlocked
-                ? "Use CatalogOS publish for production go-live."
-                : publishBlocked
+              saveBlocked
+                ? publishIntentBlocked
                   ? readinessTooltip
-                  : undefined
+                  : saveReadiness.draftSaveBlockers.map((b) => b.label).join("; ")
+                : targetStatus === "active"
+                  ? "Save and publish to storefront catalog"
+                  : "Save as draft"
             }
             className={adminPrimaryButton}
           >
-            {pending && pendingAction === "publish"
-              ? "Publishing…"
-              : urlImportReview
-                ? "Approve & publish to catalog"
-                : "Publish"}
+            {pending ? "Saving…" : targetStatus === "active" ? "Save & publish" : "Save"}
           </button>
-          {storefrontPublishBlocked && catalogosPublishUrl ? (
+          {catalogosHandoff && catalogosPrimaryUrl ? (
             <Link
-              href={catalogosPublishUrl}
+              href={catalogosPrimaryUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={cn(adminSecondaryButton, "text-xs")}
+              className={cn(adminSecondaryButton, "text-xs font-semibold")}
             >
-              Publish in CatalogOS
+              Open CatalogOS
             </Link>
           ) : null}
         </div>

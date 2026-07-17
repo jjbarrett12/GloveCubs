@@ -28,6 +28,10 @@ import {
   setPowderFreeYesNo,
 } from "@/lib/admin/disposable-attribute-controls";
 import type { LegacyMetadataField } from "@/lib/admin/legacy-metadata-migration";
+import {
+  isEditorHiddenAttributeKey,
+  resolveEditorAllowedValues,
+} from "@/lib/admin/product-attribute-editor-options";
 
 const lbl = "text-xs font-semibold text-admin-secondary";
 const field = cn(adminFormInput, "mt-1 w-full rounded-lg shadow-inner");
@@ -230,13 +234,15 @@ export function ProductAttributeEditor({
   const grouped = React.useMemo(() => {
     const map = new Map<string, AttributeDefinitionRow[]>();
     for (const d of definitions) {
+      if (isEditorHiddenAttributeKey(d.attributeKey)) continue;
+      if (isDisposable && d.attributeKey === "powder") continue;
       const g = d.displayGroup?.trim() || "Specifications";
       const arr = map.get(g) ?? [];
       arr.push(d);
       map.set(g, arr);
     }
     return Array.from(map.entries());
-  }, [definitions]);
+  }, [definitions, isDisposable]);
 
   if (!categoryId.trim()) {
     return (
@@ -268,6 +274,7 @@ export function ProductAttributeEditor({
   }
 
   function shouldSkipDef(key: string): boolean {
+    if (isEditorHiddenAttributeKey(key)) return true;
     return isDisposable && key === "powder";
   }
 
@@ -309,6 +316,7 @@ export function ProductAttributeEditor({
                 const raw = values[key];
                 const isMissingFilter = missingSet.has(key);
                 const isBlocking = blockingSet.has(key);
+                const allowedValues = resolveEditorAllowedValues(def);
 
                 if (key === "certifications" && isMulti(key)) {
                   return (
@@ -340,7 +348,7 @@ export function ProductAttributeEditor({
                         ) : null}
                       </span>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {def.allowedValues.map((v) => {
+                        {allowedValues.map((v) => {
                           const on = selected.has(v);
                           return (
                             <button
@@ -367,6 +375,25 @@ export function ProductAttributeEditor({
                 }
 
                 const selectValue = Array.isArray(raw) ? raw[0] ?? "" : (raw ?? "");
+                if (allowedValues.length === 0) {
+                  return (
+                    <label
+                      key={key}
+                      className={`block ${isBlocking ? wrapBlocking : isMissingFilter ? wrapMissing : ""}`}
+                    >
+                      <span className={lbl}>
+                        {def.label}
+                        {def.isRequired ? <span className="text-admin-danger"> *</span> : null}
+                      </span>
+                      <input
+                        type="text"
+                        value={selectValue}
+                        onChange={(e) => setValue(key, e.target.value)}
+                        className={isBlocking ? fieldBlocking : field}
+                      />
+                    </label>
+                  );
+                }
                 return (
                   <label
                     key={key}
@@ -387,7 +414,7 @@ export function ProductAttributeEditor({
                       className={isBlocking ? fieldBlocking : field}
                     >
                       <option value="">—</option>
-                      {def.allowedValues.map((v) => (
+                      {allowedValues.map((v) => (
                         <option key={v} value={v}>
                           {formatAttributeValueLabel(key, v)}
                         </option>

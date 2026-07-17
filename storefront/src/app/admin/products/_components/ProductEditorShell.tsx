@@ -36,14 +36,18 @@ import { isUrlImportProductMetadata } from "@/lib/admin/clipboard-promote-guards
 import { adminUpdateProductAction } from "@/app/admin/products/_components/product-editor-actions";
 import { ProductCommandHeader } from "@/app/admin/products/_components/ProductCommandHeader";
 import { ProductAttributeEditor } from "@/app/admin/products/_components/ProductAttributeEditor";
+import { ProductImpactPreviewPanel } from "@/app/admin/products/_components/ProductImpactPreviewPanel";
 import { ImportIntelligencePanel } from "@/app/admin/products/_components/ImportIntelligencePanel";
 import { VariantSizeMatrix } from "@/app/admin/products/_components/VariantSizeMatrix";
+import { VariantFulfillmentPanel } from "@/app/admin/products/_components/VariantFulfillmentPanel";
 import { PublishReadinessPanel } from "@/app/admin/products/_components/PublishReadinessPanel";
 import { CasePalletSetupPanel } from "@/app/admin/products/_components/CasePalletSetupPanel";
 import { PremiumSectionCard } from "@/components/admin/PremiumSectionCard";
 import type { ImportDraftProductV1 } from "@/lib/admin/import-draft-types";
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { initCommercePackagingFromEditor } from "@/lib/admin/commerce-packaging-editor";
+import { initProductImpactPerformance, type ProductImpactPerformance } from "@/lib/admin/derive-product-impact-performance";
+import { commercePackagingToFilterAttributes } from "@commerce-packaging/filter-sync";
 import type { GovernanceWarning } from "@/lib/admin/catalog-governance";
 import { skuCollisionSetsForReadiness } from "@/lib/admin/sku-collision-lookup";
 import {
@@ -55,6 +59,7 @@ import {
   adminPrimaryButton,
   adminSecondaryButton,
 } from "@/components/admin/admin-theme-utils";
+import type { CatalogosEditorHandoff } from "@/lib/admin/canonical-publish-policy";
 import { cn } from "@/lib/utils";
 
 const lbl = adminFormLabel;
@@ -70,12 +75,13 @@ export type ProductEditorShellProps = {
   productId: string;
   product: NonNullable<AdminProductDetailResult["product"]>;
   variants: NonNullable<AdminProductDetailResult["variants"]>;
+  variantFulfillmentRows: NonNullable<AdminProductDetailResult["variants"]>;
   warnings: GovernanceWarning[];
   storefrontPdpPath: string | null;
   editor: NonNullable<AdminProductDetailResult["editor"]>;
   primaryImageUrl: string;
   storefrontPublishBlocked?: boolean;
-  catalogosPublishUrl?: string | null;
+  catalogosHandoff?: CatalogosEditorHandoff | null;
 };
 
 function variantsFromDb(
@@ -126,12 +132,13 @@ export function ProductEditorShell({
   productId,
   product,
   variants: dbVariants,
+  variantFulfillmentRows,
   warnings,
   storefrontPdpPath,
   editor,
   primaryImageUrl: initialPrimaryImageUrl,
   storefrontPublishBlocked = false,
-  catalogosPublishUrl = null,
+  catalogosHandoff = null,
 }: ProductEditorShellProps) {
   const router = useRouter();
   const meta = (product.metadata ?? {}) as Record<string, unknown>;
@@ -154,6 +161,9 @@ export function ProductEditorShell({
   const [description, setDescription] = React.useState(product.description ?? "");
   const [primaryImageUrl, setPrimaryImageUrl] = React.useState(initialPrimaryImageUrl);
   const [status, setStatus] = React.useState<"draft" | "active">(product.status === "active" ? "active" : "draft");
+  const [targetStatus, setTargetStatus] = React.useState<"draft" | "active">(
+    product.status === "active" ? "active" : "draft"
+  );
   const [quoteOnly, setQuoteOnly] = React.useState(meta.quote_only === true);
   const [attributes, setAttributes] = React.useState<Record<string, string | string[]>>(editor.productAttributes);
   const [definitions, setDefinitions] = React.useState<AttributeDefinitionRow[]>(editor.attributeDefinitions);
@@ -170,13 +180,44 @@ export function ProductEditorShell({
       categorySlug: categories.find((c) => c.id === (product.categoryId ?? ""))?.slug ?? null,
     })
   );
+  const initialCategorySlug = categories.find((c) => c.id === (product.categoryId ?? ""))?.slug ?? null;
+  const [impactPerformance, setImpactPerformance] = React.useState<ProductImpactPerformance>(() =>
+    initProductImpactPerformance({
+      metadata: meta,
+      attributes: editor.productAttributes,
+      categorySlug: initialCategorySlug,
+    })
+  );
 
   const markDirty = React.useCallback(() => setDirty(true), []);
+  const packagingDirtyFromPanel = React.useRef(false);
+
+  function syncPackagingFilterAttributes(cp: CommercePackagingV1, markUserDirty: boolean) {
+    const cpAttrs = commercePackagingToFilterAttributes(cp);
+    setAttributes((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [key, val] of Object.entries(cpAttrs)) {
+        const cur = Array.isArray(prev[key]) ? prev[key][0] : prev[key];
+        if (String(cur ?? "") !== val) {
+          next[key] = val;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    if (markUserDirty) markDirty();
+  }
 
   const allowedByKey = React.useMemo(
     () => new Map(definitions.map((d) => [d.attributeKey, d.allowedValues])),
     [definitions]
   );
+
+  React.useEffect(() => {
+    syncPackagingFilterAttributes(commercePackaging, packagingDirtyFromPanel.current);
+    packagingDirtyFromPanel.current = false;
+  }, [commercePackaging]);
 
   const missingFilterKeys = React.useMemo(
     () =>
@@ -354,16 +395,35 @@ export function ProductEditorShell({
       })),
       internal_sku: internalSku,
       commerce_packaging: commercePackaging,
+      impact_performance: impactPerformance,
     };
   }
 
-  function save(targetStatus: "draft" | "active") {
+  function saveProduct() {
+    setError(null);
+    setSuccessMessage(null);
+    if (targetStatus === "active") {
+      if (storefrontPublishBlocked && isUrlImport) {
+        setError(
+          "Production go-live requires CatalogOS. Save as Draft here, or use Open CatalogOS to publish."
+        );
+        return;
+      }
+      if (hasPublishBlockers(publishReadiness)) {
+        setError(`Cannot publish: ${publishReadiness.publishBlockers.map((b) => b.label).join("; ")}`);
+        return;
+      }
+    }
+    save(targetStatus);
+  }
+
+  function save(targetStatusToSave: "draft" | "active") {
     setError(null);
     setSuccessMessage(null);
     const fd = new FormData();
     fd.set("product_id", productId);
-    fd.set("payload", JSON.stringify(buildPayload(targetStatus)));
-    setPendingAction(targetStatus === "active" ? "publish" : "draft");
+    fd.set("payload", JSON.stringify(buildPayload(targetStatusToSave)));
+    setPendingAction(targetStatusToSave === "active" ? "publish" : "draft");
     startTransition(async () => {
       try {
         const res = await adminUpdateProductAction(fd);
@@ -373,12 +433,13 @@ export function ProductEditorShell({
           return;
         }
         setDirty(false);
-        if (targetStatus === "active") {
+        setTargetStatus(targetStatusToSave);
+        if (targetStatusToSave === "active") {
           router.push(`/admin/products?tab=products&published=1`);
           return;
         }
         setStatus("draft");
-        setSuccessMessage("Draft saved.");
+        setSuccessMessage("Saved.");
         router.refresh();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Save failed";
@@ -482,45 +543,56 @@ export function ProductEditorShell({
         name={name}
         primaryImageUrl={primaryImageUrl}
         imageRequired={blockingSet.has("__primary_image__")}
-        status={status}
+        targetStatus={targetStatus}
+        onTargetStatusChange={setTargetStatus}
         quoteOnly={quoteOnly}
         parserVersion={editor.parserVersion}
         readiness={publishReadiness}
+        draftReadiness={draftReadiness}
         storefrontPath={storefrontPdpPath}
         pending={pending}
         pendingAction={pendingAction}
         dirty={dirty}
-        onSaveDraft={() => save("draft")}
-        onPublish={() => {
-          if (storefrontPublishBlocked) {
-            setError("Production publish must use CatalogOS publish to preserve variants, offers, images, attributes, and pricing.");
-            return;
-          }
-          if (hasPublishBlockers(publishReadiness)) {
-            setError(
-              `Cannot publish: ${publishReadiness.publishBlockers.map((b) => b.label).join("; ")}`
-            );
-            return;
-          }
-          save("active");
-        }}
+        onSave={saveProduct}
         urlImportReview={isUrlImport}
         storefrontPublishBlocked={storefrontPublishBlocked}
-        catalogosPublishUrl={catalogosPublishUrl}
+        catalogosHandoff={catalogosHandoff}
       />
 
-      {storefrontPublishBlocked ? (
+      {storefrontPublishBlocked && isUrlImport ? (
         <div className={cn(adminAlertSurface("warning", "mt-4"))}>
-          <strong className="text-admin-warning">CatalogOS publish required for go-live.</strong>{" "}
-          Save drafts here, then publish from CatalogOS review/publish so variants, offers, images, attributes, and
-          pricing stay aligned.
-          {catalogosPublishUrl ? (
-            <>
-              {" "}
-              <Link href={catalogosPublishUrl} target="_blank" rel="noopener noreferrer" className={adminLink}>
-                Open CatalogOS publish
+          <strong className="text-admin-warning">Production go-live uses CatalogOS.</strong>{" "}
+          Save as <strong>Draft</strong> here to keep edits. Use <strong>Open CatalogOS</strong> to review and publish
+          to the live catalog.
+          {catalogosHandoff ? (
+            <span className="mt-2 flex flex-wrap gap-2">
+              {catalogosHandoff.urlImportJobUrl ? (
+                <Link
+                  href={catalogosHandoff.urlImportJobUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(adminPrimaryButton, "inline-flex text-xs")}
+                >
+                  URL import preview
+                </Link>
+              ) : null}
+              <Link
+                href={catalogosHandoff.reviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(adminSecondaryButton, "inline-flex text-xs")}
+              >
+                Review queue
               </Link>
-            </>
+              <Link
+                href={catalogosHandoff.publishUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(adminSecondaryButton, "inline-flex text-xs")}
+              >
+                Publish-ready
+              </Link>
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -564,8 +636,8 @@ export function ProductEditorShell({
             categorySlug={categorySlug}
             blockingKeys={blockingKeys}
             onChange={(next) => {
+              packagingDirtyFromPanel.current = true;
               setCommercePackaging(next);
-              markDirty();
             }}
             hasSuggestions={hasCommerceSuggestions}
             onApplySuggestions={applyCommerceSuggestions}
@@ -714,6 +786,17 @@ export function ProductEditorShell({
             onMigrateLegacy={migrateLegacy}
           />
 
+          <ProductImpactPreviewPanel
+            value={impactPerformance}
+            attributes={attributes}
+            categorySlug={categorySlug}
+            disabled={pending}
+            onChange={(next) => {
+              setImpactPerformance(next);
+              markDirty();
+            }}
+          />
+
           <VariantSizeMatrix
             variants={variants}
             quoteOnly={quoteOnly}
@@ -722,6 +805,22 @@ export function ProductEditorShell({
               setVariants(sortVariantsByGloveSize(v));
               markDirty();
             }}
+          />
+
+          <VariantFulfillmentPanel
+            productId={productId}
+            variants={variantFulfillmentRows
+              .filter((v) => v.isActive)
+              .map((v) => ({
+                id: v.id,
+                variantSku: v.variantSku,
+                sizeCode: v.sizeCode,
+                fulfillmentMode: v.fulfillmentMode,
+                inventoryVisibility: v.inventoryVisibility,
+                stockEnforcement: v.stockEnforcement,
+                reorderPoint: v.reorderPoint,
+                defaultBinLocation: v.defaultBinLocation,
+              }))}
           />
         </div>
 
@@ -738,7 +837,13 @@ export function ProductEditorShell({
             commercePackaging={commercePackaging}
             onApply={applyImportPatch}
           />
-          <PublishReadinessPanel readiness={publishReadiness} />
+          <PublishReadinessPanel
+            readiness={publishReadiness}
+            draftReadiness={draftReadiness}
+            urlImportReview={isUrlImport}
+            storefrontPublishBlocked={storefrontPublishBlocked}
+            catalogosHandoff={catalogosHandoff}
+          />
           <div className="text-center">
             <Link href={`/admin/products/${productId}`} className={cn("text-xs font-medium", adminLink)}>
               View read-only detail →

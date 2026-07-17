@@ -64,7 +64,7 @@ export function PresetNumericInput({
   return (
     <div
       className={cn(
-        compact ? "space-y-1" : "space-y-1.5",
+        compact ? "min-w-0 space-y-1" : "space-y-1.5",
         blocking && "rounded-lg border-2 border-admin-danger/50 bg-[var(--admin-danger-surface)] p-2",
         className,
       )}
@@ -75,12 +75,7 @@ export function PresetNumericInput({
           <span className="ml-1.5 text-[10px] font-bold uppercase text-admin-danger">Required</span>
         ) : null}
       </span>
-      <div
-        className={cn(
-          "flex gap-1",
-          compact ? "flex-nowrap overflow-x-auto pb-0.5 [scrollbar-width:thin]" : "flex-wrap",
-        )}
-      >
+      <div className={cn("flex flex-wrap gap-1", compact && "max-w-full")}>
         {presets.map((n) => (
           <button
             key={n}

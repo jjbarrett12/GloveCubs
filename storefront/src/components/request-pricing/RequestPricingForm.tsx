@@ -9,6 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { INDUSTRIES, type IndustryKey } from "@/config/industries";
 import { STORE_INDUSTRY_FACET_ROWS } from "@/config/store-industry-facet";
+import {
+  BULK_SIZE_OPTIONS,
+  formatBulkGloveTypeParam,
+  formatBulkMultiParam,
+  STORE_MATERIAL_BULK_OPTIONS,
+} from "@/config/store-material-bulk-options";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import {
   buildInvoiceIntakeRfqPrefillNotes,
@@ -142,9 +148,9 @@ function RequestPricingFormInner() {
 
     const block = `Bulk Order Request:
 Industry: ${industryLabel}
-Type (glove / use): ${type ?? "—"}
-Material: ${material ?? "—"}
-Size: ${size ?? "—"}
+Type (glove / use): ${formatBulkGloveTypeParam(type)}
+Material: ${formatBulkMultiParam(material, STORE_MATERIAL_BULK_OPTIONS)}
+Size: ${formatBulkMultiParam(size, BULK_SIZE_OPTIONS)}
 Monthly case volume: ${volumeLine}${product ? `\nProduct / category note: ${product}` : ""}`;
 
     setMessage(block);

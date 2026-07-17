@@ -1,6 +1,16 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
+import {
+  ChevronRight,
+  Hand,
+  Layers,
+  Shield,
+  Sparkles,
+  UtensilsCrossed,
+  type LucideIcon,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
@@ -12,62 +22,123 @@ import {
   productRequiresSizeSelection,
   storeProductPdpVariantsAnchor,
 } from "@/lib/catalog/store-quote-rules";
-import { formatUnitsPerCaseLine } from "@/lib/catalog/store-product-commerce";
-import { CommercePriceLine } from "@/components/store/CommercePriceLine";
+import { CommercePriceColumn } from "@/components/store/CommercePriceLine";
+import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
 import { cn } from "@/lib/utils";
 
 export type StoreProductCardSurface = "dark" | "light";
 
-function ProcurementSpecStrip({
-  product,
-  surface,
-}: {
-  product: StoreProductRow;
-  surface: StoreProductCardSurface;
-}) {
-  const specParts = [product.materialHint, product.sizeCode].filter(Boolean);
-  const certParts = [product.protectionHint, ...(product.certificationHints ?? [])].filter(Boolean).slice(0, 2);
-  const multi = productRequiresSizeSelection(product);
+type CardFeature = { icon: LucideIcon; label: string };
+
+function packUnitHeading(unit: "case" | "pallet", label: string | null): string {
+  if (!label) return unit.toUpperCase();
+  const boxMatch = label.match(/(\d+)\s*box/i);
+  if (unit === "case" && boxMatch) return `Case (${boxMatch[1]} boxes)`;
+  const caseMatch = label.match(/(\d+)\s*cases/i);
+  if (unit === "pallet" && caseMatch) return `Pallet (${caseMatch[1]} cases)`;
+  return unit.toUpperCase();
+}
+
+function displayCertLabel(cert: string): string {
+  return cert.includes("_") ? formatAttributeValueLabel("certifications", cert) : cert;
+}
+
+function deriveCardFeatures(product: StoreProductRow): CardFeature[] {
+  const features: CardFeature[] = [];
+  const name = product.name;
+  const seen = new Set<string>();
+
+  const push = (icon: LucideIcon, label: string) => {
+    const key = label.toLowerCase();
+    if (seen.has(key) || features.length >= 4) return;
+    seen.add(key);
+    features.push({ icon, label });
+  };
+
+  if (/powder[- ]free/i.test(name)) push(Sparkles, "Powder-Free");
+  if (/latex[- ]free/i.test(name)) push(Shield, "Latex-Free");
+
+  const milMatch = name.match(/(\d+(?:\.\d+)?)\s*mil/i);
+  if (milMatch) push(Layers, `${milMatch[1]} mil Thickness`);
+
+  for (const cert of product.certificationHints) {
+    const label = displayCertLabel(cert);
+    if (/food|fda/i.test(label)) push(UtensilsCrossed, "Food Safe");
+    else if (/latex/i.test(label)) push(Shield, "Latex-Free");
+    else if (/astm|iso|en\s|fda|aql/i.test(label)) push(Shield, label);
+    else push(Shield, label);
+  }
+
+  if (/ambidextrous/i.test(name)) push(Hand, "Ambidextrous");
+
+  if (product.materialHint) push(Layers, product.materialHint);
+
+  return features.slice(0, 4);
+}
+
+function CardFeatureGrid({ features, surface }: { features: CardFeature[]; surface: StoreProductCardSurface }) {
+  if (features.length === 0) return null;
   const isLight = surface === "light";
 
   return (
-    <div className={cn("space-y-1.5 border-t pt-2", isLight ? "border-border-light" : "border-white/[0.06]")}>
-      {product.commercialUseSummary ? (
-        <p
-          className={cn(
-            "line-clamp-2 text-[10px] font-medium leading-snug",
-            isLight ? "text-text-muted-light" : "text-white/60"
-          )}
-        >
-          {product.commercialUseSummary}
-        </p>
-      ) : null}
-      {specParts.length > 0 ? (
-        <p className={cn("text-[10px] font-medium", isLight ? "text-neutral-700" : "text-white/70")}>
-          <span className={isLight ? "text-neutral-400" : "text-white/40"}>Spec · </span>
-          {specParts.join(" · ")}
-        </p>
-      ) : null}
-      {certParts.length > 0 ? (
-        <p className={cn("line-clamp-1 text-[10px]", isLight ? "text-neutral-500" : "text-white/50")}>
-          {certParts.join(" · ")}
-        </p>
-      ) : null}
-      {multi ? (
-        <p className="text-[10px] font-semibold text-brand">
-          {product.activeVariantCount} sizes · select on detail
-        </p>
-      ) : product.variantSku ? (
-        <p className={cn("font-mono text-[10px]", isLight ? "text-neutral-500" : "text-white/55")}>
-          <span className={isLight ? "text-neutral-400" : "text-white/40"}>SKU · </span>
-          {product.variantSku}
-        </p>
-      ) : null}
-      {!multi && product.internalSku && product.internalSku !== product.variantSku ? (
-        <p className={cn("font-mono text-[10px]", isLight ? "text-neutral-400" : "text-white/40")}>
-          Parent {product.internalSku}
-        </p>
-      ) : null}
+    <ul className="grid list-none grid-cols-2 gap-x-2 gap-y-1 p-0">
+      {features.map(({ icon: Icon, label }) => (
+        <li key={label} className="flex min-w-0 items-center gap-1">
+          <Icon
+            className={cn("h-3 w-3 shrink-0", isLight ? "text-neutral-400" : "text-white/40")}
+            strokeWidth={2}
+            aria-hidden
+          />
+          <span className={cn("truncate text-[10px] font-medium", isLight ? "text-neutral-600" : "text-white/65")}>
+            {label}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CardSizeSelector({
+  product,
+  surface,
+  selectedSize,
+  onSelectSize,
+}: {
+  product: StoreProductRow;
+  surface: StoreProductCardSurface;
+  selectedSize: string | null;
+  onSelectSize: (size: string) => void;
+}) {
+  const sizes = product.availableSizeCodes;
+  if (sizes.length === 0) return null;
+  const isLight = surface === "light";
+  const multi = productRequiresSizeSelection(product);
+
+  return (
+    <div className="space-y-1">
+      <p className={cn("text-[9px] font-semibold", isLight ? "text-neutral-500" : "text-white/45")}>Available sizes</p>
+      <div className="flex flex-wrap gap-1">
+        {sizes.map((size) => {
+          const selected = selectedSize === size || (!multi && product.sizeCode === size);
+          return (
+            <button
+              key={size}
+              type="button"
+              onClick={() => onSelectSize(size)}
+              className={cn(
+                "min-w-[1.75rem] rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition",
+                selected
+                  ? "border-brand bg-brand text-white"
+                  : isLight
+                    ? "border-border-light bg-white text-ink hover:border-brand/40"
+                    : "border-white/15 bg-white/5 text-white/80 hover:border-brand/40"
+              )}
+            >
+              {size}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -75,65 +146,53 @@ function ProcurementSpecStrip({
 export function StoreProductCard({
   product,
   surface = "dark",
+  rankLabel,
 }: {
   product: StoreProductRow;
   surface?: StoreProductCardSurface;
+  /** Optional survey rank badge (e.g. "#2"). */
+  rankLabel?: string;
 }) {
   const isLight = surface === "light";
+  const [selectedSize, setSelectedSize] = React.useState<string | null>(product.sizeCode);
 
   const displayCasePrice = product.casePrice ?? product.bestPrice;
-  const showFromPrefix =
-    product.casePrice == null && product.bestPrice != null && product.activeVariantCount > 1;
-  const unitsLine = formatUnitsPerCaseLine(product.unitsPerCase, product.unitNoun);
-
-  const priceLine =
-    displayCasePrice != null ? (
-      <div className="space-y-1">
-        <CommercePriceLine
-          listPrice={product.caseListPrice}
-          salePrice={displayCasePrice}
-          onSale={product.caseOnSale}
-          unitLabel="case"
-          compact
-          light={isLight}
-        />
-        {showFromPrefix ? (
-          <p className={cn("text-[10px] font-semibold", isLight ? "text-neutral-500" : "text-white/45")}>
-            From selected size
-          </p>
-        ) : null}
-        {unitsLine ? (
-          <p className={cn("text-[11px] font-medium", isLight ? "text-neutral-600" : "text-white/60")}>{unitsLine}</p>
-        ) : (
-          <p className={cn("text-[11px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>
-            Case quantity pending
-          </p>
+  const features = React.useMemo(() => deriveCardFeatures(product), [product]);
+  const showCasePricing = displayCasePrice != null;
+  const showPalletPricing = product.palletPricingAvailable && product.palletPrice != null;
+  const pricingColumns =
+    showCasePricing || showPalletPricing ? (
+      <div
+        className={cn(
+          "grid gap-2",
+          showCasePricing && showPalletPricing ? "grid-cols-2" : "grid-cols-1"
         )}
-        {product.palletPricingAvailable && product.palletPrice != null ? (
-          <CommercePriceLine
+      >
+        {showCasePricing ? (
+          <CommercePriceColumn
+            heading={packUnitHeading("case", product.caseLabel)}
+            listPrice={product.caseListPrice}
+            salePrice={displayCasePrice}
+            onSale={product.caseOnSale}
+            unitLabel="case"
+            light={isLight}
+          />
+        ) : null}
+        {showPalletPricing ? (
+          <CommercePriceColumn
+            heading={packUnitHeading("pallet", product.palletLabel)}
             listPrice={product.palletListPrice}
             salePrice={product.palletPrice}
             onSale={product.palletOnSale}
             unitLabel="pallet"
-            compact
             light={isLight}
-            className="mt-1"
           />
-        ) : product.palletPricingAvailable ? (
-          <span
-            className={cn(
-              "inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              isLight
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            )}
-          >
-            Pallet pricing available
-          </span>
         ) : null}
       </div>
     ) : (
-      <div className={cn("text-[11px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>Request pricing</div>
+      <div className={cn("text-[10px] font-medium", isLight ? "text-neutral-500" : "text-white/45")}>
+        Request pricing
+      </div>
     );
 
   const pdpHref = `/store/p/${encodeURIComponent(product.slug)}`;
@@ -153,11 +212,16 @@ export function StoreProductCard({
       <div className="relative shrink-0">
         <div
           className={cn(
-            "relative aspect-[4/3] w-full sm:aspect-square",
+            "relative aspect-square w-full",
             isLight ? "bg-neutral-100" : "bg-black/40"
           )}
         >
           <StoreBadgeStack labels={product.badges} />
+          {rankLabel ? (
+            <span className="absolute left-2 top-2 z-10 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-extrabold text-white shadow-sm">
+              {rankLabel}
+            </span>
+          ) : null}
           <Link
             href={pdpHref}
             className={cn(
@@ -175,13 +239,13 @@ export function StoreProductCard({
         </div>
       </div>
 
-      <CardHeader className="flex flex-1 flex-col gap-1.5 px-3 pb-2 pt-3">
+      <CardHeader className="flex flex-1 flex-col gap-1.5 px-3 pb-2 pt-2.5">
         {product.brandName ? (
-          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand">{product.brandName}</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-brand">{product.brandName}</div>
         ) : null}
         <CardTitle
           className={cn(
-            "line-clamp-2 text-left text-[14px] font-bold leading-snug",
+            "text-left text-[14px] font-bold leading-snug",
             isLight ? "text-ink" : "text-white"
           )}
         >
@@ -195,22 +259,28 @@ export function StoreProductCard({
             {product.name}
           </Link>
         </CardTitle>
-        <ProcurementSpecStrip product={product} surface={surface} />
-        <div className="pt-0.5">{priceLine}</div>
+        <CardFeatureGrid features={features} surface={surface} />
+        <CardSizeSelector
+          product={product}
+          surface={surface}
+          selectedSize={selectedSize}
+          onSelectSize={setSelectedSize}
+        />
+        <div className="pt-0.5">{pricingColumns}</div>
       </CardHeader>
 
       <CardContent className="mt-auto flex flex-col gap-2 px-3 pb-3 pt-0">
         {needsSize ? (
-          <Button asChild className="h-11 w-full bg-brand text-sm font-bold text-white hover:bg-brand-hover">
+          <Button asChild className="h-10 w-full bg-brand text-xs font-bold text-white hover:bg-brand-hover">
             <Link href={selectSizeHref}>Select size</Link>
           </Button>
         ) : showQuote ? (
-          <AddToQuoteButton product={product} className="h-11 text-sm font-bold" />
+          <AddToQuoteButton product={product} className="h-10 text-xs font-bold" />
         ) : (
           <Button
             asChild
             variant="outline"
-            className="h-11 w-full border-brand/45 text-sm font-semibold text-brand hover:bg-brand/10"
+            className="h-10 w-full border-brand/45 text-xs font-semibold text-brand hover:bg-brand/10"
           >
             <Link href="/request-pricing">Request pricing</Link>
           </Button>
@@ -218,11 +288,12 @@ export function StoreProductCard({
         <Link
           href={pdpHref}
           className={cn(
-            "text-center text-[11px] font-semibold transition-colors hover:text-brand hover:underline",
-            isLight ? "text-neutral-500" : "text-white/55"
+            "flex items-center justify-center gap-1 border-t py-2.5 text-[10px] font-semibold transition-colors hover:text-brand",
+            isLight ? "border-border-light text-neutral-500" : "border-white/10 text-white/55"
           )}
         >
           View details
+          <ChevronRight className="h-3 w-3" aria-hidden />
         </Link>
       </CardContent>
     </Card>

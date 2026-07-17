@@ -116,8 +116,14 @@ const {
     assertCommercialLineIdentity,
 } = require('./lib/commercial-line-identity');
 const { buildPurchaseOrderLinesFromOrder } = require('./lib/poLineBuilder');
+const {
+    createPurchaseOrdersForSalesOrder,
+    sendDraftPurchaseOrdersForSalesOrder,
+    schedulePurchaseOrdersForSalesOrder,
+} = require('./lib/salesOrderPurchaseOrderSync');
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
+const { sendWarehouseMigrationGone } = require('./lib/legacy-warehouse-deprecation');
 const {
     validateAdminOrderStatusTransition,
     ABANDON_STATUSES,
@@ -135,6 +141,14 @@ const { enqueueBulkUrls, runWorker, approveDraft } = require('./lib/bulk-import'
 const Stripe = require('stripe');
 const paymentLog = require('./lib/payment-logger');
 const { dispatchEmail, dispatchEmailInBackground } = require('./lib/email-dispatch');
+
+function poSyncDeps() {
+    return {
+        dataService,
+        dispatchEmail,
+        updatePurchaseOrder: dataService.updatePurchaseOrder.bind(dataService),
+    };
+}
 const webhookIdempotency = require('./lib/webhook-idempotency');
 const { sortByRelevance } = require('./lib/search-relevance');
 const cartLineContract = require('./lib/contracts/cart-line');
@@ -681,6 +695,10 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                     note: 'exception_before_or_during_dispatch',
                 });
             }
+
+            sendDraftPurchaseOrdersForSalesOrder(ord, poSyncDeps()).catch((poErr) => {
+                console.error('[stripe webhook] send draft POs failed', poErr.message || poErr);
+            });
 
             await webhookIdempotency.markEventProcessed(eventId, eventType, ord.id, 'processed');
             paymentLog.webhookProcessed(eventId, eventType, ord.id, Date.now() - startTime);
@@ -2913,47 +2931,7 @@ app.get('/api/fishbowl/status', (req, res) => {
 
 app.post('/api/fishbowl/sync-inventory', authenticateToken, async (req, res) => {
     if (!(await usersService.isAdmin(req.user.id))) return res.status(403).json({ error: 'Admin access required to sync inventory' });
-    if (!fishbowl.isConfigured()) return res.status(400).json({ error: 'Fishbowl not configured. Set FISHBOWL_BASE_URL, FISHBOWL_USERNAME, FISHBOWL_PASSWORD in .env' });
-    try {
-        const inventoryList = await fishbowl.getAllInventory(true);
-        const GLV_PREFIX = 'GLV-';
-        const qtyByPartNumber = {};
-        for (const row of inventoryList) {
-            const num = (row.partNumber || row.number || '').toString().trim().toUpperCase();
-            if (!num || !num.startsWith(GLV_PREFIX)) continue;
-            qtyByPartNumber[num] = (qtyByPartNumber[num] || 0) + (row.quantity || 0);
-        }
-        const { products: productList } = await productsService.getProducts({ limit: 10000 });
-        let updated = 0;
-        for (const product of productList || []) {
-            const mainSku = (product.sku || '').toString().trim().toUpperCase();
-            if (!mainSku) continue;
-            let totalQty = qtyByPartNumber[mainSku] || 0;
-            const sizes = (product.sizes || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-            for (const size of sizes) {
-                totalQty += qtyByPartNumber[mainSku + '-' + size.toUpperCase().replace(/\s+/g, '')] || 0;
-            }
-            const inStock = totalQty > 0 ? 1 : 0;
-            const currentQoh = product.quantity_on_hand ?? 0;
-            if (product.in_stock !== inStock || currentQoh !== totalQty) {
-                const invCanon = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-                if (!invCanon) continue;
-                await dataService.upsertInventory(invCanon, {
-                    quantity_on_hand: totalQty,
-                    canonical_product_id: invCanon,
-                });
-                await productsService.updateProduct(product.id, { in_stock: inStock });
-                updated++;
-            }
-        }
-        res.json({ success: true, updated, totalProducts: (productList || []).length, message: `Synced: ${updated} product(s) updated from Fishbowl (GLV- only)` });
-    } catch (err) {
-        console.error('Fishbowl sync error:', err);
-        res.status(500).json({
-            error: err.message || 'Fishbowl sync failed',
-            mfaRequired: err.mfaRequired === true
-        });
-    }
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
 app.get('/api/fishbowl/export-customers', authenticateToken, async (req, res) => {
@@ -3697,6 +3675,11 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             });
         }
         schedulePricingTierReevaluation(req.user.id, 'post_order');
+        schedulePurchaseOrdersForSalesOrder(order, poSyncDeps(), {
+            sendToVendor: true,
+            matchOrderNumber: true,
+            skipPaymentValidation: true,
+        });
         const purchase_analytics = buildPurchaseAnalyticsClientPayload(orderItems, order, user, requested);
         res.json({
             success: true,
@@ -3898,6 +3881,11 @@ app.post('/api/orders/create-payment-intent', authenticateToken, async (req, res
     }
 
     const purchase_analytics = buildPurchaseAnalyticsClientPayload(orderItems, order, user, payment_method);
+    schedulePurchaseOrdersForSalesOrder(order, poSyncDeps(), {
+        sendToVendor: false,
+        matchOrderNumber: true,
+        skipPaymentValidation: true,
+    });
     res.json({
         success: true,
         client_secret: paymentIntent.client_secret,
@@ -5918,106 +5906,12 @@ app.get('/api/admin/inventory', authenticateToken, requireAdmin, async (req, res
     }
 });
 
-app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const listingId = normalizeCanonicalUuidInput(req.params.product_id);
-        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
-        const product = await productsService.getProductById(listingId);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
-        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-
-        let bodyCanon = null;
-        if (req.body.canonical_product_id != null && String(req.body.canonical_product_id).trim() !== '') {
-            bodyCanon = normalizeCanonicalUuidInput(req.body.canonical_product_id);
-            if (!bodyCanon) return res.status(400).json({ error: 'Invalid canonical_product_id' });
-        }
-        const lookupKey = bodyCanon || v2;
-        const existing = lookupKey ? await dataService.getInventoryByProductId(lookupKey) : null;
-        const existingRowCanon = existing ? normalizeCanonicalUuidInput(existing.canonical_product_id) : null;
-        const resolvedCanon = bodyCanon || v2 || existingRowCanon;
-
-        if (!resolvedCanon) {
-            return res.status(422).json({
-                error:
-                    'Could not resolve catalog_v2 id for this listing; set canonical_product_id on the request body or fix listing→v2 mapping.',
-                code: 'INVENTORY_CANONICAL_REQUIRED',
-            });
-        }
-
-        if (req.body.quantity_on_hand !== undefined) {
-            const newQ = Math.max(0, parseInt(req.body.quantity_on_hand, 10) || 0);
-            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
-            if (newQ < reserved) {
-                return res.status(400).json({
-                    error: `quantity_on_hand (${newQ}) cannot be less than quantity_reserved (${reserved}).`,
-                    code: 'ON_HAND_BELOW_RESERVED',
-                });
-            }
-            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
-            const delta = newQ - current;
-            if (delta !== 0) {
-                await inventory.adjustStock(resolvedCanon, delta, 'Admin inventory PUT', { type: 'admin_put' }, req.user.id);
-            }
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('inventory')
-                .update({ last_count_at: new Date().toISOString() })
-                .eq('canonical_product_id', resolvedCanon);
-        }
-
-        const fresh = resolvedCanon ? await dataService.getInventoryByProductId(resolvedCanon) : null;
-        const payload = {
-            quantity_on_hand: fresh ? (fresh.quantity_on_hand ?? 0) : 0,
-            reorder_point:
-                req.body.reorder_point !== undefined
-                    ? Math.max(0, parseInt(req.body.reorder_point, 10) || 0)
-                    : fresh
-                      ? (fresh.reorder_point ?? 0)
-                      : (product.reorder_point ?? 0),
-            bin_location:
-                req.body.bin_location !== undefined
-                    ? String(req.body.bin_location || '').trim()
-                    : fresh
-                      ? (fresh.bin_location || '')
-                      : '',
-        };
-        if (fresh && fresh.quantity_reserved != null) payload.quantity_reserved = fresh.quantity_reserved;
-        if (bodyCanon) payload.canonical_product_id = bodyCanon;
-        else if (v2) payload.canonical_product_id = v2;
-        else if (existingRowCanon) payload.canonical_product_id = existingRowCanon;
-
-        await dataService.upsertInventory(resolvedCanon, payload);
-        const inv = await dataService.getInventoryByProductId(resolvedCanon);
-        res.json(inv || { product_id: listingId, quantity_on_hand: 0, quantity_reserved: 0, reorder_point: 0, bin_location: '' });
-    } catch (err) {
-        console.error('[admin/inventory PUT]', err);
-        res.status(500).json({ error: err.message || 'Failed to update inventory' });
-    }
+app.put('/api/admin/inventory/:product_id', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
-app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const { product_id, delta, reason } = req.body;
-        const listingId = normalizeCanonicalUuidInput(product_id);
-        if (!listingId) return res.status(400).json({ error: 'product_id must be a catalog listing UUID' });
-        const product = await productsService.getProductById(listingId);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
-        const d = parseInt(delta, 10);
-        if (isNaN(d) || d === 0) return res.status(400).json({ error: 'delta must be a non-zero integer (positive to add, negative to subtract)' });
-        const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-        if (!v2) {
-            return res.status(422).json({
-                error: 'Product must resolve to catalog_v2 (listing → v2) before stock adjustments.',
-                code: 'INVENTORY_CANONICAL_REQUIRED',
-            });
-        }
-        await inventory.adjustStock(v2, d, reason || 'Admin adjustment', { type: 'admin' }, req.user.id);
-        const stock = await inventory.getStock(v2);
-        res.json({ success: true, stock: stock || { stock_on_hand: 0, stock_reserved: 0, available_stock: 0 } });
-    } catch (err) {
-        console.error('[admin/inventory/adjust]', err);
-        res.status(500).json({ error: err.message || 'Failed to adjust inventory' });
-    }
+app.post('/api/admin/inventory/adjust', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/api/inventory/adjust');
 });
 
 app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (req, res) => {
@@ -6045,72 +5939,8 @@ app.get('/api/admin/inventory/history', authenticateToken, requireAdmin, async (
     }
 });
 
-app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const counts = Array.isArray(req.body.counts) ? req.body.counts : [];
-        const updated = [];
-        const skipped = [];
-        const rowErrors = [];
-        for (const row of counts) {
-            const listingId = normalizeCanonicalUuidInput(row.product_id);
-            if (!listingId) {
-                skipped.push({ reason: 'invalid_product_id' });
-                continue;
-            }
-            const product = await productsService.getProductById(listingId);
-            if (!product) {
-                skipped.push({ product_id: listingId, reason: 'product_not_found' });
-                continue;
-            }
-            const rowCanon =
-                row.canonical_product_id != null && String(row.canonical_product_id).trim() !== ''
-                    ? normalizeCanonicalUuidInput(row.canonical_product_id)
-                    : null;
-            if (row.canonical_product_id != null && String(row.canonical_product_id).trim() !== '' && !rowCanon) {
-                skipped.push({ product_id: listingId, reason: 'invalid_canonical_product_id' });
-                continue;
-            }
-            const v2 = normalizeCanonicalUuidInput(product.catalog_v2_product_id);
-            const resolvedCanon = rowCanon || v2;
-            if (!resolvedCanon) {
-                skipped.push({ product_id: listingId, reason: 'missing_canonical_product_id' });
-                continue;
-            }
-            const existing = await dataService.getInventoryByProductId(resolvedCanon);
-            const target = Math.max(0, parseInt(row.quantity_on_hand, 10) || 0);
-            const reserved = existing ? (existing.quantity_reserved ?? 0) : 0;
-            if (target < reserved) {
-                rowErrors.push({
-                    product_id: listingId,
-                    code: 'count_below_reserved',
-                    quantity_reserved: reserved,
-                    quantity_on_hand_requested: target,
-                });
-                continue;
-            }
-            const current = existing ? (existing.quantity_on_hand ?? 0) : 0;
-            const delta = target - current;
-            if (delta !== 0) {
-                await inventory.adjustStock(resolvedCanon, delta, 'Cycle count', { type: 'cycle_count' }, req.user.id);
-            }
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('inventory')
-                .update({ last_count_at: new Date().toISOString() })
-                .eq('canonical_product_id', resolvedCanon);
-            updated.push(listingId);
-        }
-        res.json({
-            success: true,
-            updated_product_ids: updated,
-            skipped,
-            errors: rowErrors,
-            counts_submitted: counts.length,
-        });
-    } catch (err) {
-        console.error('[admin/inventory/cycle]', err);
-        res.status(500).json({ error: err.message || 'Failed to cycle count' });
-    }
+app.post('/api/admin/inventory/cycle', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/inventory');
 });
 
 // ============ STALE ORDER CLEANUP ============
@@ -6425,23 +6255,8 @@ app.post('/api/admin/purchase-orders/:id/send', authenticateToken, requireAdmin,
     }
 });
 
-app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdmin, async (req, res) => {
-    try {
-        const poId = parseInt(req.params.id, 10);
-        if (isNaN(poId)) return res.status(400).json({ error: 'Invalid PO ID' });
-        const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
-        if (lines.length === 0) {
-            return res.status(400).json({
-                error: 'lines array required: [{ canonical_product_id (UUID), quantity_received }]',
-            });
-        }
-        await inventory.receivePurchaseOrder(poId, lines);
-        const updated = await dataService.getPurchaseOrderById(poId);
-        res.json({ success: true, po: updated });
-    } catch (err) {
-        console.error('[admin/purchase-orders/:id/receive]', err);
-        res.status(500).json({ error: err.message || 'Failed to receive PO' });
-    }
+app.post('/api/admin/purchase-orders/:id/receive', authenticateToken, requireAdmin, (req, res) => {
+    sendWarehouseMigrationGone(res, '/admin/purchase-orders');
 });
 
 // Create PO from customer order and send to vendor (drop-ship)
@@ -6449,96 +6264,45 @@ app.post('/api/admin/orders/:id/create-po', authenticateToken, requireAdmin, asy
     try {
         const order = await dataService.getOrderByIdAdmin(req.params.id);
         if (!order) return res.status(404).json({ error: 'Order not found' });
-        if (order.payment_integrity_hold === true || order.payment_integrity_hold === 1) {
-            return res.status(409).json({
-                error: 'Order is on payment integrity hold; resolve Stripe vs order total before creating a PO.',
-                code: 'PAYMENT_INTEGRITY_HOLD',
-            });
-        }
-        if (order.status === 'pending_payment') {
-            return res.status(409).json({
-                error: 'Order has not completed payment; do not create a purchase order yet.',
-                code: 'ORDER_AWAITING_PAYMENT',
-            });
-        }
-        if (orderRequiresOnlinePaymentConfirmation(order) && !order.payment_confirmed_at) {
-            return res.status(409).json({
-                error: 'Payment must be confirmed before creating a PO for card/ACH (Stripe) orders.',
-                code: 'PAYMENT_NOT_CONFIRMED',
-            });
-        }
-        const manufacturers = await dataService.getManufacturers();
-        const resolution = await buildPurchaseOrderLinesFromOrder(order, { orderId: order.id });
-        if (!resolution.ok) {
-            const summary = (resolution.blocked_lines || [])
-                .map((b) => {
-                    const li = b.order_line_index != null ? b.order_line_index + 1 : '?';
-                    const pid = b.canonical_product_id != null ? b.canonical_product_id : '?';
-                    return `Line ${li} (catalog ${pid}): ${b.code}`;
-                })
-                .join('; ');
-            return res.status(422).json({
-                error: `Cannot build purchase order — ${resolution.blocked_lines.length} line(s) blocked. ${summary}`,
-                code: resolution.code || 'PO_LINE_VALIDATION_FAILED',
-                blocked_lines: resolution.blocked_lines,
-            });
-        }
-        const byMfr = resolution.byManufacturer;
-        const mfrId =
-            req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : byMfr.size === 1 ? [...byMfr.keys()][0] : null;
-        if (mfrId == null || isNaN(mfrId)) {
-            const mfrSummaries = [...byMfr.keys()].map((id) => {
-                const m = (manufacturers || []).find((x) => x.id === id);
-                return { id, name: m ? m.name : '', line_count: (byMfr.get(id) || []).length };
-            });
-            return res.status(400).json({
-                error:
-                    'Order has line items for multiple manufacturers. Create one PO per manufacturer by passing manufacturer_id in the request body.',
-                code: 'MULTI_MANUFACTURER_ORDER',
-                manufacturers: mfrSummaries,
-            });
-        }
-        const mfr = (manufacturers || []).find((m) => m.id === mfrId);
-        if (!mfr) return res.status(400).json({ error: 'Manufacturer not found' });
-        const lines = byMfr.get(mfrId) || [];
-        if (lines.length === 0) {
-            return res.status(400).json({
-                error: 'No validated line items for the selected manufacturer.',
-                code: 'NO_LINES_FOR_MANUFACTURER',
-                manufacturer_id: mfrId,
-            });
-        }
-        const poNumber = await dataService.nextPoNumber();
-        const shippingDisplay = order.shipping_address && typeof order.shipping_address === 'object' && order.shipping_address.display ? order.shipping_address.display : (order.shipping_address || null);
-        const po = await dataService.createPurchaseOrder({
-            po_number: poNumber,
-            manufacturer_id: mfrId,
-            order_id: order.id,
-            status: 'draft',
-            lines,
-            shipping_address: shippingDisplay,
-            customer_order_number: order.order_number || null
+
+        const autoFromSalesOrder = req.body && req.body.auto_from_sales_order === true;
+        const manufacturerId =
+            req.body && req.body.manufacturer_id != null ? parseInt(req.body.manufacturer_id, 10) : null;
+
+        const result = await createPurchaseOrdersForSalesOrder(order, poSyncDeps(), {
+            sendToVendor: autoFromSalesOrder ? true : req.body?.send_to_vendor !== false,
+            matchOrderNumber: true,
+            skipPaymentValidation: autoFromSalesOrder,
+            manufacturerId: Number.isFinite(manufacturerId) && manufacturerId > 0 ? manufacturerId : null,
         });
-        const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_cost, 0);
-        const toEmail = (mfr.po_email || mfr.vendor_email || '').toString().trim();
-        if (!toEmail) return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, message: 'PO created. Add vendor email in Vendors and send from Purchase Orders.' });
-        const lineText = lines.map((l) => `  ${l.sku || l.name} - ${l.name || ''} x ${l.quantity} @ $${(l.unit_cost || 0).toFixed(2)}`).join('\n');
-        const bodyText = `GloveCubs Purchase Order\n\nPO#: ${poNumber}\nDate: ${(po.created_at || '').slice(0, 10)}\n\nShip to (drop-ship):\n${(shippingDisplay || '').replace(/\n/g, '\n')}\n\nCustomer Order: ${order.order_number || 'N/A'}\n\nLine items:\n${lineText}\n\nSubtotal: $${subtotal.toFixed(2)}\n\nPlease confirm and ship to the address above.\n\n— GloveCubs`;
-        const result = await dispatchEmail({
-            to: toEmail,
-            subject: `Purchase Order ${poNumber} - GloveCubs`,
-            text: bodyText,
-            html: bodyText.replace(/\n/g, '<br>'),
-            emailType: 'purchase_order_vendor',
-            orderId: order.id,
-            orderNumber: order.order_number || null,
-            metadata: { po_number: poNumber, po_id: po.id },
-        });
-        if (result.sent) {
-            await dataService.updatePurchaseOrder(po.id, { status: 'sent', sent_at: new Date().toISOString() });
-            return res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, sent: true, message: 'PO created and sent to vendor.' });
+
+        if (!result.ok) {
+            return res.status(result.httpStatus || 500).json({
+                error: result.error,
+                code: result.code,
+                blocked_lines: result.blocked_lines,
+                manufacturers: result.manufacturers,
+            });
         }
-        res.json({ success: true, po: { ...po, manufacturer_name: mfr.name, subtotal }, sent: false, message: 'PO created. Email failed: ' + (result.error || 'unknown') });
+
+        const pos = result.purchase_orders || [];
+        if (pos.length === 1) {
+            const one = pos[0];
+            return res.json({
+                success: true,
+                po: one.po,
+                po_number: one.po_number || one.po?.po_number,
+                sent: one.sent,
+                skipped: one.skipped,
+                message: one.message,
+            });
+        }
+
+        res.json({
+            success: true,
+            purchase_orders: pos,
+            message: `Created ${pos.filter((p) => !p.skipped).length} purchase order(s) for sales order ${order.order_number}.`,
+        });
     } catch (err) {
         console.error('[admin/orders/:id/create-po]', err);
         res.status(500).json({ error: err.message || 'Failed to create PO' });

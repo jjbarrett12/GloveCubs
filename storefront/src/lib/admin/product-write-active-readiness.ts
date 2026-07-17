@@ -21,6 +21,7 @@ import {
 } from "@/lib/admin/clipboard-promote-guards";
 import {
   evaluateStorefrontManualActivePublishGuard,
+  isUrlImportStorefrontPublishBlocked,
   URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
 } from "@/lib/admin/canonical-publish-policy";
 import {
@@ -137,7 +138,7 @@ export function evaluateActivePublishReadinessSync(
 ): string | null {
   if (input.status !== "active") return null;
 
-  if (isUrlImportProductMetadata(ctx.metadata)) {
+  if (isUrlImportStorefrontPublishBlocked(ctx.metadata)) {
     return URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE;
   }
 

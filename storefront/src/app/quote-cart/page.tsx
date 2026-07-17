@@ -17,6 +17,13 @@ import { PREP_LINE_QUOTE_SESSION_KEY } from "@/lib/procurement/session-storage";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import type { AdminShipToAddressRow } from "@/lib/admin/admin-ship-to-addresses";
 import { formatShipToOneLine } from "@/lib/commerce/ship-to-address-format";
+import {
+  applyQuoteContactPrefillToFields,
+  type QuoteContactPrefill,
+} from "@/lib/quote-cart/quote-contact-prefill";
+
+const PREFILL_HINT =
+  "We pre-filled this from your account. You can edit it before submitting.";
 
 function isValidEmail(value: string): boolean {
   const v = value.trim();
@@ -45,6 +52,10 @@ export default function QuoteCartPage() {
   const [shipToUi, setShipToUi] = useState<"off" | "loading" | "on">("off");
   const [selectedShipToId, setSelectedShipToId] = useState<string>("__none__");
   const submitIdempotencyRef = useRef<string | null>(null);
+  const contactPrefillAppliedRef = useRef(false);
+  const contactFieldsRef = useRef({ name: "", email: "", company: "", phone: "" });
+  const [contactPrefilledFromAccount, setContactPrefilledFromAccount] = useState(false);
+  contactFieldsRef.current = { name, email, company, phone };
 
   useEffect(() => {
     if (!hydrated || reorderBannerDismissed) return;
@@ -66,6 +77,8 @@ export default function QuoteCartPage() {
       setShipToUi("off");
       setShipToRows([]);
       setSelectedShipToId("__none__");
+      contactPrefillAppliedRef.current = false;
+      setContactPrefilledFromAccount(false);
     }
   }, [hydrated, items.length]);
 
@@ -88,6 +101,31 @@ export default function QuoteCartPage() {
       const def = active.find((r) => r.is_default) ?? active[0] ?? null;
       setSelectedShipToId(def ? def.id : "__none__");
       setShipToUi("on");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, items.length]);
+
+  useEffect(() => {
+    if (!hydrated || items.length === 0 || contactPrefillAppliedRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch("/api/account/quote-contact-prefill", { method: "GET", cache: "no-store" });
+      if (cancelled || res.status !== 200) return;
+      const data = (await res.json().catch(() => ({}))) as { prefill?: QuoteContactPrefill | null };
+      const prefill = data.prefill;
+      if (!prefill || typeof prefill !== "object" || typeof prefill.email !== "string") return;
+
+      contactPrefillAppliedRef.current = true;
+      const { next, changed } = applyQuoteContactPrefillToFields(contactFieldsRef.current, prefill);
+      if (changed) {
+        setName(next.name);
+        setEmail(next.email);
+        setCompany(next.company);
+        setPhone(next.phone);
+        setContactPrefilledFromAccount(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -408,6 +446,9 @@ export default function QuoteCartPage() {
         {hydrated && items.length > 0 && (
           <>
             <div className="space-y-4 border border-white/10 rounded-xl p-6 bg-white/[0.03] md:mb-4">
+              {contactPrefilledFromAccount ? (
+                <p className="text-xs text-white/55">{PREFILL_HINT}</p>
+              ) : null}
               <div>
                 <label className="block text-sm text-white/70 mb-1">Your name *</label>
                 <Input

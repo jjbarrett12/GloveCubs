@@ -11,12 +11,19 @@ import { logAdminExpressMutation } from "@/lib/admin/admin-express-mutation-log"
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const lineSchema = z.object({
-  canonical_product_id: z.string().uuid(),
-  quantity_received: z.number().int().positive(),
+  catalog_variant_id: z.string().uuid(),
+  quantity_received: z.number().int().min(0),
+  quantity_damaged: z.number().int().min(0).optional(),
+  bin_location: z.string().max(120).optional(),
+  notes: z.string().max(500).optional(),
+  unit_cost: z.number().optional(),
 });
 
 const bodySchema = z.object({
   lines: z.array(lineSchema).optional(),
+  idempotency_key: z.string().max(120).optional(),
+  receipt_notes: z.string().max(1000).optional(),
+  allow_overage: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest, ctx: { params: { poId: string } }) {
@@ -56,13 +63,22 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
     lines = buildReceiveLinesFromPo(detail.po);
     if (lines.length === 0) {
       return NextResponse.json(
-        { error: "PO has no lines with canonical_product_id; cannot receive automatically." },
+        { error: "PO has no remaining receivable lines with catalog_variant_id." },
         { status: 400 },
       );
     }
   }
 
-  const result = await receiveAdminPurchaseOrder(supabase, poId, operator.id, lines);
+  const positiveLines = lines.filter((l) => (l.quantity_received ?? 0) > 0 || (l.quantity_damaged ?? 0) > 0);
+  if (positiveLines.length === 0) {
+    return NextResponse.json({ error: "At least one line must have quantity_received or quantity_damaged" }, { status: 400 });
+  }
+
+  const result = await receiveAdminPurchaseOrder(supabase, poId, operator.id, positiveLines, {
+    idempotencyKey: parsed.data.idempotency_key,
+    receiptNotes: parsed.data.receipt_notes,
+    allowOverage: parsed.data.allow_overage,
+  });
 
   if (!result.success) {
     logAdminExpressMutation({
@@ -73,7 +89,7 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
       success: false,
       httpStatus: result.status,
       error: result.error ?? undefined,
-      detail: { line_count: lines.length },
+      detail: { line_count: positiveLines.length },
     });
     return NextResponse.json(
       { error: result.error, code: result.code ?? null },
@@ -88,7 +104,7 @@ export async function POST(request: NextRequest, ctx: { params: { poId: string }
     targetId: String(poId),
     success: true,
     httpStatus: result.status,
-    detail: { line_count: lines.length },
+    detail: { line_count: positiveLines.length },
   });
 
   return NextResponse.json({ success: true, po: result.po });

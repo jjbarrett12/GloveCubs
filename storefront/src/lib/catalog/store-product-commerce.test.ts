@@ -111,6 +111,44 @@ describe("store-product-commerce", () => {
     expect(pkg.palletBuyingEnabled).toBe(false);
     expect(pkg.casePrice).toBe(42);
   });
+
+  it("hides case pricing for pallet-only products", () => {
+    const display = commerceDisplayFromProductMetadata(
+      {
+        commerce_packaging: {
+          schema_version: COMMERCE_PACKAGING_SCHEMA_VERSION,
+          sell_by_case_enabled: false,
+          sell_by_pallet_enabled: true,
+          minimum_sell_unit: "case",
+          bulk_sell_unit: "pallet",
+          inner_unit_type: null,
+          units_per_inner: null,
+          inners_per_case: null,
+          units_per_case: 1000,
+          units_per_case_overridden: false,
+          unit_noun: "gloves",
+          case_label: null,
+          cases_per_pallet: 48,
+          units_per_pallet: 48000,
+          units_per_pallet_overridden: false,
+          pallet_label: "48 cases = 48,000 gloves",
+          case_price: 42,
+          compare_at_case_price: null,
+          standard_cost_per_case: null,
+          compare_at_pallet_price: null,
+          pallet_price: 1800,
+          pallet_discount_percent: null,
+          msrp_per_case: null,
+          field_provenance: {},
+          parse_warnings: [],
+        },
+      },
+      42
+    );
+    expect(display.casePrice).toBeNull();
+    expect(display.palletPricingAvailable).toBe(true);
+    expect(display.palletPrice).toBe(1800);
+  });
 });
 
 describe("StoreProductCard price display logic", () => {

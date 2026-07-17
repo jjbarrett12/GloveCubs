@@ -9,6 +9,7 @@ import { evaluateActivePublishReadiness } from "@/lib/admin/product-write-active
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import {
   evaluateStorefrontManualActivePublishGuard,
+  isUrlImportStorefrontPublishBlocked,
   URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE,
 } from "@/lib/admin/canonical-publish-policy";
 import {
@@ -34,6 +35,10 @@ import {
   applyCommercePackagingToMetadata,
   commercePackagingToFilterAttributes,
 } from "@/lib/admin/commerce-packaging-editor";
+import {
+  applyImpactPerformanceToMetadata,
+  type ProductImpactPerformance,
+} from "@/lib/admin/derive-product-impact-performance";
 
 const require = createRequire(import.meta.url);
 const { deleteInventoryForCanonicalProduct } = require("../../../../lib/inventory.js") as {
@@ -86,6 +91,9 @@ export type ProductWriteInput = {
 
   /** Case/pallet commerce packaging — written to catalog_v2.catalog_products.metadata. */
   commercePackaging?: CommercePackagingV1 | null;
+
+  /** Directional impact bars — written to catalog_v2.catalog_products.metadata. */
+  impactPerformance?: ProductImpactPerformance | null;
 
   /** When set, seeds import/provenance metadata on insert. */
 
@@ -490,6 +498,8 @@ export function mergeProductMetadata(
   if (input.commercePackaging) {
     applyCommercePackagingToMetadata(base, input.commercePackaging);
   }
+
+  applyImpactPerformanceToMetadata(base, input.impactPerformance);
 
   return base;
 
@@ -910,7 +920,7 @@ async function finalizeManualActivePublish(
   const canonicalBlock = evaluateStorefrontManualActivePublishGuard("active");
   if (canonicalBlock) return { error: canonicalBlock };
 
-  if (isUrlImportProductMetadata(metadata)) {
+  if (isUrlImportStorefrontPublishBlocked(metadata)) {
     return { error: URL_IMPORT_CATALOGOS_PUBLISH_REQUIRED_MESSAGE };
   }
 

@@ -7,7 +7,6 @@ import {
   adminFormInput,
   adminMutedPanel,
   adminPrimaryButton,
-  adminStatusBadgeClasses,
 } from "@/components/admin/admin-theme-utils";
 import { cn } from "@/lib/utils";
 import { PresetNumericInput } from "@/app/admin/products/_components/PresetNumericInput";
@@ -58,10 +57,12 @@ function formatProv(field: PackagingFieldKey, cp: CommercePackagingV1): string |
 
 function missingPricing(cp: CommercePackagingV1): string[] {
   const missing: string[] = [];
-  const hasCasePrice =
-    (cp.case_price != null && cp.case_price > 0) ||
-    (cp.compare_at_case_price != null && cp.compare_at_case_price > 0);
-  if (!hasCasePrice) missing.push("Case price");
+  if (cp.sell_by_case_enabled) {
+    const hasCasePrice =
+      (cp.case_price != null && cp.case_price > 0) ||
+      (cp.compare_at_case_price != null && cp.compare_at_case_price > 0);
+    if (!hasCasePrice) missing.push("Case price");
+  }
   if (cp.sell_by_pallet_enabled) {
     const hasPalletPrice =
       (cp.pallet_price != null && cp.pallet_price > 0) ||
@@ -109,6 +110,7 @@ function SetupToolbar({
   missing,
   hasSuggestions,
   onApplySuggestions,
+  onToggleCase,
   onTogglePallet,
 }: {
   value: CommercePackagingV1;
@@ -116,44 +118,55 @@ function SetupToolbar({
   missing: string[];
   hasSuggestions?: boolean;
   onApplySuggestions?: () => void;
+  onToggleCase: (enabled: boolean) => void;
   onTogglePallet: (enabled: boolean) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-admin-border-subtle pb-2">
-      <span
-        className={cn(
-          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ring-1",
-          adminStatusBadgeClasses("success"),
+    <div className="space-y-2 border-b border-admin-border-subtle pb-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-admin-secondary">
+          <input
+            type="checkbox"
+            checked={value.sell_by_case_enabled}
+            disabled={disabled}
+            onChange={(e) => onToggleCase(e.target.checked)}
+            className="rounded border-admin-border text-admin-accent"
+          />
+          Sell by case
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-admin-secondary">
+          <input
+            type="checkbox"
+            checked={value.sell_by_pallet_enabled}
+            disabled={disabled}
+            onChange={(e) => onTogglePallet(e.target.checked)}
+            className="rounded border-admin-border text-admin-accent"
+          />
+          Sell by pallet
+        </label>
+        {missing.length > 0 ? (
+          <span className="text-[10px] font-medium text-admin-warning">
+            Missing: {missing.join(" · ")}
+          </span>
+        ) : (
+          <span className="text-[10px] font-semibold text-admin-success">Complete</span>
         )}
-      >
-        Sell by case
-      </span>
-      <label className="inline-flex items-center gap-1.5 text-[11px] text-admin-secondary">
-        <input
-          type="checkbox"
-          checked={value.sell_by_pallet_enabled}
-          disabled={disabled}
-          onChange={(e) => onTogglePallet(e.target.checked)}
-          className="rounded border-admin-border text-admin-accent"
-        />
-        Sell by pallet
-      </label>
-      {missing.length > 0 ? (
-        <span className="text-[10px] font-medium text-admin-warning">
-          Missing: {missing.join(" · ")}
-        </span>
-      ) : (
-        <span className="text-[10px] font-semibold text-admin-success">Complete</span>
-      )}
-      {hasSuggestions && onApplySuggestions ? (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onApplySuggestions}
-          className={cn(adminPrimaryButton, "ml-auto text-[10px]")}
-        >
-          Apply parser suggestions
-        </button>
+        {hasSuggestions && onApplySuggestions ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onApplySuggestions}
+            className={cn(adminPrimaryButton, "ml-auto text-[10px]")}
+          >
+            Apply parser suggestions
+          </button>
+        ) : null}
+      </div>
+      {!value.sell_by_case_enabled && value.sell_by_pallet_enabled ? (
+        <p className="text-[10px] text-admin-muted">Pallet-only — case pricing is hidden on the storefront.</p>
+      ) : null}
+      {value.sell_by_case_enabled && !value.sell_by_pallet_enabled ? (
+        <p className="text-[10px] text-admin-muted">Case-only — pallet purchasing is disabled on the storefront.</p>
       ) : null}
     </div>
   );
@@ -179,8 +192,18 @@ export function CasePalletSetupPanel({
   const missingPrice = missingPricing(value);
   const missingPack = missingPackaging(value);
   const mathConflict = hasPackagingMathConflict(value);
-  const casePriceBlocking = blockingSet.has("__case_price__");
+  const casePriceBlocking = blockingSet.has("__case_price__") && value.sell_by_case_enabled;
   const unitsBlocking = blockingSet.has("__units_per_case__");
+
+  function toggleSellByCase(enabled: boolean) {
+    if (!enabled && !value.sell_by_pallet_enabled) return;
+    patch({ sell_by_case_enabled: enabled });
+  }
+
+  function toggleSellByPallet(enabled: boolean) {
+    if (!enabled && !value.sell_by_case_enabled) return;
+    patch({ sell_by_pallet_enabled: enabled });
+  }
 
   return (
     <div className="space-y-3">
@@ -195,14 +218,20 @@ export function CasePalletSetupPanel({
           missing={missingPrice}
           hasSuggestions={hasSuggestions}
           onApplySuggestions={onApplySuggestions}
-          onTogglePallet={(enabled) => patch({ sell_by_pallet_enabled: enabled })}
+          onToggleCase={toggleSellByCase}
+          onTogglePallet={toggleSellByPallet}
         />
 
-        <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div
+          className={cn(
+            "mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5",
+            !value.sell_by_case_enabled && "opacity-60",
+          )}
+        >
           <label className="block" title="Internal cost per case — not shown to customers">
             <span className={lbl}>Standard cost</span>
             {priceInput(value.standard_cost_per_case, (n) => patch({ standard_cost_per_case: n }), {
-              disabled,
+              disabled: disabled || !value.sell_by_case_enabled,
               title: "Your cost per case",
             })}
           </label>
@@ -216,13 +245,13 @@ export function CasePalletSetupPanel({
             {priceInput(
               value.compare_at_case_price,
               (n) => patch({ compare_at_case_price: n }),
-              { disabled, blocking: casePriceBlocking }
+              { disabled: disabled || !value.sell_by_case_enabled, blocking: casePriceBlocking }
             )}
           </label>
           <label className={`block ${casePriceBlocking ? wrapBlocking : ""}`} title="Active sale price per case">
             <span className={lbl}>Sale price / case</span>
             {priceInput(value.case_price, (n) => patch({ case_price: n }), {
-              disabled,
+              disabled: disabled || !value.sell_by_case_enabled,
               blocking: casePriceBlocking,
             })}
             {formatProv("case_price", value) ? (
@@ -272,8 +301,8 @@ export function CasePalletSetupPanel({
           )}
         </div>
 
-        <div className="mt-2 grid gap-3 xl:grid-cols-2">
-          <div className={cn(adminMutedPanel, "space-y-2 p-2.5")}>
+        <div className="mt-2 grid min-w-0 gap-3 xl:grid-cols-2">
+          <div className={cn(adminMutedPanel, "min-w-0 space-y-2 p-2.5")}>
             <p className="text-[10px] font-bold uppercase tracking-wide text-admin-muted">Case pack</p>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className={`block sm:col-span-2 ${unitsBlocking ? wrapBlocking : ""}`}>
@@ -340,7 +369,7 @@ export function CasePalletSetupPanel({
 
           <div
             className={cn(
-              "space-y-2 rounded-lg border p-2.5",
+              "min-w-0 space-y-2 rounded-lg border p-2.5",
               value.sell_by_pallet_enabled
                 ? "border-admin-border bg-admin-surface-muted"
                 : cn(adminMutedPanel, "opacity-60"),
@@ -350,16 +379,17 @@ export function CasePalletSetupPanel({
             {!value.sell_by_pallet_enabled ? (
               <p className="text-[10px] text-admin-muted">Enable “Sell by pallet” above to configure pallet UOM.</p>
             ) : (
-              <div className="grid gap-2">
+              <div className="grid min-w-0 gap-2">
                 <PresetNumericInput
                   compact
+                  className="min-w-0"
                   label="Cases per pallet"
                   value={value.cases_per_pallet}
                   presets={CASES_PER_PALLET_PRESETS}
                   disabled={disabled}
                   onChange={(n) => patch({ cases_per_pallet: n })}
                 />
-                <label className="block">
+                <label className="block min-w-0">
                   <span className={lbl}>Units per pallet</span>
                   <input
                     type="number"
@@ -373,7 +403,7 @@ export function CasePalletSetupPanel({
                         units_per_pallet_overridden: true,
                       });
                     }}
-                    className={field}
+                    className={cn(field, "max-w-full")}
                   />
                   <p className="mt-0.5 text-[10px] text-admin-muted">Auto-calculated unless overridden.</p>
                 </label>

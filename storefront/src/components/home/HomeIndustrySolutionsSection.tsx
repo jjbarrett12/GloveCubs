@@ -161,39 +161,38 @@ function HoneycombTile({ tile }: { tile: HomeHoneycombTile }) {
 export function HomeIndustrySolutionsSection() {
   return (
     <ProcurementSectionShell
-      tone="base"
+      tone="light"
       headingId="industries-we-serve-heading"
       ariaLabel="Industries we serve — operational hand protection honeycomb"
-      className="relative isolate !border-t-0 !bg-transparent !py-10 sm:!py-14 lg:!py-16 [&>div]:max-w-none [&>div]:px-4 sm:[&>div]:px-6 lg:[&>div]:px-10"
-      containerClassName="relative flex min-h-0 flex-col"
+      className={cn("relative isolate overflow-hidden !border-t-0 !py-16 sm:!py-20 lg:!py-24", styles.sectionShell)}
+      containerClassName="relative z-[1] flex min-h-0 max-w-none flex-col px-4 sm:px-6 lg:px-8"
     >
-      <div className={styles.sectionBackdrop} aria-hidden />
-
-      <div className={styles.sectionInner}>
+      <div className="mx-auto w-full max-w-proc">
         <HomeSectionIntro
           headingId="industries-we-serve-heading"
           eyebrow={HOME_HONEYCOMB_COPY.eyebrow}
           eyebrowIcon={Building2}
           title={HOME_HONEYCOMB_COPY.headline}
+          titleSuffix={<span className="text-[var(--color-accent-orange)]">.</span>}
           description={HOME_HONEYCOMB_COPY.supporting}
-          tone="dark"
-          className="mx-auto mb-8 w-full max-w-3xl text-center sm:mb-10 lg:mb-12 [&_h2]:mx-auto [&_p.flex]:!justify-center [&_p.proc-body]:mx-auto"
+          tone="light"
+          className="[&_p.proc-eyebrow-light]:!text-[var(--color-accent-orange)]"
         />
+      </div>
 
-        <div className={styles.honeycombWrap} aria-label="Industries honeycomb grid">
-          <div className={styles.honeycombAmbient} aria-hidden />
-          <div
-            className={styles.honeycomb}
-            role="list"
-            style={
-              {
-                "--grid-w": HONEYCOMB_LAYOUT.gridW,
-                "--grid-h": HONEYCOMB_LAYOUT.gridH,
-              } as React.CSSProperties
-            }
-          >
-            <HoneycombGrid />
-          </div>
+      <div className={styles.honeycombWrap} aria-label="Industries honeycomb grid">
+        <div className={styles.honeycombAmbient} aria-hidden />
+        <div
+          className={styles.honeycomb}
+          role="list"
+          style={
+            {
+              "--grid-w": HONEYCOMB_LAYOUT.gridW,
+              "--grid-h": HONEYCOMB_LAYOUT.gridH,
+            } as React.CSSProperties
+          }
+        >
+          <HoneycombGrid />
         </div>
       </div>
     </ProcurementSectionShell>

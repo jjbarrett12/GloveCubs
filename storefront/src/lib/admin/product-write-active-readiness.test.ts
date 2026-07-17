@@ -57,11 +57,13 @@ function activeInput(overrides: Partial<ProductWriteInput> = {}): ProductWriteIn
 }
 
 describe("evaluateActivePublishReadinessSync", () => {
-  const prev = process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
+  const prevEmergency = process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
+  const prevNodeEnv = process.env.NODE_ENV;
 
   afterEach(() => {
-    if (prev === undefined) delete process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
-    else process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = prev;
+    if (prevEmergency === undefined) delete process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH;
+    else process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = prevEmergency;
+    process.env.NODE_ENV = prevNodeEnv;
   });
 
   it("ignores draft saves", () => {
@@ -75,11 +77,13 @@ describe("evaluateActivePublishReadinessSync", () => {
   });
 
   it("blocks URL-import metadata with CatalogOS publish message", () => {
+    process.env.NODE_ENV = "production";
     const err = evaluateActivePublishReadinessSync(activeInput(), { metadata: { import_staging_id: "st-1" } }, deps);
     expect(err).toContain("CatalogOS");
   });
 
   it("blocks storefront active publish by default even when readiness passes", () => {
+    process.env.NODE_ENV = "production";
     expect(
       evaluateActivePublishReadinessSync(
         activeInput(),
@@ -90,6 +94,7 @@ describe("evaluateActivePublishReadinessSync", () => {
   });
 
   it("allows emergency storefront active publish when flag enabled", () => {
+    process.env.NODE_ENV = "production";
     process.env.GLOVECUBS_EMERGENCY_STOREFRONT_ACTIVE_PUBLISH = "1";
     expect(
       evaluateActivePublishReadinessSync(

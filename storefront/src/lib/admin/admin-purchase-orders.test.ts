@@ -20,6 +20,7 @@ const PO_ID = 42;
 const MFR_ID = 7;
 const ADMIN_ID = "00000000-0000-4000-8000-000000000099";
 const CANON_ID = "00000000-0000-4000-8000-000000000001";
+const VARIANT_ID = "00000000-0000-4000-8000-000000000002";
 
 function basePo(overrides: Record<string, unknown> = {}) {
   return {
@@ -27,11 +28,14 @@ function basePo(overrides: Record<string, unknown> = {}) {
     po_number: "PO-00001",
     manufacturer_id: MFR_ID,
     status: "draft",
+    purchase_order_type: "inbound_stock",
+    fulfillment_status: "pending",
     created_at: "2026-01-01T00:00:00Z",
     customer_order_number: "ORD-100",
     shipping_address: "123 Ship St",
     lines: [
       {
+        catalog_variant_id: VARIANT_ID,
         canonical_product_id: CANON_ID,
         sku: "SKU-1",
         name: "Glove",
@@ -205,10 +209,13 @@ describe("admin-purchase-orders hardening", () => {
     const lines = buildReceiveLinesFromPo(basePo());
     const result = await receiveAdminPurchaseOrder(supabase, PO_ID, ADMIN_ID, lines);
     expect(result.success).toBe(true);
-    expect(supabase.rpc).toHaveBeenCalledWith("admin_receive_purchase_order_full_atomic", {
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_receive_purchase_order_shipment_atomic", {
       p_po_id: PO_ID,
       p_operator_user_id: ADMIN_ID,
       p_lines: lines,
+      p_idempotency_key: null,
+      p_receipt_notes: null,
+      p_allow_overage: false,
     });
   });
 
@@ -223,9 +230,28 @@ describe("admin-purchase-orders hardening", () => {
     expect(result.code).toBe(PO_ALREADY_RECEIVED);
   });
 
-  it("buildReceiveLinesFromPo produces full line quantities", () => {
+  it("buildReceiveLinesFromPo produces remaining line quantities", () => {
     expect(buildReceiveLinesFromPo(basePo())).toEqual([
-      { canonical_product_id: CANON_ID, quantity_received: 10 },
+      { catalog_variant_id: VARIANT_ID, quantity_received: 10 },
     ]);
+  });
+
+  it("receiveAdminPurchaseOrder rejects dropship fulfillment PO type", async () => {
+    const supabase = mockSupabase({ po: basePo({ status: "sent", purchase_order_type: "dropship_fulfillment" }) });
+    const lines = buildReceiveLinesFromPo(basePo());
+    const result = await receiveAdminPurchaseOrder(supabase, PO_ID, ADMIN_ID, lines);
+    expect(result.status).toBe(400);
+    expect(result.code).toBe("PO_INVALID_TYPE");
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("buildReceiveLinesFromPo respects partial receipts", () => {
+    expect(
+      buildReceiveLinesFromPo(
+        basePo({
+          received_lines: [{ catalog_variant_id: VARIANT_ID, quantity_received: 4 }],
+        }),
+      ),
+    ).toEqual([{ catalog_variant_id: VARIANT_ID, quantity_received: 6 }]);
   });
 });

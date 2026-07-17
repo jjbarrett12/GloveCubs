@@ -15,7 +15,7 @@ export function HomeFinalCtaStrip() {
       <div className="relative mx-auto max-w-2xl text-center">
         <p className="proc-eyebrow mb-5 justify-center text-[var(--color-accent-orange)]">Next step</p>
         <h2 id="final-cta-heading" className="proc-display-xl mb-5">
-          Ready to simplify glove procurement?
+          Ready to simplify your glove purchasing?
         </h2>
         <p className="proc-body mx-auto mb-10 max-w-md text-lg text-white/72">
           Upload spend signals or request scoped pricing—quote-first programs for operators who buy by the case.

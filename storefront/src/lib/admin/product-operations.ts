@@ -106,6 +106,12 @@ export type AdminProductDetailResult = {
     metadata: Record<string, unknown> | null;
     gtinDuplicateRisk: boolean;
     signatureDuplicateRisk: boolean;
+    fulfillmentMode: "stocked" | "dropship";
+    inventoryVisibility: "hidden" | "status" | "quantity";
+    stockEnforcement: boolean;
+    reorderPoint: number;
+    defaultBinLocation: string | null;
+    defaultLocationCode: string;
   }>;
   warnings?: GovernanceWarning[];
   attributeRowCount?: number;
@@ -948,7 +954,7 @@ export async function fetchAdminProductDetail(productId: string): Promise<AdminP
     supabase
       .schema("catalog_v2")
       .from("catalog_variants")
-      .select("id, variant_sku, gtin, attribute_signature, is_active, size_code, sort_order, metadata")
+      .select("id, variant_sku, gtin, attribute_signature, is_active, size_code, sort_order, metadata, fulfillment_mode, inventory_visibility, stock_enforcement, reorder_point, default_bin_location, default_location_code")
       .eq("catalog_product_id", productId)
       .order("sort_order", { ascending: true }),
     supabase
@@ -1110,6 +1116,12 @@ export async function fetchAdminProductDetail(productId: string): Promise<AdminP
         size_code: string | null;
         sort_order: number | null;
         metadata: Record<string, unknown> | null;
+        fulfillment_mode?: string | null;
+        inventory_visibility?: string | null;
+        stock_enforcement?: boolean | null;
+        reorder_point?: number | null;
+        default_bin_location?: string | null;
+        default_location_code?: string | null;
       }) => {
         const g = (v.gtin ?? "").trim();
         const sig = (v.attribute_signature ?? "").trim();
@@ -1122,6 +1134,15 @@ export async function fetchAdminProductDetail(productId: string): Promise<AdminP
           sizeCode: v.size_code,
           sortOrder: v.sort_order ?? 0,
           metadata: v.metadata,
+          fulfillmentMode: v.fulfillment_mode === "stocked" ? "stocked" : "dropship",
+          inventoryVisibility:
+            v.inventory_visibility === "quantity" || v.inventory_visibility === "status"
+              ? v.inventory_visibility
+              : "hidden",
+          stockEnforcement: v.stock_enforcement === true,
+          reorderPoint: Number(v.reorder_point ?? 0) || 0,
+          defaultBinLocation: v.default_bin_location ?? null,
+          defaultLocationCode: v.default_location_code ?? "default",
           gtinDuplicateRisk: Boolean(g && gtinCollisionGtins.has(g)),
           signatureDuplicateRisk: Boolean(sig && signatureCollisionKeys.has(`${row.id}::${sig}`)),
         };
