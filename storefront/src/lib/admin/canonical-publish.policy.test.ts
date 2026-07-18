@@ -16,7 +16,7 @@ describe("canonical publish enforcement", () => {
       "utf8"
     );
     expect(shell).toContain("storefrontPublishBlocked");
-    expect(shell).toContain("CatalogOS publish required");
+    expect(shell).toContain("Production go-live requires CatalogOS");
   });
 
   it("review page labels CatalogOS runPublish as canonical", () => {

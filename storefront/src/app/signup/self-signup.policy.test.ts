@@ -26,10 +26,11 @@ describe("public self-signup routes", () => {
     expect(login).toContain("shop gloves and submit quote requests");
   });
 
-  it("header shows login for anonymous users; signup is linked from login page", () => {
+  it("header shows login and create-account for anonymous users; signup also linked from login", () => {
     const header = read("components/home/SiteHeader.tsx");
     expect(header).toContain('href="/login"');
-    expect(header).not.toContain("Create account");
+    expect(header).toContain("Create account");
+    expect(header).toContain('href="/signup"');
     expect(header).toContain('href="/request-pricing"');
   });
 

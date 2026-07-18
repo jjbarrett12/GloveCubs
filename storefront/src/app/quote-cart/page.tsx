@@ -450,22 +450,32 @@ export default function QuoteCartPage() {
                 <p className="text-xs text-white/55">{PREFILL_HINT}</p>
               ) : null}
               <div>
-                <label className="block text-sm text-white/70 mb-1">Your name *</label>
+                <label className="block text-sm text-white/70 mb-1" htmlFor="quote-cart-name">
+                  Your name *
+                </label>
                 <Input
+                  id="quote-cart-name"
                   className="min-h-11 bg-white/10 border-white/20 text-white"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoComplete="name"
+                  aria-invalid={Boolean(error && /name/i.test(error))}
+                  aria-describedby={error ? "quote-cart-form-error" : undefined}
                 />
               </div>
               <div>
-                <label className="block text-sm text-white/70 mb-1">Work email *</label>
+                <label className="block text-sm text-white/70 mb-1" htmlFor="quote-cart-email">
+                  Work email *
+                </label>
                 <Input
+                  id="quote-cart-email"
                   type="email"
                   className="min-h-11 bg-white/10 border-white/20 text-white"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
+                  aria-invalid={Boolean(error && /email/i.test(error))}
+                  aria-describedby={error ? "quote-cart-form-error" : undefined}
                 />
               </div>
               <div>
@@ -536,7 +546,11 @@ export default function QuoteCartPage() {
                 />
               </div>
 
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error ? (
+                <p id="quote-cart-form-error" className="text-sm text-red-400" role="alert">
+                  {error}
+                </p>
+              ) : null}
             </div>
 
             <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#0a0a0a]/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:static md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none">

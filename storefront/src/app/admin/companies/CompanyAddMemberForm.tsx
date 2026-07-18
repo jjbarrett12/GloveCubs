@@ -69,7 +69,7 @@ export function CompanyAddMemberForm({ companyId }: Props) {
       if (data.password_setup_required) {
         setWarn(
           data.message ||
-            "Buyer created and linked. They must use Forgot password on the login page with this email to set a password before first sign-in.",
+            "Buyer created and linked. To complete setup: direct them to /login, have them click 'Forgot password?', and enter this email to receive a password-setup link.",
         );
       } else if (data.outcome === "already_member") {
         setMsg(data.message || "Buyer is already linked to this customer account.");

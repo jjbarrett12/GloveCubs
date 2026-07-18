@@ -31,7 +31,7 @@ describe("Admin health UI policy", () => {
 
   it("inventory page does not require Express env and gates on Supabase health", () => {
     const s = readFileSync(join(__dirname, "../inventory/page.tsx"), "utf8");
-    expect(s).toContain("fetchAdminInventory");
+    expect(s).toContain("fetchAdminWarehouseInventory");
     expect(s).not.toContain("fetchAdminInventoryFromExpress");
     expect(s).toContain("getAdminModuleAvailability");
     expect(s).not.toContain("JWT_SECRET");

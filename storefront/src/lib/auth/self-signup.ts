@@ -4,6 +4,7 @@
  */
 
 import { createCompany } from "@/lib/admin/admin-company-write";
+import { linkOrphanQuoteRequestsByEmail } from "@/lib/admin/admin-company-member-write";
 import { sanitizeSignupText, SELF_SIGNUP_DEFAULT_REDIRECT } from "@/lib/auth/self-signup-form";
 
 const NAME_MAX = 80;
@@ -47,14 +48,22 @@ async function fetchExistingMembership(
 
 /**
  * Idempotent: if membership already exists, returns it. Otherwise creates active company + owner member.
+ * If userEmail is provided, links orphan quote requests to the new company.
  */
 export async function finalizeSelfSignupForUser(
   supabase: any,
   userId: string,
   userMetadata: Record<string, unknown> | null | undefined,
+  userEmail?: string | null,
 ): Promise<FinalizeSelfSignupResult> {
   const existing = await fetchExistingMembership(supabase, userId);
   if (existing) {
+    if (userEmail) {
+      await linkOrphanQuoteRequestsByEmail(supabase, {
+        email: userEmail,
+        companyId: existing.company_id,
+      }).catch(() => undefined);
+    }
     return {
       company_id: existing.company_id,
       member_id: existing.member_id,
@@ -102,6 +111,12 @@ export async function finalizeSelfSignupForUser(
       }
     }
     throw insertErr;
+  }
+
+  if (userEmail) {
+    await linkOrphanQuoteRequestsByEmail(supabase, { email: userEmail, companyId: company.id }).catch(() => {
+      // Non-fatal: logging would go here in production
+    });
   }
 
   return {

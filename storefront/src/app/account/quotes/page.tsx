@@ -72,7 +72,7 @@ export default async function AccountQuotesPage() {
 
         <h1 className="text-2xl font-bold text-white">Quote history</h1>
         <p className="mt-2 text-sm text-white/65">
-          Your organization&apos;s quote requests — formal pricing and fulfillment are confirmed by our team, not in this
+          Your company&apos;s quote requests — formal pricing and fulfillment are confirmed by our team, not in this
           list.
         </p>
 

@@ -42,7 +42,7 @@ describe("Phase 1C quote ship-to policy", () => {
   const route = join(__dirname, "../../app/api/quote-request/route.ts");
   const quoteCart = join(__dirname, "../../app/quote-cart/page.tsx");
   const buyerSnapshot = join(__dirname, "../account/buyer-account-snapshot.ts");
-  const adminLeads = join(__dirname, "../../app/admin/leads/page.tsx");
+  const adminLeads = join(__dirname, "../../app/admin/leads/LeadsTable.tsx");
   const resolver = join(__dirname, "quote-request-ship-to.ts");
 
   it("migration adds ship_to columns and FK to gc_commerce.ship_to_addresses", () => {

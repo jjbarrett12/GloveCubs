@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const result = await finalizeSelfSignupForUser(supabase, auth.user.id, auth.user.user_metadata);
+    const result = await finalizeSelfSignupForUser(supabase, auth.user.id, auth.user.user_metadata, auth.user.email);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "finalize_failed";

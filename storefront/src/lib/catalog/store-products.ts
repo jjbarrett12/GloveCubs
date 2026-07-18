@@ -16,6 +16,7 @@ import {
   type ProductImpactPerformance,
 } from "@/lib/admin/derive-product-impact-performance";
 import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
+import { isStorefrontCredibleProduct } from "@/lib/catalog/storefront-sku-credibility";
 
 const MAX_PRODUCT_IDS_FOR_PRICE = 10_000;
 const MAX_CATEGORIES_OR_BRANDS = 500;
@@ -399,10 +400,19 @@ function mapProductsToRows(
 ): StoreProductRow[] {
   const variantCounts = activeVariantCountByProduct(variants);
   const sizeCodesMap = sizeCodesByProduct(variants);
-  return products.map((p) => {
+  const rows: StoreProductRow[] = [];
+  for (const p of products) {
     const meta = (p.metadata ?? null) as Record<string, unknown> | null;
     const v = pickDefaultVariant(variants, p.id);
     const vMeta = (v?.metadata ?? null) as Record<string, unknown> | null;
+    if (
+      !isStorefrontCredibleProduct({
+        internalSku: p.internal_sku,
+        variantSku: v?.variant_sku ?? null,
+      })
+    ) {
+      continue;
+    }
     const card = commercialCardFieldsFromBucket(commercialByProduct.get(p.id));
     const activeVariantCount = variantCounts.get(p.id) ?? 0;
     const bestPrice = validDisplayPrice(bestPriceByProduct.get(p.id) ?? null);
@@ -412,7 +422,7 @@ function mapProductsToRows(
       (typeof vMeta?.fulfillment_mode === "string"
         ? (vMeta.fulfillment_mode as StoreProductRow["fulfillmentMode"])
         : "dropship");
-    return {
+    rows.push({
       id: p.id,
       name: p.name,
       slug: p.slug,
@@ -450,8 +460,9 @@ function mapProductsToRows(
       fulfillmentMode: fulfillmentMode ?? "dropship",
       stockEnforcement: v?.stock_enforcement === true,
       localAvailableStock: null,
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promise<StoreCatalogPageResult> {

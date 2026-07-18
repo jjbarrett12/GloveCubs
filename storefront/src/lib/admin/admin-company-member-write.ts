@@ -125,9 +125,26 @@ async function fetchCompanyMemberRow(
 }
 
 /**
- * Future quote linkage (Launch Blocker follow-up): backfill catalogos.quote_requests.gc_company_id
- * where email matches and gc_company_id IS NULL after membership is created.
+ * Backfill catalogos.quote_requests.gc_company_id where email matches and gc_company_id IS NULL.
+ * Idempotent — only updates rows that are still unlinked.
  */
+export async function linkOrphanQuoteRequestsByEmail(
+  supabase: any,
+  opts: { email: string; companyId: string },
+): Promise<{ linked_count: number }> {
+  const email = normalizeBuyerEmail(opts.email);
+  const { data, error } = await supabase
+    .schema("catalogos")
+    .from("quote_requests")
+    .update({ gc_company_id: opts.companyId })
+    .eq("email", email)
+    .is("gc_company_id", null)
+    .select("id");
+
+  if (error) throw error;
+  return { linked_count: Array.isArray(data) ? data.length : 0 };
+}
+
 export async function addCompanyMemberForAdmin(
   supabase: any,
   companyId: string,
@@ -195,6 +212,10 @@ export async function addCompanyMemberForAdmin(
     }
     throw insertErr;
   }
+
+  await linkOrphanQuoteRequestsByEmail(supabase, { email, companyId }).catch(() => {
+    // Non-fatal: logging would go here in production
+  });
 
   return {
     outcome: created ? "created_user" : "linked_existing_user",

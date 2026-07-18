@@ -30,9 +30,9 @@ export default async function ProcurementActiveCompanyPage() {
 
   return (
     <div className="mx-auto max-w-lg text-sm">
-      <h1 className="text-lg font-semibold text-white/90">Select organization</h1>
+      <h1 className="text-lg font-semibold text-white/90">Select company</h1>
       <p className="mt-2 text-white/60">
-        Your account is linked to multiple organizations. Choose the one to use for procurement and quote pricing context.
+        Your account is linked to multiple companies. Choose the one to use for procurement and quote pricing context.
         This choice is saved to your profile.
       </p>
       <ActiveCompanyPickerClient options={options} />
