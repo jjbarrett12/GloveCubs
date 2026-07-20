@@ -227,9 +227,11 @@ describe("revokeCompanyInvite", () => {
         from: vi.fn().mockReturnValue({
           update: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              is: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
                 is: vi.fn().mockReturnValue({
-                  select: vi.fn().mockResolvedValue({ data: [{ id: "inv1" }], error: null }),
+                  is: vi.fn().mockReturnValue({
+                    select: vi.fn().mockResolvedValue({ data: [{ id: "inv1" }], error: null }),
+                  }),
                 }),
               }),
             }),
@@ -238,7 +240,7 @@ describe("revokeCompanyInvite", () => {
       }),
     };
 
-    const result = await revokeCompanyInvite(supabase, "inv1");
+    const result = await revokeCompanyInvite(supabase, "inv1", "company-1");
     expect(result).toEqual({ revoked: true });
   });
 
@@ -248,9 +250,11 @@ describe("revokeCompanyInvite", () => {
         from: vi.fn().mockReturnValue({
           update: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              is: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
                 is: vi.fn().mockReturnValue({
-                  select: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  is: vi.fn().mockReturnValue({
+                    select: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
                 }),
               }),
             }),
@@ -259,7 +263,7 @@ describe("revokeCompanyInvite", () => {
       }),
     };
 
-    const result = await revokeCompanyInvite(supabase, "inv-unknown");
+    const result = await revokeCompanyInvite(supabase, "inv-unknown", "company-1");
     expect(result).toEqual({ revoked: false });
   });
 });

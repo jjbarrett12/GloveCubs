@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
 
   const companyName = body.company?.trim() || "Unknown";
   const contactName = body.name.trim();
-  const email = body.email.trim();
+  const email = body.email.trim().toLowerCase();
 
   const phone = body.phone?.trim() || null;
   const submittedAt = new Date().toISOString();

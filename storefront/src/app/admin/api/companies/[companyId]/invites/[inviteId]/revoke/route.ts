@@ -29,7 +29,7 @@ export async function POST(
   const supabase = getSupabaseAdmin() as any;
 
   try {
-    const result = await revokeCompanyInvite(supabase, inviteId);
+    const result = await revokeCompanyInvite(supabase, inviteId, companyId);
     if (!result.revoked) {
       return NextResponse.json(
         { error: "Invite not found or already revoked/accepted" },

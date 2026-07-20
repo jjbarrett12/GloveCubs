@@ -47,17 +47,27 @@ export async function POST(
   const supabase = getSupabaseAdmin() as any;
   try {
     const result = await acceptCompanyInvite(supabase, token, userData.user.id);
+    let quotesLinkedCount = 0;
+    let quotesLinkWarning: string | null = null;
     const email = userData.user.email;
     if (email) {
-      await linkOrphanQuoteRequestsByEmail(supabase, {
-        email,
-        companyId: result.company_id,
-      }).catch(() => undefined);
+      try {
+        const linked = await linkOrphanQuoteRequestsByEmail(supabase, {
+          email,
+          companyId: result.company_id,
+        });
+        quotesLinkedCount = linked.linked_count;
+      } catch (linkErr) {
+        console.error("[POST /api/invites/[token]/accept] quote linkage failed", linkErr);
+        quotesLinkWarning = "membership_ok_quote_link_failed";
+      }
     }
     return NextResponse.json({
       ok: true,
       company_id: result.company_id,
       member_id: result.member_id,
+      quotes_linked_count: quotesLinkedCount,
+      ...(quotesLinkWarning ? { warning: quotesLinkWarning } : {}),
       redirect_path: "/account",
     });
   } catch (e) {

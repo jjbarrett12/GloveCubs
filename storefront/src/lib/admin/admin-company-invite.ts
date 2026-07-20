@@ -73,7 +73,7 @@ export async function createCompanyInvite(
     throw new Error("active_invite_exists");
   }
 
-  // Check if already a member
+  // Check if already a member (per-user lookup; avoids listUsers pagination holes)
   const { data: members } = await supabase
     .schema("gc_commerce")
     .from("company_members")
@@ -81,14 +81,13 @@ export async function createCompanyInvite(
     .eq("company_id", input.companyId);
 
   if (members && members.length > 0) {
-    // Need to check if any member has this email
     for (const m of members) {
-      const { data: authUsers } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
-      const user = authUsers?.users?.find(
-        (u: { id: string; email?: string }) =>
-          u.id === m.user_id && u.email?.toLowerCase() === email,
-      );
-      if (user) throw new Error("already_member");
+      const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(m.user_id);
+      if (authErr) continue;
+      const memberEmail = authData?.user?.email?.toLowerCase();
+      if (memberEmail && memberEmail === email) {
+        throw new Error("already_member");
+      }
     }
   }
 
@@ -127,12 +126,14 @@ export async function createCompanyInvite(
 export async function revokeCompanyInvite(
   supabase: any,
   inviteId: string,
+  companyId: string,
 ): Promise<{ revoked: boolean }> {
   const { data, error } = await supabase
     .schema("gc_commerce")
     .from("company_invitations")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", inviteId)
+    .eq("company_id", companyId)
     .is("revoked_at", null)
     .is("accepted_at", null)
     .select("id");
@@ -256,7 +257,29 @@ export async function acceptCompanyInvite(
     .select("id")
     .single();
 
-  if (memberErr) throw memberErr;
+  if (memberErr) {
+    // Concurrent accept race: unique (company_id, user_id) — treat as idempotent success
+    const code = String((memberErr as { code?: string }).code ?? "");
+    if (code === "23505") {
+      const { data: raced } = await supabase
+        .schema("gc_commerce")
+        .from("company_members")
+        .select("id")
+        .eq("company_id", invite.company_id)
+        .eq("user_id", acceptingUserId)
+        .maybeSingle();
+      if (raced?.id) {
+        await supabase
+          .schema("gc_commerce")
+          .from("company_invitations")
+          .update({ accepted_at: now, accepted_user_id: acceptingUserId })
+          .eq("token_hash", tokenHash)
+          .is("accepted_at", null);
+        return { member_id: raced.id, company_id: invite.company_id };
+      }
+    }
+    throw memberErr;
+  }
 
   // Mark invite as accepted
   await supabase

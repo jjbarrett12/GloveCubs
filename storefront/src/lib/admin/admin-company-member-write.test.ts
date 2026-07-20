@@ -7,7 +7,7 @@ import {
 describe("linkOrphanQuoteRequestsByEmail", () => {
   it("normalizes email and updates unlinked quote requests", async () => {
     const updateMock = vi.fn().mockReturnThis();
-    const eqMock = vi.fn().mockReturnThis();
+    const ilikeMock = vi.fn().mockReturnThis();
     const isMock = vi.fn().mockReturnThis();
     const selectMock = vi.fn().mockResolvedValue({
       data: [{ id: "q1" }, { id: "q2" }],
@@ -21,8 +21,8 @@ describe("linkOrphanQuoteRequestsByEmail", () => {
         }),
       }),
     };
-    updateMock.mockReturnValue({ eq: eqMock });
-    eqMock.mockReturnValue({ is: isMock });
+    updateMock.mockReturnValue({ ilike: ilikeMock });
+    ilikeMock.mockReturnValue({ is: isMock });
     isMock.mockReturnValue({ select: selectMock });
 
     const result = await linkOrphanQuoteRequestsByEmail(supabase, {
@@ -32,7 +32,7 @@ describe("linkOrphanQuoteRequestsByEmail", () => {
 
     expect(supabase.schema).toHaveBeenCalledWith("catalogos");
     expect(updateMock).toHaveBeenCalledWith({ gc_company_id: "company-123" });
-    expect(eqMock).toHaveBeenCalledWith("email", "buyer@example.com");
+    expect(ilikeMock).toHaveBeenCalledWith("email", "buyer@example.com");
     expect(isMock).toHaveBeenCalledWith("gc_company_id", null);
     expect(result.linked_count).toBe(2);
   });
@@ -42,7 +42,7 @@ describe("linkOrphanQuoteRequestsByEmail", () => {
       schema: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
+            ilike: vi.fn().mockReturnValue({
               is: vi.fn().mockReturnValue({
                 select: vi.fn().mockResolvedValue({ data: [], error: null }),
               }),
@@ -72,7 +72,7 @@ describe("linkOrphanQuoteRequestsByEmail", () => {
       schema: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
+            ilike: vi.fn().mockReturnValue({
               is: vi.fn().mockReturnValue({
                 select: vi.fn().mockResolvedValue({
                   data: null,
@@ -96,7 +96,7 @@ describe("linkOrphanQuoteRequestsByEmail", () => {
       schema: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
+            ilike: vi.fn().mockReturnValue({
               is: isMock.mockReturnValue({
                 select: vi.fn().mockResolvedValue({ data: [], error: null }),
               }),

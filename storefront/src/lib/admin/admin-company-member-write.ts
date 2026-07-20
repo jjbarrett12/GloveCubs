@@ -133,11 +133,12 @@ export async function linkOrphanQuoteRequestsByEmail(
   opts: { email: string; companyId: string },
 ): Promise<{ linked_count: number }> {
   const email = normalizeBuyerEmail(opts.email);
+  // Case-insensitive match: quote_request emails may have been stored with mixed case.
   const { data, error } = await supabase
     .schema("catalogos")
     .from("quote_requests")
     .update({ gc_company_id: opts.companyId })
-    .eq("email", email)
+    .ilike("email", email)
     .is("gc_company_id", null)
     .select("id");
 
