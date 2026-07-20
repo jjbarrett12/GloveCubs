@@ -19,7 +19,7 @@ const CANONICAL = path.join(REPO_ROOT, "supabase", "migrations");
 
 export const FORBIDDEN_PRODUCTION_REF = "mnmagwsenzvetwngaszv";
 export const REQUIRED_STAGING_REF = "fmrupehxifzkpfphiyvm";
-export const BASELINE_END = "20261219120000_pg_trgm_search_path_convergence.sql";
+export const BASELINE_END = "20261219130000_product_favorites_canonical_assert.sql";
 export const EXCLUDED = new Set([
   "20261220120000_gc_commerce_company_invitations.sql",
 ]);
