@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { acceptCompanyInvite } from "@/lib/admin/admin-company-invite";
-import { linkOrphanQuoteRequestsByEmail } from "@/lib/admin/admin-company-member-write";
+import { tryLinkOrphanQuoteRequestsByEmail } from "@/lib/admin/admin-company-member-write";
 
 export const dynamic = "force-dynamic";
 
@@ -51,16 +51,13 @@ export async function POST(
     let quotesLinkWarning: string | null = null;
     const email = userData.user.email;
     if (email) {
-      try {
-        const linked = await linkOrphanQuoteRequestsByEmail(supabase, {
-          email,
-          companyId: result.company_id,
-        });
-        quotesLinkedCount = linked.linked_count;
-      } catch (linkErr) {
-        console.error("[POST /api/invites/[token]/accept] quote linkage failed", linkErr);
-        quotesLinkWarning = "membership_ok_quote_link_failed";
-      }
+      const linked = await tryLinkOrphanQuoteRequestsByEmail(supabase, {
+        email,
+        companyId: result.company_id,
+        userId: userData.user.id,
+      });
+      quotesLinkedCount = linked.linked_count;
+      quotesLinkWarning = linked.warning;
     }
     return NextResponse.json({
       ok: true,

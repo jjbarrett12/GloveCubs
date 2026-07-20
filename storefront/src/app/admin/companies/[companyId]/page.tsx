@@ -399,7 +399,7 @@ export default async function AdminCompanyDetailPage({
           >
             <div className="space-y-3 text-sm text-admin-secondary">
               <p>
-                If you added a buyer using the "Add buyer" form (not an invite link), they may not yet have a
+                If you added a buyer using the &quot;Add buyer&quot; form (not an invite link), they may not yet have a
                 password set in our system.
               </p>
               <ol className="list-decimal space-y-2 pl-5">
@@ -408,13 +408,13 @@ export default async function AdminCompanyDetailPage({
                   <span className="font-mono text-xs text-admin-muted">/login</span>.
                 </li>
                 <li>
-                  <strong className="text-admin-primary">Password setup:</strong> If they see "Invalid login
-                  credentials", they should click <strong>Forgot password?</strong> and enter their email to receive
+                  <strong className="text-admin-primary">Password setup:</strong> If they see &quot;Invalid login
+                  credentials&quot;, they should click <strong>Forgot password?</strong> and enter their email to receive
                   a password-setup link.
                 </li>
                 <li>
                   <strong className="text-admin-primary">Complete setup:</strong> After setting a password, they can
-                  sign in and access this company's portal, quotes, and procurement tools.
+                  sign in and access this company&apos;s portal, quotes, and procurement tools.
                 </li>
               </ol>
             </div>

@@ -92,7 +92,7 @@ export default async function InviteAcceptPage({
         <div className="rounded-lg border border-white/10 bg-white/[0.03] px-6 py-8">
           <h1 className="text-xl font-bold text-white">Join {result.invite.company_trade_name}</h1>
           <p className="mt-3 text-sm text-white/65">
-            You've been invited to join <strong className="text-white/90">{result.invite.company_trade_name}</strong>{" "}
+            You&apos;ve been invited to join <strong className="text-white/90">{result.invite.company_trade_name}</strong>{" "}
             as a <strong className="text-white/90">{result.invite.role}</strong>.
           </p>
           <p className="mt-2 text-xs text-white/45">

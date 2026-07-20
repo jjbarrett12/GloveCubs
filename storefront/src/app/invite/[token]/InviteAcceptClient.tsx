@@ -67,7 +67,7 @@ export function InviteAcceptClient({ token, email }: Props) {
         </p>
         <p className="text-xs text-white/55">
           Sign in with <strong className="text-white/80">{email}</strong> to join the company.
-          If you don't have an account yet, you can create one first.
+          If you don&apos;t have an account yet, you can create one first.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
@@ -105,7 +105,7 @@ export function InviteAcceptClient({ token, email }: Props) {
       </button>
 
       <p className="text-center text-xs text-white/45">
-        By accepting, you'll be added as a team member and can access company quotes and orders.
+        By accepting, you&apos;ll be added as a team member and can access company quotes and orders.
       </p>
     </div>
   );

@@ -29,6 +29,8 @@ export type AddCompanyMemberResult = {
   member: CompanyMemberWriteRow;
   auth_user_created: boolean;
   password_setup_required: boolean;
+  quotes_linked_count?: number;
+  quotes_link_warning?: string | null;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -124,26 +126,56 @@ async function fetchCompanyMemberRow(
   };
 }
 
+export type LinkOrphanQuotesResult = {
+  linked_count: number;
+  linked_ids: string[];
+};
+
 /**
- * Backfill catalogos.quote_requests.gc_company_id where email matches and gc_company_id IS NULL.
- * Idempotent — only updates rows that are still unlinked.
+ * Backfill catalogos.quote_requests.gc_company_id for exact normalized email matches.
+ * Uses SECURITY DEFINER RPC: lower(trim(email)) equality — never ILIKE (no _/% wildcards).
+ * Idempotent — only updates rows that are still unlinked (gc_company_id IS NULL).
+ * When userId is provided, RPC requires membership in companyId.
  */
 export async function linkOrphanQuoteRequestsByEmail(
   supabase: any,
-  opts: { email: string; companyId: string },
-): Promise<{ linked_count: number }> {
+  opts: { email: string; companyId: string; userId?: string | null },
+): Promise<LinkOrphanQuotesResult> {
   const email = normalizeBuyerEmail(opts.email);
-  // Case-insensitive match: quote_request emails may have been stored with mixed case.
-  const { data, error } = await supabase
-    .schema("catalogos")
-    .from("quote_requests")
-    .update({ gc_company_id: opts.companyId })
-    .ilike("email", email)
-    .is("gc_company_id", null)
-    .select("id");
+  const { data, error } = await supabase.schema("catalogos").rpc(
+    "gc_link_orphan_quote_requests_by_email",
+    {
+      p_email: email,
+      p_company_id: opts.companyId,
+      p_user_id: opts.userId ?? null,
+    },
+  );
 
   if (error) throw error;
-  return { linked_count: Array.isArray(data) ? data.length : 0 };
+
+  const linkedCount = Number((data as { linked_count?: number } | null)?.linked_count ?? 0);
+  const rawIds = (data as { linked_ids?: unknown } | null)?.linked_ids;
+  const linkedIds = Array.isArray(rawIds) ? rawIds.map((id) => String(id)) : [];
+
+  return { linked_count: linkedCount, linked_ids: linkedIds };
+}
+
+/** Attempt linkage; never throws — returns observable warning for callers. */
+export async function tryLinkOrphanQuoteRequestsByEmail(
+  supabase: any,
+  opts: { email: string; companyId: string; userId?: string | null },
+): Promise<LinkOrphanQuotesResult & { warning: string | null }> {
+  try {
+    const result = await linkOrphanQuoteRequestsByEmail(supabase, opts);
+    return { ...result, warning: null };
+  } catch (err) {
+    console.error("[tryLinkOrphanQuoteRequestsByEmail] quote linkage failed", {
+      companyId: opts.companyId,
+      userId: opts.userId ?? null,
+      err,
+    });
+    return { linked_count: 0, linked_ids: [], warning: "quote_link_failed" };
+  }
 }
 
 export async function addCompanyMemberForAdmin(
@@ -214,8 +246,10 @@ export async function addCompanyMemberForAdmin(
     throw insertErr;
   }
 
-  await linkOrphanQuoteRequestsByEmail(supabase, { email, companyId }).catch(() => {
-    // Non-fatal: logging would go here in production
+  const link = await tryLinkOrphanQuoteRequestsByEmail(supabase, {
+    email,
+    companyId,
+    userId,
   });
 
   return {
@@ -229,5 +263,7 @@ export async function addCompanyMemberForAdmin(
     },
     auth_user_created: created,
     password_setup_required: passwordSetupRequired,
+    quotes_linked_count: link.linked_count,
+    quotes_link_warning: link.warning,
   };
 }

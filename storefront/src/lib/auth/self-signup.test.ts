@@ -99,6 +99,47 @@ describe("finalizeSelfSignupForUser", () => {
     expect(result.already_provisioned).toBe(true);
     expect(result.company_id).toBe("company-1");
     expect(result.redirect_path).toBe(SELF_SIGNUP_DEFAULT_REDIRECT);
+    expect(result.quotes_linked_count).toBe(0);
+    expect(result.quotes_link_warning).toBeNull();
+  });
+
+  it("surfaces quote_link_failed warning without failing signup", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } });
+    const supabase = {
+      schema: vi.fn((name: string) => {
+        if (name === "catalogos") return { rpc };
+        return {
+          from: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            order: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: "member-1", company_id: "company-1" },
+              error: null,
+            }),
+          }),
+        };
+      }),
+    };
+
+    const result = await finalizeSelfSignupForUser(
+      supabase,
+      "user-1",
+      { company_name: "Acme" },
+      "Buyer@Example.com",
+    );
+    expect(result.already_provisioned).toBe(true);
+    expect(result.quotes_linked_count).toBe(0);
+    expect(result.quotes_link_warning).toBe("quote_link_failed");
+    expect(rpc).toHaveBeenCalledWith(
+      "gc_link_orphan_quote_requests_by_email",
+      expect.objectContaining({
+        p_email: "buyer@example.com",
+        p_company_id: "company-1",
+        p_user_id: "user-1",
+      }),
+    );
   });
 
   it("creates active company and owner membership", async () => {
@@ -157,6 +198,8 @@ describe("finalizeSelfSignupForUser", () => {
     expect(result.already_provisioned).toBe(false);
     expect(result.company_id).toBe("company-new");
     expect(result.member_id).toBe("member-new");
+    expect(result.quotes_linked_count).toBe(0);
+    expect(result.quotes_link_warning).toBeNull();
     expect(membersChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         company_id: "company-new",

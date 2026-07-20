@@ -83,9 +83,12 @@ export async function POST(request: NextRequest, ctx: { params: { companyId: str
         invite_url: inviteUrl,
         raw_token: result.rawToken,
         expires_at: result.expiresAt,
-        message: "Invitation created. Share the invite URL with the buyer.",
+        reissued: result.reissued,
+        message: result.reissued
+          ? "Invitation reissued. Share the new invite URL with the buyer."
+          : "Invitation created. Share the invite URL with the buyer.",
       },
-      { status: 201 },
+      { status: result.reissued ? 200 : 201 },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Create invite failed";
