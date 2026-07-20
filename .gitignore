@@ -34,3 +34,7 @@ storefront/tmp-*
 test-results/
 playwright-report/
 coverage/
+
+# Generated quote-first baseline workspaces (never commit)
+.tmp/
+

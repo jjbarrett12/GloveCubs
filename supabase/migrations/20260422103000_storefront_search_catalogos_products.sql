@@ -1,5 +1,57 @@
 -- Storefront search + listing resolution read directly from catalogos.products.
 -- Replaces public.canonical_products as the source inside search RPCs and resolve_canonical_listing_product_id.
+--
+-- Replay safety (2026-07-20): this historical migration previously assumed pg_trgm was already
+-- installed and visible via ambient search_path. Fresh Supabase projects have neither.
+-- Canonical install schema is `extensions` (Supabase platform default). If pg_trgm already
+-- exists in `public` (some older projects), leave it in place — do not move it.
+-- Durable objects call public.gc_trgm_similarity / schema-qualified gin_trgm_ops so they do not
+-- depend on ambient search_path. Existing deployed DBs that already applied this version remain
+-- converged via 20261219120000_pg_trgm_search_path_convergence.sql (CREATE OR REPLACE / IF NOT EXISTS).
+
+-- -----------------------------------------------------------------------------
+-- 0) Deterministic pg_trgm (required for gin_trgm_ops + similarity)
+-- -----------------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS extensions;
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+
+DO $pg_trgm_guard$
+DECLARE
+  ext_schema text;
+BEGIN
+  SELECT n.nspname INTO ext_schema
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'pg_trgm';
+
+  IF ext_schema IS NULL THEN
+    RAISE EXCEPTION 'pg_trgm extension missing after CREATE EXTENSION';
+  END IF;
+
+  IF ext_schema NOT IN ('extensions', 'public') THEN
+    RAISE EXCEPTION
+      'pg_trgm is installed in schema %, expected extensions or public (do not move automatically)',
+      ext_schema;
+  END IF;
+END
+$pg_trgm_guard$;
+
+-- Stable wrapper: resolves similarity via search_path containing both candidate schemas.
+CREATE OR REPLACE FUNCTION public.gc_trgm_similarity(a text, b text)
+RETURNS real
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = public, extensions
+AS $$
+BEGIN
+  RETURN similarity(a, b);
+END;
+$$;
+
+COMMENT ON FUNCTION public.gc_trgm_similarity(text, text) IS
+  'Schema-stable wrapper over pg_trgm similarity(); search_path includes public + extensions.';
 
 -- -----------------------------------------------------------------------------
 -- 1) FTS / trigram on catalogos.products (mirrors former canonical_products search surface)
@@ -10,8 +62,25 @@ ALTER TABLE catalogos.products
 CREATE INDEX IF NOT EXISTS idx_catalogos_products_search_vector
   ON catalogos.products USING GIN (search_vector);
 
-CREATE INDEX IF NOT EXISTS idx_catalogos_products_name_trgm
-  ON catalogos.products USING GIN (name gin_trgm_ops);
+DO $trgm_idx$
+DECLARE
+  ext_schema text;
+BEGIN
+  SELECT n.nspname INTO ext_schema
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'pg_trgm';
+
+  IF to_regclass('catalogos.idx_catalogos_products_name_trgm') IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  EXECUTE format(
+    'CREATE INDEX idx_catalogos_products_name_trgm ON catalogos.products USING GIN (name %I.gin_trgm_ops)',
+    ext_schema
+  );
+END
+$trgm_idx$;
 
 CREATE OR REPLACE FUNCTION catalogos.catalogos_products_search_tsv()
 RETURNS TRIGGER
@@ -127,7 +196,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SET search_path = public, catalogos
+SET search_path = public, catalogos, extensions
 AS $$
 BEGIN
     RETURN QUERY
@@ -165,7 +234,7 @@ BEGIN
                 WHEN p.id IN (SELECT product_id FROM supplier_product_matches) THEN 2
                 ELSE 0
             END +
-            COALESCE(similarity(p.name, REPLACE(p_search_pattern, '%', '')), 0) * 3
+            COALESCE(public.gc_trgm_similarity(p.name, REPLACE(p_search_pattern, '%', '')), 0) * 3
             AS relevance_score
         FROM catalogos.products p
         LEFT JOIN catalogos.categories c ON c.id = p.category_id
@@ -176,7 +245,7 @@ BEGIN
                 OR p.name ILIKE p_search_pattern
                 OR p.sku ILIKE p_search_pattern
                 OR (p.attributes->>'material') ILIKE p_search_pattern
-                OR similarity(p.name, REPLACE(p_search_pattern, '%', '')) > 0.3
+                OR public.gc_trgm_similarity(p.name, REPLACE(p_search_pattern, '%', '')) > 0.3
                 OR p.id IN (SELECT product_id FROM supplier_product_matches)
             )
             AND (p_material IS NULL OR (p.attributes->>'material') ILIKE '%' || p_material || '%')
@@ -267,7 +336,7 @@ CREATE OR REPLACE FUNCTION search_products_listing_count(
 RETURNS BIGINT
 LANGUAGE sql
 STABLE
-SET search_path = public, catalogos
+SET search_path = public, catalogos, extensions
 AS $$
     WITH supplier_product_matches AS (
         SELECT DISTINCT so.product_id
@@ -289,7 +358,7 @@ AS $$
                 OR p.name ILIKE p_search_pattern
                 OR p.sku ILIKE p_search_pattern
                 OR (p.attributes->>'material') ILIKE p_search_pattern
-                OR similarity(p.name, REPLACE(p_search_pattern, '%', '')) > 0.3
+                OR public.gc_trgm_similarity(p.name, REPLACE(p_search_pattern, '%', '')) > 0.3
                 OR p.id IN (SELECT product_id FROM supplier_product_matches)
             )
             AND (p_material IS NULL OR (p.attributes->>'material') ILIKE '%' || p_material || '%')
@@ -311,7 +380,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SET search_path = public, catalogos
+SET search_path = public, catalogos, extensions
 AS $$
 BEGIN
     RETURN QUERY
