@@ -13,8 +13,9 @@
 !**/.env.example
 .DS_Store
 Thumbs.db
-# Supabase CLI local artifacts
+# Supabase CLI local artifacts / link state
 supabase/.temp/
+storefront/supabase/.temp/
 # Scheduled Fishbowl customer export (generated every 30 min)
 data/
 

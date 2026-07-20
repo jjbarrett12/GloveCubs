@@ -89,14 +89,18 @@ const nextConfig = {
       config.cache = false;
     }
     const storefrontNodeModules = path.resolve(__dirname, "node_modules");
+    const monorepoLib = fs.existsSync(path.join(__dirname, "_monorepo_lib"))
+      ? path.join(__dirname, "_monorepo_lib")
+      : path.resolve(__dirname, "../lib");
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...config.resolve.alias,
       "@supabase/supabase-js": path.join(storefrontNodeModules, "@supabase/supabase-js"),
-      "@glove-sku-intelligence": path.resolve(__dirname, "../lib/glove-sku-intelligence/index.ts"),
-      "@glove-sku-intelligence/glove-size-normalization": path.resolve(
-        __dirname,
-        "../lib/glove-sku-intelligence/glove-size-normalization.ts"
+      "@commerce-packaging": path.join(monorepoLib, "commerce-packaging"),
+      "@glove-sku-intelligence": path.join(monorepoLib, "glove-sku-intelligence/index.ts"),
+      "@glove-sku-intelligence/glove-size-normalization": path.join(
+        monorepoLib,
+        "glove-sku-intelligence/glove-size-normalization.ts",
       ),
     };
     const existing = Array.isArray(config.resolve.modules)

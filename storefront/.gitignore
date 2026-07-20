@@ -6,3 +6,7 @@ node_modules/.cache
 /blob-report/
 /playwright/.cache/
 .env*.local
+
+# Vendored monorepo libs for Vercel storefront-root deploys
+_monorepo_lib/
+
