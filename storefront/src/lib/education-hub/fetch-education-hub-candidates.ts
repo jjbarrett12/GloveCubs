@@ -16,6 +16,11 @@ export type EducationHubCatalogFetchResult = {
  * Active published catalog rows for home survey matching — newest first, bounded scan.
  */
 export async function fetchEducationHubCatalogCandidates(): Promise<EducationHubCatalogFetchResult> {
+  /** Emergency cost containment: zero catalog PostgREST when set to "1". */
+  if (process.env.GC_EMERGENCY_DISABLE_CATALOG_SUPABASE === "1") {
+    return { candidates: [], catalogUnavailable: true };
+  }
+
   if (!isSupabaseConfigured()) {
     return { candidates: [], catalogUnavailable: true };
   }

@@ -461,6 +461,21 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
   const to = from + limit - 1;
   const normalized = normalizeStorefrontFilterParams(params);
 
+  /** Emergency cost containment: zero catalog PostgREST when set to "1". */
+  if (process.env.GC_EMERGENCY_DISABLE_CATALOG_SUPABASE === "1") {
+    return {
+      products: [],
+      total: 0,
+      page,
+      limit,
+      brands: [],
+      facetCounts: {},
+      facetMeta: {},
+      error: null,
+      catalogUnavailable: true,
+    };
+  }
+
   if (!isSupabaseConfigured()) {
     logStoreCatalogFailure("catalog_unavailable", "Supabase is not configured for this environment");
     return {
