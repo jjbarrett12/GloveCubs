@@ -53,9 +53,34 @@ WHERE p.prosecdef IS TRUE
   )
 ORDER BY 1, 2;
 
-\echo '=== supplier_offers policies (expect admin-only / no anon) ==='
+\echo '=== Cost-bearing views: anon/authenticated grants (expect none on internal) ==='
 
-SELECT schemaname, tablename, policyname, roles, cmd, qual
-FROM pg_policies
-WHERE tablename IN ('supplier_offers', 'offer_trust_scores', 'suppliers')
+SELECT table_schema, table_name, grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name IN (
+  'v_products_legacy_shape_internal',
+  'v_audit_line_margin',
+  'v_audit_order_margin_summary',
+  'supplier_offers',
+  'offer_trust_scores'
+)
+AND grantee IN ('anon', 'authenticated')
+AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
 ORDER BY 1, 2, 3;
+
+\echo '=== Authenticated INSERT grants on orders / company_members (expect none) ==='
+
+SELECT table_schema, table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee = 'authenticated'
+  AND table_schema = 'gc_commerce'
+  AND table_name IN ('orders', 'order_lines', 'company_members')
+  AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+ORDER BY 1, 2, 3;
+
+\echo '=== quote_status_history policies (expect no USING true) ==='
+
+SELECT policyname, roles, cmd, qual, with_check
+FROM pg_policies
+WHERE schemaname = 'catalogos' AND tablename = 'quote_status_history';
+

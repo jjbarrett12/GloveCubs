@@ -12,6 +12,11 @@
 | Express API | Legacy user-scoped + company-scoped paths; DB RLS is defense-in-depth |
 | CatalogOS | Internal operators; supplier cost via service_role / admin_users |
 
+## Company user management (Phase 1A)
+
+Customer/API roles may **SELECT** company-scoped memberships only.  
+**INSERT / UPDATE / DELETE** on `company_members` is **service_role / internal admin only** until a dedicated invitation system ships (manual operator workflow).
+
 ## Membership helpers (RLS)
 
 - `gc_commerce.is_company_member(company_id)` — `auth.uid()` only

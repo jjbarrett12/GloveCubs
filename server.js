@@ -1229,20 +1229,39 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
         if (!token || !password || String(password).length < 6) {
             return res.status(400).json({ error: 'Valid token and password (min 6 characters) are required.' });
         }
-        const row = await dataService.findPasswordResetToken(token);
-        if (!row) {
+        const claimed = await dataService.claimPasswordResetToken(token);
+        if (!claimed) {
             return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
         }
-        const consumed = await dataService.consumePasswordResetToken(token);
-        if (!consumed) {
-            return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+        const claimId = claimed.claim_id;
+        try {
+            const userId = claimed.user_id;
+            const user =
+                userId != null
+                    ? await usersService.getUserById(userId)
+                    : await usersService.getUserByEmail(claimed.email);
+            if (!user) {
+                await dataService.releasePasswordResetClaim(token, claimId);
+                return res.status(400).json({ error: 'User not found.' });
+            }
+            const password_hash = await bcrypt.hash(String(password).trim(), 10);
+            await usersService.updateUser(user.id, { password_hash });
+            const consumed = await dataService.consumePasswordResetClaim(token, claimId);
+            if (!consumed) {
+                // Password already updated; claim lost — force re-login path is still ok.
+                return res.status(400).json({
+                    error: 'Reset could not be finalized. If login fails, request a new reset link.',
+                });
+            }
+            return res.json({ success: true, message: 'Password updated. You can log in now.' });
+        } catch (updateErr) {
+            try {
+                await dataService.releasePasswordResetClaim(token, claimId);
+            } catch (_) {
+                /* claim TTL will expire */
+            }
+            throw updateErr;
         }
-        const userId = row.user_id;
-        const user = userId != null ? await usersService.getUserById(userId) : await usersService.getUserByEmail(row.email);
-        if (!user) return res.status(400).json({ error: 'User not found.' });
-        const password_hash = await bcrypt.hash(String(password).trim(), 10);
-        await usersService.updateUser(user.id, { password_hash });
-        return res.json({ success: true, message: 'Password updated. You can log in now.' });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Reset failed.' });
     }
