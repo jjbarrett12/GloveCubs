@@ -1189,7 +1189,8 @@ app.post('/api/auth/forgot-password', authContactLimiter, async (req, res) => {
         if (!user) {
             return res.json({ success: true, message: 'If that email is on file, we sent a reset link.' });
         }
-        const token = require('crypto').randomBytes(32).toString('hex');
+        const { generatePasswordResetToken } = require('./lib/passwordResetToken');
+        const token = generatePasswordResetToken();
         const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS).toISOString();
         await dataService.deletePasswordResetTokensByUserId(user.id);
         await dataService.createPasswordResetToken(email, token, expiresAt, user.id);
@@ -1232,12 +1233,15 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
         if (!row) {
             return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
         }
+        const consumed = await dataService.consumePasswordResetToken(token);
+        if (!consumed) {
+            return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+        }
         const userId = row.user_id;
         const user = userId != null ? await usersService.getUserById(userId) : await usersService.getUserByEmail(row.email);
         if (!user) return res.status(400).json({ error: 'User not found.' });
         const password_hash = await bcrypt.hash(String(password).trim(), 10);
         await usersService.updateUser(user.id, { password_hash });
-        await dataService.deletePasswordResetToken(token);
         return res.json({ success: true, message: 'Password updated. You can log in now.' });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Reset failed.' });

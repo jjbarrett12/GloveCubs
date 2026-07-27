@@ -536,10 +536,18 @@ async function createContactMessage(payload) {
   return data;
 }
 
-// ---------- Password reset tokens ----------
+// ---------- Password reset tokens (store digest only) ----------
 async function createPasswordResetToken(email, token, expiresAt, userId = null) {
   const supabase = getSupabaseAdmin();
-  const row = { email, token, expires_at: expiresAt };
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const row = {
+    email,
+    token: '', // plaintext column retained for schema compat; never store raw token
+    token_hash: tokenHash,
+    expires_at: expiresAt,
+    consumed_at: null,
+  };
   if (userId != null) row.user_id = userId;
   const { error } = await supabase.from('password_reset_tokens').insert(row);
   if (error) throw error;
@@ -547,13 +555,38 @@ async function createPasswordResetToken(email, token, expiresAt, userId = null) 
 
 async function findPasswordResetToken(token) {
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase.from('password_reset_tokens').select('*').eq('token', token).gt('expires_at', new Date().toISOString()).maybeSingle();
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const { data } = await supabase
+    .from('password_reset_tokens')
+    .select('*')
+    .eq('token_hash', tokenHash)
+    .is('consumed_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  return data;
+}
+
+async function consumePasswordResetToken(token) {
+  const supabase = getSupabaseAdmin();
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .update({ consumed_at: new Date().toISOString(), token: '' })
+    .eq('token_hash', tokenHash)
+    .is('consumed_at', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
   return data;
 }
 
 async function deletePasswordResetToken(token) {
   const supabase = getSupabaseAdmin();
-  await supabase.from('password_reset_tokens').delete().eq('token', token);
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  await supabase.from('password_reset_tokens').delete().eq('token_hash', tokenHash);
 }
 
 async function deletePasswordResetTokensByUserId(userId) {
@@ -1144,6 +1177,7 @@ module.exports = {
   createContactMessage,
   createPasswordResetToken,
   findPasswordResetToken,
+  consumePasswordResetToken,
   deletePasswordResetToken,
   deletePasswordResetTokensByUserId,
   getShipToByUserId,
