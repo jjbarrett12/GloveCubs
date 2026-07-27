@@ -21,7 +21,7 @@ export function BrandCarousel({ compact = false }: { compact?: boolean }) {
           compact ? "text-[11px] sm:mb-6" : "mb-6 text-sm",
         )}
       >
-        Authorized distributor for
+        Products sourced through established manufacturers and distribution partners
       </p>
       <div className={styles.brandsCarouselWrap}>
         <div className={styles.brandsCarouselOuter}>

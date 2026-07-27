@@ -1,9 +1,10 @@
 /**
- * CatalogOS route protection: admin auth for /api/ingest, /api/publish, /api/staging, /api/openclaw,
- * /api/csv-import, /api/supplier-import, etc.
- * Uses CATALOGOS_ADMIN_SECRET: when set, requests with Authorization: Bearer <secret>
- * or cookie catalogos_admin=<secret> are allowed. When unset, all requests pass (dev).
- * Rate limits use shared DB tables (public.rate_limit_events/blocks) for multi-instance safety.
+ * CatalogOS route protection for ingest/publish/review/import/dashboard surfaces.
+ *
+ * Auth uses CATALOGOS_ADMIN_SECRET (Bearer or catalogos_admin cookie).
+ * Production-like runtimes fail closed when the secret is missing.
+ * Local open access requires CATALOGOS_ALLOW_INSECURE_DEV_AUTH=1.
+ * Rate limits use shared DB tables (public.rate_limit_events/blocks).
  */
 
 import { NextResponse } from "next/server";
@@ -13,7 +14,15 @@ import {
   RATE_LIMIT_EXPENSIVE,
   RATE_LIMIT_DEFAULT,
 } from "@/lib/rate-limit";
+import {
+  evaluateCatalogosAdminAuth,
+  getCatalogosAdminSecret,
+  getCatalogosInternalApiKey,
+  isCatalogosInsecureDevAuthAllowed,
+  isCatalogosProductionLikeRuntime,
+} from "@/lib/auth/catalogos-admin-auth";
 
+/** Mutating / privileged API prefixes — not public catalog read or bulk-quote lead capture. */
 const ADMIN_API_PATHS = [
   "/api/ingest",
   "/api/publish",
@@ -23,6 +32,10 @@ const ADMIN_API_PATHS = [
   "/api/admin",
   "/api/csv-import",
   "/api/supplier-import",
+  "/api/review",
+  "/api/feeds",
+  "/api/internal",
+  "/api/suppliers",
 ];
 const DASHBOARD_PREFIX = "/dashboard";
 const ADMIN_PREFIX = "/admin";
@@ -35,6 +48,27 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
+function denyResponse(
+  req: NextRequest,
+  path: string,
+  isAdminApi: boolean,
+  decision: { status: 401 | 503; error: string; detail?: string },
+): NextResponse {
+  if (isAdminApi || path.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: decision.error, ...(decision.detail ? { detail: decision.detail } : {}) },
+      { status: decision.status },
+    );
+  }
+  if (path.startsWith(ADMIN_PREFIX) || path.startsWith(DASHBOARD_PREFIX)) {
+    if (decision.status === 503) {
+      return new NextResponse("CatalogOS admin authentication is not configured.", { status: 503 });
+    }
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+  return NextResponse.json({ error: decision.error }, { status: decision.status });
+}
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isAdminApi = ADMIN_API_PATHS.some((p) => path.startsWith(p));
@@ -43,31 +77,19 @@ export async function middleware(req: NextRequest) {
 
   if (!isAdminApi && !isDashboard && !isAdminPage) return NextResponse.next();
 
-  const secret = process.env.CATALOGOS_ADMIN_SECRET;
-  const internalKey = process.env.INTERNAL_API_KEY?.trim() || "dev-internal-key";
-  if (!secret) {
-    return NextResponse.next();
-  }
+  const secret = getCatalogosAdminSecret();
+  const decision = evaluateCatalogosAdminAuth({
+    secret,
+    bearer: req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "",
+    cookieToken: req.cookies.get("catalogos_admin")?.value ?? "",
+    apiKey: req.headers.get("x-api-key")?.trim() ?? "",
+    productionLike: isCatalogosProductionLikeRuntime(),
+    allowInsecureDev: isCatalogosInsecureDevAuthAllowed(),
+    internalKey: getCatalogosInternalApiKey(),
+  });
 
-  const bearer =
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
-  const cookieToken = req.cookies.get("catalogos_admin")?.value ?? "";
-  const apiKey = req.headers.get("x-api-key")?.trim() ?? "";
-
-  const authorized =
-    bearer === secret ||
-    cookieToken === secret ||
-    apiKey === internalKey ||
-    bearer === internalKey;
-
-  if (!authorized) {
-    if (isAdminApi) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (isAdminPage) {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
-    return NextResponse.next();
+  if (!decision.ok) {
+    return denyResponse(req, path, isAdminApi, decision);
   }
 
   if (isAdminApi) {
@@ -78,14 +100,15 @@ export async function middleware(req: NextRequest) {
       path.startsWith("/api/distributor-sync") ||
       path.startsWith("/api/admin/crawl-distributor") ||
       path.startsWith("/api/admin/url-import") ||
-      path.startsWith("/api/csv-import");
+      path.startsWith("/api/csv-import") ||
+      path.startsWith("/api/feeds");
     const identifier = `catalogos:${ip}:${isExpensive ? "exp" : "def"}`;
     const config = isExpensive ? RATE_LIMIT_EXPENSIVE : RATE_LIMIT_DEFAULT;
     const result = await checkAndRecordRateLimit(identifier, config);
     if (!result.allowed) {
       return NextResponse.json(
         { error: result.reason ?? "Too many requests. Try again later." },
-        { status: 429 }
+        { status: 429 },
       );
     }
   }
@@ -103,6 +126,10 @@ export const config = {
     "/api/admin/:path*",
     "/api/csv-import/:path*",
     "/api/supplier-import/:path*",
+    "/api/review/:path*",
+    "/api/feeds/:path*",
+    "/api/internal/:path*",
+    "/api/suppliers/:path*",
     "/dashboard/:path*",
     "/admin/:path*",
   ],

@@ -111,7 +111,7 @@ export const HOME_INDUSTRY_SOLUTIONS: HomeIndustrySolution[] = [
     key: "medical",
     name: "Medical & healthcare",
     pain: "Compliance, patient-care continuity, and supplier transparency outweigh coupon-driven switching.",
-    gloveClasses: "Exam nitrile · procedure fit · chemo-rated where published on SKU",
+    gloveClasses: "Exam-style nitrile · procedure fit · verify published SKU documentation",
     education: "Verify certifications on each listing—industry pages summarize typical specs; your policies govern final selection.",
     href: "/industries/healthcare",
     imageTone: "light",
@@ -120,7 +120,7 @@ export const HOME_INDUSTRY_SOLUTIONS: HomeIndustrySolution[] = [
     key: "tattoo",
     name: "Tattoo & body art",
     pain: "Barrier protection, dexterity, and client-facing presentation demand consistent black nitrile programs.",
-    gloveClasses: "Black nitrile · powder-free · exam-grade dexterity",
+    gloveClasses: "Black nitrile · powder-free · dexterity-focused options",
     education: "Standardize thickness and texture for artist preference—recurring case orders reduce mid-week stock-outs.",
     href: buildStoreCatalogHref({ industries: ["tattoo_body_art"] }),
     imageTone: "dark",
@@ -167,7 +167,7 @@ export const HOME_FAQ_CATEGORIES = [
       },
       {
         q: "What about food-safe or medical claims?",
-        a: "Read certifications on each SKU. Industry pages describe typical use; your facility policies and regulators govern final selection.",
+        a: "Product suitability and regulatory documentation should be verified for your intended use. Where listings publish certifications, treat them as SKU-specific—not blanket brand claims. Your facility policies and regulators govern final selection.",
       },
     ],
   },
@@ -176,7 +176,7 @@ export const HOME_FAQ_CATEGORIES = [
     items: [
       {
         q: "Where do you ship from?",
-        a: "Operations are anchored in Salt Lake City, UT with nationwide B2B fulfillment. Lead times depend on SKU, volume, and program—request pricing for scoped answers.",
+        a: "Operations are anchored in Salt Lake City, UT. Availability and pricing are confirmed with each quote—nationwide programs are scoped per SKU, volume, and supplier pathway, not implied as universal inventory.",
       },
       {
         q: "Do you support pallet and case programs?",

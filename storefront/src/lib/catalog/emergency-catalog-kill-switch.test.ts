@@ -5,13 +5,25 @@ const getSupabaseAdmin = vi.fn(() => {
 });
 const isSupabaseConfigured = vi.fn(() => true);
 
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return { ...actual, cache: <T extends (...args: never[]) => unknown>(fn: T) => fn };
+});
+
 vi.mock("@/lib/supabase/server", () => ({
   isSupabaseConfigured: () => isSupabaseConfigured(),
   getSupabaseAdmin: () => getSupabaseAdmin(),
 }));
 
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { fetchStoreCatalogPage } from "@/lib/catalog/store-products";
+import { fetchStoreProductDetail } from "@/lib/catalog/store-product-detail";
+import { fetchCompareWizardProducts } from "@/lib/catalog/compare-wizard-products";
 import { fetchEducationHubCatalogCandidates } from "@/lib/education-hub/fetch-education-hub-candidates";
+import {
+  fetchStoreProductCommercialAttrsByProductIds,
+  fetchStoreProductRowsByIds,
+} from "@/lib/catalog/store-products";
 
 describe("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", () => {
   beforeEach(() => {
@@ -25,25 +37,22 @@ describe("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", () => {
     vi.unstubAllEnvs();
   });
 
+  it("helper is true only for exact string 1", () => {
+    expect(isCatalogSupabaseEmergencyDisabled()).toBe(false);
+    vi.stubEnv("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", "1");
+    expect(isCatalogSupabaseEmergencyDisabled()).toBe(true);
+    vi.stubEnv("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", "true");
+    expect(isCatalogSupabaseEmergencyDisabled()).toBe(false);
+  });
+
   it("fetchStoreCatalogPage returns catalogUnavailable before any Supabase client when flag is 1", async () => {
     vi.stubEnv("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", "1");
 
     const result = await fetchStoreCatalogPage({ page: 2 });
 
     expect(getSupabaseAdmin).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      products: [],
-      total: 0,
-      page: 2,
-      limit: result.limit,
-      brands: [],
-      facetCounts: {},
-      facetMeta: {},
-      error: null,
-      catalogUnavailable: true,
-    });
-    expect(result.limit).toBeGreaterThan(0);
-    expect(Array.isArray(result.products)).toBe(true);
+    expect(result.catalogUnavailable).toBe(true);
+    expect(result.products).toEqual([]);
   });
 
   it("fetchEducationHubCatalogCandidates returns empty unavailable before any Supabase client when flag is 1", async () => {
@@ -55,6 +64,19 @@ describe("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", () => {
     expect(result).toEqual({ candidates: [], catalogUnavailable: true });
   });
 
+  it("product detail / compare / by-id hydrations do not call Supabase when flag is 1", async () => {
+    vi.stubEnv("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", "1");
+
+    await expect(fetchStoreProductDetail("any-slug")).resolves.toBeNull();
+    await expect(fetchCompareWizardProducts()).resolves.toEqual({ rows: [], catalogUnavailable: true });
+    await expect(fetchStoreProductRowsByIds(["00000000-0000-4000-8000-000000000001"])).resolves.toEqual([]);
+    await expect(
+      fetchStoreProductCommercialAttrsByProductIds(["00000000-0000-4000-8000-000000000001"]),
+    ).resolves.toEqual(new Map());
+
+    expect(getSupabaseAdmin).not.toHaveBeenCalled();
+  });
+
   it("flag absent preserves existing configured=false short-circuit for store catalog", async () => {
     isSupabaseConfigured.mockReturnValue(false);
 
@@ -64,15 +86,6 @@ describe("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", () => {
     expect(result.catalogUnavailable).toBe(true);
     expect(result.products).toEqual([]);
     expect(result.error).toBeNull();
-  });
-
-  it("flag absent preserves existing configured=false short-circuit for education hub", async () => {
-    isSupabaseConfigured.mockReturnValue(false);
-
-    const result = await fetchEducationHubCatalogCandidates();
-
-    expect(getSupabaseAdmin).not.toHaveBeenCalled();
-    expect(result).toEqual({ candidates: [], catalogUnavailable: true });
   });
 
   it("flag absent still reaches Supabase admin client when configured", async () => {

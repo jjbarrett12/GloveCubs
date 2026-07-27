@@ -79,7 +79,13 @@ const PROCUREMENT_TRUTH_FORBIDDEN: ReadonlyArray<{ needle: RegExp; label: string
   { needle: /\bAI-assisted\b/i, label: "AI-assisted" },
   { needle: /\bReplenishment planning\b/i, label: "Replenishment planning" },
   { needle: /\bDedicated procurement reps?\b/i, label: "Dedicated procurement rep(s)" },
+  { needle: /\bAuthorized [Dd]istributor\b/i, label: "Authorized Distributor" },
   { needle: /\bFast nationwide fulfillment\b/i, label: "Fast nationwide fulfillment" },
+  { needle: /\bFast shipping\b/i, label: "Fast shipping" },
+  { needle: /\bQuality guaranteed\b/i, label: "Quality guaranteed" },
+  { needle: /\bFDA-approved\b/i, label: "FDA-approved (unsupported public claim)" },
+  { needle: /\bmedical-grade\b/i, label: "medical-grade (unsupported public claim)" },
+  { needle: /\bExam-grade and clinical-use programs\b/i, label: "Exam-grade clinical programs claim" },
   ...FAKE_COMMERCE_FORBIDDEN,
 ];
 

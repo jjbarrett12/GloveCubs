@@ -13,6 +13,7 @@ import {
 import { runJsonResponse } from "@/lib/ai/client";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { fetchStoreProductRowsByIds } from "@/lib/catalog/store-products";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
 import { fetchRestaurantPrepLineCandidateProductIds } from "@/lib/ontology/prep-line-candidates";
@@ -137,6 +138,16 @@ export async function POST(request: NextRequest) {
 
     if (parsed.data.operationalEnvironmentKey !== RESTAURANT_PREP_LINE_ENVIRONMENT_KEY) {
       return NextResponse.json({ error: "Unsupported operational environment" }, { status: 400 });
+    }
+
+    if (isCatalogSupabaseEmergencyDisabled()) {
+      return NextResponse.json(
+        {
+          error: "Catalog guidance is temporarily unavailable. Please request pricing or upload an invoice.",
+          catalogUnavailable: true,
+        },
+        { status: 503 },
+      );
     }
 
     if (!isSupabaseConfigured()) {

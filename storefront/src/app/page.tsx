@@ -27,7 +27,7 @@ export default function HomePage() {
         <HomeHeroExpress />
         <section
           className="border-b border-[#ebebea] bg-white py-6 sm:py-8"
-          aria-label="Authorized distributor brands"
+          aria-label="Manufacturer and distribution partner brands"
         >
           <BrandCarousel compact />
         </section>

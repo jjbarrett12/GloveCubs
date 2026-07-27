@@ -338,7 +338,7 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   )}
                 >
                   <Boxes className="h-2.5 w-2.5 shrink-0" aria-hidden />
-                  Authorized Distributor
+                  Manufacturer partners
                 </span>
               </div>
 

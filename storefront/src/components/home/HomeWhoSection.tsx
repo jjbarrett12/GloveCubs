@@ -15,13 +15,13 @@ const INDUSTRIES = [
     href: "/industries/hospitality",
     icon: UtensilsCrossed,
     title: "Hospitality",
-    body: "Food-safe vinyl & nitrile at competitive case pricing.",
+    body: "Vinyl and nitrile options for hospitality programs—confirm suitability for your food-handling policy.",
   },
   {
     href: "/industries/healthcare",
     icon: Stethoscope,
     title: "Healthcare",
-    body: "Medical-grade compliance with reliable stock.",
+    body: "Clinical and facility programs with documentation verified per SKU.",
   },
   {
     href: "/industries/industrial",

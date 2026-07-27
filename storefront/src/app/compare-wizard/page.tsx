@@ -27,8 +27,8 @@ export default async function CompareWizardPage() {
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs font-semibold text-neutral-600 sm:text-sm">
-              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5">Fast shipping</span>
-              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5">Quality guaranteed</span>
+              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5">Quote-first B2B</span>
+              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5">Specs verified per SKU</span>
               <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5">Expert support</span>
             </div>
           </div>
