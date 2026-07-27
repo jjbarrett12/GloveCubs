@@ -612,25 +612,91 @@ async function consumePasswordResetClaim(token, claimId) {
   const supabase = getSupabaseAdmin();
   const { hashPasswordResetToken } = require('../lib/passwordResetToken');
   const tokenHash = hashPasswordResetToken(token);
+  // Retire the token before password write; keep claim_id so failure can resurrect.
   const { data, error } = await supabase
     .from('password_reset_tokens')
     .update({
       consumed_at: new Date().toISOString(),
       token: '',
-      claim_id: null,
-      claimed_at: null,
-      claim_expires_at: null,
     })
     .eq('token_hash', tokenHash)
     .eq('claim_id', claimId)
     .is('consumed_at', null)
+    .select('id, claim_id, token_hash')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Undo consume after a failed password update (same claim only). */
+async function resurrectPasswordResetClaim(token, claimId) {
+  const supabase = getSupabaseAdmin();
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .update({
+      consumed_at: null,
+      claim_id: null,
+      claimed_at: null,
+      claim_expires_at: null,
+      token: '',
+    })
+    .eq('token_hash', tokenHash)
+    .eq('claim_id', claimId)
+    .not('consumed_at', 'is', null)
     .select('id')
     .maybeSingle();
   if (error) throw error;
   return data;
 }
 
-/** Release a claim after password-update failure so the user can retry. */
+/** After successful password change: keep consumed_at, drop claim lease. */
+async function finalizePasswordResetClaim(token, claimId) {
+  const supabase = getSupabaseAdmin();
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .update({
+      claim_id: null,
+      claimed_at: null,
+      claim_expires_at: null,
+      token: '',
+    })
+    .eq('token_hash', tokenHash)
+    .eq('claim_id', claimId)
+    .not('consumed_at', 'is', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Unconditional retire by hash (cleanup / defense). Does not reopen.
+ */
+async function forceInvalidatePasswordResetToken(token) {
+  const supabase = getSupabaseAdmin();
+  const { hashPasswordResetToken } = require('../lib/passwordResetToken');
+  const tokenHash = hashPasswordResetToken(token);
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .update({
+      consumed_at: new Date().toISOString(),
+      claim_id: null,
+      claimed_at: null,
+      claim_expires_at: null,
+      token: '',
+    })
+    .eq('token_hash', tokenHash)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Release a claim after password-update failure so the user can retry (pre-consume). */
 async function releasePasswordResetClaim(token, claimId) {
   const supabase = getSupabaseAdmin();
   const { hashPasswordResetToken } = require('../lib/passwordResetToken');
@@ -1249,6 +1315,9 @@ module.exports = {
   findPasswordResetToken,
   claimPasswordResetToken,
   consumePasswordResetClaim,
+  resurrectPasswordResetClaim,
+  finalizePasswordResetClaim,
+  forceInvalidatePasswordResetToken,
   releasePasswordResetClaim,
   deletePasswordResetToken,
   deletePasswordResetTokensByUserId,

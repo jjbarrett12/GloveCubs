@@ -247,6 +247,87 @@ async function updateUser(id, payload) {
   return getUserById(id);
 }
 
+/**
+ * Apply a password reset: public.users bcrypt hash + Auth password + durable
+ * app_metadata completion marker in one Auth admin update (when Auth succeeds).
+ * Returns { ok, authMarkerWritten, authPasswordUpdated }.
+ */
+async function applyPasswordReset(userId, plainPassword, tokenHash, claimId) {
+  if (!isAuthUuid(userId)) {
+    const err = new Error('invalid_user');
+    err.statusCode = 400;
+    throw err;
+  }
+  const supabase = getSupabaseAdmin();
+  const {
+    mergePasswordResetAppMetadata,
+    PASSWORD_RESET_APP_METADATA_KEY,
+  } = require('../lib/passwordResetAuthMarker');
+
+  const password_hash = await require('bcryptjs').hash(String(plainPassword).trim(), 10);
+  const { error: profileErr } = await supabase
+    .from('users')
+    .update({ password_hash, updated_at: new Date().toISOString() })
+    .eq('id', String(userId));
+  if (profileErr) throw profileErr;
+
+  const { data: authWrap, error: getErr } = await supabase.auth.admin.getUserById(String(userId));
+  if (getErr) throw getErr;
+  const authUser = authWrap?.user;
+  if (!authUser) {
+    const err = new Error('auth_user_missing');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const completedAt = new Date().toISOString();
+  const nextMeta = mergePasswordResetAppMetadata(authUser.app_metadata, {
+    tokenHash,
+    claimId,
+    completedAt,
+  });
+
+  const { data: updated, error: authErr } = await supabase.auth.admin.updateUserById(String(userId), {
+    password: String(plainPassword).trim(),
+    app_metadata: nextMeta,
+  });
+  if (authErr) {
+    const err = new Error(authErr.message || 'auth_password_reset_failed');
+    err.statusCode = 500;
+    err.passwordUpdated = true; // public.users already updated — do not resurrect token
+    err.cause = authErr;
+    throw err;
+  }
+
+  const written = updated?.user?.app_metadata?.[PASSWORD_RESET_APP_METADATA_KEY];
+  const authMarkerWritten =
+    written && typeof written === 'object' && String(written.th || '') === String(tokenHash);
+
+  if (!authMarkerWritten) {
+    const err = new Error('auth_reset_marker_not_confirmed');
+    err.statusCode = 500;
+    err.passwordUpdated = true;
+    throw err;
+  }
+
+  return {
+    ok: true,
+    authMarkerWritten: true,
+    authPasswordUpdated: true,
+    completedAt,
+  };
+}
+
+/** True if Auth app_metadata already records completion for this token hash. */
+async function hasCompletedPasswordResetForToken(userId, tokenHash) {
+  if (!userId || !tokenHash) return false;
+  const supabase = getSupabaseAdmin();
+  const { isPasswordResetAlreadyCompleted } = require('../lib/passwordResetAuthMarker');
+  const { data: authWrap, error } = await supabase.auth.admin.getUserById(String(userId));
+  if (error || !authWrap?.user) return false;
+  return isPasswordResetAlreadyCompleted(authWrap.user.app_metadata, tokenHash);
+}
+
 async function getAllUsers() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
@@ -317,6 +398,8 @@ module.exports = {
   getAllUsers,
   createUser,
   updateUser,
+  applyPasswordReset,
+  hasCompletedPasswordResetForToken,
   isAdmin,
   rowToUser,
   listAppAdminsForCockpit,

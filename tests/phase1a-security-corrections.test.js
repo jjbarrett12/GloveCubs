@@ -63,20 +63,36 @@ describe('phase1a corrective migration (source)', () => {
 });
 
 describe('phase1a password reset app flow (source)', () => {
-  it('claims then consumes after update; releases on failure', () => {
+  it('claims, consumes before applyPasswordReset; resurrects only on pre-success failure', () => {
     const server = read('server.js');
     assert.match(server, /claimPasswordResetToken/);
     assert.match(server, /consumePasswordResetClaim/);
-    assert.match(server, /releasePasswordResetClaim/);
-    const claimIdx = server.indexOf('claimPasswordResetToken');
-    const updateIdx = server.indexOf('updateUser(user.id, { password_hash }');
-    const consumeIdx = server.indexOf('consumePasswordResetClaim');
-    assert.ok(claimIdx > 0 && updateIdx > claimIdx && consumeIdx > updateIdx);
+    assert.match(server, /applyPasswordReset/);
+    assert.match(server, /resurrectPasswordResetClaim/);
+    assert.match(server, /hasCompletedPasswordResetForToken/);
+    assert.match(server, /forceInvalidatePasswordResetToken/);
+    const idxConsume = server.indexOf('consumePasswordResetClaim');
+    const idxApply = server.indexOf('applyPasswordReset');
+    assert.ok(idxConsume > 0 && idxApply > idxConsume);
   });
 
-  it('does not call consume-before-update helper', () => {
+  it('does not restore consume-after-update-only without marker', () => {
     const server = read('server.js');
-    assert.doesNotMatch(server, /consumePasswordResetToken\(/);
+    assert.doesNotMatch(server, /updateUser\(user\.id, \{ password_hash \}/);
+    assert.match(server, /app_metadata|applyPasswordReset/);
+  });
+});
+
+describe('phase1b durable replay guards (source)', () => {
+  it('uses Auth app_metadata marker helpers, not user_metadata', () => {
+    const marker = read('lib/passwordResetAuthMarker.js');
+    const users = read('services/usersService.js');
+    assert.match(marker, /PASSWORD_RESET_APP_METADATA_KEY/);
+    assert.doesNotMatch(marker, /user_metadata/);
+    assert.match(users, /auth\.admin\.updateUserById/);
+    assert.match(users, /mergePasswordResetAppMetadata/);
+    assert.match(users, /app_metadata/);
+    assert.doesNotMatch(users, /user_metadata.*gc_password_reset|gc_password_reset.*user_metadata/);
   });
 });
 

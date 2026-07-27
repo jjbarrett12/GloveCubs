@@ -1229,38 +1229,69 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
         if (!token || !password || String(password).length < 6) {
             return res.status(400).json({ error: 'Valid token and password (min 6 characters) are required.' });
         }
+        const { hashPasswordResetToken } = require('./lib/passwordResetToken');
+        const tokenHash = hashPasswordResetToken(token);
+
         const claimed = await dataService.claimPasswordResetToken(token);
         if (!claimed) {
             return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
         }
         const claimId = claimed.claim_id;
+        const userId = claimed.user_id;
+
         try {
-            const userId = claimed.user_id;
+            if (userId != null && (await usersService.hasCompletedPasswordResetForToken(userId, tokenHash))) {
+                await dataService.releasePasswordResetClaim(token, claimId).catch(() => {});
+                await dataService.forceInvalidatePasswordResetToken(token).catch(() => {});
+                return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+            }
+
+            const consumed = await dataService.consumePasswordResetClaim(token, claimId);
+            if (!consumed) {
+                await dataService.releasePasswordResetClaim(token, claimId).catch(() => {});
+                return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+            }
+
             const user =
                 userId != null
                     ? await usersService.getUserById(userId)
                     : await usersService.getUserByEmail(claimed.email);
             if (!user) {
-                await dataService.releasePasswordResetClaim(token, claimId);
+                await dataService.resurrectPasswordResetClaim(token, claimId).catch(() => {});
                 return res.status(400).json({ error: 'User not found.' });
             }
-            const password_hash = await bcrypt.hash(String(password).trim(), 10);
-            await usersService.updateUser(user.id, { password_hash });
-            const consumed = await dataService.consumePasswordResetClaim(token, claimId);
-            if (!consumed) {
-                // Password already updated; claim lost — force re-login path is still ok.
-                return res.status(400).json({
-                    error: 'Reset could not be finalized. If login fails, request a new reset link.',
-                });
-            }
-            return res.json({ success: true, message: 'Password updated. You can log in now.' });
-        } catch (updateErr) {
+
             try {
-                await dataService.releasePasswordResetClaim(token, claimId);
-            } catch (_) {
-                /* claim TTL will expire */
+                await usersService.applyPasswordReset(user.id, String(password).trim(), tokenHash, claimId);
+            } catch (applyErr) {
+                if (applyErr && applyErr.passwordUpdated) {
+                    console.error('[password_reset] password updated but Auth marker incomplete', {
+                        user_id: user.id,
+                        claim_id: claimId,
+                        code: applyErr.message,
+                    });
+                    await dataService.forceInvalidatePasswordResetToken(token).catch((cleanupErr) => {
+                        console.error('[password_reset] force invalidate after partial Auth failure', {
+                            user_id: user.id,
+                            code: cleanupErr.message,
+                        });
+                    });
+                    // Password (Express profile) changed; token retired — report success, no replay.
+                    return res.json({ success: true, message: 'Password updated. You can log in now.' });
+                }
+                await dataService.resurrectPasswordResetClaim(token, claimId).catch(() => {});
+                throw applyErr;
             }
-            throw updateErr;
+
+            await dataService.finalizePasswordResetClaim(token, claimId).catch((finalizeErr) => {
+                console.error('[password_reset] finalize claim fields failed', {
+                    user_id: user.id,
+                    code: finalizeErr.message,
+                });
+            });
+            return res.json({ success: true, message: 'Password updated. You can log in now.' });
+        } catch (innerErr) {
+            throw innerErr;
         }
     } catch (error) {
         res.status(500).json({ error: error.message || 'Reset failed.' });

@@ -82,15 +82,17 @@ describe('phase1 password reset application code (source)', () => {
     assert.match(ds, /token: ''/);
   });
 
-  it('claims token, updates password, then consumes claim', () => {
+  it('claims token, consumes before password update, writes Auth marker path', () => {
     const server = read('server.js');
     assert.match(server, /generatePasswordResetToken/);
     assert.match(server, /claimPasswordResetToken/);
     assert.match(server, /consumePasswordResetClaim/);
-    assert.match(server, /releasePasswordResetClaim/);
+    assert.match(server, /applyPasswordReset/);
+    assert.match(server, /hasCompletedPasswordResetForToken/);
+    assert.match(server, /resurrectPasswordResetClaim/);
     const idxClaim = server.indexOf('claimPasswordResetToken');
-    const idxUpdate = server.indexOf('updateUser(user.id, { password_hash }');
     const idxConsume = server.indexOf('consumePasswordResetClaim');
-    assert.ok(idxClaim > 0 && idxUpdate > idxClaim && idxConsume > idxUpdate);
+    const idxApply = server.indexOf('applyPasswordReset');
+    assert.ok(idxClaim > 0 && idxConsume > idxClaim && idxApply > idxConsume);
   });
 });

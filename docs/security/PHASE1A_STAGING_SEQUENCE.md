@@ -17,7 +17,9 @@ Do **not** apply these migrations to production until staging evidence is captur
 | Phase 1A app before migrate | Inserts referencing `token_hash` / `claim_id` fail — **blocked**. |
 | Required | **DB migrations first**, then Express with claim/consume/release. |
 
-Migration-first is safe for the **old** app only until Phase 1A app deploys claim fields; scrub of plaintext is intentional.
+Phase 1B: reset flow is **claim → Auth-marker check → consume (retire) → password + Auth `app_metadata` marker → finalize**. Consume-before-update + Auth marker closes replay if cleanup fails. Password failure **resurrects** the token.
+
+Migration-first is safe for the **old** app only until Phase 1A/1B app deploys claim fields; scrub of plaintext is intentional.
 
 ## Sequence
 
