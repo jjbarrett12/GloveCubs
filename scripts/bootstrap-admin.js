@@ -1,19 +1,21 @@
 /**
  * Create the first GloveCubs admin on an empty / greenfield project.
  *
- * Identity: auth.users (UUID). public.users is the portal profile row with the same id (bcrypt for Express login).
+ * Identity: auth.users (UUID). public.users is the portal profile with the same id.
+ * Password authority: Supabase Auth only (profile stores deprecated sentinel, not a usable hash).
  * public.app_admins — admin API access (auth_user_id; email is display/metadata only).
  *
  * Requires: .env with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  * Requires: BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD (min 8 chars)
+ * Optional for Express login smoke: SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY
  *
  * Run: node scripts/bootstrap-admin.js
  */
 'use strict';
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-const bcrypt = require('bcryptjs');
 const { getSupabaseAdmin } = require('../lib/supabaseAdmin');
+const { PASSWORD_HASH_DEPRECATED_SENTINEL } = require('../lib/supabasePasswordAuth');
 const usersService = require('../services/usersService');
 
 function requireEnv(name) {
@@ -72,7 +74,6 @@ async function main() {
   }
 
   const supabase = getSupabaseAdmin();
-  const password_hash = bcrypt.hashSync(plainPassword, 10);
 
   const { data: existingPu } = await supabase.from('users').select('id').ilike('email', emailLower).maybeSingle();
 
@@ -90,7 +91,7 @@ async function main() {
     await supabase
       .from('users')
       .update({
-        password_hash,
+        password_hash: PASSWORD_HASH_DEPRECATED_SENTINEL,
         is_approved: 1,
         company_name: 'GloveCubs',
         contact_name: 'Administrator',
@@ -102,7 +103,6 @@ async function main() {
   } else {
     const merged = await usersService.createUser({
       email: emailLower,
-      password_hash,
       plain_password: plainPassword,
       company_name: 'GloveCubs',
       contact_name: 'Administrator',
@@ -116,7 +116,7 @@ async function main() {
 
   await ensureAppAdminRow(supabase, jwtSubject, emailLower);
 
-  console.log('\nDone. Sign in at the portal with this email and password.');
+  console.log('\nDone. Sign in at the portal with this email and password (Supabase Auth).');
   console.log('JWT `id` (canonical):', jwtSubject);
 }
 

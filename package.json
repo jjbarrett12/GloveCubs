@@ -13,7 +13,7 @@
     "seed": "node seed.js",
     "diagnose:products": "node scripts/diagnose-products.mjs",
     "enrich:hospeco-images": "node scripts/enrich-hospeco-images.mjs",
-    "test:phase1-security": "node --test tests/password-reset-token.test.js tests/phase1-tenant-security-source.test.js tests/phase1a-security-corrections.test.js",
+    "test:phase1-security": "node --test tests/password-reset-token.test.js tests/phase1-tenant-security-source.test.js tests/phase1a-security-corrections.test.js tests/phase1c-dual-auth.test.js",
     "test": "node scripts/check-no-catalogos-products.js && node scripts/check-express-freeze.js && node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js && node --test \"tests/*.test.js\"",
     "check:commerce-truth": "node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js",
     "verify:pricing-authority-parity": "node scripts/verify-pricing-authority-parity.js",

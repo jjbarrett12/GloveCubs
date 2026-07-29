@@ -15,11 +15,11 @@ Do **not** apply these migrations to production until staging evidence is captur
 |--------------|----------|
 | Migrate (incl. `203`+`205` claim cols) then old Express | New resets still write/read via service_role; in-flight plaintext scrubbed at `203` (users re-request). Old app without claim columns fails inserts that set `claim_*` only after Phase 1A app — so **migrate then deploy Phase 1A app**. |
 | Phase 1A app before migrate | Inserts referencing `token_hash` / `claim_id` fail — **blocked**. |
-| Required | **DB migrations first**, then Express with claim/consume/release. |
+| Required | **DB migrations first**, then Express with claim/consume + **Phase 1C Auth-only password**. |
 
-Phase 1B: reset flow is **claim → Auth-marker check → consume (retire) → password + Auth `app_metadata` marker → finalize**. Consume-before-update + Auth marker closes replay if cleanup fails. Password failure **resurrects** the token.
+Phase 1B/1C reset: **claim → marker check → consume → Auth password + `app_metadata` marker → finalize**. No `public.users.password_hash` write. Express login validates via Supabase `signInWithPassword` (anon key), then issues custom JWT.
 
-Migration-first is safe for the **old** app only until Phase 1A/1B app deploys claim fields; scrub of plaintext is intentional.
+Requires Express env: `SUPABASE_URL` (or `NEXT_PUBLIC_SUPABASE_URL`) and `SUPABASE_ANON_KEY` (or `NEXT_PUBLIC_SUPABASE_ANON_KEY`) in addition to service role.
 
 ## Sequence
 

@@ -102,17 +102,18 @@ async function getUserById(id) {
 
 async function createUser(payload) {
   const supabase = getSupabaseAdmin();
-  const passwordHash =
-    payload.password_hash != null && payload.password_hash !== ''
-      ? payload.password_hash
-      : payload.password;
+  const { PASSWORD_HASH_DEPRECATED_SENTINEL } = require('../lib/supabasePasswordAuth');
   const email = (payload.email || '').trim().toLowerCase();
   if (!email) throw new Error('email required');
 
   const plainForAuth =
     payload.plain_password != null && String(payload.plain_password).length > 0
       ? String(payload.plain_password)
-      : null;
+      : payload.password != null &&
+          String(payload.password).length > 0 &&
+          !String(payload.password).startsWith('$2')
+        ? String(payload.password)
+        : null;
   const authPassword = plainForAuth || `${crypto.randomBytes(24).toString('base64url')}Aa0!zq`;
 
   let authUid = null;
@@ -152,7 +153,8 @@ async function createUser(payload) {
     const insert = {
       id: authUid,
       email,
-      password_hash: passwordHash,
+      // Column is NOT NULL; store non-authenticating sentinel — Auth owns the password.
+      password_hash: PASSWORD_HASH_DEPRECATED_SENTINEL,
       company_name: payload.company_name || null,
       contact_name: payload.contact_name || null,
       phone: payload.phone || null,
@@ -204,7 +206,6 @@ async function updateUser(id, payload) {
     'zip',
     'is_approved',
     'discount_tier',
-    'password_hash',
     'budget_amount',
     'budget_period',
     'rep_name',
@@ -248,8 +249,8 @@ async function updateUser(id, payload) {
 }
 
 /**
- * Apply a password reset: public.users bcrypt hash + Auth password + durable
- * app_metadata completion marker in one Auth admin update (when Auth succeeds).
+ * Apply a password reset against Supabase Auth only (canonical customer credential).
+ * Does not update the legacy profile credential column.
  * Returns { ok, authMarkerWritten, authPasswordUpdated }.
  */
 async function applyPasswordReset(userId, plainPassword, tokenHash, claimId) {
@@ -263,13 +264,6 @@ async function applyPasswordReset(userId, plainPassword, tokenHash, claimId) {
     mergePasswordResetAppMetadata,
     PASSWORD_RESET_APP_METADATA_KEY,
   } = require('../lib/passwordResetAuthMarker');
-
-  const password_hash = await require('bcryptjs').hash(String(plainPassword).trim(), 10);
-  const { error: profileErr } = await supabase
-    .from('users')
-    .update({ password_hash, updated_at: new Date().toISOString() })
-    .eq('id', String(userId));
-  if (profileErr) throw profileErr;
 
   const { data: authWrap, error: getErr } = await supabase.auth.admin.getUserById(String(userId));
   if (getErr) throw getErr;
@@ -294,7 +288,7 @@ async function applyPasswordReset(userId, plainPassword, tokenHash, claimId) {
   if (authErr) {
     const err = new Error(authErr.message || 'auth_password_reset_failed');
     err.statusCode = 500;
-    err.passwordUpdated = true; // public.users already updated — do not resurrect token
+    err.passwordUpdated = false;
     err.cause = authErr;
     throw err;
   }
@@ -306,6 +300,7 @@ async function applyPasswordReset(userId, plainPassword, tokenHash, claimId) {
   if (!authMarkerWritten) {
     const err = new Error('auth_reset_marker_not_confirmed');
     err.statusCode = 500;
+    // Auth password may already be updated; do not resurrect token.
     err.passwordUpdated = true;
     throw err;
   }

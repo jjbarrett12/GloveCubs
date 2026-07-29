@@ -969,11 +969,9 @@ app.post('/api/auth/register', authContactLimiter, async (req, res) => {
         const { company_name, email, password, contact_name, phone, address, city, state, zip, cases_or_pallets, allow_free_upgrades } = req.body;
         const existing = await usersService.getUserByEmail(email);
         if (existing) return res.status(400).json({ error: 'Email already registered' });
-        const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = await usersService.createUser({
             company_name,
             email,
-            password_hash: hashedPassword,
             plain_password: password,
             contact_name,
             phone: phone || '',
@@ -999,11 +997,27 @@ app.post('/api/auth/login', authContactLimiter, async (req, res) => {
         const email = (req.body.email || '').toString().trim();
         const password = (req.body.password != null && req.body.password !== '') ? String(req.body.password).trim() : '';
         if (!email || !password) return res.status(400).json({ error: 'Please enter email and password.' });
-        const user = await usersService.getUserByEmail(email);
-        if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
-        const validPassword = await bcrypt.compare(password, user.password || user.password_hash);
-        if (!validPassword) return res.status(401).json({ error: 'Invalid email or password.' });
-        const authSubject = String(user.id);
+
+        const {
+            authenticateCustomerPassword,
+            isSupabasePasswordAuthConfigured,
+        } = require('./lib/supabasePasswordAuth');
+        if (!isSupabasePasswordAuthConfigured()) {
+            console.error('[POST /api/auth/login] Supabase password auth not configured');
+            return res.status(503).json({ error: 'Authentication temporarily unavailable.' });
+        }
+
+        const authResult = await authenticateCustomerPassword(email, password);
+        if (!authResult.ok) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        const user = await usersService.getUserById(authResult.userId);
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        const authSubject = String(authResult.userId);
         let activeCompanyPayload = null;
         try {
             const r = await activeCompanyResolve.resolveActiveCompanyId(authSubject, {});
@@ -1265,18 +1279,18 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
                 await usersService.applyPasswordReset(user.id, String(password).trim(), tokenHash, claimId);
             } catch (applyErr) {
                 if (applyErr && applyErr.passwordUpdated) {
-                    console.error('[password_reset] password updated but Auth marker incomplete', {
+                    // Auth password (and possibly marker) already changed — never resurrect.
+                    console.error('[password_reset] Auth updated but marker/finalize incomplete', {
                         user_id: user.id,
                         claim_id: claimId,
                         code: applyErr.message,
                     });
                     await dataService.forceInvalidatePasswordResetToken(token).catch((cleanupErr) => {
-                        console.error('[password_reset] force invalidate after partial Auth failure', {
+                        console.error('[password_reset] force invalidate after Auth success', {
                             user_id: user.id,
                             code: cleanupErr.message,
                         });
                     });
-                    // Password (Express profile) changed; token retired — report success, no replay.
                     return res.json({ success: true, message: 'Password updated. You can log in now.' });
                 }
                 await dataService.resurrectPasswordResetClaim(token, claimId).catch(() => {});
@@ -1294,7 +1308,8 @@ app.post('/api/auth/reset-password', authContactLimiter, async (req, res) => {
             throw innerErr;
         }
     } catch (error) {
-        res.status(500).json({ error: error.message || 'Reset failed.' });
+        console.error('[POST /api/auth/reset-password]', error && error.message ? error.message : error);
+        res.status(500).json({ error: 'Unable to reset password. Please try again or request a new link.' });
     }
 });
 
@@ -5287,12 +5302,10 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
         const emailTrim = (email || '').toString().trim().toLowerCase();
         const existing = await usersService.getUserByEmail(emailTrim);
         if (existing) return res.status(400).json({ error: 'Email already registered' });
-        const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = await usersService.createUser({
         company_name: (company_name || '').trim(),
         contact_name: (contact_name || '').trim(),
         email: emailTrim,
-        password_hash: hashedPassword,
         plain_password: password,
         phone: (phone || '').trim(),
         address: (address || '').trim(),
@@ -5894,7 +5907,7 @@ app.get('/api/admin/owner/admins-users', authenticateToken, requireAdmin, async 
             users_pending_approval: pending.length,
             pending_queue: pending.slice(0, 100),
             users_total: usersPublic.length,
-            note: 'public.users.id matches auth.users (UUID); profile holds B2B fields and bcrypt for Express login. Admin UI requires app_admins.auth_user_id.'
+            note: 'public.users.id matches auth.users (UUID); profile holds B2B fields. Password authority is Supabase Auth. Admin UI requires app_admins.auth_user_id.'
         });
     } catch (err) {
         console.error('[admin/owner/admins-users]', err);
