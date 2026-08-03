@@ -84,34 +84,8 @@ CREATE POLICY gc_company_members_delete_owner_admin
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE gc_commerce.company_members TO authenticated;
 
--- -----------------------------------------------------------------------------
--- user_profiles: own row only
--- -----------------------------------------------------------------------------
-ALTER TABLE gc_commerce.user_profiles ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS gc_user_profiles_select_self ON gc_commerce.user_profiles;
-CREATE POLICY gc_user_profiles_select_self
-  ON gc_commerce.user_profiles
-  FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid() OR public.is_active_admin());
-
-DROP POLICY IF EXISTS gc_user_profiles_update_self ON gc_commerce.user_profiles;
-CREATE POLICY gc_user_profiles_update_self
-  ON gc_commerce.user_profiles
-  FOR UPDATE
-  TO authenticated
-  USING (user_id = auth.uid() OR public.is_active_admin())
-  WITH CHECK (user_id = auth.uid() OR public.is_active_admin());
-
-DROP POLICY IF EXISTS gc_user_profiles_insert_self ON gc_commerce.user_profiles;
-CREATE POLICY gc_user_profiles_insert_self
-  ON gc_commerce.user_profiles
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (user_id = auth.uid() OR public.is_active_admin());
-
-GRANT SELECT, INSERT, UPDATE ON TABLE gc_commerce.user_profiles TO authenticated;
+-- gc_commerce.user_profiles was merged into public.users and dropped in
+-- 20260707120000_public_users_uuid_identity.sql. Do not reintroduce RLS here.
 
 -- -----------------------------------------------------------------------------
 -- ship_to_addresses

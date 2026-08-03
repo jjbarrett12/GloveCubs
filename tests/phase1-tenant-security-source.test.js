@@ -45,6 +45,10 @@ describe('phase1 tenant security migrations (source)', () => {
     }
     assert.match(sql, /role <> 'owner'/);
     assert.match(sql, /gc_commerce\.is_company_member/);
+    // Dropped in 20260707120000 after merge into public.users — must not be reintroduced.
+    assert.doesNotMatch(sql, /ALTER TABLE gc_commerce\.user_profiles\b/i);
+    assert.doesNotMatch(sql, /ON gc_commerce\.user_profiles\b/i);
+    assert.doesNotMatch(sql, /GRANT .+ ON TABLE gc_commerce\.user_profiles\b/i);
   });
 
   it('revokes public supplier-cost SELECT policies', () => {

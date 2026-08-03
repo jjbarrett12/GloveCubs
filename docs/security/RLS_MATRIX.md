@@ -6,7 +6,7 @@ Policies in migrations `20261227120000`–`20261227120500`.
 |--------------|-----|--------|--------|--------|--------|-------------|
 | gc_commerce.companies | on | member/admin | — (service) | owner/admin | — | `is_company_member(id)` |
 | gc_commerce.company_members | on | same-company | — (service) | — | — | Phase 1A: customer SELECT only |
-| gc_commerce.user_profiles | on | self | self | self | — | `user_id = auth.uid()` |
+| gc_commerce.user_profiles | — | — | — | — | — | Dropped in `20260707120000` (merged into `public.users`). Not a Phase 1 RLS target. |
 | gc_commerce.ship_to_addresses | on | member | owner/admin | owner/admin | — (service) | Phase 1A: no customer DELETE |
 | gc_commerce.uploaded_invoices | on | member | owner/admin/member | — | — (service) | Phase 1A: no customer hard-delete |
 | gc_commerce.rfqs | on | member or creator | owner/admin/member/billing | — | — | `company_id` |
