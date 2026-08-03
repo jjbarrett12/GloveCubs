@@ -30,6 +30,9 @@ quarantine-plan.csv
 .vercel
 .env*.local
 
+# Staging security evidence (may contain identifiers — keep local)
+.artifacts/
+
 # Local storefront scratch / smoke artifacts
 storefront/tmp-*
 test-results/
