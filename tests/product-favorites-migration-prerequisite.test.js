@@ -59,4 +59,19 @@ describe('product_favorites blank-project prerequisite', () => {
     assert.ok(files.includes('20260422103000_storefront_search_catalogos_products.sql'));
     assert.ok('20260422102000_enable_pg_trgm.sql' < '20260422103000_storefront_search_catalogos_products.sql');
   });
+
+  it('drops own-user policies before UUID user_id conversion and restores after', () => {
+    const dropFile = '20260707115000_drop_product_favorites_rls_for_user_uuid.sql';
+    const uuidFile = '20260707120000_public_users_uuid_identity.sql';
+    const restoreFile = '20260707121000_restore_product_favorites_rls.sql';
+    const files = list();
+    assert.ok(files.includes(dropFile));
+    assert.ok(files.includes(restoreFile));
+    assert.ok(dropFile < uuidFile);
+    assert.ok(uuidFile < restoreFile);
+    assert.match(read(dropFile), /DROP POLICY IF EXISTS product_favorites_select_own/i);
+    assert.match(read(restoreFile), /CREATE POLICY product_favorites_select_own/i);
+    assert.match(read(restoreFile), /user_id\s*=\s*\(\s*SELECT auth\.uid\(\)\s*\)/i);
+    assert.doesNotMatch(read(restoreFile), /using\s*\(\s*true\s*\)/i);
+  });
 });

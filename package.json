@@ -16,6 +16,11 @@
     "test:phase1-security": "node --test tests/password-reset-token.test.js tests/phase1-tenant-security-source.test.js tests/phase1a-security-corrections.test.js tests/phase1c-dual-auth.test.js",
     "test:pg-trgm-prereq": "node --test tests/pg-trgm-migration-prerequisite.test.js",
     "test:product-favorites-prereq": "node --test tests/product-favorites-migration-prerequisite.test.js",
+    "test:sales-prospects-prereq": "node --test tests/sales-prospects-migration-prerequisite.test.js",
+    "test:drop-products-deleted-triggers": "node --test tests/drop-products-deleted-triggers.test.js",
+    "test:admin-po-receive-atomic-splitter": "node --test tests/admin-po-receive-atomic-splitter.test.js",
+    "test:baseline-migration-history": "node --test tests/baseline-migration-history-guard.test.js",
+
     "test": "node scripts/check-no-catalogos-products.js && node scripts/check-express-freeze.js && node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js && node --test \"tests/*.test.js\"",
     "check:commerce-truth": "node scripts/check-pricing-drift.js && node scripts/check-variant-mandatory.js && node scripts/check-parent-inventory-usage.js",
     "verify:pricing-authority-parity": "node scripts/verify-pricing-authority-parity.js",

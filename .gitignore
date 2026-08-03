@@ -10,7 +10,9 @@
 .env
 .env.*
 !.env.example
+!.env.staging.example
 !**/.env.example
+!**/.env.staging.example
 .DS_Store
 Thumbs.db
 # Supabase CLI local artifacts
