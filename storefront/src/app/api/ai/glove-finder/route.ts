@@ -13,7 +13,10 @@ import {
 import { runJsonResponse } from "@/lib/ai/client";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
+import {
+  isCatalogSupabaseEmergencyDisabled,
+  isPublicAiEmergencyDisabled,
+} from "@/lib/catalog/emergency-catalog-kill-switch";
 import { fetchStoreProductRowsByIds } from "@/lib/catalog/store-products";
 import type { StoreProductRow } from "@/lib/catalog/store-products";
 import { fetchRestaurantPrepLineCandidateProductIds } from "@/lib/ontology/prep-line-candidates";
@@ -22,6 +25,7 @@ import { appendGloveFinderAdvisoryEvent, ensureGloveFinderOpportunity } from "@/
 import { projectPrepLineCardFacts } from "@/lib/prep-line/card-projection";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -106,6 +110,19 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    if (isPublicAiEmergencyDisabled()) {
+      return NextResponse.json(
+        {
+          error: "AI guidance is temporarily unavailable. Please request pricing or upload an invoice.",
+          emergencyDisabled: true,
+        },
+        { status: 503 },
+      );
+    }
+
+    const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+    if (guarded) return guarded;
+
     const rate = checkAiRateLimit(request);
     if (!rate.allowed) {
       return NextResponse.json(

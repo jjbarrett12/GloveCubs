@@ -1,4 +1,4 @@
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { SiteHeader } from "@/components/home/SiteHeader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 import { HomeHeroExpress } from "@/components/home/HomeHeroExpress";
 import { BrandCarousel } from "@/components/home/BrandCarousel";
@@ -10,8 +10,11 @@ import { HomeFaqSection } from "@/components/home/HomeFaqSection";
 import { HomeFinalCtaStrip } from "@/components/home/HomeFinalCtaStrip";
 import { HomeBridge } from "@/components/home/authority/HomeAuthorityPrimitives";
 
-/** Authority homepage — procurement-first; no catalog strip on landing. */
-export const dynamic = "force-dynamic";
+/**
+ * Authority homepage — procurement-first; anonymous chrome (no auth lookups).
+ * Education hub short-circuits when GC_EMERGENCY_DISABLE_CATALOG_SUPABASE=1.
+ */
+export const revalidate = 600;
 
 /**
  * Homepage Authority Redesign V1.1 — cohesive procurement brand experience.
@@ -22,7 +25,7 @@ export default function HomePage() {
       data-ui-root="homepage"
       className="home-authority flex min-h-screen min-w-0 flex-col font-poppins"
     >
-      <SiteHeaderLoader />
+      <SiteHeader />
       <main>
         <HomeHeroExpress />
         <section

@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  enrichStoreProductDetailBuyerPricing,
-  fetchStoreProductDetail,
-} from "@/lib/catalog/store-product-detail";
+import { fetchStoreProductDetail } from "@/lib/catalog/store-product-detail";
 import { StorePdpContent } from "@/components/store/pdp/StorePdpContent";
 import { StorePageShell } from "@/components/store/StorePageShell";
-import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
-import {
-  assertCustomerCompanyAccess,
-  resolveCustomerProcurementGate,
-} from "@/lib/procurement/customer-procurement-session";
 
-export const dynamic = "force-dynamic";
+/**
+ * Anonymous PDP — no auth / procurement lookups on the public path.
+ * Buyer-specific pricing stays on authenticated account surfaces.
+ */
+export const revalidate = 600;
 
 type PageProps = { params: { slug: string } };
 
@@ -63,10 +59,10 @@ function CatalogUnavailablePdp() {
     <main className="py-8 sm:py-10">
       <StorePageShell>
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-5 text-sm text-amber-950">
-          <p className="m-0 text-base font-semibold">Catalog listings are temporarily unavailable</p>
+          <p className="m-0 text-base font-semibold">Catalog is temporarily being updated</p>
           <p className="mt-2 m-0 leading-relaxed">
-            Product pages are paused while we contain catalog infrastructure load. Request pricing or upload an
-            invoice and our team will help source the right products.
+            Product pages are paused while we refresh catalog infrastructure. Request pricing or upload an invoice and our
+            team will help source the right products.
           </p>
           <p className="mt-3 m-0 flex flex-wrap gap-3">
             <Link href="/request-pricing" className="font-semibold text-[#f06232] hover:underline">
@@ -90,20 +86,8 @@ export default async function StoreProductPage({ params }: PageProps) {
     return <CatalogUnavailablePdp />;
   }
 
-  let detail = await fetchStoreProductDetail(params.slug);
+  const detail = await fetchStoreProductDetail(params.slug);
   if (!detail) notFound();
-
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabaseAdmin() as any;
-    const gate = await resolveCustomerProcurementGate(supabase);
-    if (gate.kind === "ready") {
-      const { userId, companyId } = gate.session;
-      const allowed = await assertCustomerCompanyAccess(supabase, userId, companyId);
-      if (allowed) {
-        detail = await enrichStoreProductDetailBuyerPricing(detail, companyId);
-      }
-    }
-  }
 
   return <StorePdpContent detail={detail} />;
 }

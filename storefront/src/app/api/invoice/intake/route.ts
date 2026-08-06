@@ -3,10 +3,25 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { checkAiRateLimit } from "@/lib/ai/middleware";
 import { runInvoiceIntakeFromMultipart } from "@/lib/invoice/run-intake-from-request";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
+import { isPublicAiEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
+import { guardPublicMultipartPost } from "@/lib/http/public-post-guard";
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  if (isPublicAiEmergencyDisabled()) {
+    return NextResponse.json(
+      {
+        error: "Invoice analysis is temporarily unavailable. Please request pricing or contact sales.",
+        emergencyDisabled: true,
+      },
+      { status: 503 },
+    );
+  }
+
+  const guarded = guardPublicMultipartPost(request, { maxBytes: 8 * 1024 * 1024 });
+  if (guarded) return guarded;
+
   const rate = checkAiRateLimit(request);
   if (!rate.allowed) {
     return NextResponse.json({ error: "Too many requests", retryAfterMs: rate.retryAfterMs }, { status: 429 });

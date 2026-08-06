@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({
   getSupabaseAdmin: () => getSupabaseAdmin(),
 }));
 
-import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
+import { isCatalogSupabaseEmergencyDisabled, isPublicAiEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { fetchStoreCatalogPage } from "@/lib/catalog/store-products";
 import { fetchStoreProductDetail } from "@/lib/catalog/store-product-detail";
 import { fetchCompareWizardProducts } from "@/lib/catalog/compare-wizard-products";
@@ -43,6 +43,14 @@ describe("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", () => {
     expect(isCatalogSupabaseEmergencyDisabled()).toBe(true);
     vi.stubEnv("GC_EMERGENCY_DISABLE_CATALOG_SUPABASE", "true");
     expect(isCatalogSupabaseEmergencyDisabled()).toBe(false);
+  });
+
+  it("public AI emergency helper is true only for exact string 1", () => {
+    expect(isPublicAiEmergencyDisabled()).toBe(false);
+    vi.stubEnv("GC_EMERGENCY_DISABLE_PUBLIC_AI", "1");
+    expect(isPublicAiEmergencyDisabled()).toBe(true);
+    vi.stubEnv("GC_EMERGENCY_DISABLE_PUBLIC_AI", "true");
+    expect(isPublicAiEmergencyDisabled()).toBe(false);
   });
 
   it("fetchStoreCatalogPage returns catalogUnavailable before any Supabase client when flag is 1", async () => {

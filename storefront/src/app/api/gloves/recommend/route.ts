@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendRequestSchema, recommendResponseSchema, type RecommendResponse } from "@/lib/gloves/types";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
+import {
+  isCatalogSupabaseEmergencyDisabled,
+  isPublicAiEmergencyDisabled,
+} from "@/lib/catalog/emergency-catalog-kill-switch";
 import {
   getActiveProducts,
   getUseCaseRiskProfiles,
@@ -12,6 +15,7 @@ import { scoreGloves, topNWithAlternatives } from "@/lib/gloves/scoring";
 import type { ScoredProduct } from "@/lib/gloves/scoring";
 import { chatCompletionPlain, getOpenAIClient } from "@/lib/ai/provider";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 
 function formatRulesResponse(
   scored: ScoredProduct[],
@@ -52,6 +56,19 @@ function formatRulesResponse(
  */
 export async function POST(request: NextRequest) {
   try {
+    if (isPublicAiEmergencyDisabled()) {
+      return NextResponse.json(
+        {
+          error: "Recommendations are temporarily unavailable. Please request pricing instead.",
+          emergencyDisabled: true,
+        },
+        { status: 503 },
+      );
+    }
+
+    const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+    if (guarded) return guarded;
+
     const body = await request.json();
     const parsed = recommendRequestSchema.safeParse(body);
     if (!parsed.success) {

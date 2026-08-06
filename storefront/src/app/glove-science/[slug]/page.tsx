@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { SiteHeader } from "@/components/home/SiteHeader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 import { ScienceArticleBody } from "@/components/glove-science/articles/ScienceArticleBody";
 import { ScienceArticleLayout } from "@/components/glove-science/articles/ScienceArticleLayout";
@@ -58,7 +58,7 @@ export default async function GloveScienceArticlePage({ params }: Props) {
     <div className="home-authority flex min-h-screen min-w-0 flex-col font-poppins">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
-      <SiteHeaderLoader />
+      <SiteHeader />
       <main className="min-w-0 flex-1 bg-white">
         <ScienceArticleLayout article={article}>
           <ScienceArticleBody sections={article.sections} />

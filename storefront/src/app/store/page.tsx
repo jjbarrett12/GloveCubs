@@ -13,15 +13,23 @@ import { StorePagination } from "@/components/store/StorePagination";
 import { AddVisiblePageToQuote } from "@/components/store/AddVisiblePageToQuote";
 import { getRequestPricingHrefForIntent } from "@/lib/discovery/intent-routes";
 import { getCanonicalStoreHrefIfNeeded } from "@/lib/catalog/store-legacy-url";
-import { getAdminUser } from "@/lib/admin/get-admin-user";
 
-/** Fresh catalog reads on each request (Supabase). */
-export const dynamic = "force-dynamic";
+/**
+ * Anonymous catalog listing — no admin/auth lookups.
+ * searchParams keep the route request-dynamic; kill switch prevents catalog fan-out.
+ * Canonical URL is filter-free `/store` so query variants are not treated as distinct indexable pages.
+ */
+export const revalidate = 300;
 
 export const metadata = {
   title: "Store | GloveCubs",
   description:
     "Industrial and disposable glove catalog for business buyers—filter by spec, brand, and industry. List pricing when published; case, pallet, and contract paths through quote review.",
+  alternates: { canonical: "/store" },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 type PageProps = {
@@ -105,8 +113,6 @@ export default async function StorePage({ searchParams }: PageProps) {
   const { products, total, limit, brands, facetCounts, facetMeta, catalogUnavailable } = await fetchStoreCatalogPage(urlState);
   const hasFilters = storeUrlHasActiveFilters(urlState);
   const showGrid = !catalogUnavailable;
-  const adminUser = await getAdminUser();
-  const showAdminCatalogCta = Boolean(adminUser);
 
   return (
     <div className="font-poppins">
@@ -152,9 +158,9 @@ export default async function StorePage({ searchParams }: PageProps) {
 
           {catalogUnavailable ? (
             <div className="mb-5 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3 sm:px-4">
-              <p className="m-0 text-sm font-semibold text-white">Catalog pricing is temporarily unavailable</p>
+              <p className="m-0 text-sm font-semibold text-white">Catalog is temporarily being updated</p>
               <p className="mt-2 text-sm leading-relaxed text-white/70">
-                Tell us what you need and we will help source the right products from distributor programs and published listings.
+                Listings are paused while we refresh catalog infrastructure. Request pricing or upload an invoice and our team will help source the right products.
               </p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <Link href="/request-pricing" className="text-sm font-bold text-[#f06232] hover:underline">
@@ -205,14 +211,6 @@ export default async function StorePage({ searchParams }: PageProps) {
                 >
                   Contact sales
                 </Link>
-                {showAdminCatalogCta ? (
-                  <Link
-                    href="/admin/products/new"
-                    className="inline-flex items-center justify-center rounded-md border border-emerald-500/45 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-200 transition hover:bg-emerald-500/18 sm:text-sm"
-                  >
-                    Add first product (admin)
-                  </Link>
-                ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-3 text-sm">
                 {hasFilters ? (

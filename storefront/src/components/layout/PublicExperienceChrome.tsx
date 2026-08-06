@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { SiteHeader } from "@/components/home/SiteHeader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 
 type Props = {
@@ -8,14 +8,17 @@ type Props = {
   className?: string;
 };
 
-/** Canonical public procurement shell: auth-aware header + footer, single chrome per route. */
+/**
+ * Canonical public procurement shell: anonymous header + footer (no server auth lookups).
+ * Authenticated account / workspace pages keep their own auth-aware header loaders.
+ */
 export async function PublicExperienceChrome({
   children,
   className = "min-h-screen bg-[#0a0a0a] font-poppins",
 }: Props) {
   return (
     <div className={`flex min-h-screen flex-col ${className}`}>
-      <SiteHeaderLoader />
+      <SiteHeader />
       <div className="flex flex-1 flex-col">{children}</div>
       <SiteFooter />
     </div>

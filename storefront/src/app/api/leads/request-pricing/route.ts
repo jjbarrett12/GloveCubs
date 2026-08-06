@@ -5,6 +5,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, sendSmtpMail } from "@/lib/email/smtp";
 import { recordRequestPricingSpine } from "@/lib/procurement/spine-writes";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 
 const bodySchema = z
   .object({
@@ -32,6 +33,9 @@ const bodySchema = z
 
 export async function POST(request: NextRequest) {
   const correlationId = randomUUID();
+
+  const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+  if (guarded) return guarded;
 
   if (!isSupabaseConfigured()) {
     logPublicFunnel("lead_request_pricing", "service_unavailable", { correlation_id: correlationId });

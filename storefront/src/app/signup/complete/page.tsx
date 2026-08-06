@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { SiteHeader } from "@/components/home/SiteHeader";
 import { resolveSupabasePublicEnv } from "@/lib/supabase/public-env";
 import { SignupCompleteClient } from "./SignupCompleteClient";
 
@@ -13,7 +13,7 @@ export default function SignupCompletePage() {
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
-      <SiteHeaderLoader />
+      <SiteHeader />
       <main className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center">
         <SignupCompleteClient supabaseConfigured={supabaseConfigured} />
       </main>

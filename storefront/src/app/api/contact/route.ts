@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, sendSmtpMail } from "@/lib/email/smtp";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 
 const bodySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -13,6 +14,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+  if (guarded) return guarded;
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }

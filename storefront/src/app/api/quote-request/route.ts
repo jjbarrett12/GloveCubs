@@ -6,6 +6,7 @@ import { recordQuoteCartSpine } from "@/lib/procurement/spine-writes";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { resolveQuoteShipToSnapshot } from "@/lib/commerce/quote-request-ship-to";
 import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 
 function isVariantMandatoryEnforceEnabled(): boolean {
   const v = process.env.VARIANT_MANDATORY_ENFORCE;
@@ -65,6 +66,9 @@ const bodySchema = z
   .strict();
 
 export async function POST(request: NextRequest) {
+  const guarded = guardPublicJsonPost(request, { maxBytes: 512 * 1024 });
+  if (guarded) return guarded;
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
+import { SiteHeader } from "@/components/home/SiteHeader";
 import { SiteFooter } from "@/components/home/SiteFooter";
 import { GloveSciencePage } from "@/components/glove-science/GloveSciencePage";
 
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function GloveScienceRoutePage() {
   return (
     <div className="home-authority flex min-h-screen min-w-0 flex-col font-poppins">
-      <SiteHeaderLoader />
+      <SiteHeader />
       <GloveSciencePage />
       <SiteFooter />
     </div>

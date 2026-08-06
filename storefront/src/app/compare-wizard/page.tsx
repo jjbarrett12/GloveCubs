@@ -3,7 +3,8 @@ import { CompareWizardTable } from "@/components/compare-wizard/CompareWizardTab
 import { StorePageShell } from "@/components/store/StorePageShell";
 import { fetchCompareWizardProducts } from "@/lib/catalog/compare-wizard-products";
 
-export const dynamic = "force-dynamic";
+/** Anonymous compare sheet — kill switch short-circuits catalog fan-out. */
+export const revalidate = 600;
 
 export default async function CompareWizardPage() {
   const { rows, catalogUnavailable } = await fetchCompareWizardProducts();
