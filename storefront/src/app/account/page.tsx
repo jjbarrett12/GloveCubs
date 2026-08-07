@@ -101,7 +101,7 @@ export default async function AccountPage() {
 
         {gate.kind === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            <p className="font-medium text-amber-50">Link your organization to unlock quote history</p>
+            <p className="font-medium text-amber-50">Link your company to unlock quote history</p>
             <p className="mt-2 text-xs text-amber-100/80">
               You can browse the catalog and submit quote requests now. Once your company is linked, requests appear in
               quote history and workspace tools unlock.
@@ -128,7 +128,7 @@ export default async function AccountPage() {
 
         {gate.kind === "active_company_required" ? (
           <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            Choose which organization you are buying for to unlock the full dashboard.{" "}
+            Choose which company you are buying for to unlock the full dashboard.{" "}
             <Link className="font-semibold text-[#f06232] underline" href="/workspace/procurement/active-company">
               Select active company
             </Link>
@@ -139,7 +139,7 @@ export default async function AccountPage() {
         {companySummary && buyerSnap ? (
           <section className="mt-8 grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 sm:col-span-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Your organization</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Your company</h2>
               <p className="mt-1 text-lg font-semibold text-white">{companySummary.tradeName}</p>
               <p className="mt-3 text-xs text-white/45">
                 Tier: <span className="font-medium text-white/80">{b2bTierLabel(companySummary.tierCode)}</span>
@@ -251,10 +251,10 @@ export default async function AccountPage() {
         ) : null}
 
         <section className="mt-10 rounded-lg border border-white/10 bg-black/20 px-4 py-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Order records</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/60">Order records</h2>
           <p className="mt-2 text-sm text-white/65">
             Checkout and self-serve payment are not enabled for this account yet. You can open the order records page
-            for read-only canonical headers when the feature flag is on; otherwise it explains what is coming next.
+            for status when available; otherwise it explains what is coming next.
           </p>
           <p className="mt-3">
             <Link className="text-sm font-semibold text-[#f06232] hover:underline" href="/account/orders">
@@ -264,7 +264,7 @@ export default async function AccountPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Buying & quotes</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/60">Buying & quotes</h2>
           <ul className="mt-3 space-y-3 text-sm">
             {gate.kind === "ready" ? (
               <li>

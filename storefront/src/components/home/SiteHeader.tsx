@@ -401,8 +401,9 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 <button
                   type="submit"
                   className="flex w-10 shrink-0 items-center justify-center bg-neutral-800 text-white hover:bg-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/40 lg:w-11"
+                  aria-label="Search"
                 >
-                  <Search className="h-[18px] w-[18px]" />
+                  <Search className="h-[18px] w-[18px]" aria-hidden />
                 </button>
               </form>
 

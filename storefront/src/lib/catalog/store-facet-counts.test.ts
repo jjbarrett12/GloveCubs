@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withFacetDisplayLabels } from "./store-facet-counts";
+import { withFacetDisplayLabels, filterFacetRowsForDisplay } from "./store-facet-counts";
 
 describe("withFacetDisplayLabels", () => {
   it("keeps canonical value while attaching formatted label", () => {
@@ -19,5 +19,19 @@ describe("withFacetDisplayLabels", () => {
 
     const units = withFacetDisplayLabels("units_per_case", [{ value: "10000", count: 1 }]);
     expect(units[0]).toEqual({ value: "10000", count: 1, label: "10,000" });
+  });
+});
+
+describe("filterFacetRowsForDisplay", () => {
+  it("hides zero-count rows unless selected", () => {
+    const rows = [
+      { value: "healthcare", count: 2, label: "Healthcare" },
+      { value: "veterinary", count: 0, label: "Veterinary" },
+    ];
+    expect(filterFacetRowsForDisplay(rows, undefined).map((r) => r.value)).toEqual(["healthcare"]);
+    expect(filterFacetRowsForDisplay(rows, ["veterinary"]).map((r) => r.value)).toEqual([
+      "healthcare",
+      "veterinary",
+    ]);
   });
 });

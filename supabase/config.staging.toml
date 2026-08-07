@@ -1,0 +1,22 @@
+# Minimal remote Auth config for GloveCubs Staging (fmrupehxifzkpfphiyvm).
+# Do not use as production config.toml.
+# Push: copy over local supabase/config.toml (or merge auth block), then:
+#   npx supabase config push --project-ref fmrupehxifzkpfphiyvm
+
+[project]
+id = "fmrupehxifzkpfphiyvm"
+
+[auth]
+enabled = true
+site_url = "https://glovecubs-staging.vercel.app"
+additional_redirect_urls = [
+  "https://glovecubs-staging.vercel.app/**",
+  "https://glovecubs-staging-jason-s-projects-920fb103.vercel.app/**",
+  "http://localhost:3005/**"
+]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true

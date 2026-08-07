@@ -4,6 +4,7 @@
  */
 
 import { createCompany } from "@/lib/admin/admin-company-write";
+import { tryLinkOrphanQuoteRequestsByEmail } from "@/lib/admin/admin-company-member-write";
 import { sanitizeSignupText, SELF_SIGNUP_DEFAULT_REDIRECT } from "@/lib/auth/self-signup-form";
 
 const NAME_MAX = 80;
@@ -14,6 +15,8 @@ export type FinalizeSelfSignupResult = {
   member_id: string;
   already_provisioned: boolean;
   redirect_path: typeof SELF_SIGNUP_DEFAULT_REDIRECT;
+  quotes_linked_count: number;
+  quotes_link_warning: string | null;
 };
 
 export function parseSelfSignupMetadata(
@@ -47,19 +50,34 @@ async function fetchExistingMembership(
 
 /**
  * Idempotent: if membership already exists, returns it. Otherwise creates active company + owner member.
+ * If userEmail is provided, links orphan quote requests to the new company.
  */
 export async function finalizeSelfSignupForUser(
   supabase: any,
   userId: string,
   userMetadata: Record<string, unknown> | null | undefined,
+  userEmail?: string | null,
 ): Promise<FinalizeSelfSignupResult> {
   const existing = await fetchExistingMembership(supabase, userId);
   if (existing) {
+    let quotesLinkedCount = 0;
+    let quotesLinkWarning: string | null = null;
+    if (userEmail) {
+      const link = await tryLinkOrphanQuoteRequestsByEmail(supabase, {
+        email: userEmail,
+        companyId: existing.company_id,
+        userId,
+      });
+      quotesLinkedCount = link.linked_count;
+      quotesLinkWarning = link.warning;
+    }
     return {
       company_id: existing.company_id,
       member_id: existing.member_id,
       already_provisioned: true,
       redirect_path: SELF_SIGNUP_DEFAULT_REDIRECT,
+      quotes_linked_count: quotesLinkedCount,
+      quotes_link_warning: quotesLinkWarning,
     };
   }
 
@@ -93,15 +111,40 @@ export async function finalizeSelfSignupForUser(
     if (insertErr.code === "23505" || /duplicate|unique/i.test(insertErr.message ?? "")) {
       const raced = await fetchExistingMembership(supabase, userId);
       if (raced) {
+        let quotesLinkedCount = 0;
+        let quotesLinkWarning: string | null = null;
+        if (userEmail) {
+          const link = await tryLinkOrphanQuoteRequestsByEmail(supabase, {
+            email: userEmail,
+            companyId: raced.company_id,
+            userId,
+          });
+          quotesLinkedCount = link.linked_count;
+          quotesLinkWarning = link.warning;
+        }
         return {
           company_id: raced.company_id,
           member_id: raced.member_id,
           already_provisioned: true,
           redirect_path: SELF_SIGNUP_DEFAULT_REDIRECT,
+          quotes_linked_count: quotesLinkedCount,
+          quotes_link_warning: quotesLinkWarning,
         };
       }
     }
     throw insertErr;
+  }
+
+  let quotesLinkedCount = 0;
+  let quotesLinkWarning: string | null = null;
+  if (userEmail) {
+    const link = await tryLinkOrphanQuoteRequestsByEmail(supabase, {
+      email: userEmail,
+      companyId: company.id,
+      userId,
+    });
+    quotesLinkedCount = link.linked_count;
+    quotesLinkWarning = link.warning;
   }
 
   return {
@@ -109,5 +152,7 @@ export async function finalizeSelfSignupForUser(
     member_id: String(inserted.id),
     already_provisioned: false,
     redirect_path: SELF_SIGNUP_DEFAULT_REDIRECT,
+    quotes_linked_count: quotesLinkedCount,
+    quotes_link_warning: quotesLinkWarning,
   };
 }

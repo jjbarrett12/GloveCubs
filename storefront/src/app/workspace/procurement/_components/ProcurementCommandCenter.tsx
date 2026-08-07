@@ -72,7 +72,7 @@ function AttentionSection(props: { lifecycleRows: CustomerProcurementLifecycleRo
         <div className="mt-3">
           <EmptyState
             title="You’re caught up"
-            body="There are no sourcing threads in follow-up or paused states for your organization right now."
+            body="There are no sourcing threads in follow-up or paused states for your company right now."
             action={{ href: "/invoice-savings", label: "Submit a new spend signal" }}
           />
         </div>
@@ -135,7 +135,7 @@ function PipelineSnapshot(props: { lifecycleRows: CustomerProcurementLifecycleRo
         <div className="mt-3">
           <EmptyState
             title="No linked sourcing threads yet"
-            body="When spend signals are linked to procurement work, stage counts will appear here. This is normal for a new organization."
+            body="When spend signals are linked to procurement work, stage counts will appear here. This is normal for a new company."
             action={{ href: "/invoice-savings", label: "Submit spend signal" }}
           />
         </div>
@@ -178,7 +178,7 @@ function PipelineSnapshot(props: { lifecycleRows: CustomerProcurementLifecycleRo
     <section aria-label="Sourcing pipeline">
       <h3 className="text-sm font-medium text-white/90">Sourcing threads</h3>
       <p className="mt-1 text-xs text-white/45">
-        Counts by stage for threads linked to your organization. This is a distribution summary — not a completion bar.
+        Counts by stage for threads linked to your company. This is a distribution summary — not a completion bar.
         “Pricing in progress” does not mean final terms are ready.
       </p>
       <div className="mt-3 hidden sm:block">{chipBody}</div>
@@ -251,7 +251,7 @@ function ApprovedOpportunityCard(props: { dto: CustomerApprovedOpportunityDto })
   const o = props.dto;
   return (
     <article className="flex min-w-0 flex-col rounded-lg border border-white/10 bg-white/[0.03] p-5">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-white/45">Approved for your organization</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-white/45">Approved for your company</p>
       <h4 className="mt-2 text-sm font-semibold text-white/90">{o.candidate_product.label}</h4>
       <p className="mt-1 text-xs text-white/55">
         <span className="text-white/45">From current line:</span> {o.source_product.label}
@@ -494,7 +494,7 @@ export function ProcurementCommandCenter(props: {
               <div className="mt-3">
                 <EmptyState
                   title="Nothing approved yet"
-                  body="When SourceIt approves an alternate or savings note for your organization, it will appear here with full provenance."
+                  body="When SourceIt approves an alternate or savings note for your company, it will appear here with full provenance."
                   action={{ href: "/invoice-savings", label: "Submit spend signal" }}
                 />
               </div>

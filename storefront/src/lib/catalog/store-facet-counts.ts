@@ -45,6 +45,15 @@ export function mergeIndustryFacetRows(
   return [...known, ...extras];
 }
 
+/** Hide empty facets unless the value is currently selected (so users can clear filters). */
+export function filterFacetRowsForDisplay(
+  rows: { value: string; count: number; label?: string }[],
+  selectedValues: string[] | undefined
+): { value: string; count: number; label?: string }[] {
+  const selected = new Set((selectedValues ?? []).map((v) => v.trim()).filter(Boolean));
+  return rows.filter((r) => r.count > 0 || selected.has(r.value));
+}
+
 const MAX_VARIANT_ROWS_FOR_SIZE_FACETS = 100_000;
 
 async function aggregateSizeFacetCountsFromVariants(

@@ -1,0 +1,14 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npm install && npm ci --prefix storefront",
+  "buildCommand": "npm run build --prefix storefront",
+  "outputDirectory": "storefront/.next",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    }
+  ]
+}

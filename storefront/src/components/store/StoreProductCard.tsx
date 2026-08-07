@@ -134,7 +134,7 @@ function CardSizeSelector({
                     : "border-white/15 bg-white/5 text-white/80 hover:border-brand/40"
               )}
             >
-              {size}
+              {size.toUpperCase()}
             </button>
           );
         })}

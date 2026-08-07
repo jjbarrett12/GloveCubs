@@ -216,7 +216,7 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
 
         {issueStr === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Your account is signed in but is not linked to an organization yet.{" "}
+            Your account is signed in but is not linked to a company yet.{" "}
             <Link href="/signup" className="font-semibold text-[#f06232] underline">
               Create an account
             </Link>{" "}

@@ -45,7 +45,7 @@ export default async function CustomerProcurementLayout({ children }: { children
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-white/90">Buyer workspace</h1>
               <p className="mt-1 text-sm text-white/60">
-                Track sourcing threads, alternates, verified spend, and repeat-quote shortcuts for your organization.
+                Track sourcing threads, alternates, verified spend, and repeat-quote shortcuts for your company.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">

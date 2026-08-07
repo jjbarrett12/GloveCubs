@@ -59,7 +59,7 @@ describe("Admin Phase 6D-2 product editor/detail consistency", () => {
     const s = read("_components/ProductCommandHeader.tsx");
     expect(s).toContain("hasPublishBlockers");
     expect(s).toContain("publishBlocked");
-    expect(s).toMatch(/disabled=\{pending \|\| publishBlocked\}/);
+    expect(s).toMatch(/disabled=\{pending \|\| saveBlocked\}/);
   });
 
   it("ProductAttributeEditor preserves blocking and required safety hooks", () => {

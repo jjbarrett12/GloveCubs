@@ -13,6 +13,12 @@ import {
   facetKeysGroupedForUi,
   hiddenFieldsPreservingFilters,
 } from "@/lib/catalog/store-facet-links";
+import { filterFacetRowsForDisplay } from "@/lib/catalog/store-facet-counts";
+
+function selectedFacetValues(state: StoreCatalogUrlState, key: string): string[] {
+  const raw = (state as Record<string, unknown>)[key];
+  return Array.isArray(raw) ? raw.map((x) => String(x).trim()).filter(Boolean) : [];
+}
 
 type Props = {
   urlState: StoreCatalogUrlState;
@@ -139,7 +145,8 @@ export function StoreFiltersSidebar({ urlState, brands, facetCounts, facetMeta, 
         <div key={group.groupLabel} className="space-y-2">
           <p className="px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/35">{group.groupLabel}</p>
           {group.keys.map((key) => {
-            const rows = facetCounts[key] ?? [];
+            const rawRows = facetCounts[key] ?? [];
+            const rows = filterFacetRowsForDisplay(rawRows, selectedFacetValues(urlState, key));
             if (rows.length === 0) return null;
             return (
               <FacetSectionBlock

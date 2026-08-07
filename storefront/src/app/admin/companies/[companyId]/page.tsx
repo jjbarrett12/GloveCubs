@@ -22,6 +22,7 @@ import { fetchAdminShipToAddresses } from "@/lib/admin/admin-ship-to-addresses";
 import { parseCustomerDetailTab } from "@/lib/admin/admin-customer-detail-tabs";
 import { CompanyAddMemberForm } from "../CompanyAddMemberForm";
 import { CompanyB2bTierSelect } from "../CompanyB2bTierSelect";
+import { CompanyInviteForm } from "../CompanyInviteForm";
 import { CompanyProfileForm } from "../CompanyProfileForm";
 import { CompanyQuicklistManager } from "../CompanyQuicklistManager";
 import { CompanyShipToAddressesManager } from "../CompanyShipToAddressesManager";
@@ -385,14 +386,39 @@ export default async function AdminCompanyDetailPage({
             </div>
           </PremiumSectionCard>
 
-          <PlaceholderPanel title="Self-service invites coming soon">
-            <p>Buyers can be linked above by operator email. Self-service invite links ship in a later phase.</p>
-            <p className="text-admin-muted">
-              New buyers without a password should use{" "}
-              <span className="font-mono text-xs">/login/forgot-password</span> with their email to set one before
-              first sign-in.
-            </p>
-          </PlaceholderPanel>
+          <PremiumSectionCard
+            title="Invite buyers"
+            description="Generate secure invite links for new team members."
+          >
+            <CompanyInviteForm companyId={companyId} />
+          </PremiumSectionCard>
+
+          <PremiumSectionCard
+            title="First-time login for existing buyers"
+            description="Steps for buyers added via the direct add form above."
+          >
+            <div className="space-y-3 text-sm text-admin-secondary">
+              <p>
+                If you added a buyer using the &quot;Add buyer&quot; form (not an invite link), they may not yet have a
+                password set in our system.
+              </p>
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>
+                  <strong className="text-admin-primary">Share the login page:</strong> Direct the buyer to{" "}
+                  <span className="font-mono text-xs text-admin-muted">/login</span>.
+                </li>
+                <li>
+                  <strong className="text-admin-primary">Password setup:</strong> If they see &quot;Invalid login
+                  credentials&quot;, they should click <strong>Forgot password?</strong> and enter their email to receive
+                  a password-setup link.
+                </li>
+                <li>
+                  <strong className="text-admin-primary">Complete setup:</strong> After setting a password, they can
+                  sign in and access this company&apos;s portal, quotes, and procurement tools.
+                </li>
+              </ol>
+            </div>
+          </PremiumSectionCard>
         </div>
       ) : null}
 

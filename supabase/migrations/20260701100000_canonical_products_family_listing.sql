@@ -1,3 +1,6 @@
+-- Requires public.gc_trgm_similarity from 20260422103000 (replay-safe pg_trgm wrapper).
+-- Unqualified similarity() is intentionally avoided (search_path / extension schema drift).
+
 -- =============================================================================
 -- One storefront listing per product family: canonical_products.family_id +
 -- is_listing_primary, sync from catalogos.products, search resolves variants
@@ -195,7 +198,7 @@ BEGIN
                 WHEN cp.id IN (SELECT product_id FROM supplier_product_matches) THEN 2
                 ELSE 0
             END +
-            COALESCE(similarity(cp.name, REPLACE(p_search_pattern, '%', '')), 0) * 3
+            COALESCE(public.gc_trgm_similarity(cp.name, REPLACE(p_search_pattern, '%', '')), 0) * 3
             AS relevance_score
         FROM canonical_products cp
         WHERE
@@ -206,7 +209,7 @@ BEGIN
                 OR cp.title ILIKE p_search_pattern
                 OR cp.sku ILIKE p_search_pattern
                 OR cp.material ILIKE p_search_pattern
-                OR similarity(cp.name, REPLACE(p_search_pattern, '%', '')) > 0.3
+                OR public.gc_trgm_similarity(cp.name, REPLACE(p_search_pattern, '%', '')) > 0.3
                 OR cp.id IN (SELECT product_id FROM supplier_product_matches)
             )
             AND (p_material IS NULL OR cp.material ILIKE '%' || p_material || '%')
@@ -318,7 +321,7 @@ AS $$
                 OR cp.title ILIKE p_search_pattern
                 OR cp.sku ILIKE p_search_pattern
                 OR cp.material ILIKE p_search_pattern
-                OR similarity(cp.name, REPLACE(p_search_pattern, '%', '')) > 0.3
+                OR public.gc_trgm_similarity(cp.name, REPLACE(p_search_pattern, '%', '')) > 0.3
                 OR cp.id IN (SELECT product_id FROM supplier_product_matches)
             )
             AND (p_material IS NULL OR cp.material ILIKE '%' || p_material || '%')

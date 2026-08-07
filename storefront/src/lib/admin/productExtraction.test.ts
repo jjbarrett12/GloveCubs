@@ -145,15 +145,15 @@ describe("extractSizeOptionsFromHtml Hospeco MainProductId live-style fixture", 
 });
 
 const LIVE_HOSPECO_HTML = path.join(__dirname, "..", "..", "..", "tmp-hospeco-live.html");
+const HAS_LIVE_HOSPECO = fs.existsSync(LIVE_HOSPECO_HTML);
 
-describe.skipIf(!fs.existsSync(LIVE_HOSPECO_HTML))(
+(HAS_LIVE_HOSPECO ? describe : describe.skip)(
   "extractSizeOptionsFromHtml live Hospeco HTML fetch",
   () => {
-    const html = fs.readFileSync(LIVE_HOSPECO_HTML, "utf8");
-    const url =
-      "https://www.hospecobrands.com/products/proworks-blue-violet-nitrile-exam-gloves-powder-free-3-mil-hos-gl-n125f-l-gl-n125fl";
-
     it("extracts five sizes from fetched live static HTML", () => {
+      const html = fs.readFileSync(LIVE_HOSPECO_HTML, "utf8");
+      const url =
+        "https://www.hospecobrands.com/products/proworks-blue-violet-nitrile-exam-gloves-powder-free-3-mil-hos-gl-n125f-l-gl-n125fl";
       const { sizes } = extractSizeOptionsFromHtml(html, html, url);
       expect(sizes.map((s) => s.normalizedCode)).toEqual(["XS", "S", "M", "L", "XL"]);
       expect(sizes.find((s) => s.normalizedCode === "XL")?.manufacturerSku).toBe("GL-N125F-XL");

@@ -27,6 +27,7 @@ describe("clipboard url-staging promote route policy", () => {
     expect(promoteBody).not.toContain("status: \"active\"");
     expect(s).toContain("evaluateActivePublishReadiness");
     expect(s).toContain("input.importStagingId?.trim() ? \"draft\"");
-    expect(readinessSrc).toContain("clipboardUrlImportActiveStatusError");
+    expect(readinessSrc).toContain("isUrlImportProductMetadata");
+    expect(readinessSrc).toContain("clipboard-promote-guards");
   });
 });
