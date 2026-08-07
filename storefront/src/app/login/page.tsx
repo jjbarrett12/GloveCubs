@@ -20,26 +20,6 @@ export const metadata: Metadata = {
 export default function LoginPage() {
   const { configured: supabaseConfigured } = resolveSupabasePublicEnv();
 
-  // #region agent log
-  fetch("http://127.0.0.1:7509/ingest/b93805e8-6d0d-449a-a28d-f5a520f7995a", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd2f9d" },
-    body: JSON.stringify({
-      sessionId: "dd2f9d",
-      runId: "post-fix",
-      hypothesisId: "A",
-      location: "app/login/page.tsx:LoginPage",
-      message: "login_page_server_render",
-      data: {
-        forceStatic: true,
-        readsSearchParams: false,
-        supabaseConfigured,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <SiteHeader />

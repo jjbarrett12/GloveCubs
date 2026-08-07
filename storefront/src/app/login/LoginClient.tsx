@@ -46,53 +46,6 @@ export function LoginClient({ supabaseConfigured }: Props) {
     signInAlertRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [signInIssue]);
 
-  // #region agent log
-  React.useEffect(() => {
-    const navEntries =
-      typeof performance !== "undefined" && typeof performance.getEntriesByType === "function"
-        ? performance.getEntriesByType("navigation").map((e) => {
-            const n = e as PerformanceNavigationTiming;
-            return { type: n.type, redirectCount: n.redirectCount };
-          })
-        : [];
-    fetch("http://127.0.0.1:7509/ingest/b93805e8-6d0d-449a-a28d-f5a520f7995a", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd2f9d" },
-      body: JSON.stringify({
-        sessionId: "dd2f9d",
-        runId: "post-fix",
-        hypothesisId: "D",
-        location: "app/login/LoginClient.tsx:mount",
-        message: "login_client_mount",
-        data: {
-          href: typeof window !== "undefined" ? window.location.href : null,
-          search: typeof window !== "undefined" ? window.location.search : null,
-          navEntries,
-          hasExplicitNext,
-          supabaseConfigured,
-          readsSearchParamsClient: true,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    return () => {
-      fetch("http://127.0.0.1:7509/ingest/b93805e8-6d0d-449a-a28d-f5a520f7995a", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd2f9d" },
-        body: JSON.stringify({
-          sessionId: "dd2f9d",
-          runId: "post-fix",
-          hypothesisId: "D",
-          location: "app/login/LoginClient.tsx:unmount",
-          message: "login_client_unmount",
-          data: { href: typeof window !== "undefined" ? window.location.href : null },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    };
-  }, [hasExplicitNext, supabaseConfigured]);
-  // #endregion
-
   function togglePasswordVisible() {
     setShowPassword((prev) => {
       const next = !prev;
