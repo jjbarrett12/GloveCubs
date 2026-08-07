@@ -25,10 +25,32 @@ describe("anonymous public chrome (emergency containment)", () => {
     expect(s).not.toContain("getAdminUser");
   });
 
-  it("store page does not call getAdminUser", () => {
+  it("store page is force-static and does not read server searchParams", () => {
     const s = read("app/store/page.tsx");
     expect(s).not.toContain("getAdminUser");
     expect(s).toContain('canonical: "/store"');
+    expect(s).toContain('dynamic = "force-static"');
+    expect(s).toContain("revalidate = 300");
+    expect(s).toContain("StoreCatalogClient");
+    expect(s).not.toMatch(/function StorePage\(\{\s*searchParams/);
+    expect(s).not.toContain("cookies(");
+    expect(s).not.toContain("headers(");
+  });
+
+  it("store filter hydration uses cacheable catalog API from the client", () => {
+    const client = read("components/store/StoreCatalogClient.tsx");
+    const api = read("app/api/store/catalog/route.ts");
+    expect(client).toContain("useSearchParams");
+    expect(client).toContain("/api/store/catalog");
+    expect(api).toContain("Cache-Control");
+    expect(api).toContain("s-maxage=300");
+    expect(api).toContain("fetchStoreCatalogPage");
+  });
+
+  it("request-pricing page is force-static", () => {
+    const s = read("app/request-pricing/page.tsx");
+    expect(s).toContain('dynamic = "force-static"');
+    expect(s).toContain("revalidate = 600");
   });
 
   it("public PDP does not call procurement gate or getAdminUser", () => {
