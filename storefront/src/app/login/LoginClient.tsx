@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { safeCommerceNextPath } from "@/lib/auth/safe-next-path";
@@ -15,15 +15,16 @@ import {
 } from "@/lib/auth/format-sign-in-error";
 
 type Props = {
-  nextPath: string | string[] | undefined;
-  issue: string | string[] | undefined;
-  reset: string | string[] | undefined;
   supabaseConfigured: boolean;
-  hasExplicitNext: boolean;
 };
 
-export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExplicitNext }: Props) {
+function hasExplicitNextParam(raw: string | null): boolean {
+  return typeof raw === "string" && raw.trim() !== "";
+}
+
+export function LoginClient({ supabaseConfigured }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -33,8 +34,10 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
   const passwordMaskedRef = React.useRef<HTMLInputElement>(null);
   const passwordPlainRef = React.useRef<HTMLInputElement>(null);
 
-  const issueStr = Array.isArray(issue) ? issue[0] : issue;
-  const resetStr = Array.isArray(reset) ? reset[0] : reset;
+  const nextPath = searchParams.get("next") ?? undefined;
+  const issueStr = searchParams.get("issue");
+  const resetStr = searchParams.get("reset");
+  const hasExplicitNext = hasExplicitNextParam(nextPath ?? null);
   const explicitDest = safeCommerceNextPath(nextPath);
   const signInAlertRef = React.useRef<HTMLDivElement>(null);
 
@@ -42,6 +45,53 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
     if (!signInIssue || !signInAlertRef.current) return;
     signInAlertRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [signInIssue]);
+
+  // #region agent log
+  React.useEffect(() => {
+    const navEntries =
+      typeof performance !== "undefined" && typeof performance.getEntriesByType === "function"
+        ? performance.getEntriesByType("navigation").map((e) => {
+            const n = e as PerformanceNavigationTiming;
+            return { type: n.type, redirectCount: n.redirectCount };
+          })
+        : [];
+    fetch("http://127.0.0.1:7509/ingest/b93805e8-6d0d-449a-a28d-f5a520f7995a", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd2f9d" },
+      body: JSON.stringify({
+        sessionId: "dd2f9d",
+        runId: "post-fix",
+        hypothesisId: "D",
+        location: "app/login/LoginClient.tsx:mount",
+        message: "login_client_mount",
+        data: {
+          href: typeof window !== "undefined" ? window.location.href : null,
+          search: typeof window !== "undefined" ? window.location.search : null,
+          navEntries,
+          hasExplicitNext,
+          supabaseConfigured,
+          readsSearchParamsClient: true,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    return () => {
+      fetch("http://127.0.0.1:7509/ingest/b93805e8-6d0d-449a-a28d-f5a520f7995a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd2f9d" },
+        body: JSON.stringify({
+          sessionId: "dd2f9d",
+          runId: "post-fix",
+          hypothesisId: "D",
+          location: "app/login/LoginClient.tsx:unmount",
+          message: "login_client_unmount",
+          data: { href: typeof window !== "undefined" ? window.location.href : null },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    };
+  }, [hasExplicitNext, supabaseConfigured]);
+  // #endregion
 
   function togglePasswordVisible() {
     setShowPassword((prev) => {

@@ -56,6 +56,19 @@ describe("anonymous public chrome (emergency containment)", () => {
     expect(s).toContain("revalidate = 600");
   });
 
+  it("login page is force-static and does not read server searchParams", () => {
+    const s = read("app/login/page.tsx");
+    const client = read("app/login/LoginClient.tsx");
+    expect(s).toContain('dynamic = "force-static"');
+    expect(s).toContain("revalidate = 600");
+    expect(s).toContain("LoginClient");
+    expect(s).toContain("Suspense");
+    expect(s).not.toMatch(/function LoginPage\(\{\s*searchParams/);
+    expect(s).not.toContain("cookies(");
+    expect(s).not.toContain("headers(");
+    expect(client).toContain("useSearchParams");
+  });
+
   it("public PDP does not call procurement gate or getAdminUser", () => {
     const s = read("app/store/p/[slug]/page.tsx");
     expect(s).not.toContain("resolveCustomerProcurementGate");
