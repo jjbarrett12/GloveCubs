@@ -37,14 +37,17 @@ describe("anonymous public chrome (emergency containment)", () => {
     expect(s).not.toContain("headers(");
   });
 
-  it("store filter hydration uses cacheable catalog API from the client", () => {
+  it("store filter hydration uses one canonical cached catalog API + local filters", () => {
     const client = read("components/store/StoreCatalogClient.tsx");
     const api = read("app/api/store/catalog/route.ts");
     expect(client).toContain("useSearchParams");
-    expect(client).toContain("/api/store/catalog");
+    expect(client).toContain('fetch("/api/store/catalog"');
+    expect(client).toContain("filterPublicCatalogClient");
+    expect(client).not.toContain("/api/store/catalog?");
     expect(api).toContain("Cache-Control");
     expect(api).toContain("s-maxage=300");
-    expect(api).toContain("fetchStoreCatalogPage");
+    expect(api).toContain('dynamic = "force-static"');
+    expect(api).not.toMatch(/GET\(\s*request/);
   });
 
   it("request-pricing page is force-static", () => {

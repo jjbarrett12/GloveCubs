@@ -1,41 +1,36 @@
-import { NextResponse } from "next/server";
-import { fetchStoreCatalogPage } from "@/lib/catalog/store-products";
-import { parseStoreCatalogParams } from "@/lib/catalog/store-url";
-
 /**
- * Anonymous catalog JSON for client-side /store filter hydration.
- * Response is CDN-cacheable by full query URL (s-maxage) so repeated filter
- * variants do not require fresh origin work on every hit.
+ * Canonical public catalog JSON — one cache key, no crawler-controlled query variants.
+ *
+ * Intentionally does NOT read `Request` / searchParams: doing so forced dynamic
+ * serverless execution and prevented Vercel CDN from honoring s-maxage (live MISS churn).
  */
-function searchParamsToRecord(sp: URLSearchParams): Record<string, string | string[] | undefined> {
-  const out: Record<string, string | string[] | undefined> = {};
-  for (const key of Array.from(new Set(Array.from(sp.keys())))) {
-    const all = sp.getAll(key);
-    out[key] = all.length <= 1 ? (all[0] ?? undefined) : all;
-  }
-  return out;
-}
+import { NextResponse } from "next/server";
+import { getPublicAnonymousCatalogDataset } from "@/lib/catalog/public-catalog-dataset";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const urlState = parseStoreCatalogParams(searchParamsToRecord(url.searchParams));
-  const page = await fetchStoreCatalogPage(urlState);
+export const dynamic = "force-static";
+export const revalidate = 300;
+
+export async function GET() {
+  const dataset = await getPublicAnonymousCatalogDataset();
 
   return NextResponse.json(
     {
-      products: page.products,
-      total: page.total,
-      page: page.page,
-      limit: page.limit,
-      brands: page.brands,
-      facetCounts: page.facetCounts,
-      facetMeta: page.facetMeta,
-      catalogUnavailable: Boolean(page.catalogUnavailable),
+      products: dataset.products,
+      total: dataset.total,
+      limit: dataset.limit,
+      brands: dataset.brands,
+      facetCounts: dataset.facetCounts,
+      facetMeta: dataset.facetMeta,
+      catalogUnavailable: dataset.catalogUnavailable,
+      /** Snapshot metadata for clients — not a cache-buster. */
+      generatedAt: dataset.generatedAt,
     },
     {
       status: 200,
       headers: {
         "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        // Stable Vary — do not vary on query string / cookies.
+        Vary: "Accept-Encoding",
       },
     },
   );

@@ -8,6 +8,7 @@ import {
   type StoreCatalogUrlState,
 } from "@/lib/catalog/store-url";
 import { getCanonicalStoreHrefIfNeeded } from "@/lib/catalog/store-legacy-url";
+import { filterPublicCatalogClient } from "@/lib/catalog/filter-public-catalog-client";
 import { StoreCatalogView, type StoreCatalogViewData } from "@/components/store/StoreCatalogView";
 
 function searchParamsToRecord(sp: URLSearchParams): Record<string, string | string[] | undefined> {
@@ -19,10 +20,33 @@ function searchParamsToRecord(sp: URLSearchParams): Record<string, string | stri
   return out;
 }
 
-function catalogApiHref(urlState: StoreCatalogUrlState): string {
-  const pageHref = buildStoreCatalogHref(urlState);
-  if (pageHref === "/store") return "/api/store/catalog";
-  return `/api/store/catalog?${pageHref.slice("/store?".length)}`;
+/** Module-level dedupe so React Strict Mode / remounts share one in-flight request. */
+let publicCatalogInflight: Promise<StoreCatalogViewData> | null = null;
+
+function loadPublicCatalogOnce(): Promise<StoreCatalogViewData> {
+  if (!publicCatalogInflight) {
+    publicCatalogInflight = fetch("/api/store/catalog", {
+      headers: { Accept: "application/json" },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`catalog_api_${res.status}`);
+        const json = (await res.json()) as StoreCatalogViewData & { generatedAt?: string };
+        return {
+          products: json.products ?? [],
+          total: json.total ?? 0,
+          limit: json.limit ?? 24,
+          brands: json.brands ?? [],
+          facetCounts: json.facetCounts ?? {},
+          facetMeta: json.facetMeta ?? {},
+          catalogUnavailable: Boolean(json.catalogUnavailable),
+        };
+      })
+      .catch((err) => {
+        publicCatalogInflight = null;
+        throw err;
+      });
+  }
+  return publicCatalogInflight;
 }
 
 type Props = {
@@ -31,19 +55,22 @@ type Props = {
 };
 
 /**
- * Reads /store query state in the browser and hydrates filtered results from the
- * cacheable catalog API — keeps the RSC page force-static / ISR.
+ * URL filters stay on /store (SEO + shareable). Catalog data comes from ONE canonical
+ * cached API (or the ISR-embedded initialData) and is filtered locally — no per-query
+ * serverless catalog fan-out.
  */
 export function StoreCatalogClient({ initialData, initialUrlState }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const record = React.useMemo(() => searchParamsToRecord(searchParams), [searchParams]);
   const urlState = React.useMemo(() => parseStoreCatalogParams(record), [record]);
-  /** Any query string (filters, sort, page) hydrates via API; bare /store uses ISR shell data. */
   const queryKey = searchParams.toString();
-  const needsClientFetch = queryKey.length > 0;
+  const needsFilteredView = queryKey.length > 0;
 
-  const [data, setData] = React.useState<StoreCatalogViewData>(initialData);
+  const [snapshot, setSnapshot] = React.useState<StoreCatalogViewData>(initialData);
+  const [snapshotReady, setSnapshotReady] = React.useState(
+    Boolean(initialData.catalogUnavailable) || !needsFilteredView,
+  );
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -56,47 +83,41 @@ export function StoreCatalogClient({ initialData, initialUrlState }: Props) {
   }, [record, router, queryKey]);
 
   React.useEffect(() => {
-    if (!needsClientFetch) {
-      setData(initialData);
+    // Bare /store: ISR shell data only — no API call.
+    if (!needsFilteredView) {
+      setSnapshot(initialData);
+      setSnapshotReady(true);
+      setLoading(false);
+      return;
+    }
+
+    // Kill-switch / unavailable shell: do not fan out to the API.
+    if (initialData.catalogUnavailable) {
+      setSnapshot(initialData);
+      setSnapshotReady(true);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-    const ctrl = new AbortController();
     setLoading(true);
-
-    fetch(catalogApiHref(urlState), {
-      signal: ctrl.signal,
-      headers: { Accept: "application/json" },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`catalog_api_${res.status}`);
-        return res.json() as Promise<StoreCatalogViewData>;
-      })
-      .then((json) => {
+    loadPublicCatalogOnce()
+      .then((data) => {
         if (!cancelled) {
-          setData({
-            products: json.products ?? [],
-            total: json.total ?? 0,
-            limit: json.limit ?? urlState.limit ?? 24,
-            brands: json.brands ?? [],
-            facetCounts: json.facetCounts ?? {},
-            facetMeta: json.facetMeta ?? {},
-            catalogUnavailable: Boolean(json.catalogUnavailable),
-          });
+          setSnapshot(data);
+          setSnapshotReady(true);
         }
       })
       .catch((err) => {
-        if (cancelled || ctrl.signal.aborted) return;
         console.error("[store-catalog-client]", err);
         if (!cancelled) {
-          setData({
+          setSnapshot({
             ...initialData,
             products: [],
             total: 0,
             catalogUnavailable: true,
           });
+          setSnapshotReady(true);
         }
       })
       .finally(() => {
@@ -105,17 +126,30 @@ export function StoreCatalogClient({ initialData, initialUrlState }: Props) {
 
     return () => {
       cancelled = true;
-      ctrl.abort();
     };
-    // Refetch only when the URL query string changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, needsClientFetch]);
+  }, [needsFilteredView, initialData]);
+
+  const viewData = React.useMemo(() => {
+    if (!needsFilteredView) return initialData;
+    if (!snapshotReady) return initialData;
+    return filterPublicCatalogClient(snapshot, urlState);
+  }, [needsFilteredView, snapshotReady, snapshot, urlState, initialData]);
 
   return (
     <StoreCatalogView
-      urlState={needsClientFetch ? urlState : initialUrlState}
-      data={needsClientFetch ? data : initialData}
-      loading={loading}
+      urlState={needsFilteredView ? urlState : initialUrlState}
+      data={viewData}
+      loading={loading && needsFilteredView}
     />
   );
+}
+
+/** Test helper — canonical API href never includes filter query strings. */
+export function publicCatalogApiHref(): string {
+  return "/api/store/catalog";
+}
+
+/** Test helper — store page href remains the shareable filter URL. */
+export function storeFilterHref(state: Partial<StoreCatalogUrlState>): string {
+  return buildStoreCatalogHref(state);
 }
