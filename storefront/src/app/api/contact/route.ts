@@ -3,6 +3,11 @@ import { z } from "zod";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAdminNotificationEmail, sendSmtpMail } from "@/lib/email/smtp";
 import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 const bodySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -14,6 +19,15 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/contact" });
+  if (!botGate.ok) return botGate.response;
+
+  const rateLimited = checkPublicWriteRateLimit(
+    request,
+    PUBLIC_WRITE_LIMITS.contact,
+  );
+  if (rateLimited) return rateLimited;
+
   const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
   if (guarded) return guarded;
 

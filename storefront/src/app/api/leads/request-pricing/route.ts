@@ -6,6 +6,11 @@ import { getAdminNotificationEmail, sendSmtpMail } from "@/lib/email/smtp";
 import { recordRequestPricingSpine } from "@/lib/procurement/spine-writes";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 const bodySchema = z
   .object({
@@ -33,6 +38,25 @@ const bodySchema = z
 
 export async function POST(request: NextRequest) {
   const correlationId = randomUUID();
+
+  const botGate = await requireHumanBotId({ route: "/api/leads/request-pricing" });
+  if (!botGate.ok) {
+    logPublicFunnel("lead_request_pricing", "botid_rejected", {
+      correlation_id: correlationId,
+    });
+    return botGate.response;
+  }
+
+  const rateLimited = checkPublicWriteRateLimit(
+    request,
+    PUBLIC_WRITE_LIMITS.requestPricing,
+  );
+  if (rateLimited) {
+    logPublicFunnel("lead_request_pricing", "rate_limited", {
+      correlation_id: correlationId,
+    });
+    return rateLimited;
+  }
 
   const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
   if (guarded) return guarded;

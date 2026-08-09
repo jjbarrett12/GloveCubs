@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withBotId } from "botid/next/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -136,4 +137,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBotId(nextConfig);

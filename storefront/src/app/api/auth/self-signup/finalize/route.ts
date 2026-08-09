@@ -1,12 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { resolveUserForPostLoginDestination } from "@/lib/auth/post-login-session";
 import { finalizeSelfSignupForUser } from "@/lib/auth/self-signup";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const botGate = await requireHumanBotId({
+    route: "/api/auth/self-signup/finalize",
+  });
+  if (!botGate.ok) return botGate.response;
+
+  const rateLimited = checkPublicWriteRateLimit(
+    req,
+    PUBLIC_WRITE_LIMITS.selfSignupFinalize,
+  );
+  if (rateLimited) return rateLimited;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!url || !anon) {
