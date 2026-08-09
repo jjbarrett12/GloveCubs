@@ -6,8 +6,11 @@ describe("BOTID_PROTECTED_ROUTES", () => {
     const keys = BOTID_PROTECTED_ROUTES.map((r) => `${r.method} ${r.path}`).sort();
     expect(keys).toEqual(
       [
+        "POST /api/ai/glove-finder",
+        "POST /api/ai/invoice/recommend",
         "POST /api/auth/self-signup/finalize",
         "POST /api/contact",
+        "POST /api/gloves/recommend",
         "POST /api/invoice/intake",
         "POST /api/leads/request-pricing",
         "POST /api/quote-request",

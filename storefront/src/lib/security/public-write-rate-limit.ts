@@ -66,4 +66,6 @@ export const PUBLIC_WRITE_LIMITS = {
     limit: 5,
     windowMs: 10 * 60 * 1000,
   },
+  /** Find-my-glove wizard: 5 / 10 minutes / IP */
+  glovesRecommend: { key: "gloves-recommend", limit: 5, windowMs: 10 * 60 * 1000 },
 } as const;

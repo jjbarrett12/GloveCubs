@@ -124,6 +124,7 @@ const {
 const { runPoMappingHealthReport } = require('./lib/poMappingHealth');
 const inventory = require('./lib/inventory');
 const { sendWarehouseMigrationGone } = require('./lib/legacy-warehouse-deprecation');
+const { sendLegacyPublicWriteGone } = require('./lib/legacy-public-write-drain');
 const {
     validateAdminOrderStatusTransition,
     ABANDON_STATUSES,
@@ -965,31 +966,10 @@ const optionalAuth = (req, res, next) => {
 // ============ AUTH ROUTES ============
 
 app.post('/api/auth/register', authContactLimiter, async (req, res) => {
-    try {
-        const { company_name, email, password, contact_name, phone, address, city, state, zip, cases_or_pallets, allow_free_upgrades } = req.body;
-        const existing = await usersService.getUserByEmail(email);
-        if (existing) return res.status(400).json({ error: 'Email already registered' });
-        const newUser = await usersService.createUser({
-            company_name,
-            email,
-            plain_password: password,
-            contact_name,
-            phone: phone || '',
-            address: address || '',
-            city: city || '',
-            state: state || '',
-            zip: zip || '',
-            cases_or_pallets: (cases_or_pallets || '').toString().trim() || '',
-            allow_free_upgrades: !!allow_free_upgrades,
-            payment_terms: 'credit_card',
-            is_approved: 0,
-            discount_tier: 'standard'
-        });
-        res.json({ success: true, message: 'Account created! Pending approval for B2B pricing.', userId: newUser.id });
-    } catch (error) {
-        console.error('[POST /api/auth/register]', error);
-        res.status(500).json({ error: error.message });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/auth/register',
+        nextRoute: '/signup',
+    });
 });
 
 app.post('/api/auth/login', authContactLimiter, async (req, res) => {
@@ -1152,41 +1132,10 @@ app.get('/api/account/net-terms-application', authenticateToken, async (req, res
 // ============ CONTACT ============
 
 app.post('/api/contact', authContactLimiter, async (req, res) => {
-    try {
-        const { name, email, company, message } = req.body;
-        if (!name || !email || !message) {
-            return res.status(400).json({ error: 'Name, email, and message are required.' });
-        }
-        const emailTrim = (email || '').toString().trim();
-        const nameTrim = (name || '').toString().trim();
-        const companyTrim = (company || '').toString().trim();
-        const messageTrim = (message || '').toString().trim();
-        if (!emailTrim || !nameTrim || !messageTrim) {
-            return res.status(400).json({ error: 'Name, email, and message are required.' });
-        }
-        await dataService.createContactMessage({ name: nameTrim, email: emailTrim, company: companyTrim, message: messageTrim });
-
-        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'sales@glovecubs.com';
-        const text = `New contact form submission from Glovecubs\n\nName: ${nameTrim}\nEmail: ${emailTrim}\nCompany: ${companyTrim}\n\nMessage:\n${messageTrim}`;
-        await dispatchEmail({
-            to: adminEmail,
-            subject: `[Glovecubs] Contact from ${nameTrim}`,
-            text,
-            emailType: 'contact_form_admin',
-            metadata: { contact_email: emailTrim },
-        });
-        await dispatchEmail({
-            to: emailTrim,
-            subject: 'We received your message - Glovecubs',
-            text: `Hi ${nameTrim},\n\nThank you for contacting Glovecubs. We have received your message and will get back to you soon.\n\nBest regards,\nGlovecubs Team`,
-            emailType: 'contact_form_user_receipt',
-            alertOnFailure: false,
-        });
-
-        res.json({ success: true, message: 'Message sent! We\'ll get back to you soon.' });
-    } catch (error) {
-        res.status(500).json({ error: error.message || 'Failed to send message.' });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/contact',
+        nextRoute: '/api/contact',
+    });
 });
 
 // ============ PASSWORD RESET ============
@@ -2696,110 +2645,26 @@ function aiError(res, status, code, message, details = null) {
 
 app.post('/api/ai/glove-finder', optionalAuth, aiLimiter, async (req, res) => {
     logExpressAiDeprecation(req, res, 'glove-finder');
-    const parsed = validateGloveFinderRequest(req.body || {});
-    if (!parsed.success) {
-        return aiError(res, 400, 'VALIDATION_ERROR', 'Invalid request', parsed.error.flatten());
-    }
-    if (!aiConfigured()) {
-        return aiError(res, 503, 'AI_NOT_CONFIGURED', 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).');
-    }
-    try {
-        const result = await aiGenerate(parsed.data);
-        const validated = validateGloveFinderResponse(result);
-        if (!validated.success) {
-            return aiError(res, 500, 'INVALID_AI_RESPONSE', 'Invalid AI response', validated.error.flatten());
-        }
-        const summary = (result.recommendations || []).length + ' recommendations';
-        const supabase = getSupabaseForAi();
-        if (supabase) {
-            await logConversation(supabase, {
-                user_id: req.user && req.user.id ? req.user.id : null,
-                ip_hash: hashIp(req.ip || req.connection?.remoteAddress),
-                kind: 'glove_finder',
-                request_summary: JSON.stringify(parsed.data).slice(0, 500),
-                response_summary: summary,
-            });
-        }
-        res.json(validated.data);
-    } catch (err) {
-        console.error('AI glove-finder error:', err);
-        return aiError(res, 500, 'INTERNAL_ERROR', err.message || 'AI request failed');
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/ai/glove-finder',
+        nextRoute: '/api/ai/glove-finder',
+    });
 });
 
 app.post('/api/ai/invoice/extract', optionalAuth, aiLimiter, async (req, res) => {
     logExpressAiDeprecation(req, res, 'invoice-extract-text');
-    if (process.env.DEPRECATE_LEGACY_INVOICE_EXTRACT === 'true' || process.env.DEPRECATE_LEGACY_INVOICE_EXTRACT === '1') {
-        return res.status(410).json({
-            error: 'DEPRECATED',
-            message: 'Use storefront POST /api/invoice/intake (multipart file). Legacy text extract is disabled when DEPRECATE_LEGACY_INVOICE_EXTRACT is set.',
-        });
-    }
-    const rawText = typeof req.body === 'object' && req.body && typeof req.body.text === 'string' ? req.body.text : (typeof req.body === 'string' ? req.body : '');
-    if (!rawText || rawText.trim().length < 10) {
-        return res.status(400).json({ error: 'Request body must include "text" with invoice content (min 10 chars).' });
-    }
-    if (!aiConfigured()) {
-        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
-    }
-    try {
-        const result = await aiExtractInvoice(rawText);
-        const validated = validateInvoiceExtractResponse(result);
-        if (!validated.success) {
-            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
-        }
-        const data = validated.data;
-        const summary = `vendor=${data.vendor_name || 'N/A'}, lines=${(data.lines || []).length}`;
-        const supabase = getSupabaseForAi();
-        let uploadId = null;
-        if (supabase) {
-            uploadId = await logInvoiceUpload(supabase, {
-                user_id: req.user && req.user.id ? req.user.id : null,
-                ip_hash: hashIp(req.ip || req.connection?.remoteAddress),
-                file_name: req.body && req.body.file_name ? String(req.body.file_name).slice(0, 255) : null,
-                vendor_name: data.vendor_name,
-                invoice_number: data.invoice_number,
-                total_amount: data.total_amount,
-                line_count: (data.lines || []).length,
-                extract_summary: summary,
-            });
-            if (uploadId && data.lines && data.lines.length) await logInvoiceLines(supabase, uploadId, data.lines);
-        }
-        res.json({ ...data, upload_id: uploadId });
-    } catch (err) {
-        console.error('AI invoice extract error:', err);
-        res.status(500).json({ error: err.message || 'Extraction failed' });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/ai/invoice/extract',
+        nextRoute: '/api/invoice/intake',
+    });
 });
 
 app.post('/api/ai/invoice/recommend', optionalAuth, aiLimiter, async (req, res) => {
     logExpressAiDeprecation(req, res, 'invoice-recommend');
-    const extract = req.body && req.body.extract;
-    if (!extract || !Array.isArray(extract.lines)) {
-        return res.status(400).json({ error: 'Request body must include "extract" with "lines" array (e.g. from /api/ai/invoice/extract).' });
-    }
-    if (!aiConfigured()) {
-        return res.status(503).json({ error: 'AI not configured. Set AI_PROVIDER and OPENAI_API_KEY (or GEMINI_API_KEY).' });
-    }
-    const productCatalogSummary = (req.body && req.body.product_catalog_summary) ? String(req.body.product_catalog_summary).slice(0, 2000) : '';
-    try {
-        const result = await aiRecommendFromInvoice(extract, productCatalogSummary);
-        const validated = validateInvoiceRecommendResponse(result);
-        if (!validated.success) {
-            return res.status(500).json({ error: 'Invalid AI response', details: validated.error.flatten() });
-        }
-        const supabase = getSupabaseForAi();
-        if (supabase && result.recommendations && result.recommendations.length) {
-            await logRecommendations(supabase, {
-                upload_id: req.body && req.body.upload_id ? req.body.upload_id : null,
-                recommendations: result.recommendations,
-            });
-        }
-        res.json(validated.data);
-    } catch (err) {
-        console.error('AI invoice recommend error:', err);
-        res.status(500).json({ error: err.message || 'Recommendation failed' });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/ai/invoice/recommend',
+        nextRoute: '/api/ai/invoice/recommend',
+    });
 });
 
 app.post('/api/products', authenticateToken, async (req, res) => {
@@ -5011,67 +4876,10 @@ app.post('/api/cart/bulk', authenticateToken, async (req, res) => {
 // ============ RFQ ROUTES ============
 
 app.post('/api/rfqs', async (req, res) => {
-    try {
-        const {
-            company_name, contact_name, email, phone, quantity, type, use_case, notes, cases_or_pallets, size, material,
-            product_interest, estimated_volume, source
-        } = req.body;
-        let userId = null;
-        let user = null;
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
-        if (token) {
-            try {
-                const decoded = jwt.verify(token, JWT_SECRET);
-                userId = decoded.id;
-                user = await usersService.getUserById(userId);
-            } catch (e) { /* ignore */ }
-        }
-        const companyId = user ? await companiesService.getCompanyIdForUser(user) : null;
-        const newRFQ = await dataService.createRfq({
-            company_name: company_name || (user && user.company_name) || '',
-            contact_name: contact_name || (user && user.contact_name) || '',
-            email: email || (user && user.email) || '',
-            phone: phone || (user && user.phone) || '',
-            quantity: quantity || '',
-            type: type || '',
-            use_case: use_case || '',
-            cases_or_pallets: (cases_or_pallets || '').toString().trim() || '',
-            size: size || '',
-            material: material || '',
-            notes: notes || '',
-            product_interest: (product_interest || '').toString().trim(),
-            estimated_volume: (estimated_volume || '').toString().trim(),
-            source: (source || (user ? 'buyer_portal' : 'web_modal')).toString().trim().slice(0, 120)
-        }, { companyId, createdByUserId: userId });
-        // Send RFQ confirmation email with improved template
-        const rfqEmail = newRFQ.email || (user && user.email);
-        if (rfqEmail) {
-            const emailContent = emailTemplates.rfqConfirmation(newRFQ, user);
-            dispatchEmailInBackground({
-                to: rfqEmail,
-                subject: emailContent.subject,
-                text: emailContent.text,
-                html: emailContent.html,
-                emailType: 'rfq_customer_confirmation',
-                metadata: { rfq_id: newRFQ.id },
-            });
-        }
-        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
-        if (adminEmail) {
-            const adminText = `New RFQ #${newRFQ.id}\nCompany: ${newRFQ.company_name}\nContact: ${newRFQ.contact_name}\nEmail: ${newRFQ.email}\nSource: ${newRFQ.source || '—'}\nProduct/SKU interest: ${newRFQ.product_interest || '—'}\nEst. volume: ${newRFQ.estimated_volume || '—'}\nQuantity: ${newRFQ.quantity}\nType: ${newRFQ.type}\nUse case: ${newRFQ.use_case}\nCases/pallets: ${newRFQ.cases_or_pallets || '—'}\nNotes: ${newRFQ.notes}`;
-            dispatchEmailInBackground({
-                to: adminEmail,
-                subject: `[Glovecubs] New RFQ from ${newRFQ.company_name || newRFQ.email}`,
-                text: adminText,
-                emailType: 'rfq_admin_notification',
-                metadata: { rfq_id: newRFQ.id },
-            });
-        }
-        res.json({ success: true, message: 'RFQ submitted successfully', rfq_id: newRFQ.id });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/rfqs',
+        nextRoute: '/api/quote-request',
+    });
 });
 
 app.get('/api/rfqs/mine', authenticateToken, async (req, res) => {
@@ -5116,16 +4924,12 @@ app.put('/api/rfqs/:id', authenticateToken, async (req, res) => {
     }
 });
 
-/** Lightweight public lead capture (honeypot field "website" must be empty). Rate-limited. */
+/** Drained — canonical Next POST /api/leads/request-pricing (BotID). */
 app.post('/api/public/lead-capture', leadCaptureLimiter, async (req, res) => {
-    try {
-        const out = await growthPipelineService.capturePublicLead(req.body || {});
-        res.json(out);
-    } catch (err) {
-        const code = err.statusCode || 500;
-        console.error('[public/lead-capture]', err);
-        res.status(code).json({ error: err.message || 'Failed to save lead' });
-    }
+    return sendLegacyPublicWriteGone(res, {
+        route: '/api/public/lead-capture',
+        nextRoute: '/api/leads/request-pricing',
+    });
 });
 
 // ============ ADMIN ROUTES ============

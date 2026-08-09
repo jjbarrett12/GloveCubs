@@ -26,6 +26,7 @@ import { projectPrepLineCardFacts } from "@/lib/prep-line/card-projection";
 import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -109,6 +110,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/ai/glove-finder" });
+  if (!botGate.ok) return botGate.response;
+
   try {
     if (isPublicAiEmergencyDisabled()) {
       return NextResponse.json(
@@ -120,9 +124,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
-    if (guarded) return guarded;
-
     const rate = checkAiRateLimit(request);
     if (!rate.allowed) {
       return NextResponse.json(
@@ -130,6 +131,9 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: rate.retryAfterMs ? { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000)) } : undefined }
       );
     }
+
+    const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+    if (guarded) return guarded;
 
     logPublicFunnel("glove_finder_prep_line", "post", {
       path: request.nextUrl.pathname,

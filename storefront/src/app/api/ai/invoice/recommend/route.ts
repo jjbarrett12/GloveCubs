@@ -11,10 +11,14 @@ import {
   isPublicAiEmergencyDisabled,
 } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
 
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/ai/invoice/recommend" });
+  if (!botGate.ok) return botGate.response;
+
   if (isPublicAiEmergencyDisabled()) {
     return NextResponse.json(
       {
@@ -25,9 +29,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const guarded = guardPublicJsonPost(request, { maxBytes: 256 * 1024 });
-  if (guarded) return guarded;
-
   const rate = checkAiRateLimit(request);
   if (!rate.allowed) {
     return NextResponse.json(
@@ -35,6 +36,9 @@ export async function POST(request: NextRequest) {
       { status: 429 }
     );
   }
+
+  const guarded = guardPublicJsonPost(request, { maxBytes: 256 * 1024 });
+  if (guarded) return guarded;
 
   let body: unknown;
   try {
