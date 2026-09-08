@@ -76,6 +76,12 @@ export async function POST(req: NextRequest) {
     if (message === "missing_signup_metadata") {
       return NextResponse.json({ error: "Signup profile data is missing.", code: message }, { status: 422 });
     }
+    if (message === "finalize_in_progress") {
+      return NextResponse.json(
+        { error: "Account setup is still in progress. Try again in a moment.", code: message },
+        { status: 409 },
+      );
+    }
     console.error("[self-signup/finalize] failed", message.slice(0, 120));
     return NextResponse.json({ error: "Could not complete account setup.", code: "finalize_failed" }, { status: 500 });
   }

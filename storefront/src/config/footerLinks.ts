@@ -38,6 +38,8 @@ export const FOOTER_QUICK_LINKS: FooterQuickLink[] = [
   { label: "Resources", href: "/resources" },
   { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms of Use", href: "/terms" },
 ];
 
 export const FOOTER_TOP_BRANDS: FooterTopBrand[] = [

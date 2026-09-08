@@ -35,13 +35,17 @@ export async function findOpportunityByClientTraceId(
 
 export async function findOpportunityByIdempotencyKey(
   supabase: any,
-  idempotencyKey: string
+  idempotencyKey: string,
+  idempotencyScope?: string | null,
 ): Promise<ProcurementOpportunityRow | null> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("procurement_opportunities")
     .select("*")
-    .eq("idempotency_key", idempotencyKey)
-    .maybeSingle();
+    .eq("idempotency_key", idempotencyKey);
+  if (idempotencyScope) {
+    query = query.eq("idempotency_scope", idempotencyScope);
+  }
+  const { data, error } = await query.maybeSingle();
   if (error || !data) return null;
   return data as ProcurementOpportunityRow;
 }
@@ -59,6 +63,7 @@ export async function insertProcurementOpportunity(
     quote_request_id?: string | null;
     client_trace_id?: string | null;
     idempotency_key?: string | null;
+    idempotency_scope?: string | null;
     metadata?: Record<string, unknown>;
   }
 ): Promise<{ id: string; buyer_display_ref: string } | null> {
@@ -76,6 +81,7 @@ export async function insertProcurementOpportunity(
       quote_request_id: row.quote_request_id ?? null,
       client_trace_id: row.client_trace_id ?? null,
       idempotency_key: row.idempotency_key ?? null,
+      idempotency_scope: row.idempotency_scope ?? null,
       metadata,
       updated_at: new Date().toISOString(),
     })

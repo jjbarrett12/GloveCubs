@@ -354,22 +354,13 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   <span className="text-[12px] font-semibold">Quote</span>
                 </Link>
                 {auth.kind === "anonymous" ? (
-                  <>
-                    <Link
-                      href="/signup"
-                      className="text-[13px] font-semibold text-brand hover:text-brand-hover"
-                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                    >
-                      Create account
-                    </Link>
-                    <Link
-                      href="/login"
-                      className="text-[13px] font-semibold text-neutral-800 hover:text-brand"
-                      onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
-                    >
-                      Sign In
-                    </Link>
-                  </>
+                  <Link
+                    href="/login"
+                    className="text-[13px] font-semibold text-neutral-800 hover:text-brand"
+                    onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
+                  >
+                    Sign In
+                  </Link>
                 ) : null}
                 <button
                   type="button"
@@ -407,11 +398,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
               </form>
 
               <div className="order-1 flex shrink-0 items-center gap-2">
-                {auth.kind === "anonymous" ? (
-                  <Link href="/signup" className={headerPrimaryCtaClass}>
-                    Create account
-                  </Link>
-                ) : null}
                 <Link href="/request-pricing" className={auth.kind === "anonymous" ? headerSecondaryCtaClass : headerPrimaryCtaClass}>
                   Request pricing
                 </Link>
@@ -430,9 +416,6 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                 <>
                   <Link href="/login" className={headerTertiaryLinkClass}>
                     Login
-                  </Link>
-                  <Link href="/signup" className={headerTertiaryLinkClass}>
-                    Create account
                   </Link>
                 </>
               ) : (
@@ -521,12 +504,12 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                     {auth.kind === "anonymous" ? (
                       <li>
                         <Link
-                          href="/signup"
+                          href="/login"
                           className={mobileProcurementPrimaryClass}
                           onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}
                         >
                           <User className="h-4 w-4 shrink-0" aria-hidden />
-                          Create account
+                          Sign in
                         </Link>
                       </li>
                     ) : null}
@@ -861,18 +844,11 @@ export function SiteHeader({ auth = { kind: "anonymous" } }: { auth?: CommerceHe
                   Account
                 </li>
                 {auth.kind === "anonymous" ? (
-                  <>
-                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
-                      <Link href="/signup" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                        Create account
-                      </Link>
-                    </li>
-                    <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
-                      <Link href="/login" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
-                        Sign in
-                      </Link>
-                    </li>
-                  </>
+                  <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">
+                    <Link href="/login" className={navLinkClass} onClick={() => closeMobileNav(setMobileOpen, setMobilePanel)}>
+                      Sign in
+                    </Link>
+                  </li>
                 ) : (
                   <>
                     <li className="border-b border-neutral-100 py-3 lg:hidden lg:border-0 lg:py-2">

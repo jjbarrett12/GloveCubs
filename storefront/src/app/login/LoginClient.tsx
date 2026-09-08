@@ -118,6 +118,8 @@ export function LoginClient({ supabaseConfigured }: Props) {
         path?: string;
         error?: string;
         code?: string;
+        buyer_default_path?: string;
+        buyer_issue?: string | null;
       };
       if (!res.ok) {
         if (body.code === "missing_supabase_env") {
@@ -149,10 +151,10 @@ export function LoginClient({ supabaseConfigured }: Props) {
           ? body.path
           : "/account";
       const buyerDefaultPath =
-        typeof (body as { buyer_default_path?: string }).buyer_default_path === "string" &&
-        (body as { buyer_default_path: string }).buyer_default_path.startsWith("/") &&
-        !(body as { buyer_default_path: string }).buyer_default_path.startsWith("//")
-          ? (body as { buyer_default_path: string }).buyer_default_path
+        typeof body.buyer_default_path === "string" &&
+        body.buyer_default_path.startsWith("/") &&
+        !body.buyer_default_path.startsWith("//")
+          ? body.buyer_default_path
           : defaultPath === "/admin"
             ? "/account"
             : defaultPath;
@@ -165,6 +167,10 @@ export function LoginClient({ supabaseConfigured }: Props) {
             "You were trying to open the admin console. Use your buyer account from the storefront, or ask an owner to grant admin access for this email.",
           ],
         });
+        return;
+      }
+      if (!isActiveAdmin && (body.buyer_issue === "needs_signup_complete" || body.buyer_issue === "no_membership")) {
+        window.location.assign("/signup/complete");
         return;
       }
       const dest = resolvePostLoginRedirectPath({
@@ -220,10 +226,10 @@ export function LoginClient({ supabaseConfigured }: Props) {
         {issueStr === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Your account is signed in but is not linked to an organization yet.{" "}
-            <Link href="/signup" className="font-semibold text-[#f06232] underline">
-              Create an account
+            <Link href="/signup/complete" className="font-semibold text-[#f06232] underline">
+              Finish account setup
             </Link>{" "}
-            to shop gloves and submit quote requests, or{" "}
+            to link your company, or{" "}
             <Link href="/contact" className="font-semibold text-[#f06232] underline">
               contact support
             </Link>

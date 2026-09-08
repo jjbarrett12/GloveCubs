@@ -388,5 +388,11 @@ export async function POST(request: NextRequest) {
     email_notification_sent: emailNotificationSent,
     procurement_opportunity_id,
     buyer_display_ref,
+    ...(emailNotificationSent
+      ? {}
+      : {
+          warning:
+            "Your quote request was saved. We could not send an internal email notification automatically—our team can still see it in admin, or reach us via Contact if you need a faster follow-up.",
+        }),
   });
 }

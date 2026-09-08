@@ -42,6 +42,8 @@ export default function QuoteCartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [emailNotificationSent, setEmailNotificationSent] = useState<boolean | null>(null);
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const [quoteRequestId, setQuoteRequestId] = useState<string | null>(null);
   const [buyerDisplayRef, setBuyerDisplayRef] = useState<string | null>(null);
   const [reorderSource, setReorderSource] = useState<ReorderSourcePayload | null>(null);
@@ -230,9 +232,18 @@ export default function QuoteCartPage() {
 
       const refRaw = typeof data.buyer_display_ref === "string" ? data.buyer_display_ref.trim() : "";
       const prepRef = refRaw.startsWith("GC-PREP-") ? refRaw : null;
+      const emailOk = data.email_notification_sent === true;
+      const warningText =
+        typeof data.warning === "string" && data.warning.trim()
+          ? data.warning.trim()
+          : !emailOk
+            ? "Your quote request was saved. We could not send an internal email notification automatically—our team can still see it in admin, or reach us via Contact if you need a faster follow-up."
+            : null;
 
       setQuoteRequestId(qid);
       setBuyerDisplayRef(prepRef);
+      setEmailNotificationSent(emailOk);
+      setEmailWarning(warningText);
       submitIdempotencyRef.current = null;
       clearReorderSource();
       setReorderSource(null);
@@ -319,11 +330,21 @@ export default function QuoteCartPage() {
 
         {hydrated && done && quoteRequestId && (
           <div className="text-sm mb-6 border border-emerald-500/30 rounded-lg px-4 py-3 space-y-3">
-            <p className="text-emerald-400/90 font-medium">Your quote request was received and saved.</p>
+            <p className="text-emerald-400/90 font-medium">
+              {emailNotificationSent === false ? "Your quote request was received and saved." : "Your quote request was received and saved."}
+            </p>
             <p className="text-white/80 text-sm">
               Our team will follow up using the contact details you provided. This is not an order confirmation — pricing
               and availability are confirmed during follow-up.
             </p>
+            {emailNotificationSent === false && emailWarning ? (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                {emailWarning}{" "}
+                <Link href="/contact" className="font-semibold text-[#f06232] underline">
+                  Contact
+                </Link>
+              </p>
+            ) : null}
             <div className="rounded-md bg-white/5 border border-white/10 px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-white/45 mb-1">Quote request reference</p>
               <p className="font-mono text-xs text-white/90 break-all">{quoteRequestId}</p>

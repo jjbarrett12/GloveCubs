@@ -6,7 +6,51 @@ import {
   SELF_SIGNUP_DEFAULT_REDIRECT,
   validateSelfSignupForm,
 } from "@/lib/auth/self-signup-form";
-import { finalizeSelfSignupForUser, parseSelfSignupMetadata } from "@/lib/auth/self-signup";
+import {
+  canAttemptSelfSignupRecovery,
+  finalizeSelfSignupForUser,
+  parseSelfSignupMetadata,
+  recoverSelfSignupIfNeeded,
+} from "@/lib/auth/self-signup";
+
+function membershipOnlySupabase(membership: { id: string; company_id: string } | null) {
+  const membersChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: membership, error: null }),
+    insert: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    delete: vi.fn().mockReturnThis(),
+  };
+  const locksChain = {
+    insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+    delete: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
+  return {
+    schema: vi.fn((name: string) => ({
+      from: (table: string) => {
+        if (table === "company_members") return membersChain;
+        if (table === "self_signup_finalize_locks") return locksChain;
+        if (table === "companies") {
+          return {
+            insert: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn(),
+            ilike: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          };
+        }
+        throw new Error(`unexpected table ${table} in ${name}`);
+      },
+    })),
+    _membersChain: membersChain,
+    _locksChain: locksChain,
+  };
+}
 
 describe("validateSelfSignupForm", () => {
   const valid = {
@@ -74,6 +118,13 @@ describe("parseSelfSignupMetadata", () => {
   });
 });
 
+describe("canAttemptSelfSignupRecovery", () => {
+  it("allows recovery when company_name metadata exists", () => {
+    expect(canAttemptSelfSignupRecovery({ company_name: "Acme" })).toBe(true);
+    expect(canAttemptSelfSignupRecovery({})).toBe(false);
+  });
+});
+
 describe("sanitizeSignupText", () => {
   it("trims and collapses whitespace", () => {
     expect(sanitizeSignupText("  Acme   Gloves  ", 80)).toBe("Acme Gloves");
@@ -81,27 +132,16 @@ describe("sanitizeSignupText", () => {
 });
 
 describe("finalizeSelfSignupForUser", () => {
-  it("returns existing membership idempotently", async () => {
-    const supabase = {
-      schema: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: { id: "member-1", company_id: "company-1" },
-        error: null,
-      }),
-    };
-
+  it("returns existing membership idempotently (repeated finalize)", async () => {
+    const supabase = membershipOnlySupabase({ id: "member-1", company_id: "company-1" });
     const result = await finalizeSelfSignupForUser(supabase, "user-1", { company_name: "Acme" });
     expect(result.already_provisioned).toBe(true);
     expect(result.company_id).toBe("company-1");
     expect(result.redirect_path).toBe(SELF_SIGNUP_DEFAULT_REDIRECT);
+    expect(supabase._locksChain.insert).not.toHaveBeenCalled();
   });
 
-  it("creates active company and owner membership", async () => {
+  it("creates active company and owner membership (normal signup)", async () => {
     const membersChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -113,6 +153,7 @@ describe("finalizeSelfSignupForUser", () => {
         .mockResolvedValueOnce({ data: null, error: null }),
       insert: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: { id: "member-new" }, error: null }),
+      delete: vi.fn().mockReturnThis(),
     };
 
     const companiesChain = {
@@ -137,11 +178,18 @@ describe("finalizeSelfSignupForUser", () => {
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     };
 
+    const locksChain = {
+      insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+
     const supabase = {
       schema: vi.fn((name: string) => ({
         from: (table: string) => {
           if (table === "company_members") return membersChain;
           if (table === "companies") return companiesChain;
+          if (table === "self_signup_finalize_locks") return locksChain;
           throw new Error(`unexpected table ${table} in ${name}`);
         },
       })),
@@ -157,6 +205,7 @@ describe("finalizeSelfSignupForUser", () => {
     expect(result.already_provisioned).toBe(false);
     expect(result.company_id).toBe("company-new");
     expect(result.member_id).toBe("member-new");
+    expect(locksChain.insert).toHaveBeenCalled();
     expect(membersChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         company_id: "company-new",
@@ -167,18 +216,85 @@ describe("finalizeSelfSignupForUser", () => {
   });
 
   it("throws when signup metadata is missing", async () => {
-    const supabase = {
-      schema: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-        }),
+    const supabase = membershipOnlySupabase(null);
+    await expect(finalizeSelfSignupForUser(supabase, "user-3", {})).rejects.toThrow("missing_signup_metadata");
+  });
+});
+
+describe("recoverSelfSignupIfNeeded", () => {
+  it("returns ready for existing membership", async () => {
+    const supabase = membershipOnlySupabase({ id: "m1", company_id: "c1" });
+    const out = await recoverSelfSignupIfNeeded(supabase, "user-1", {});
+    expect(out.kind).toBe("ready");
+    if (out.kind === "ready") expect(out.result.already_provisioned).toBe(true);
+  });
+
+  it("routes authenticated user without membership/metadata to signup complete", async () => {
+    const supabase = membershipOnlySupabase(null);
+    const out = await recoverSelfSignupIfNeeded(supabase, "user-x", {});
+    expect(out).toEqual({ kind: "needs_complete", redirect_path: "/signup/complete" });
+  });
+
+  it("finalizes missed signup when metadata is present", async () => {
+    const membersChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi
+        .fn()
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({ data: null, error: null }),
+      insert: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "member-r" }, error: null }),
+      delete: vi.fn().mockReturnThis(),
+    };
+    const companiesChain = {
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: "company-r",
+          trade_name: "Recover Co",
+          legal_name: null,
+          slug: "recover-co",
+          country_code: null,
+          status: "active",
+          b2b_pricing_tier_code: "cub",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+        error: null,
       }),
+      ilike: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const locksChain = {
+      insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const supabase = {
+      schema: vi.fn(() => ({
+        from: (table: string) => {
+          if (table === "company_members") return membersChain;
+          if (table === "companies") return companiesChain;
+          if (table === "self_signup_finalize_locks") return locksChain;
+          throw new Error(table);
+        },
+      })),
     };
 
-    await expect(finalizeSelfSignupForUser(supabase, "user-3", {})).rejects.toThrow("missing_signup_metadata");
+    const out = await recoverSelfSignupIfNeeded(supabase, "user-r", {
+      company_name: "Recover Co",
+      onboarding_source: "self_signup",
+    });
+    expect(out.kind).toBe("ready");
+    if (out.kind === "ready") {
+      expect(out.result.company_id).toBe("company-r");
+      expect(out.result.already_provisioned).toBe(false);
+    }
   });
 });

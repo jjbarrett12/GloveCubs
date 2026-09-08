@@ -99,6 +99,7 @@ describe("runInvoiceIntake", () => {
       extraction_model: "gpt-4o-mini",
       extracted_at: "2026-01-01T00:01:00Z",
       extraction_error: null,
+      idempotency_scope: "company:co-1",
       payload: {
         last_extract: {
           vendor_name: "V",
@@ -109,22 +110,35 @@ describe("runInvoiceIntake", () => {
       },
     };
 
+    const chainEq = () => {
+      const api: any = {
+        eq: () => api,
+        maybeSingle: async () => ({
+          data: {
+            id: "opp-1",
+            idempotency_key: "idem-x",
+            idempotency_scope: "company:co-1",
+            metadata: {},
+          },
+          error: null,
+        }),
+      };
+      return api;
+    };
+
+    const intakeEq = () => {
+      const api: any = {
+        eq: () => api,
+        maybeSingle: async () => ({ data: intakeRow, error: null }),
+      };
+      return api;
+    };
+
     const supabase = {
       from: (table: string) => {
         if (table === "procurement_opportunities") {
           return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    id: "opp-1",
-                    idempotency_key: "idem-x",
-                    metadata: {},
-                  },
-                  error: null,
-                }),
-              }),
-            }),
+            select: () => chainEq(),
           };
         }
         throw new Error(`unexpected public table ${table}`);
@@ -135,11 +149,7 @@ describe("runInvoiceIntake", () => {
           from: (table: string) => {
             if (table === "uploaded_invoices") {
               return {
-                select: () => ({
-                  eq: () => ({
-                    maybeSingle: async () => ({ data: intakeRow, error: null }),
-                  }),
-                }),
+                select: () => intakeEq(),
               };
             }
             throw new Error(`unexpected gc table ${table}`);
@@ -171,15 +181,40 @@ describe("runInvoiceIntake", () => {
   });
 
   it("returns 409 when same company re-uploads same bytes with a different idempotency key", async () => {
+    const oppEq = () => {
+      const api: any = {
+        eq: () => api,
+        maybeSingle: async () => ({ data: null, error: null }),
+      };
+      return api;
+    };
+    const shaEq = () => {
+      const api: any = {
+        eq: () => api,
+        maybeSingle: async () => ({
+          data: {
+            id: "existing",
+            idempotency_key: "old-key",
+            idempotency_scope: "company:co-1",
+            intake_status: "extracted_ok",
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+            extraction_model: null,
+            extracted_at: null,
+            extraction_error: null,
+            payload: {},
+          },
+          error: null,
+        }),
+      };
+      return api;
+    };
+
     const supabase = {
       from: (table: string) => {
         if (table === "procurement_opportunities") {
           return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({ data: null, error: null }),
-              }),
-            }),
+            select: () => oppEq(),
           };
         }
         throw new Error(`unexpected public table ${table}`);
@@ -188,26 +223,7 @@ describe("runInvoiceIntake", () => {
         from: (table: string) => {
           if (table !== "uploaded_invoices") throw new Error(table);
           return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  maybeSingle: async () => ({
-                    data: {
-                      id: "existing",
-                      idempotency_key: "old-key",
-                      intake_status: "extracted_ok",
-                      created_at: "2026-01-01T00:00:00Z",
-                      updated_at: "2026-01-01T00:00:00Z",
-                      extraction_model: null,
-                      extracted_at: null,
-                      extraction_error: null,
-                      payload: {},
-                    },
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
+            select: () => shaEq(),
           };
         },
       }),
@@ -231,5 +247,65 @@ describe("runInvoiceIntake", () => {
       expect(result.status).toBe(409);
       expect(result.body.error).toBe("duplicate_invoice_bytes");
     }
+  });
+
+  it("does not replay another tenant's intake for the same idempotency key", async () => {
+    const extractSpy = vi.spyOn(aiProvider, "aiExtractInvoice").mockRejectedValue(new Error("stop"));
+
+    // Opportunity lookup is scoped — other tenant's row is invisible (null).
+    const oppEq = () => {
+      const api: any = {
+        eq: () => api,
+        maybeSingle: async () => ({ data: null, error: null }),
+      };
+      return api;
+    };
+
+    const supabase = {
+      from: (table: string) => {
+        if (table === "procurement_opportunities") {
+          return {
+            select: () => oppEq(),
+            insert: () => ({
+              select: () => ({
+                single: async () => ({ data: null, error: { message: "stop create" } }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`unexpected public table ${table}`);
+      },
+      schema: () => ({
+        from: () => ({
+          select: () => {
+            const api: any = {
+              eq: () => api,
+              maybeSingle: async () => ({ data: null, error: null }),
+            };
+            return api;
+          },
+        }),
+      }),
+    };
+
+    const result = await runInvoiceIntake({
+      supabase,
+      identityOverride: {
+        authenticated: true,
+        company_id: "tenant-b",
+        user_id: "user-b",
+        anonymous_session_id: null,
+      },
+      idempotencyKeyHeader: "shared-client-key",
+      anonymousSessionId: null,
+      file: { buffer: Buffer.from("x"), filename: "f.pdf", mimeType: "application/pdf" },
+    });
+
+    // Must not succeed as a cross-tenant replay; create path fails closed without leaking.
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.body.error).not.toBe("incomplete_intake");
+    }
+    expect(extractSpy).not.toHaveBeenCalled();
   });
 });
