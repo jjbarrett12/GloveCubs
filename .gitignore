@@ -38,3 +38,10 @@ storefront/tmp-*
 test-results/
 playwright-report/
 coverage/
+
+# Generated local debug / deploy dumps (never commit)
+.cursor/debug-*.log
+/debug-*.log
+/debug-*.json
+/scripts-*.cjs
+
