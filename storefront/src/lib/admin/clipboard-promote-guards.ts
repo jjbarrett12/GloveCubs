@@ -5,7 +5,7 @@
 import {
   CLIPBOARD_EXTRACTION_AUTHORITY_CATALOGOS,
   CLIPBOARD_EXTRACTION_AUTHORITY_LOCAL,
-} from "@/lib/admin/clipboard-url-catalogos-extract";
+} from "@/lib/admin/clipboard-extraction-authority";
 
 export const URL_IMPORT_REVIEW_REQUIRED_MESSAGE =
   "Imported products must be reviewed before publishing.";

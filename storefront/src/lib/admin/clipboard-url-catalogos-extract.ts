@@ -23,9 +23,15 @@ import {
   adaptUrlImportJobDetail,
   type UrlImportExtractedProduct,
 } from "@/lib/admin/url-import-adapter";
+import {
+  CLIPBOARD_EXTRACTION_AUTHORITY_CATALOGOS,
+  CLIPBOARD_EXTRACTION_AUTHORITY_LOCAL,
+} from "@/lib/admin/clipboard-extraction-authority";
 
-export const CLIPBOARD_EXTRACTION_AUTHORITY_CATALOGOS = "catalogos_url_import_v2" as const;
-export const CLIPBOARD_EXTRACTION_AUTHORITY_LOCAL = "storefront_product_extraction_v2" as const;
+export {
+  CLIPBOARD_EXTRACTION_AUTHORITY_CATALOGOS,
+  CLIPBOARD_EXTRACTION_AUTHORITY_LOCAL,
+};
 
 export function isClipboardCatalogosExtractConfigured(): boolean {
   return computeProductsImportConnectionStatus().configured;
