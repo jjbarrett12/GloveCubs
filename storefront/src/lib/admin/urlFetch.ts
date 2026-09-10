@@ -186,7 +186,10 @@ export async function safeFetchHtml(urlString: string): Promise<FetchResult> {
   }
 
   try {
-    const { ssrfSafeFetch } = await import("@ssrf-safe-fetch");
+    const { ssrfSafeFetch } = await import(
+      /* webpackIgnore: true */
+      "@ssrf-safe-fetch"
+    );
     const fetched = await ssrfSafeFetch(validation.url.toString(), {
       method: "GET",
       timeoutMs: FETCH_CONFIG.timeout_ms,

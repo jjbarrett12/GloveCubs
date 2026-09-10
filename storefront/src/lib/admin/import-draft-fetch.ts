@@ -1,9 +1,8 @@
 /**
  * Fetch-only HTML retrieval for URL import staging.
  * Parsing is exclusively productExtraction.ts.
+ * SSRF fetch is Node-only and must not be webpack-bundled into client components.
  */
-
-import { ssrfSafeFetch } from "@ssrf-safe-fetch";
 
 const DEFAULT_MAX_BYTES = 400_000;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -12,6 +11,10 @@ export async function fetchHtmlForImport(
   url: string,
   maxBytes = DEFAULT_MAX_BYTES
 ): Promise<{ html: string; truncated: boolean }> {
+  const { ssrfSafeFetch } = await import(
+    /* webpackIgnore: true */
+    "@ssrf-safe-fetch"
+  );
   const res = await ssrfSafeFetch(url, {
     method: "GET",
     timeoutMs: FETCH_TIMEOUT_MS,
