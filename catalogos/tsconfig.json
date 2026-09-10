@@ -17,6 +17,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@commerce-packaging/*": ["../lib/commerce-packaging/*"],
+      "@ssrf-safe-fetch": ["../lib/ssrf-safe-fetch/index.ts"],
+      "@invoice-line-parse": ["../lib/invoice-line-parse/index.ts"],
       "@glove-sku-intelligence": ["../lib/glove-sku-intelligence/index.ts"],
       "@glove-sku-intelligence/*": ["../lib/glove-sku-intelligence/*"]
     }

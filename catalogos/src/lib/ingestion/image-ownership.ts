@@ -4,6 +4,7 @@
  */
 
 import { createHash } from "crypto";
+import { ssrfSafeFetch } from "@ssrf-safe-fetch";
 import { getSupabaseCatalogos } from "@/lib/db/client";
 
 export const CATALOG_IMPORT_IMAGES_BUCKET = "catalog-import-images";
@@ -123,48 +124,29 @@ function storagePathForUrl(batchId: string, httpsUrl: string, ext: string): stri
 }
 
 async function ingestHttpsImageToStorage(batchId: string, httpsUrl: string): Promise<UrlIngestOutcome> {
-  let res: Response;
-  try {
-    const clRes = await fetch(httpsUrl, {
-      method: "HEAD",
-      signal: AbortSignal.timeout(Math.min(8000, FETCH_TIMEOUT_MS)),
-      redirect: "follow",
-      headers: { Accept: "image/*,*/*", "User-Agent": "CatalogOS-ImageOwnership/1.0" },
-    });
-    const lenHdr = clRes.headers.get("content-length");
-    if (lenHdr) {
-      const n = Number(lenHdr);
-      if (Number.isFinite(n) && n > IMAGE_OWNERSHIP_MAX_BYTES) {
-        return { status: "failed", error: `Content-Length exceeds max (${IMAGE_OWNERSHIP_MAX_BYTES} bytes)`, hotlink: httpsUrl };
-      }
-    }
-  } catch {
-    /* non-fatal: proceed to GET; some hosts omit HEAD */
+  const fetched = await ssrfSafeFetch(httpsUrl, {
+    method: "GET",
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: { Accept: "image/*,*/*", "User-Agent": "CatalogOS-ImageOwnership/1.0" },
+  });
+  if (!fetched.ok) {
+    return {
+      status: "failed",
+      error: fetched.security_blocked ? `Blocked URL: ${fetched.error}` : fetched.error,
+      hotlink: httpsUrl,
+    };
   }
-
-  try {
-    res = await fetch(httpsUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: "follow",
-      headers: { Accept: "image/*,*/*", "User-Agent": "CatalogOS-ImageOwnership/1.0" },
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { status: "failed", error: `Fetch failed: ${msg}`, hotlink: httpsUrl };
+  if (fetched.status < 200 || fetched.status >= 300) {
+    return { status: "failed", error: `HTTP ${fetched.status}`, hotlink: httpsUrl };
   }
-
-  if (!res.ok) {
-    return { status: "failed", error: `HTTP ${res.status}`, hotlink: httpsUrl };
+  if (fetched.buffer.length > IMAGE_OWNERSHIP_MAX_BYTES) {
+    return {
+      status: "failed",
+      error: `Image exceeds max size (${IMAGE_OWNERSHIP_MAX_BYTES} bytes)`,
+      hotlink: httpsUrl,
+    };
   }
-
-  let bytes: Uint8Array;
-  try {
-    bytes = await readBodyWithMaxSize(res, IMAGE_OWNERSHIP_MAX_BYTES);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { status: "failed", error: msg, hotlink: httpsUrl };
-  }
+  const bytes = new Uint8Array(fetched.buffer);
 
   const mime = sniffImageMimeFromBuffer(bytes);
   if (!mime) {

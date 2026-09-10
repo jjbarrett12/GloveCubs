@@ -61,7 +61,7 @@ Server-only. Must authorize (session + membership or admin) before querying/sign
 
 | Asset | Model |
 |-------|--------|
-| Customer invoice uploads | Stored as DB payload / relational rows (`uploaded_invoices`); RLS by `company_id`. No public storage path for invoice bytes. |
+| Customer invoice uploads | Private bucket `invoice-originals` (service_role write; no public URL). Metadata + object path on `gc_commerce.uploaded_invoices` (RLS by `company_id`). Path includes company or `anonymous`. |
 | Product / catalog-import images | Public bucket `catalog-import-images` (intentional). |
 | Supplier onboarding | Private bucket `supplier-onboarding`; signed URLs via CatalogOS service role after admin auth. |
 | Regulatory evidence | Internal / operator only until product decides public gating (still a launch P0). |

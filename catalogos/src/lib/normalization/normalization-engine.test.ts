@@ -280,6 +280,18 @@ describe("deterministic extraction - disposable gloves", () => {
     expect(withFallback.attributes.packaging).toBe("case_1000_ct");
     expect(withNoMap.attributes.packaging).toBe("case_1000_ct");
   });
+
+  it("parses distributor abbreviations from NITR GLV BLK XL 100/BX", () => {
+    const { attributes } = extractDisposableGloveAttributes({
+      name: "NITR GLV BLK XL 100/BX",
+      sku: "DIST-1",
+      brand: "X",
+    });
+    expect(attributes.material).toBe("nitrile");
+    expect(attributes.color).toBe("black");
+    expect(attributes.size).toBe("xl");
+    expect(attributes.packaging).toBe("box_100_ct");
+  });
 });
 
 describe("deterministic extraction - work gloves", () => {

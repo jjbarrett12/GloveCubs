@@ -21,6 +21,7 @@ import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
   unitsPerCaseFromStagingNormalizedContent,
+  withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
 import {
   extractSizeCodeFromFilterAttributes,
@@ -264,6 +265,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   let productId: string;
   let slug: string | null = null;
   let internalSkuForSellable = "";
+  let catalogVariantId: string | null = null;
 
   if (input.masterProductId) {
     productId = input.masterProductId;
@@ -331,6 +333,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
         manufacturerSku: resolvedSkus?.manufacturerSku ?? null,
       });
       if (!vr.ok) return { success: false, error: vr.error };
+      catalogVariantId = vr.catalogVariantId;
     }
   } else if (input.newProductPayload) {
     const payload = input.newProductPayload;
@@ -377,17 +380,25 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     const variantMetadata: Record<string, unknown> = gloveIngestSize ? { size: gloveIngestSize } : {};
     const mfr = resolvedSkus?.manufacturerSku?.trim();
     if (mfr) variantMetadata.manufacturer_sku = mfr;
-    const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
-      catalog_product_id: productId,
-      variant_sku: variantSku,
-      sort_order: 0,
-      is_active: true,
-      metadata: variantMetadata,
-      ...(gloveIngestSize ? { size_code: gloveIngestSize } : {}),
-      ...(input.stagedContent.gtin ? { gtin: input.stagedContent.gtin } : {}),
-      ...(input.stagedContent.mpn ? { mpn: input.stagedContent.mpn } : {}),
-    });
-    if (vInsErr) return { success: false, error: `catalog_variants insert: ${vInsErr.message}` };
+    const { data: insertedVariant, error: vInsErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_variants")
+      .insert({
+        catalog_product_id: productId,
+        variant_sku: variantSku,
+        sort_order: 0,
+        is_active: true,
+        metadata: variantMetadata,
+        ...(gloveIngestSize ? { size_code: gloveIngestSize } : {}),
+        ...(input.stagedContent.gtin ? { gtin: input.stagedContent.gtin } : {}),
+        ...(input.stagedContent.mpn ? { mpn: input.stagedContent.mpn } : {}),
+      })
+      .select("id")
+      .single();
+    if (vInsErr || !insertedVariant) {
+      return { success: false, error: `catalog_variants insert: ${vInsErr?.message ?? "failed"}` };
+    }
+    catalogVariantId = (insertedVariant as { id: string }).id;
   } else {
     return { success: false, error: "Either masterProductId or newProductPayload is required" };
   }
@@ -450,24 +461,27 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   }
 
   const sellPrice = input.overrideSellPrice ?? input.stagedContent.supplier_cost;
-  const offerRow = buildSupplierOfferUpsertRow(
-    {
-      supplier_id: input.supplierId,
-      product_id: productId,
-      supplier_sku: input.stagedContent.supplier_sku,
-      cost: input.stagedContent.supplier_cost,
-      sell_price: Number.isFinite(sellPrice) ? sellPrice : input.stagedContent.supplier_cost,
-      raw_id: input.rawId,
-      normalized_id: input.normalizedId,
-      is_active: true,
-      units_per_case: input.stagedContent.units_per_case ?? null,
-    },
-    {
-      currency_code: "USD",
-      cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
-      cost: input.stagedContent.supplier_cost,
-      units_per_case: input.stagedContent.units_per_case,
-    }
+  const offerRow = withResolvedCatalogVariantId(
+    buildSupplierOfferUpsertRow(
+      {
+        supplier_id: input.supplierId,
+        product_id: productId,
+        supplier_sku: input.stagedContent.supplier_sku,
+        cost: input.stagedContent.supplier_cost,
+        sell_price: Number.isFinite(sellPrice) ? sellPrice : input.stagedContent.supplier_cost,
+        raw_id: input.rawId,
+        normalized_id: input.normalizedId,
+        is_active: true,
+        units_per_case: input.stagedContent.units_per_case ?? null,
+      },
+      {
+        currency_code: "USD",
+        cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
+        cost: input.stagedContent.supplier_cost,
+        units_per_case: input.stagedContent.units_per_case,
+      }
+    ),
+    catalogVariantId
   );
   const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
     onConflict: "supplier_id,product_id,supplier_sku",

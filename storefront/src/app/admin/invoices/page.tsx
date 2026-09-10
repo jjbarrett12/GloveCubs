@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { EmptyState, ErrorState, PageHeader } from "@/components/admin";
 import { getAdminOperator } from "@/lib/admin/get-admin-user";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { adminLink } from "@/components/admin/admin-theme-utils";
 import { InvoicesTable, type InvoiceIntakeRow } from "./InvoicesTable";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +47,11 @@ export default async function AdminInvoicesPage() {
         title="Invoice intakes"
         description="Uploaded invoice documents — newest 100. Failed extractions are highlighted."
       />
+      <p className="mb-4 text-sm">
+        <Link href="/admin/procurement/crosswalk" className={adminLink}>
+          Competitor crosswalk
+        </Link>
+      </p>
 
       {error ? (
         <ErrorState title="Could not load invoice intakes" message={error.message} />

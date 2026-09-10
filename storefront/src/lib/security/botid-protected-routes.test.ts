@@ -7,7 +7,6 @@ describe("BOTID_PROTECTED_ROUTES", () => {
     expect(keys).toEqual(
       [
         "POST /api/ai/glove-finder",
-        "POST /api/ai/invoice/recommend",
         "POST /api/auth/self-signup/finalize",
         "POST /api/contact",
         "POST /api/gloves/recommend",

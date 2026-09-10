@@ -54,6 +54,8 @@ export function getFallbackSynonymMap(): SynonymMap {
       grn: "green",
       gry: "gray",
       grey: "gray",
+      vio: "violet",
+      pur: "purple",
       "lt blue": "light_blue",
       "light blue": "light_blue",
     },
@@ -76,6 +78,12 @@ export function getFallbackSynonymMap(): SynonymMap {
       hdpe: "polyethylene_pe",
       "high density polyethylene": "polyethylene_pe",
       polyethylene: "polyethylene_pe",
+      nitr: "nitrile",
+      nit: "nitrile",
+      ntrl: "nitrile",
+      nitrile: "nitrile",
+      vinyl: "vinyl",
+      latex: "latex",
     },
   };
 }

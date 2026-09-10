@@ -174,8 +174,7 @@ function isPrivateIP(ip: string): boolean {
  */
 export async function safeFetchHtml(urlString: string): Promise<FetchResult> {
   const startTime = Date.now();
-  
-  // Validate URL first
+
   const validation = validateUrl(urlString);
   if (!validation.valid || !validation.url) {
     return {
@@ -185,127 +184,74 @@ export async function safeFetchHtml(urlString: string): Promise<FetchResult> {
       security_blocked: true,
     };
   }
-  
-  const url = validation.url;
-  
+
   try {
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_CONFIG.timeout_ms);
-    
-    // Perform fetch
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    const { ssrfSafeFetch } = await import("@ssrf-safe-fetch");
+    const fetched = await ssrfSafeFetch(validation.url.toString(), {
+      method: "GET",
+      timeoutMs: FETCH_CONFIG.timeout_ms,
       headers: {
-        'User-Agent': FETCH_CONFIG.user_agent,
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-US,en;q=0.9',
+        "User-Agent": FETCH_CONFIG.user_agent,
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
       },
-      signal: controller.signal,
-      redirect: 'follow',
     });
-    
-    clearTimeout(timeoutId);
-    
-    // Check response status
-    if (!response.ok) {
+
+    if (!fetched.ok) {
       return {
         success: false,
         url: urlString,
-        final_url: response.url,
-        error: `HTTP error: ${response.status} ${response.statusText}`,
-        fetch_time_ms: Date.now() - startTime,
+        error: fetched.error,
+        security_blocked: fetched.security_blocked,
+        fetch_time_ms: fetched.fetch_time_ms,
       };
     }
-    
-    // Check content type
-    const contentType = response.headers.get('content-type') || '';
-    const isHtml = FETCH_CONFIG.allowed_content_types.some(type => 
-      contentType.toLowerCase().includes(type)
+
+    if (fetched.status < 200 || fetched.status >= 300) {
+      return {
+        success: false,
+        url: urlString,
+        final_url: fetched.final_url,
+        error: `HTTP error: ${fetched.status}`,
+        fetch_time_ms: fetched.fetch_time_ms,
+      };
+    }
+
+    const contentType = fetched.content_type || "";
+    const isHtml = FETCH_CONFIG.allowed_content_types.some((type) =>
+      contentType.toLowerCase().includes(type),
     );
-    
     if (!isHtml) {
       return {
         success: false,
         url: urlString,
-        final_url: response.url,
+        final_url: fetched.final_url,
         content_type: contentType,
         error: `Invalid content type: ${contentType}`,
-        fetch_time_ms: Date.now() - startTime,
+        fetch_time_ms: fetched.fetch_time_ms,
       };
     }
-    
-    // Check content length
-    const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > FETCH_CONFIG.max_content_length) {
+
+    if (fetched.buffer.length > FETCH_CONFIG.max_content_length) {
       return {
         success: false,
         url: urlString,
-        final_url: response.url,
-        error: `Content too large: ${contentLength} bytes`,
-        fetch_time_ms: Date.now() - startTime,
+        final_url: fetched.final_url,
+        error: "Content exceeds size limit",
+        fetch_time_ms: fetched.fetch_time_ms,
       };
     }
-    
-    // Read response body with size limit
-    const reader = response.body?.getReader();
-    if (!reader) {
-      return {
-        success: false,
-        url: urlString,
-        error: 'Failed to read response body',
-        fetch_time_ms: Date.now() - startTime,
-      };
-    }
-    
-    const chunks: Uint8Array[] = [];
-    let totalSize = 0;
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      totalSize += value.length;
-      if (totalSize > FETCH_CONFIG.max_content_length) {
-        reader.cancel();
-        return {
-          success: false,
-          url: urlString,
-          final_url: response.url,
-          error: 'Content exceeds size limit',
-          fetch_time_ms: Date.now() - startTime,
-        };
-      }
-      
-      chunks.push(value);
-    }
-    
-    // Decode HTML
-    const decoder = new TextDecoder('utf-8');
-    const html = chunks.map(chunk => decoder.decode(chunk, { stream: true })).join('') + decoder.decode();
-    
+
     return {
       success: true,
-      html,
+      html: fetched.buffer.toString("utf8"),
       url: urlString,
-      final_url: response.url,
+      final_url: fetched.final_url,
       content_type: contentType,
-      fetch_time_ms: Date.now() - startTime,
+      fetch_time_ms: fetched.fetch_time_ms,
     };
-    
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    // Check for abort (timeout)
-    if (errorMessage.includes('abort')) {
-      return {
-        success: false,
-        url: urlString,
-        error: 'Request timeout',
-        fetch_time_ms: Date.now() - startTime,
-      };
-    }
-    
     return {
       success: false,
       url: urlString,

@@ -8,6 +8,7 @@ import { ProcurementEventType } from "@/lib/procurement/event-taxonomy";
 import { isTrustedProcurementLine } from "@/lib/procurement/trusted-procurement-line";
 import { computeAggregateReview, INVOICE_MATCHING_VERSION, lineReviewFromMatch } from "@/lib/invoice/invoice-phase2";
 import { resolveInvoiceLinesViaCatalogos } from "@/lib/invoice/catalogos-resolve-client";
+import { persistGovernedComparisonsForInvoice } from "@/lib/procurement/invoice-line-comparison-run";
 
 export type InvoiceMatchingRerunResult =
   | {
@@ -33,7 +34,7 @@ export async function runInvoiceMatchingRerun(input: {
     .update({ matching_rerun_in_progress: true, updated_at: new Date().toISOString() })
     .eq("id", uploadedInvoiceId)
     .eq("matching_rerun_in_progress", false)
-    .select("id, matching_attempt, procurement_opportunity_id")
+    .select("id, matching_attempt, procurement_opportunity_id, company_id")
     .maybeSingle();
 
   if (lockErr) {
@@ -44,6 +45,7 @@ export async function runInvoiceMatchingRerun(input: {
   }
 
   const opportunityId = (lockedRow as { procurement_opportunity_id?: string | null }).procurement_opportunity_id ?? null;
+  const companyId = (lockedRow as { company_id?: string | null }).company_id ?? null;
   const priorAttempt = Number((lockedRow as { matching_attempt?: number }).matching_attempt ?? 0);
   const nextAttempt = priorAttempt + 1;
 
@@ -127,6 +129,10 @@ export async function runInvoiceMatchingRerun(input: {
     }
 
     const rematchedLineIds: string[] = [];
+    const catalogByLine = new Map<
+      string,
+      { catalog_product_id: string | null; match_reason: string; normalized_snapshot?: Record<string, unknown> }
+    >();
     if (rematchPayload.length === 0) {
       if (opportunityId) {
         await appendProcurementEvent(supabase, opportunityId, ProcurementEventType.matching_rerun_completed, {
@@ -152,6 +158,11 @@ export async function runInvoiceMatchingRerun(input: {
           continue;
         }
         const review = lineReviewFromMatch(r);
+        catalogByLine.set(r.line_id, {
+          catalog_product_id: r.catalog_product_id,
+          match_reason: r.match_reason,
+          normalized_snapshot: r.normalized_snapshot as Record<string, unknown> | undefined,
+        });
         const { error: upErr } = await s
           .from("invoice_lines")
           .update({
@@ -160,6 +171,7 @@ export async function runInvoiceMatchingRerun(input: {
             catalog_product_id: r.catalog_product_id,
             match_confidence: r.match_confidence,
             match_reason: r.match_reason,
+            substitute_candidate: r.match_reason === "fuzzy_title",
             decision_source: "system",
             updated_at: new Date().toISOString(),
           })
@@ -204,6 +216,12 @@ export async function runInvoiceMatchingRerun(input: {
     const { data: supRow } = await s.from("invoice_supplier_matches").select("review_status").eq("uploaded_invoice_id", uploadedInvoiceId).maybeSingle();
     const supplierStatus = String((supRow as { review_status?: string } | null)?.review_status ?? "pending_review");
     const aggregate = computeAggregateReview(lineStatuses, supplierStatus);
+
+    try {
+      await persistGovernedComparisonsForInvoice(supabase, uploadedInvoiceId, companyId, catalogByLine);
+    } catch {
+      /* Comparison is additive; rematch must still complete. */
+    }
 
     await s
       .from("uploaded_invoices")

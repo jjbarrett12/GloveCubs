@@ -79,7 +79,7 @@ export async function productIdsForActiveVariantSizes(sizeParams: string[] | str
   return new Set((data ?? []).map((r: { catalog_product_id: string }) => r.catalog_product_id));
 }
 
-/** Best available offer price: sell_price when set, else cost (for storefront display and filtering). Exported for tests. */
+/** Internal/admin: sell_price when set, else cost. Public catalog DTOs must not use this. */
 export function offerPrice(row: { cost: number; sell_price?: number | null }): number {
   return row.sell_price != null && Number.isFinite(row.sell_price) ? row.sell_price : row.cost;
 }
@@ -364,26 +364,27 @@ export async function getProductBySlug(slug: string): Promise<LiveProductItem | 
   return detail;
 }
 
-/** Offers summary for a product (storefront: use sell_price when set for best_price). */
+/** Public offers summary — sell_price only; never supplier cost. */
 export async function getOffersSummaryByProductId(productId: string): Promise<{
-  offers: { supplier_id: string; supplier_sku: string; cost: number; sell_price?: number | null; lead_time_days: number | null }[];
+  offers: { supplier_id: string; supplier_sku: string; sell_price?: number | null; lead_time_days: number | null }[];
   best_price: number;
   offer_count: number;
 }> {
   const supabase = getSupabaseCatalogos(true);
   const { data: rows } = await supabase
     .from("supplier_offers")
-    .select("supplier_id, supplier_sku, cost, sell_price, lead_time_days")
+    .select("supplier_id, supplier_sku, sell_price, lead_time_days")
     .eq("product_id", productId)
     .eq("is_active", true);
-  const offers = (rows ?? []).map((r: { supplier_id: string; supplier_sku: string; cost: number; sell_price?: number | null; lead_time_days: number | null }) => ({
+  const offers = (rows ?? []).map((r: { supplier_id: string; supplier_sku: string; sell_price?: number | null; lead_time_days: number | null }) => ({
     supplier_id: r.supplier_id,
     supplier_sku: r.supplier_sku,
-    cost: r.cost,
     sell_price: r.sell_price,
     lead_time_days: r.lead_time_days,
   }));
-  const prices = offers.map((o) => offerPrice(o));
+  const prices = offers
+    .map((o) => (o.sell_price != null && Number.isFinite(o.sell_price) ? o.sell_price : null))
+    .filter((n): n is number => n != null);
   const best_price = prices.length ? Math.min(...prices) : 0;
   return { offers, best_price, offer_count: offers.length };
 }
@@ -429,7 +430,7 @@ export async function getProductDetailBySlug(slug: string): Promise<(LiveProduct
     updated_at: string | null;
   };
   const [{ data: offers }, { data: brand }, { data: imgRows }, { data: priceRow }] = await Promise.all([
-    supabase.from("supplier_offers").select("product_id, cost, sell_price").eq("product_id", product.id).eq("is_active", true),
+    supabase.from("supplier_offers").select("product_id, sell_price").eq("product_id", product.id).eq("is_active", true),
     product.brand_id ? supabase.from("brands").select("id, name").eq("id", product.brand_id).single() : { data: null },
     admin
       .schema("catalog_v2")
@@ -439,8 +440,10 @@ export async function getProductDetailBySlug(slug: string): Promise<(LiveProduct
       .order("sort_order", { ascending: true }),
     supabase.from("product_best_offer_price").select("best_price, offer_count").eq("product_id", product.id).maybeSingle(),
   ]);
-  const offerRows = (offers ?? []) as { cost: number; sell_price?: number | null }[];
-  const prices = offerRows.map((o) => offerPrice(o));
+  const offerRows = (offers ?? []) as { sell_price?: number | null }[];
+  const prices = offerRows
+    .map((o) => (o.sell_price != null && Number.isFinite(o.sell_price) ? o.sell_price : null))
+    .filter((n): n is number => n != null);
   const fromView = priceRow as { best_price: number; offer_count: number } | null;
   const best_price =
     fromView != null && Number.isFinite(fromView.best_price)

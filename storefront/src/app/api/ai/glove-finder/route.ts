@@ -27,6 +27,7 @@ import { PrepLineOperationalCopy } from "@/lib/prep-line/operational-copy";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
 import { requireHumanBotId } from "@/lib/security/botid-gate";
+import { checkPublicWriteRateLimit, PUBLIC_WRITE_LIMITS } from "@/lib/security/public-write-rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -112,6 +113,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const botGate = await requireHumanBotId({ route: "/api/ai/glove-finder" });
   if (!botGate.ok) return botGate.response;
+
+  const writeLimited = checkPublicWriteRateLimit(request, PUBLIC_WRITE_LIMITS.gloveFinder);
+  if (writeLimited) return writeLimited;
 
   try {
     if (isPublicAiEmergencyDisabled()) {

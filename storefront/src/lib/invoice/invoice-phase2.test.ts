@@ -302,6 +302,40 @@ describe("processInvoicePhase2", () => {
     expect(lrIdx).toBeGreaterThan(-1);
     expect(nmIdx).toBeLessThan(lrIdx);
   });
+
+  it("marks fuzzy_title CatalogOS hits as substitute candidates, never approved", async () => {
+    const ctx = createSupabaseMock({});
+    const { supabase } = ctx;
+    const lineId = "aaaaaaaa-aaaa-4aaa-8aaa-000000000001";
+    vi.mocked(resolveInvoiceLinesViaCatalogos).mockResolvedValue({
+      ok: true,
+      results: [
+        {
+          line_id: lineId,
+          matched: true,
+          catalog_product_id: "prod-fuzzy",
+          match_confidence: 0.62,
+          match_reason: "fuzzy_title",
+          category_slug: "disposable_gloves",
+          normalized_snapshot: {},
+        },
+      ],
+    });
+
+    const r = await processInvoicePhase2({
+      supabase,
+      opportunityId: "opp-1",
+      uploadedInvoiceId: "inv-1",
+      extractOk: true,
+      extract: { lines: [{ description: "blue gloves", quantity: 1, unit_price: 1, total: 1 }] } as any,
+    });
+    expect(r).toEqual({ ok: true });
+    const patches = ctx.getInvoiceLineUpdates().map((u) => (u as { patch: Record<string, unknown> }).patch);
+    const fuzzy = patches.find((p) => p.match_reason === "fuzzy_title");
+    expect(fuzzy?.substitute_candidate).toBe(true);
+    expect(fuzzy?.review_status).toBe("review_required");
+    expect(patches.every((p) => p.review_status !== "approved")).toBe(true);
+  });
 });
 
 describe("computeAggregateReview", () => {

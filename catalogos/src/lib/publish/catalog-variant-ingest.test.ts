@@ -119,6 +119,7 @@ describe("upsertCatalogVariantFromGloveIngest", () => {
     });
 
     expect(r.ok).toBe(true);
+    if (r.ok) expect(r.catalogVariantId).toBe("v-size-1");
     expect(updatePayload).not.toBeNull();
     expect(updatePayload!.gtin).toBe("012345678905");
     expect(updatePayload!.mpn).toBe("MPN-STAGED");
@@ -165,8 +166,47 @@ describe("upsertCatalogVariantFromGloveIngest", () => {
     });
 
     expect(r.ok).toBe(true);
+    if (r.ok) expect(r.catalogVariantId).toBe("v-size-2");
     expect(updatePayload!.gtin).toBe("9998887776665");
     expect(updatePayload!.mpn).toBe("TRUSTED-MPN");
+  });
+
+  it("returns catalogVariantId from insert", async () => {
+    const skuLookup = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const sizeLookup = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const insertChain = {
+      insert: vi.fn(() => ({
+        select: vi.fn(() => ({
+          single: vi.fn().mockResolvedValue({ data: { id: "v-new-1" }, error: null }),
+        })),
+      })),
+    };
+    let fromN = 0;
+    const admin = {
+      schema: vi.fn().mockImplementation(() => ({
+        from: vi.fn(() => {
+          fromN += 1;
+          if (fromN === 1) return skuLookup;
+          if (fromN === 2) return sizeLookup;
+          return insertChain;
+        }),
+      })),
+    };
+    const r = await upsertCatalogVariantFromGloveIngest(admin as never, {
+      catalogProductId: "prod-c",
+      sizeCode: "s",
+      variantSku: "GLV-GL-N125S",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.catalogVariantId).toBe("v-new-1");
   });
 
 });
