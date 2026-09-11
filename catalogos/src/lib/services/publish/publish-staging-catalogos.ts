@@ -5,7 +5,6 @@
  */
 
 import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
-import { computeSellPrice } from "@/lib/ingestion/pricing-service";
 import {
   CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
   upsertSellableForCatalogV2Product,
@@ -14,6 +13,7 @@ import { stripPricingKeysForV2ProductMetadata } from "@/lib/ingestion/v2-insert-
 import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
+  omitUnapprovedSellPriceFromOfferWrite,
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../../lib/supplier-offer-normalization";
@@ -184,22 +184,23 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     const sellUnit = pricing?.sell_unit ?? "case";
     const offerCostBasis = costBasisFromSellUnit(sellUnit);
     const unitsPer = unitsPerCaseFromStagingNormalizedContent(norm as Record<string, unknown>, attrs as Record<string, unknown>);
-    const offerRow = withResolvedCatalogVariantId(
-      buildSupplierOfferUpsertRow(
-        {
-          supplier_id: row.supplier_id,
-          product_id: masterId,
-          supplier_sku: supplierSku,
-          cost,
-          sell_price: cost,
-          raw_id: row.raw_id,
-          normalized_id: row.id,
-          is_active: true,
-          units_per_case: unitsPer ?? null,
-        },
-        { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
-      ),
-      catalogVariantId
+    const offerRow = omitUnapprovedSellPriceFromOfferWrite(
+      withResolvedCatalogVariantId(
+        buildSupplierOfferUpsertRow(
+          {
+            supplier_id: row.supplier_id,
+            product_id: masterId,
+            supplier_sku: supplierSku,
+            cost,
+            raw_id: row.raw_id,
+            normalized_id: row.id,
+            is_active: true,
+            units_per_case: unitsPer ?? null,
+          },
+          { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
+        ),
+        catalogVariantId
+      )
     );
     const { error: offerErr } = await catalogos.from("supplier_offers").upsert(offerRow, {
       onConflict: "supplier_id,product_id,supplier_sku",
@@ -209,13 +210,6 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
       errors.push(`Staging ${stagingId}: offer upsert: ${offerErr.message}`);
       continue;
     }
-
-    await computeSellPrice({
-      cost,
-      categoryId,
-      supplierId: row.supplier_id,
-      productId: masterId,
-    });
 
     const brand = String(norm.brand ?? attrs.brand ?? "").trim();
     let manufacturerId: number | null = null;
@@ -258,16 +252,11 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
       .select("name, internal_sku")
       .eq("id", masterId)
       .single();
-    const listPriceMinor = Number.isFinite(cost) ? Math.round(cost * 100) : null;
-    if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
-      errors.push(`Staging ${stagingId}: sellable list price missing (invalid cost)`);
-      continue;
-    }
     const unitCostMinor = Number.isFinite(cost) ? Math.round(cost * 100) : null;
     const sellable = await upsertSellableForCatalogV2Product(masterId, {
       name: (v2n as { name?: string })?.name ?? displayName,
       internalSku: ((v2n as { internal_sku?: string | null })?.internal_sku ?? skuForSellable).trim(),
-      listPriceMinor,
+      listPriceMinor: null,
       bulkPriceMinor: null,
       unitCostMinor,
       isActive: true,

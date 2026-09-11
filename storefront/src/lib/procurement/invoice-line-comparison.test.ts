@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { evaluateInvoiceLineComparison, type InvoiceLineComparisonInput } from "@/lib/procurement/invoice-line-comparison";
 import { evaluateCompatibility } from "@/lib/procurement/glove-compatibility";
 import { resolveGlovesPerPurchasedUnit } from "@/lib/procurement/invoice-pack-authority";
-import { sellPriceLooksLikeCost } from "@/lib/procurement/governed-savings";
 
 const nitrileExam4mil200: InvoiceLineComparisonInput["specs"] = {
   material: "nitrile",
@@ -50,6 +49,7 @@ function baseGood(over: Partial<InvoiceLineComparisonInput> = {}): InvoiceLineCo
       sell_unit_price: 16,
       sell_gloves_per_unit: 200,
       pricing_source: "site_variant_list_x_company_tier_v1",
+      published_list_approved: true,
     },
     ...over,
   };
@@ -228,14 +228,14 @@ describe("evaluateInvoiceLineComparison", () => {
     expect(r.block_reason).toBe("price_arithmetic_conflict");
   });
 
-  it("SUPPLIER COST as pricing source blocks savings", () => {
+  it("unapproved published list blocks savings", () => {
     const r = evaluateInvoiceLineComparison(
       baseGood({
-        gloveCubs: { ...baseGood().gloveCubs!, pricing_source: "supplier_cost_fallback" },
+        gloveCubs: { ...baseGood().gloveCubs!, published_list_approved: false },
       }),
     );
     expect(r.savings).toBeNull();
-    expect(r.block_reason).toBe("supplier_cost_used_as_sell_price");
+    expect(r.block_reason).toBe("missing_authoritative_sell_price");
   });
 });
 
@@ -251,8 +251,12 @@ describe("compatibility thickness", () => {
 });
 
 describe("sell price authority", () => {
-  it("treats cost-named sources as forbidden for savings", () => {
-    expect(sellPriceLooksLikeCost("supplier_cost_fallback")).toBe(true);
-    expect(sellPriceLooksLikeCost("site_variant_list_x_company_tier_v1")).toBe(false);
+  it("blocks savings when published list is not approved", () => {
+    const r = evaluateInvoiceLineComparison(
+      baseGood({
+        gloveCubs: { ...baseGood().gloveCubs!, published_list_approved: false },
+      }),
+    );
+    expect(r.block_reason).toBe("missing_authoritative_sell_price");
   });
 });

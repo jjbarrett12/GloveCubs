@@ -137,7 +137,6 @@ export async function applyDiscontinuedToOffers(discontinuedCandidateId: string)
       cost_basis: string;
     };
     const nextCost = Number(r.cost);
-    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
     const patch = buildSupplierOfferUpsertRow(
       {
         is_active: false,
@@ -145,7 +144,6 @@ export async function applyDiscontinuedToOffers(discontinuedCandidateId: string)
         discontinued_reason: DISCONTINUED_REASON,
         updated_at: new Date().toISOString(),
         cost: nextCost,
-        sell_price: nextSell,
         units_per_case: r.units_per_case,
       },
       {

@@ -6,6 +6,8 @@
  * catalog_supplier_product_map / catalog_v2.supplier_offers are unused and are not a second price source.
  */
 
+import { isApprovedPublishedList } from "@/lib/pricing/published-list-pricing";
+
 export const OFFER_VARIANT_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -132,7 +134,7 @@ export function detectApparentOfferCandidates(args: {
   return out;
 }
 
-/** Test/contract mirror of catalogos.variant_best_offer_price (FK + sell_price only). */
+/** Test/contract mirror of catalogos.variant_best_offer_price (FK + approved sell_price only). */
 export function selectVariantBestSellPrice(args: {
   variantId: string;
   variantActive: boolean;
@@ -140,6 +142,7 @@ export function selectVariantBestSellPrice(args: {
     catalogVariantId: string | null;
     isActive: boolean;
     sellPrice: number | null;
+    sellPriceVerifiedAt?: string | null;
     cost?: number | null;
   }>;
 }): number | null {
@@ -149,9 +152,7 @@ export function selectVariantBestSellPrice(args: {
       (o) =>
         o.catalogVariantId === args.variantId &&
         o.isActive &&
-        o.sellPrice != null &&
-        Number.isFinite(o.sellPrice) &&
-        o.sellPrice > 0
+        isApprovedPublishedList({ sellPrice: o.sellPrice, verifiedAt: o.sellPriceVerifiedAt })
     )
     .map((o) => o.sellPrice as number);
   if (prices.length === 0) return null;

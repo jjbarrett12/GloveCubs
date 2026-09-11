@@ -13,7 +13,6 @@ import { reconcileInvoiceLinePrice } from "@/lib/procurement/invoice-price-recon
 import {
   computeGovernedSavings,
   normalizePricesFromPurchasedUnit,
-  sellPriceLooksLikeCost,
   type GovernedSavings,
   type SavingsBlockReason,
 } from "@/lib/procurement/governed-savings";
@@ -49,6 +48,8 @@ export type GloveCubsSide = {
   sell_unit_price: number | null;
   sell_gloves_per_unit: number | null;
   pricing_source: string | null;
+  /** True only when PA V2 / variant list came from an approved published list. */
+  published_list_approved: boolean;
 };
 
 export type InvoiceLineComparisonInput = {
@@ -257,24 +258,11 @@ export function evaluateInvoiceLineComparison(input: InvoiceLineComparisonInput)
     });
   }
 
-  if (input.gloveCubs.sell_unit_price == null || input.gloveCubs.sell_gloves_per_unit == null) {
+  if (input.gloveCubs.sell_unit_price == null || input.gloveCubs.sell_gloves_per_unit == null || !input.gloveCubs.published_list_approved) {
     return block("insufficient_data", "missing_authoritative_sell_price", {
       compatibility: compat,
       packaging: { status: "verified" },
       price_basis: { current_per_1000: currentNorm.prices.per_1000, glovecubs_per_1000: null },
-      explain: {
-        current: explainCurrent,
-        matched_glovecubs: explainGc,
-        match_status: "REVIEW REQUIRED",
-        match_reasons: compat.checks,
-      },
-    });
-  }
-
-  if (sellPriceLooksLikeCost(input.gloveCubs.pricing_source)) {
-    return block("insufficient_data", "supplier_cost_used_as_sell_price", {
-      compatibility: compat,
-      packaging: { status: "verified" },
       explain: {
         current: explainCurrent,
         matched_glovecubs: explainGc,

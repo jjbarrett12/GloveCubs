@@ -77,6 +77,7 @@ describe("operator approval → savings", () => {
         sell_unit_price: 16,
         sell_gloves_per_unit: 200,
         pricing_source: "gc_resolve_buyer_unit_price",
+        published_list_approved: true,
       },
     });
     expect(after.savings).not.toBeNull();

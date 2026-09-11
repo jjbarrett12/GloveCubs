@@ -11,14 +11,21 @@ const MIGRATION_221 = path.resolve(
   "../../../../supabase/migrations/20261227122100_offer_variant_fk_pricing.sql"
 );
 
+const MIGRATION_222 = path.resolve(
+  __dirname,
+  "../../../../supabase/migrations/20261227122200_offer_published_list_approval.sql"
+);
+
 describe("sell-price-only listing and PA V2 views", () => {
   const sql220 = readFileSync(MIGRATION_220, "utf8");
   const sql221 = readFileSync(MIGRATION_221, "utf8");
+  const sql222 = readFileSync(MIGRATION_222, "utf8");
 
   it("does not COALESCE sell_price to cost in unapplied migrations", () => {
     expect(sql220).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
     expect(sql220).not.toMatch(/COALESCE\s*\(\s*sell_price\s*,\s*cost\s*\)/i);
     expect(sql221).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
+    expect(sql222).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
   });
 
   it("product_best_offer_price uses sell_price only", () => {
@@ -40,5 +47,13 @@ describe("sell-price-only listing and PA V2 views", () => {
     expect(sql221).toContain("catalogos.supplier_offers.variant_fk_sell_v1");
     expect(sql221).not.toContain("so.supplier_sku = v.variant_sku");
     expect(sql221).not.toContain("variant_sku_sell_v1");
+  });
+
+  it("222 requires sell_price_verified_at and never backfills approval", () => {
+    expect(sql222).toContain("sell_price_verified_at");
+    expect(sql222).toContain("AND so.sell_price_verified_at IS NOT NULL");
+    expect(sql222).toContain("AND sell_price_verified_at IS NOT NULL");
+    expect(sql222).not.toMatch(/UPDATE\s+catalogos\.supplier_offers[\s\S]*sell_price_verified_at/i);
+    expect(sql222).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
   });
 });

@@ -11,6 +11,7 @@ import { getSupabaseCatalogos } from "@/lib/db/client";
 import { logOfferUpsertFailure } from "@/lib/observability";
 import {
   buildSupplierOfferUpsertRow,
+  omitUnapprovedSellPriceFromOfferWrite,
   type SupplierOfferCostBasis,
 } from "../../../../lib/supplier-offer-normalization";
 
@@ -83,25 +84,26 @@ export async function createSuggestedOffer(input: CreateOfferInput): Promise<boo
     }
   }
 
-  const offerRow = buildSupplierOfferUpsertRow(
-    {
-      supplier_id: input.supplierId,
-      product_id: input.masterProductId,
-      supplier_sku: input.supplierSku,
-      cost: input.cost,
-      sell_price: input.cost,
-      lead_time_days: input.leadTimeDays ?? null,
-      raw_id: input.rawId,
-      normalized_id: input.normalizedId,
-      is_active: true,
-      units_per_case: input.unitsPerCase ?? null,
-    },
-    {
-      currency_code: input.currencyCode,
-      cost_basis: input.costBasis,
-      cost: input.cost,
-      units_per_case: input.unitsPerCase,
-    }
+  const offerRow = omitUnapprovedSellPriceFromOfferWrite(
+    buildSupplierOfferUpsertRow(
+      {
+        supplier_id: input.supplierId,
+        product_id: input.masterProductId,
+        supplier_sku: input.supplierSku,
+        cost: input.cost,
+        lead_time_days: input.leadTimeDays ?? null,
+        raw_id: input.rawId,
+        normalized_id: input.normalizedId,
+        is_active: true,
+        units_per_case: input.unitsPerCase ?? null,
+      },
+      {
+        currency_code: input.currencyCode,
+        cost_basis: input.costBasis,
+        cost: input.cost,
+        units_per_case: input.unitsPerCase,
+      }
+    )
   );
 
   const { error } = await supabase.from("supplier_offers").upsert(offerRow, {

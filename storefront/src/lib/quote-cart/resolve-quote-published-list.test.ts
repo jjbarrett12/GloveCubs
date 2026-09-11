@@ -127,6 +127,17 @@ describe("resolveQuoteLinePublishedList", () => {
       })
     ).toEqual(QUOTE_REQUEST_PRICING);
   });
+
+  it("unverified list (no variant_best_offer_price row) is request pricing", () => {
+    expect(
+      resolveQuoteLinePublishedList({
+        catalogVariantId: small,
+        productId: PRODUCT_ID,
+        pricingRow: undefined,
+        productStatus: "active",
+      })
+    ).toEqual(QUOTE_REQUEST_PRICING);
+  });
 });
 
 describe("formatQuoteRequestEmailPriceLabel", () => {
@@ -267,5 +278,6 @@ describe("resolveQuoteRequestPublishedListPrices batch + trust", () => {
     expect(src).not.toContain("casePrice");
     expect(src).toContain("fetchVariantPricingRows");
     expect(src).not.toContain("fetchVariantCaseEconomicsBatch");
+    expect(src).toContain("QUOTE_REQUEST_PRICING");
   });
 });
