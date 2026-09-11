@@ -14,6 +14,7 @@ type CommerceExtras = Pick<
   QuoteCartItem,
   | "sell_unit"
   | "unit_price_major"
+  | "pricing_status"
   | "units_per_case"
   | "cases_per_pallet"
   | "units_per_pallet"
@@ -33,7 +34,7 @@ function listingCommerceFromProduct(product: StoreProductRow): CommerceExtras {
   const pkg: PdpCommercePackaging = {
     sellByCaseEnabled: true,
     sellByPalletEnabled: product.palletPricingAvailable,
-    casePrice: product.casePrice ?? product.bestPrice,
+    casePrice: product.casePrice,
     caseListPrice: product.caseListPrice,
     caseOnSale: product.caseOnSale,
     palletPrice: product.palletPrice,
@@ -47,7 +48,8 @@ function listingCommerceFromProduct(product: StoreProductRow): CommerceExtras {
     palletLabel: product.palletLabel ?? null,
     palletBuyingEnabled: false,
   };
-  return buildQuoteLineCommerceFields("case", 1, pkg);
+  /** Listing rows only have family `bestPrice` / packaging casePrice — not variant-authoritative. */
+  return buildQuoteLineCommerceFields("case", 1, pkg, null);
 }
 
 export function AddToQuoteButton({ product, className, quantity = 1, commerce }: Props) {
@@ -97,12 +99,12 @@ export function buildPdpQuoteCommerce(
   commerce: PdpCommercePackaging,
   sellUnit: SellUnit,
   quantity: number,
-  casePriceOverride?: number | null
+  authoritativeUnitPrice?: number | null
 ): CommerceExtras {
   return buildQuoteLineCommerceFields(
     sellUnit,
     quantity,
     commerce,
-    sellUnit === "case" ? casePriceOverride : undefined
+    sellUnit === "case" ? authoritativeUnitPrice : null
   );
 }

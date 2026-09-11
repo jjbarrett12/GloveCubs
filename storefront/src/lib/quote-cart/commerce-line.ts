@@ -1,6 +1,6 @@
 import type { SellUnit, UnitNoun } from "@commerce-packaging/types";
 import type { PdpCommercePackaging } from "@/lib/catalog/store-product-commerce";
-import type { QuoteCartItem } from "@/lib/quote-cart/types";
+import type { QuoteCartItem, QuoteLinePricingStatus } from "@/lib/quote-cart/types";
 import { resolveQuoteSellUnit } from "@/lib/quote-cart/line-utils";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -53,15 +53,33 @@ export function buildCommerceSummary(
   return parts.join(" · ");
 }
 
+function finitePositivePrice(n: unknown): number | null {
+  if (n == null) return null;
+  const x = Number(n);
+  if (!Number.isFinite(x) || x <= 0) return null;
+  return x;
+}
+
+/**
+ * Quote commerce fields. `authoritativeUnitPrice` is the only allowed unit price —
+ * packaging `casePrice` / `palletPrice` and family `bestPrice` must not be used here.
+ */
+export function quoteLinePricingStatusFromUnitPrice(
+  unitPriceMajor: number | null
+): QuoteLinePricingStatus {
+  return unitPriceMajor != null ? "variant_published_list" : "request_pricing";
+}
+
 export function buildQuoteLineCommerceFields(
   sellUnit: SellUnit,
   quantity: number,
   pkg: PdpCommercePackaging,
-  unitPriceOverride?: number | null
+  authoritativeUnitPrice?: number | null
 ): Pick<
   QuoteCartItem,
   | "sell_unit"
   | "unit_price_major"
+  | "pricing_status"
   | "units_per_case"
   | "cases_per_pallet"
   | "units_per_pallet"
@@ -69,12 +87,11 @@ export function buildQuoteLineCommerceFields(
   | "commerce_summary"
   | "line_unit_label"
 > {
-  const unitPrice =
-    unitPriceOverride ??
-    (sellUnit === "pallet" ? pkg.palletPrice : pkg.casePrice);
+  const unit_price_major = finitePositivePrice(authoritativeUnitPrice);
   return {
     sell_unit: sellUnit,
-    unit_price_major: unitPrice,
+    unit_price_major,
+    pricing_status: quoteLinePricingStatusFromUnitPrice(unit_price_major),
     units_per_case: pkg.unitsPerCase,
     cases_per_pallet: sellUnit === "pallet" ? pkg.casesPerPallet : null,
     units_per_pallet: sellUnit === "pallet" ? pkg.unitsPerPallet : null,
@@ -93,7 +110,7 @@ export function formatQuoteCartLinePrimary(item: QuoteCartItem): string | null {
   if (price != null && Number.isFinite(price) && price > 0) {
     return `${qtyLabel} × ${usd.format(price)} / ${unitLabel}`;
   }
-  return qtyLabel;
+  return `${qtyLabel} · Request pricing`;
 }
 
 export function formatQuoteCartLineSecondary(item: QuoteCartItem): string | null {

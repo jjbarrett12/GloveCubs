@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   matrixShowsListUnitColumn,
+  quoteUnitPriceMajorFromSelectedVariant,
   resolvePdpParentFromDisplay,
   resolvePdpSelectedVariantPricingDisplay,
   variantListUnitLabel,
@@ -115,6 +116,27 @@ describe("matrix list unit column", () => {
         },
       ])
     ).toBe(false);
+  });
+});
+
+describe("quoteUnitPriceMajorFromSelectedVariant", () => {
+  it("stores mapped list $85 and not family min", () => {
+    const selected = resolvePdpSelectedVariantPricingDisplay(variantA, pricingRows, undefined);
+    expect(quoteUnitPriceMajorFromSelectedVariant(selected)).toBe(8.5);
+    expect(quoteUnitPriceMajorFromSelectedVariant(selected)).not.toBe(5.99);
+  });
+
+  it("does not inherit sibling or family price when selected size is unmapped", () => {
+    const selected = resolvePdpSelectedVariantPricingDisplay("variant-missing", pricingRows, undefined);
+    expect(selected).toEqual({ kind: "request_pricing" });
+    expect(quoteUnitPriceMajorFromSelectedVariant(selected)).toBeNull();
+  });
+
+  it("uses the selected mapped size when siblings differ", () => {
+    const medium = resolvePdpSelectedVariantPricingDisplay(variantB, pricingRows, undefined);
+    expect(quoteUnitPriceMajorFromSelectedVariant(medium)).toBe(11);
+    const small = resolvePdpSelectedVariantPricingDisplay(variantA, pricingRows, undefined);
+    expect(quoteUnitPriceMajorFromSelectedVariant(small)).toBe(8.5);
   });
 });
 
