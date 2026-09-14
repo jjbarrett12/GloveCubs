@@ -61,6 +61,17 @@ describe("resolveQuoteLinePublishedList", () => {
     ).toEqual(QUOTE_REQUEST_PRICING);
   });
 
+  it("cost-invalidated list (no variant_best_offer_price row) → request pricing", () => {
+    expect(
+      resolveQuoteLinePublishedList({
+        catalogVariantId: small,
+        productId: PRODUCT_ID,
+        pricingRow: undefined,
+        productStatus: "active",
+      })
+    ).toEqual(QUOTE_REQUEST_PRICING);
+  });
+
   it("does not inherit a sibling size price", () => {
     expect(
       resolveQuoteLinePublishedList({

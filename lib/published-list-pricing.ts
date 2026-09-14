@@ -204,6 +204,50 @@ export function validatePublishedListApproval(args: {
 }
 
 /**
+ * Landed-cost change against an already-approved list.
+ * Matches catalogos.enforce_published_list_kodiak_floor: never rewrite sell_price or mapping;
+ * if the list is now below the Kodiak floor, drop verification only.
+ * Operator approval of an unsafe list is rejected by validatePublishedListApproval / the DB trigger.
+ */
+export function applyLandedCostChangeToApproval(args: {
+  cost: number | null | undefined;
+  sellPrice: number | null | undefined;
+  verifiedAt: string | null | undefined;
+  verifiedBy?: string | null;
+}): {
+  sellPrice: number | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  invalidated: boolean;
+} {
+  const n = args.sellPrice == null ? NaN : Number(args.sellPrice);
+  const preservedSell = Number.isFinite(n) ? n : null;
+  const verifiedBy = args.verifiedBy == null || String(args.verifiedBy).trim() === "" ? null : String(args.verifiedBy);
+  if (!isApprovedPublishedList({ sellPrice: args.sellPrice, verifiedAt: args.verifiedAt })) {
+    return {
+      sellPrice: preservedSell,
+      verifiedAt: null,
+      verifiedBy: null,
+      invalidated: false,
+    };
+  }
+  if (validatePublishedListApproval({ cost: args.cost, sellPrice: args.sellPrice }).ok) {
+    return {
+      sellPrice: preservedSell,
+      verifiedAt: String(args.verifiedAt),
+      verifiedBy,
+      invalidated: false,
+    };
+  }
+  return {
+    sellPrice: preservedSell,
+    verifiedAt: null,
+    verifiedBy: null,
+    invalidated: true,
+  };
+}
+
+/**
  * Approval input: approved list may be shown; unverified historical sell_price must not be the draft.
  * Unverified rows get the min-safe recommendation when landed cost is present, otherwise blank.
  */

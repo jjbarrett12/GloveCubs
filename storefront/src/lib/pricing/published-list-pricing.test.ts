@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyLandedCostChangeToApproval,
   grossMarginVsCost,
   isApprovedPublishedList,
   minimumSafePublishedList,
@@ -36,6 +37,8 @@ describe("published list approval", () => {
   it("ceils the Kodiak 20% floor in cents so displayed min is approvable", () => {
     expect(minimumSafePublishedList(85)).toBe(151.79);
     expect(usdMajorToCents(151.79)).toBe(15179);
+    expect(minimumSafePublishedList(90)).toBe(160.72);
+    expect(usdMajorToCents(160.72)).toBe(16072);
     expect(grossMarginVsCost(100, 40)).toEqual({ dollars: 60, percent: 60 });
   });
 });
@@ -102,5 +105,91 @@ describe("approval input prefill", () => {
     expect(v.input).toBe("151.79");
     expect(validatePublishedListApproval({ cost: 85, sellPrice: Number(v.input) }).ok).toBe(true);
     expect(validatePublishedListApproval({ cost: 85, sellPrice: 100 }).ok).toBe(false);
+  });
+});
+
+describe("SQL / TS floor parity (ceil cents of cost / 0.56)", () => {
+  function sqlCeilFloorMajor(cost: number): number {
+    const minCents = Math.ceil(Math.round(cost * 100) / 0.56 - 1e-9);
+    return minCents / 100;
+  }
+
+  it("matches TypeScript minimumSafePublishedList at known boundaries", () => {
+    for (const cost of [80, 85, 90, 200]) {
+      expect(sqlCeilFloorMajor(cost)).toBe(minimumSafePublishedList(cost));
+    }
+    expect(sqlCeilFloorMajor(85)).toBe(151.79);
+    expect(sqlCeilFloorMajor(90)).toBe(160.72);
+    expect(validatePublishedListApproval({ cost: 85, sellPrice: 151.79 }).ok).toBe(true);
+    expect(validatePublishedListApproval({ cost: 90, sellPrice: 155 }).ok).toBe(false);
+    expect(validatePublishedListApproval({ cost: 90, sellPrice: 160.72 }).ok).toBe(true);
+    expect(validatePublishedListApproval({ cost: 90, sellPrice: 160.71 }).ok).toBe(false);
+  });
+});
+
+describe("applyLandedCostChangeToApproval", () => {
+  const verified = "2026-09-11T18:00:00.000Z";
+
+  it("keeps verification when cost 80 → 85 against approved 155", () => {
+    const r = applyLandedCostChangeToApproval({
+      cost: 85,
+      sellPrice: 155,
+      verifiedAt: verified,
+      verifiedBy: "op",
+    });
+    expect(r.invalidated).toBe(false);
+    expect(r.verifiedAt).toBe(verified);
+    expect(r.verifiedBy).toBe("op");
+    expect(r.sellPrice).toBe(155);
+  });
+
+  it("clears verification when cost 85 → 90 against approved 155", () => {
+    const r = applyLandedCostChangeToApproval({
+      cost: 90,
+      sellPrice: 155,
+      verifiedAt: verified,
+      verifiedBy: "op",
+    });
+    expect(r.invalidated).toBe(true);
+    expect(r.verifiedAt).toBeNull();
+    expect(r.verifiedBy).toBeNull();
+    expect(r.sellPrice).toBe(155);
+  });
+
+  it("clears verification on extreme cost 85 → 200 and keeps 155 unverified", () => {
+    const r = applyLandedCostChangeToApproval({
+      cost: 200,
+      sellPrice: 155,
+      verifiedAt: verified,
+      verifiedBy: "op",
+    });
+    expect(r.invalidated).toBe(true);
+    expect(r.sellPrice).toBe(155);
+    expect(isApprovedPublishedList({ sellPrice: r.sellPrice, verifiedAt: r.verifiedAt })).toBe(false);
+    expect(publishedListApprovalInputValue({ ...r, cost: 200 }).unverifiedExistingList).toBe(155);
+  });
+
+  it("keeps verification when cost decreases and the list stays safe", () => {
+    const r = applyLandedCostChangeToApproval({
+      cost: 70,
+      sellPrice: 155,
+      verifiedAt: verified,
+      verifiedBy: "op",
+    });
+    expect(r.invalidated).toBe(false);
+    expect(r.verifiedAt).toBe(verified);
+    expect(r.sellPrice).toBe(155);
+  });
+
+  it("does not invent verification on an already unverified offer", () => {
+    const r = applyLandedCostChangeToApproval({
+      cost: 200,
+      sellPrice: 155,
+      verifiedAt: null,
+      verifiedBy: null,
+    });
+    expect(r.invalidated).toBe(false);
+    expect(r.verifiedAt).toBeNull();
+    expect(r.sellPrice).toBe(155);
   });
 });

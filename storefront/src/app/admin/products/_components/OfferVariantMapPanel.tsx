@@ -177,6 +177,9 @@ function OfferCard({
             {seed.unverifiedExistingList != null ? (
               <p className="text-xs text-admin-warning">
                 Existing unverified value: {money(seed.unverifiedExistingList)}
+                {minSafe != null && seed.unverifiedExistingList < minSafe
+                  ? " — Price requires re-approval after cost change"
+                  : ""}
               </p>
             ) : null}
           </div>

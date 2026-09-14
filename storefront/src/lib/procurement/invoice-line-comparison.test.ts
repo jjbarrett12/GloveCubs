@@ -251,7 +251,7 @@ describe("compatibility thickness", () => {
 });
 
 describe("sell price authority", () => {
-  it("blocks savings when published list is not approved", () => {
+  it("blocks savings when published list is not approved (including cost-invalidated)", () => {
     const r = evaluateInvoiceLineComparison(
       baseGood({
         gloveCubs: { ...baseGood().gloveCubs!, published_list_approved: false },
