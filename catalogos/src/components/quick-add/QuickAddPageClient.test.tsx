@@ -62,11 +62,14 @@ async function fillCreateDraftForm(user: ReturnType<typeof userEvent.setup>) {
   const selects = basics.querySelectorAll("select");
   await user.selectOptions(selects[0], "sup-1");
   await user.selectOptions(selects[1], "disposable_gloves");
+  await user.selectOptions(selects[2], "supplier_quote");
   const textboxes = within(basics).getAllByRole("textbox");
   await user.clear(textboxes[0]);
   await user.type(textboxes[0], "SKU-99");
   await user.clear(textboxes[1]);
   await user.type(textboxes[1], "Draft glove");
+  await user.clear(textboxes[2]);
+  await user.type(textboxes[2], "Quote 2026-09-14");
   const costInput = basics.querySelector('input[type="number"]') as HTMLInputElement;
   await user.clear(costInput);
   await user.type(costInput, "12.5");
@@ -144,6 +147,8 @@ describe("QuickAddPageClient", () => {
       name: "Draft glove",
       category_slug: "disposable_gloves",
       normalized_case_cost: 12.5,
+      cost_source_type: "supplier_quote",
+      cost_source_reference: "Quote 2026-09-14",
     });
     expect(navState.replace).toHaveBeenCalledWith(expect.stringContaining("id=new-nid"));
   });
@@ -313,6 +318,9 @@ describe("QuickAddPageClient", () => {
     await waitFor(() => {
       expect(reviewMocks.createNewMasterProduct).toHaveBeenCalledTimes(1);
     });
+    expect(reviewMocks.createNewMasterProduct.mock.calls[0][1]).toMatchObject({
+      list_price_minor: 0,
+    });
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
     await waitFor(() => {
       expect(screen.getByText(/Master linked/i)).toBeTruthy();
@@ -322,6 +330,81 @@ describe("QuickAddPageClient", () => {
     await waitFor(() => {
       expect(within(readinessCard).getByText(/Tier 1: Ready for publish attempt/i)).toBeTruthy();
     });
+  });
+
+  it("create product record does not require import_auto_pricing and does not invent a list", async () => {
+    const user = userEvent.setup();
+    navState.sp = new URLSearchParams("id=nid-1");
+    const nd = {
+      name: "Test Glove",
+      supplier_sku: "SKU-1",
+      sku: "SKU-1",
+      supplier_cost: 85,
+      category_slug: "disposable_gloves",
+      filter_attributes: { product_type: "nitrile" },
+      normalized_case_cost: 85,
+      pricing: { sell_unit: "case", normalized_case_cost: 85 },
+      cost_source_type: "supplier_quote",
+      cost_source_reference: "Quote 2026-09-14",
+      landed_cost_trusted: true,
+    };
+    setStagingFetchRow(
+      makeStagingDetail("nid-1", {
+        master_product_id: null,
+        status: "pending",
+        normalized_data: nd,
+      })
+    );
+    reviewMocks.createNewMasterProduct.mockResolvedValue({ success: true, masterProductId: "m1" });
+    renderQuickAdd();
+    await waitFor(() => {
+      const btn = screen.getByRole("button", { name: /create product record/i }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+    });
+    await user.click(screen.getByRole("button", { name: /create product record/i }));
+    await waitFor(() => {
+      expect(reviewMocks.createNewMasterProduct).toHaveBeenCalledTimes(1);
+    });
+    const payload = reviewMocks.createNewMasterProduct.mock.calls[0][1] as {
+      list_price_minor: number;
+      unit_cost_minor: number | null;
+    };
+    expect(payload.list_price_minor).toBe(0);
+    expect(payload.unit_cost_minor).toBe(8500);
+    expect(payload).not.toHaveProperty("sell_price");
+    expect(JSON.stringify(nd)).not.toMatch(/import_auto_pricing/);
+  });
+
+  it("create product record is blocked until untrusted imported cost is confirmed", async () => {
+    const user = userEvent.setup();
+    navState.sp = new URLSearchParams("id=nid-1");
+    setStagingFetchRow(
+      makeStagingDetail("nid-1", {
+        master_product_id: null,
+        status: "pending",
+        normalized_data: {
+          name: "Test Glove",
+          supplier_sku: "SKU-1",
+          sku: "SKU-1",
+          supplier_cost: 85,
+          category_slug: "disposable_gloves",
+          normalized_case_cost: 85,
+          pricing: { sell_unit: "case", normalized_case_cost: 85 },
+          cost_source_type: "csv_import",
+          cost_source_reference: "sheet.csv — column \"price\"",
+          landed_cost_trusted: false,
+        },
+      })
+    );
+    renderQuickAdd();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create product record/i })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: /create product record/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Confirm landed case cost/i)).toBeTruthy();
+    });
+    expect(reviewMocks.createNewMasterProduct).not.toHaveBeenCalled();
   });
 
   it("after attributes save, refetches staging detail from GET /api/review/staging/:id", async () => {

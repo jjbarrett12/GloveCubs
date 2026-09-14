@@ -7,6 +7,11 @@ import { Label } from "@/components/ui/label";
 import { createBulkCsvImport, type BulkCsvImportRowResult } from "@/app/actions/bulk-csv-add";
 import { parseCsvLoose } from "./parse-csv-loose";
 import { BulkImportResultsTable } from "./BulkImportResultsTable";
+import {
+  guessCsvLandedCostColumnIndex,
+  LANDED_CASE_COST_HINT,
+  LANDED_CASE_COST_LABEL,
+} from "@/lib/pricing/landed-cost-provenance";
 
 type MappableField = "sku" | "name" | "category_slug" | "cost";
 
@@ -14,7 +19,7 @@ const FIELD_META: { key: MappableField; label: string; required: boolean }[] = [
   { key: "sku", label: "SKU", required: true },
   { key: "name", label: "Name", required: true },
   { key: "category_slug", label: "Category slug", required: false },
-  { key: "cost", label: "Case cost (USD)", required: false },
+  { key: "cost", label: LANDED_CASE_COST_LABEL, required: false },
 ];
 
 function guessMapping(headers: string[]): Record<MappableField, number | ""> {
@@ -30,7 +35,7 @@ function guessMapping(headers: string[]): Record<MappableField, number | ""> {
     sku: pick("sku", "item", "part_number", "partnumber", "style"),
     name: pick("name", "title", "product_name", "description"),
     category_slug: pick("category_slug", "category", "slug", "cat"),
-    cost: pick("normalized_case_cost", "case_cost", "cost", "price", "unit_cost"),
+    cost: guessCsvLandedCostColumnIndex(headers),
   };
 }
 
@@ -92,6 +97,7 @@ export function CsvMapAndImport({ supplierId }: { supplierId: string }) {
       name: pick(row, "name"),
       category_slug: pick(row, "category_slug"),
       normalized_case_cost: pick(row, "cost"),
+      cost_column_header: mapping.cost === "" ? undefined : headers[mapping.cost],
     }));
   }, [matrix, dataRows, mapping]);
 
@@ -175,6 +181,9 @@ export function CsvMapAndImport({ supplierId }: { supplierId: string }) {
               </div>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {LANDED_CASE_COST_HINT} Generic columns named price are not auto-mapped and are not trusted as landed cost until you confirm them in Quick Add.
+          </p>
 
           <div>
             <h2 className="text-sm font-medium mb-2">Preview (first rows)</h2>

@@ -8,6 +8,11 @@ import { validateUuidParam } from "@/lib/admin/commerce-validation";
 import { logAdminCatalogAudit } from "@/lib/review/admin-audit";
 import { persistFacetExtractionForNormalizedRow } from "@/lib/extraction/staging-facet-extraction";
 import { allocateBulkCsvExternalId } from "@/lib/ingestion/bulk-csv-external-id";
+import {
+  COST_PROVENANCE_ACTOR,
+  csvCostMappingTrust,
+  normalizeCostSourceReference,
+} from "@/lib/pricing/landed-cost-provenance";
 
 const REVAL_PATHS = [
   "/dashboard/products/quick-add",
@@ -27,6 +32,8 @@ export interface BulkCsvImportRowInput {
   category_slug?: string | null;
   /** Raw cell; empty / invalid → 0 and counts as default for review flag */
   normalized_case_cost?: string | null;
+  /** Source header mapped to landed cost. Generic `price` is not trusted. */
+  cost_column_header?: string | null;
 }
 
 export interface BulkCsvImportRowResult {
@@ -76,6 +83,7 @@ export async function createBulkCsvImport(input: {
   const results: BulkCsvImportRowResult[] = [];
   let successCount = 0;
   let firstNormalizedId: string | undefined;
+  const filename = input.source_filename?.trim() || "bulk-csv";
 
   for (let i = 0; i < input.rows.length; i++) {
     const row = input.rows[i]!;
@@ -84,10 +92,18 @@ export async function createBulkCsvImport(input: {
     const name = (row.name ?? "").trim();
     const category_slug = (row.category_slug ?? "").trim();
     const { value: cost, defaulted: costDefaulted } = parseCost(row.normalized_case_cost ?? undefined);
+    const header = row.cost_column_header?.trim() || "";
+    const trust = csvCostMappingTrust(header || null);
+    const costUntrusted = costDefaulted || trust !== "trusted_landed";
 
     const externalId = allocateBulkCsvExternalId(batchId, sourceRowIndex, trimmedSku, assignedExternalIds);
 
-    const needsReview = costDefaulted || externalId !== trimmedSku;
+    const needsReview = costUntrusted || externalId !== trimmedSku;
+    const refParts = [filename];
+    if (header) refParts.push(`column "${header}"`);
+    if (trust !== "trusted_landed") refParts.push("confirm as landed case cost");
+    const cost_source_reference = normalizeCostSourceReference(refParts.join(" — "));
+
     const normalizedDataExtra = needsReview ? { csv_bulk_needs_review: true } : undefined;
 
     const raw_payload: Record<string, unknown> = {
@@ -97,6 +113,8 @@ export async function createBulkCsvImport(input: {
       category_slug,
       normalized_case_cost: cost,
       source_row_index: sourceRowIndex,
+      cost_column_header: header || null,
+      landed_cost_trusted: !costUntrusted,
     };
 
     const insertResult = await insertQuickAddStagingRow(supabase, {
@@ -109,6 +127,10 @@ export async function createBulkCsvImport(input: {
       name,
       category_slug,
       normalized_case_cost: cost,
+      cost_source_type: "csv_import",
+      cost_source_reference,
+      cost_updated_by: COST_PROVENANCE_ACTOR.csv_import,
+      landed_cost_trusted: !costUntrusted,
       normalizedDataExtra,
     });
 

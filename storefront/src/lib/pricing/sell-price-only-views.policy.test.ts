@@ -19,12 +19,17 @@ const MIGRATION_223 = path.resolve(
   __dirname,
   "../../../../supabase/migrations/20261227122300_invalidate_unsafe_published_list.sql"
 );
+const MIGRATION_224 = path.resolve(
+  __dirname,
+  "../../../../supabase/migrations/20261227122400_offer_landed_cost_provenance.sql"
+);
 
 describe("sell-price-only listing and PA V2 views", () => {
   const sql220 = readFileSync(MIGRATION_220, "utf8");
   const sql221 = readFileSync(MIGRATION_221, "utf8");
   const sql222 = readFileSync(MIGRATION_222, "utf8");
   const sql223 = readFileSync(MIGRATION_223, "utf8");
+  const sql224 = readFileSync(MIGRATION_224, "utf8");
 
   it("does not COALESCE sell_price to cost in unapplied migrations", () => {
     expect(sql220).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
@@ -73,5 +78,15 @@ describe("sell-price-only listing and PA V2 views", () => {
     expect(sql223).not.toMatch(/NEW\.sell_price\s*:?=/);
     expect(sql223).not.toMatch(/NEW\.catalog_variant_id\s*:?=/);
     expect(sql223).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
+  });
+
+  it("224 adds cost provenance and does not approve or copy list", () => {
+    expect(sql224).toContain("cost_source_type");
+    expect(sql224).toContain("cost_source_reference");
+    expect(sql224).toContain("cost_updated_at");
+    expect(sql224).toContain("cost_updated_by");
+    expect(sql224).toContain("LANDed CASE COST");
+    expect(sql224).not.toMatch(/sell_price_verified_at/i);
+    expect(sql224).not.toMatch(/COALESCE\s*\(\s*so\.sell_price\s*,\s*so\.cost\s*\)/i);
   });
 });

@@ -46,6 +46,11 @@ export interface StagingNormalizedData {
   supplier_cost: number;
   /** Case cost after normalization; use for sell price when present. */
   normalized_case_cost?: number | null;
+  cost_source_type?: string;
+  cost_source_reference?: string | null;
+  cost_updated_at?: string;
+  cost_updated_by?: string;
+  landed_cost_trusted?: boolean;
   pricing?: StagingPricing;
   images: string[];
   /** Linked spec / SDS / technical PDF URLs (crawl or row; not parsed as attributes). */
@@ -165,6 +170,11 @@ const stagingNormalizedDataSchema = z.object({
   upc: z.string().optional(),
   supplier_cost: z.number(),
   normalized_case_cost: z.number().nullable().optional(),
+  cost_source_type: z.string().optional(),
+  cost_source_reference: z.string().nullable().optional(),
+  cost_updated_at: z.string().optional(),
+  cost_updated_by: z.string().optional(),
+  landed_cost_trusted: z.boolean().optional(),
   pricing: stagingPricingSchema.optional(),
   import_auto_pricing: importAutoPricingSchema.optional(),
   images: z.array(z.string()),

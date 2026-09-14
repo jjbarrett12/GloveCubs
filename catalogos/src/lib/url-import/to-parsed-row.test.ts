@@ -180,5 +180,8 @@ describe("finalizeUrlImportParsedRow", () => {
     expect((row.commerce_packaging as { schema_version: number }).schema_version).toBe(1);
     expect((row.commerce_packaging as { units_per_case?: number }).units_per_case).toBe(1000);
     expect(row.boxes_per_case).toBe(10);
+    expect(row.cost_source_type).toBe("url_import");
+    expect(row.landed_cost_trusted).toBe(false);
+    expect(row.cost_updated_by).toBe("url_import");
   });
 });

@@ -8,6 +8,11 @@ import { validateUuidParam } from "@/lib/admin/commerce-validation";
 import { logAdminCatalogAudit } from "@/lib/review/admin-audit";
 import { applyFacetExtractionToNormalizedDataRecord } from "@/lib/extraction/staging-facet-merge";
 import { persistFacetExtractionForNormalizedRow } from "@/lib/extraction/staging-facet-extraction";
+import {
+  COST_PROVENANCE_ACTOR,
+  parseCostSourceType,
+  stagingLandedCostFields,
+} from "@/lib/pricing/landed-cost-provenance";
 
 const REVAL_PATHS = ["/dashboard/products/quick-add", "/dashboard/staging", "/dashboard/review", "/dashboard/publish"];
 
@@ -20,8 +25,10 @@ export interface CreateQuickAddDraftInput {
   sku: string;
   name: string;
   category_slug: string;
-  /** Normalized case cost (USD); required so case-only publish preflight can pass. */
+  /** Landed case cost (USD); operator-supplied. Not a public list. */
   normalized_case_cost: number;
+  cost_source_type: string;
+  cost_source_reference?: string | null;
 }
 
 export async function createQuickAddDraft(
@@ -36,7 +43,9 @@ export async function createQuickAddDraft(
   if (!name) return { success: false, error: "Name is required" };
   if (!category_slug) return { success: false, error: "category_slug is required" };
   const cost = Number(input.normalized_case_cost);
-  if (!Number.isFinite(cost) || cost < 0) return { success: false, error: "normalized_case_cost must be a non-negative number" };
+  if (!Number.isFinite(cost) || cost < 0) return { success: false, error: "Landed case cost must be a non-negative number" };
+  const sourceType = parseCostSourceType(input.cost_source_type);
+  if (!sourceType) return { success: false, error: "Cost source type is required" };
 
   const supabase = getSupabaseCatalogos(true);
   let batchId: string;
@@ -63,11 +72,17 @@ export async function createQuickAddDraft(
       name,
       category_slug,
       normalized_case_cost: cost,
+      cost_source_type: sourceType,
+      cost_source_reference: input.cost_source_reference ?? null,
     },
     sku,
     name,
     category_slug,
     normalized_case_cost: cost,
+    cost_source_type: sourceType,
+    cost_source_reference: input.cost_source_reference,
+    cost_updated_by: COST_PROVENANCE_ACTOR.catalogos_operator,
+    landed_cost_trusted: true,
   });
 
   if (!insertResult.success) {
@@ -98,6 +113,8 @@ export interface UpdateQuickAddCoreInput {
   sku: string;
   category_slug: string;
   normalized_case_cost: number;
+  cost_source_type: string;
+  cost_source_reference?: string | null;
 }
 
 export async function updateQuickAddProductCore(
@@ -112,13 +129,22 @@ export async function updateQuickAddProductCore(
   if (!name) return { success: false, error: "Name is required" };
   if (!category_slug) return { success: false, error: "category_slug is required" };
   const cost = Number(input.normalized_case_cost);
-  if (!Number.isFinite(cost) || cost < 0) return { success: false, error: "normalized_case_cost must be a non-negative number" };
+  if (!Number.isFinite(cost) || cost < 0) return { success: false, error: "Landed case cost must be a non-negative number" };
+  const sourceType = parseCostSourceType(input.cost_source_type);
+  if (!sourceType) return { success: false, error: "Cost source type is required" };
 
   const supabase = getSupabaseCatalogos(true);
   const { data: row } = await supabase.from("supplier_products_normalized").select("normalized_data").eq("id", input.normalizedId).single();
   if (!row) return { success: false, error: "Not found" };
   const nd = (row.normalized_data as Record<string, unknown>) ?? {};
   const filterAttrs = (nd.filter_attributes as Record<string, unknown>) ?? {};
+  const landed = stagingLandedCostFields({
+    cost,
+    sourceType,
+    sourceReference: input.cost_source_reference,
+    updatedBy: COST_PROVENANCE_ACTOR.catalogos_operator,
+    trusted: true,
+  });
   const updated: Record<string, unknown> = {
     ...nd,
     name,
@@ -126,8 +152,7 @@ export async function updateQuickAddProductCore(
     supplier_sku: sku,
     sku,
     category_slug,
-    supplier_cost: cost,
-    normalized_case_cost: cost,
+    ...landed,
     pricing: {
       ...(typeof nd.pricing === "object" && nd.pricing !== null ? (nd.pricing as object) : {}),
       sell_unit: "case",
@@ -153,7 +178,7 @@ export async function updateQuickAddProductCore(
   await logAdminCatalogAudit({
     normalizedId: input.normalizedId,
     action: "quick_add_core_updated",
-    details: { keys: ["name", "sku", "category_slug", "normalized_case_cost"] },
+    details: { keys: ["name", "sku", "category_slug", "normalized_case_cost", "cost_source_type"] },
   });
   revalidateQuickAddSurfaces();
   return { success: true };

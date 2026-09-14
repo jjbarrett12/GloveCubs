@@ -43,6 +43,10 @@ import { StagedCommercePackagingPanel } from "@/components/review/StagedCommerce
 import { StagedSkuProposalPanel } from "@/components/review/StagedSkuProposalPanel";
 import { StagedUrlExtractionPanel } from "@/components/review/StagedUrlExtractionPanel";
 import { ProductSetupWizardPanel } from "@/components/review/ProductSetupWizardPanel";
+import {
+  COST_SOURCE_TYPE_LABELS,
+  COST_SOURCE_TYPES,
+} from "@/lib/pricing/landed-cost-provenance";
 
 function StagedReviewMatchPrimaryActions({
   setActionModal,
@@ -198,9 +202,10 @@ function OfferEditRow({
     id: string;
     supplier_sku: string;
     cost: number;
-    sell_price?: number | null;
     lead_time_days?: number | null;
     is_active: boolean;
+    cost_source_type?: string | null;
+    cost_source_reference?: string | null;
   };
   normalizedId: string | null;
   disabled: boolean;
@@ -208,14 +213,16 @@ function OfferEditRow({
   onError: (msg: string) => void;
 }) {
   const [cost, setCost] = useState(String(offer.cost));
-  const [sell, setSell] = useState(offer.sell_price != null ? String(offer.sell_price) : "");
+  const [sourceType, setSourceType] = useState(offer.cost_source_type ?? "");
+  const [sourceReference, setSourceReference] = useState(offer.cost_source_reference ?? "");
   const [lead, setLead] = useState(offer.lead_time_days != null ? String(offer.lead_time_days) : "");
   const [active, setActive] = useState(offer.is_active);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setCost(String(offer.cost));
-    setSell(offer.sell_price != null ? String(offer.sell_price) : "");
+    setSourceType(offer.cost_source_type ?? "");
+    setSourceReference(offer.cost_source_reference ?? "");
     setLead(offer.lead_time_days != null ? String(offer.lead_time_days) : "");
     setActive(offer.is_active);
   }, [offer]);
@@ -223,14 +230,30 @@ function OfferEditRow({
   return (
     <div className="border border-border rounded-md p-2 space-y-2 bg-background/50">
       <p className="text-xs font-mono text-foreground">{offer.supplier_sku}</p>
+      <p className="text-[10px] text-muted-foreground">Published list is approved in storefront admin, not here.</p>
       <div className="flex flex-wrap gap-2 items-end">
         <div>
-          <label className="text-[10px] text-muted-foreground block">Cost</label>
+          <label className="text-[10px] text-muted-foreground block">Landed case cost (USD)</label>
           <Input className="h-8 w-24 text-sm" type="number" step="0.0001" value={cost} onChange={(e) => setCost(e.target.value)} />
         </div>
         <div>
-          <label className="text-[10px] text-muted-foreground block">Sell</label>
-          <Input className="h-8 w-24 text-sm" type="number" step="0.01" value={sell} onChange={(e) => setSell(e.target.value)} placeholder="—" />
+          <label className="text-[10px] text-muted-foreground block">Cost source</label>
+          <select
+            className="h-8 rounded-md border border-border bg-background px-1 text-xs"
+            value={sourceType}
+            onChange={(e) => setSourceType(e.target.value)}
+          >
+            <option value="">Select…</option>
+            {COST_SOURCE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {COST_SOURCE_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-muted-foreground block">Cost source reference</label>
+          <Input className="h-8 w-40 text-sm" value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} placeholder="Quote / invoice" />
         </div>
         <div>
           <label className="text-[10px] text-muted-foreground block">Lead days</label>
@@ -246,13 +269,13 @@ function OfferEditRow({
           onClick={async () => {
             setBusy(true);
             const c = parseFloat(cost);
-            const s = sell.trim() === "" ? null : parseFloat(sell);
             const l = lead.trim() === "" ? null : parseInt(lead, 10);
             const r = await updateSupplierOfferAdmin(
               offer.id,
               {
                 cost: Number.isFinite(c) ? c : offer.cost,
-                sell_price: s != null && Number.isFinite(s) ? s : sell.trim() === "" ? null : undefined,
+                cost_source_type: sourceType,
+                cost_source_reference: sourceReference.trim() || null,
                 lead_time_days: l != null && Number.isFinite(l) ? l : lead.trim() === "" ? null : undefined,
                 is_active: active,
               },
@@ -407,9 +430,10 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
     id: string;
     supplier_sku: string;
     cost: number;
-    sell_price?: number | null;
     lead_time_days?: number | null;
     is_active: boolean;
+    cost_source_type?: string | null;
+    cost_source_reference?: string | null;
   }>;
 
   function getResolutionSourceLabel(reason: string | undefined): string {
@@ -564,7 +588,7 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                   </div>
                 ) : null}
                 <ProductSetupWizardPanel
-                  normalizedId={normalizedId}
+                  normalizedId={normalizedId ?? undefined}
                   normalizedData={nd}
                   rawPayload={raw}
                   publishReadiness={publishReadiness}
@@ -580,7 +604,7 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                   }
                 />
                 <StagedSkuProposalPanel
-                  normalizedId={normalizedId}
+                  normalizedId={normalizedId ?? ""}
                   normalizedData={nd}
                   onApplied={refreshDetail}
                 />
@@ -757,7 +781,7 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Pricing: supplier price → conversion → case cost → sell price</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Landed case cost (published list is approved in storefront)</p>
                   {nd.pricing && typeof nd.pricing === "object" ? (
                     <div className="text-sm space-y-1.5">
                       <p>
@@ -770,7 +794,7 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                         <p className="text-muted-foreground font-mono text-xs">Conversion: {(nd.pricing as { conversion_formula: string }).conversion_formula}</p>
                       )}
                       <p>
-                        <span className="text-muted-foreground">Case cost: </span>
+                        <span className="text-muted-foreground">Landed case cost: </span>
                         {(nd.normalized_case_cost ?? (nd.pricing as { normalized_case_cost?: number }).normalized_case_cost) != null
                           ? `$${Number(nd.normalized_case_cost ?? (nd.pricing as { normalized_case_cost: number }).normalized_case_cost).toFixed(2)}/case`
                           : "— (cannot compute)"}
@@ -779,12 +803,8 @@ export function StagedProductDetail({ normalizedId, open, onOpenChange, categori
                         )}
                       </p>
                       <p>
-                        <span className="text-muted-foreground">Sell price: </span>
-                        {nd.override_sell_price != null && Number.isFinite(Number(nd.override_sell_price))
-                          ? `$${Number(nd.override_sell_price).toFixed(2)} (override)`
-                          : nd.cost != null
-                            ? `$${Number(nd.cost).toFixed(2)}/case (from case cost + markup)`
-                            : "—"}
+                        <span className="text-muted-foreground">Published list: </span>
+                        approve in storefront admin after publish. CatalogOS does not verify sell price.
                       </p>
                       {Array.isArray((nd.pricing as { pricing_notes?: string[] }).pricing_notes) && (nd.pricing as { pricing_notes: string[] }).pricing_notes.length > 0 && (
                         <p className="text-xs text-muted-foreground">Notes: {(nd.pricing as { pricing_notes: string[] }).pricing_notes.join(" ")}</p>

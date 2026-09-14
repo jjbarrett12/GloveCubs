@@ -5,6 +5,7 @@
 
 import { attachCommercePackagingToParsedRow } from "@commerce-packaging/staging-bridge";
 import type { NormalizedFamily } from "@/lib/openclaw/normalize";
+import { stampUrlImportCostProvenance } from "@/lib/pricing/landed-cost-provenance";
 
 function num(v: string | number | undefined | null): number | undefined {
   if (v == null) return undefined;
@@ -249,7 +250,16 @@ export function finalizeUrlImportParsedRow(
         ? out.category
         : undefined;
 
-  return attachCommercePackagingToParsedRow(out, { parsedPage: ctx.parsedPage, categorySlug });
+  const packaged = attachCommercePackagingToParsedRow(out, { parsedPage: ctx.parsedPage, categorySlug });
+  const sourceUrl =
+    typeof packaged.source_url === "string"
+      ? packaged.source_url
+      : typeof ctx.parsedPage?.url === "string"
+        ? ctx.parsedPage.url
+        : typeof ctx.parsedPage?.source_url === "string"
+          ? ctx.parsedPage.source_url
+          : null;
+  return stampUrlImportCostProvenance(packaged, sourceUrl);
 }
 
 export interface NormalizedFamilyToParsedRowOptions {

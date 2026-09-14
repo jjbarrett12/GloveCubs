@@ -44,14 +44,18 @@ describe("ingest/publish must not copy cost into sell_price", () => {
     expect(src).not.toMatch(/sell_price:\s*args\.casePrice/);
   });
 
-  it("review offer patch does not fill null sell_price from cost", () => {
+  it("review offer patch does not fill null sell_price from cost and cannot verify list", () => {
     const src = readFileSync(REVIEW, "utf8");
     expect(src).not.toMatch(/:\s*nextCost;\s*\n\s*const base[\s\S]*sell_price:\s*nextSell/);
     expect(src).not.toMatch(/const nextSell = r\.sell_price != null \? Number\(r\.sell_price\) : nextCost/);
+    expect(src).not.toContain("withOperatorApprovedSellPrice");
   });
 
-  it("discontinue does not fill null sell_price from cost", () => {
-    const src = readFileSync(DISCONTINUED, "utf8");
-    expect(src).not.toMatch(/const nextSell = r\.sell_price != null \? Number\(r\.sell_price\) : nextCost/);
+  it("reimport may copy landed-cost provenance but still omits sell_price", () => {
+    const src = readFileSync(PUBLISH, "utf8");
+    expect(src).toContain("mergeOfferProvenance");
+    expect(src).toContain("offerProvenanceFromStaging");
+    expect(src).toContain("omitUnapprovedSellPriceFromOfferWrite");
+    expect(src).not.toMatch(/sell_price:\s*input\.stagedContent\.supplier_cost/);
   });
 });

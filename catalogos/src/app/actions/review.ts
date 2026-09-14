@@ -30,9 +30,12 @@ import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import {
   buildSupplierOfferUpsertRow,
   parseSupplierOfferCostBasis,
-  withOperatorApprovedSellPrice,
 } from "../../../../lib/supplier-offer-normalization";
-import { validatePublishedListApproval } from "@/lib/pricing/published-list-pricing";
+import {
+  COST_PROVENANCE_ACTOR,
+  parseCostSourceType,
+  withLandedCostProvenance,
+} from "@/lib/pricing/landed-cost-provenance";
 
 function slugForNewCatalogProduct(sku: string, name: string): string {
   const base = (name || sku || "product").trim();
@@ -521,23 +524,34 @@ export async function updateStagedVariantFields(
 }
 
 /**
- * Update a live supplier offer (cost, sell_price, lead time, active). Validates non-negative numbers.
+ * Update a live supplier offer (landed case cost, lead time, active).
+ * CatalogOS does not write or verify a published list — that is storefront approval only.
  */
 export async function updateSupplierOfferAdmin(
   offerId: string,
   fields: {
     cost?: number;
-    sell_price?: number | null;
     lead_time_days?: number | null;
     is_active?: boolean;
+    cost_source_type?: string;
+    cost_source_reference?: string | null;
   },
   options?: { actor?: string; normalizedId?: string | null }
 ): Promise<ReviewResult> {
+  if ("sell_price" in fields) {
+    return {
+      success: false,
+      error: "CatalogOS cannot approve or edit published list. Use storefront OfferVariantMapPanel.",
+    };
+  }
+  const patchCheck = validateOfferAdminPatch(fields);
+  if (!patchCheck.ok) return { success: false, error: patchCheck.error };
+
   const supabase = getSupabaseCatalogos(true);
   const { data: existing, error: fetchErr } = await supabase
     .from("supplier_offers")
     .select(
-      "id, product_id, supplier_id, normalized_id, cost, sell_price, units_per_case, currency_code, cost_basis, lead_time_days, is_active"
+      "id, product_id, supplier_id, normalized_id, cost, units_per_case, currency_code, cost_basis, lead_time_days, is_active"
     )
     .eq("id", offerId)
     .single();
@@ -549,7 +563,6 @@ export async function updateSupplierOfferAdmin(
     supplier_id: string;
     normalized_id: string | null;
     cost: number;
-    sell_price: number | null;
     units_per_case: number | null;
     currency_code: string;
     cost_basis: string;
@@ -558,36 +571,29 @@ export async function updateSupplierOfferAdmin(
   };
 
   const nextCost = fields.cost !== undefined ? fields.cost : Number(row.cost);
+  const actor = options?.actor?.trim() || COST_PROVENANCE_ACTOR.catalogos_operator;
 
-  const base: Record<string, unknown> = {
+  let base: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     cost: nextCost,
     units_per_case: row.units_per_case,
   };
   if (fields.lead_time_days !== undefined) base.lead_time_days = fields.lead_time_days;
   if (fields.is_active !== undefined) base.is_active = fields.is_active;
-  if (fields.sell_price !== undefined) {
-    if (fields.sell_price != null) {
-      const gate = validatePublishedListApproval({ cost: nextCost, sellPrice: fields.sell_price });
-      if (!gate.ok) {
-        return {
-          success: false,
-          error: `${gate.reason} (cost=${gate.cost} list=${gate.sellPrice} min=${gate.minimumSafeList} kodiak=${gate.kodiak} kodiak_gm_pct=${gate.kodiakGmPercent})`,
-        };
-      }
+  if (fields.cost !== undefined) {
+    const sourceType = parseCostSourceType(fields.cost_source_type);
+    if (!sourceType) {
+      return { success: false, error: "Cost source type is required when updating landed case cost" };
     }
-    Object.assign(
-      base,
-      withOperatorApprovedSellPrice(base, {
-        sellPrice: fields.sell_price,
-        verifiedBy: options?.actor ?? "admin",
-      })
-    );
+    base = withLandedCostProvenance(base, {
+      sourceType,
+      sourceReference: fields.cost_source_reference,
+      updatedBy: actor,
+    });
   }
 
   const hasFieldChange =
     fields.cost !== undefined ||
-    fields.sell_price !== undefined ||
     fields.lead_time_days !== undefined ||
     fields.is_active !== undefined;
   if (!hasFieldChange) return { success: true };
@@ -607,7 +613,7 @@ export async function updateSupplierOfferAdmin(
     productId: row.product_id,
     supplierOfferId: offerId,
     action: "supplier_offer_updated",
-    actor: options?.actor ?? "admin",
+    actor,
     details: { fields },
   });
   await revalidateReview();

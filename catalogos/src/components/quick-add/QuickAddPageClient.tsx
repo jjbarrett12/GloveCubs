@@ -12,10 +12,6 @@ import {
 } from "@/app/actions/quick-add";
 import { createNewMasterProduct, publishStagedToLive, getAttributeRequirementsForStaged } from "@/app/actions/review";
 import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
-import {
-  effectiveImportPricing,
-  type ImportAutoPricingWithOverride,
-} from "@/lib/ingestion/import-pricing";
 import type { PublishReadiness } from "@/lib/review/publish-guards";
 import { effectiveMasterCreateSku } from "@/lib/sku-intelligence/publish-sku-apply";
 import { StagedSkuProposalPanel } from "@/components/review/StagedSkuProposalPanel";
@@ -166,6 +162,9 @@ function QuickAddInner({
           : (nd.pricing as { normalized_case_cost?: number } | undefined)?.normalized_case_cost != null
             ? String((nd.pricing as { normalized_case_cost: number }).normalized_case_cost)
             : "",
+      cost_source_type: String(nd.cost_source_type ?? ""),
+      cost_source_reference: nd.cost_source_reference != null ? String(nd.cost_source_reference) : "",
+      landed_cost_trusted: nd.landed_cost_trusted !== false,
     }),
     [detail, nd]
   );
@@ -209,6 +208,8 @@ function QuickAddInner({
       sku: values.sku,
       category_slug: values.category_slug,
       normalized_case_cost: values.normalized_case_cost,
+      cost_source_type: values.cost_source_type,
+      cost_source_reference: values.cost_source_reference,
     });
     if (activeNormalizedIdRef.current !== targetId) return;
     if (!r.success) {
@@ -237,23 +238,15 @@ function QuickAddInner({
       setBanner({ text: "Name and SKU are required.", variant: "error" });
       return;
     }
-    const iap = nd.import_auto_pricing as ImportAutoPricingWithOverride | undefined;
-    if (!iap) {
+    if (nd.landed_cost_trusted === false) {
       setBanner({
-        text: "Import pricing is required before creating a catalog master. Save case pricing and supplier cost first.",
+        text: "Confirm landed case cost and source before creating the product record. Imported price columns are not trusted until you save them as landed cost.",
         variant: "error",
       });
       return;
     }
-    const eff = effectiveImportPricing(iap);
-    const list_price_minor = Math.round(eff.list_price * 100);
-    if (!Number.isInteger(list_price_minor) || list_price_minor < 0) {
-      setBanner({ text: "Computed list price is invalid; fix import pricing and retry.", variant: "error" });
-      return;
-    }
-    const sc = Number(nd.supplier_cost ?? iap.supplier_cost);
-    const unit_cost_minor =
-      Number.isFinite(sc) && sc >= 0 ? Math.round(sc * 100) : null;
+    const sc = Number(nd.normalized_case_cost ?? nd.supplier_cost);
+    const unit_cost_minor = Number.isFinite(sc) && sc >= 0 ? Math.round(sc * 100) : null;
     setActionBusy(true);
     setBanner(null);
     const r = await createNewMasterProduct(
@@ -263,7 +256,7 @@ function QuickAddInner({
         name,
         category_id: cat.id,
         product_type_id: CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID,
-        list_price_minor,
+        list_price_minor: 0,
         unit_cost_minor,
       },
       { publishToLive: false, publishedBy: "admin" }

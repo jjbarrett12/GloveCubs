@@ -25,6 +25,11 @@ import {
   withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
 import {
+  COST_PROVENANCE_ACTOR,
+  mergeOfferProvenance,
+  offerProvenanceFromStaging,
+} from "@/lib/pricing/landed-cost-provenance";
+import {
   extractSizeCodeFromFilterAttributes,
   isGloveCategorySlug,
   omitSizeFromProductAttributesFilter,
@@ -464,16 +469,19 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const offerRow = omitUnapprovedSellPriceFromOfferWrite(
     withResolvedCatalogVariantId(
       buildSupplierOfferUpsertRow(
-        {
-          supplier_id: input.supplierId,
-          product_id: productId,
-          supplier_sku: input.stagedContent.supplier_sku,
-          cost: input.stagedContent.supplier_cost,
-          raw_id: input.rawId,
-          normalized_id: input.normalizedId,
-          is_active: true,
-          units_per_case: input.stagedContent.units_per_case ?? null,
-        },
+        mergeOfferProvenance(
+          {
+            supplier_id: input.supplierId,
+            product_id: productId,
+            supplier_sku: input.stagedContent.supplier_sku,
+            cost: input.stagedContent.supplier_cost,
+            raw_id: input.rawId,
+            normalized_id: input.normalizedId,
+            is_active: true,
+            units_per_case: input.stagedContent.units_per_case ?? null,
+          },
+          offerProvenanceFromStaging(input.stagedNormalizedData, input.publishedBy ?? COST_PROVENANCE_ACTOR.catalogos_operator)
+        ),
         {
           currency_code: "USD",
           cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",

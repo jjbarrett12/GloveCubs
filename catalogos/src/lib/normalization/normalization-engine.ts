@@ -144,6 +144,11 @@ export function runNormalization(
     "boxes_per_case",
     "gloves_per_box",
     "total_gloves_per_case",
+    "cost_source_type",
+    "cost_source_reference",
+    "cost_updated_at",
+    "cost_updated_by",
+    "landed_cost_trusted",
   ] as const;
   for (const key of packagingPassthrough) {
     if (rawRow[key] != null) {
