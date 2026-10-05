@@ -736,6 +736,14 @@ export async function publishVariantGroupForNormalized(
   return result;
 }
 
+/** Direct Postgres returns Date; the review JSON body sends millisecond ISO. Compare the instant. */
+function sameStagingRowVersion(current: unknown, expected: string): boolean {
+  if (current === expected) return true;
+  const currentMs = current instanceof Date ? current.getTime() : Date.parse(String(current));
+  const expectedMs = Date.parse(expected);
+  return Number.isFinite(currentMs) && Number.isFinite(expectedMs) && currentMs === expectedMs;
+}
+
 /**
  * Publish an already-approved staged product to the live catalog (or re-publish after edits).
  * Gates on status (approved|merged), master link, dictionary rules, and case-cost rules; logs admin_catalog_audit on success.
@@ -769,8 +777,8 @@ export async function publishStagedToLive(
       .select("updated_at")
       .eq("id", normalizedId)
       .single();
-    const curAt = (cur as { updated_at?: string } | null)?.updated_at;
-    if (curAt && curAt !== options.expectedUpdatedAt) {
+    const curAt = (cur as { updated_at?: unknown } | null)?.updated_at;
+    if (curAt != null && !sameStagingRowVersion(curAt, options.expectedUpdatedAt)) {
       return {
         success: false,
         error: "This staged row changed since you opened it. Refresh the detail panel and try again.",
