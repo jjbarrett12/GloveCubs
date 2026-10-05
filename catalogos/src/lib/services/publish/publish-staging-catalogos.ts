@@ -17,6 +17,11 @@ import {
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../../lib/supplier-offer-normalization";
+import {
+  COST_PROVENANCE_ACTOR,
+  mergeOfferProvenance,
+  offerProvenanceFromStaging,
+} from "@/lib/pricing/landed-cost-provenance";
 
 export interface PublishInput {
   staging_ids: string[];
@@ -187,16 +192,19 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     const offerRow = omitUnapprovedSellPriceFromOfferWrite(
       withResolvedCatalogVariantId(
         buildSupplierOfferUpsertRow(
-          {
-            supplier_id: row.supplier_id,
-            product_id: masterId,
-            supplier_sku: supplierSku,
-            cost,
-            raw_id: row.raw_id,
-            normalized_id: row.id,
-            is_active: true,
-            units_per_case: unitsPer ?? null,
-          },
+          mergeOfferProvenance(
+            {
+              supplier_id: row.supplier_id,
+              product_id: masterId,
+              supplier_sku: supplierSku,
+              cost,
+              raw_id: row.raw_id,
+              normalized_id: row.id,
+              is_active: true,
+              units_per_case: unitsPer ?? null,
+            },
+            offerProvenanceFromStaging(norm as Record<string, unknown>, input.published_by ?? COST_PROVENANCE_ACTOR.catalogos_operator)
+          ),
           { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
         ),
         catalogVariantId

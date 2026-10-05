@@ -7,6 +7,8 @@
  */
 
 import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
+import { privateDbConfigured } from "@/lib/db/private-sql";
+import { publishAtomically } from "./publish-atomic";
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 import { setLifecycleStatus } from "@/lib/catalog-expansion/lifecycle";
@@ -24,6 +26,11 @@ import {
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
+import {
+  COST_PROVENANCE_ACTOR,
+  mergeOfferProvenance,
+  offerProvenanceFromStaging,
+} from "@/lib/pricing/landed-cost-provenance";
 import {
   extractSizeCodeFromFilterAttributes,
   isGloveCategorySlug,
@@ -86,7 +93,17 @@ export function buildPublishInputFromStaged(
   }
 ): PublishInput | null {
   const nd = row.normalized_data ?? {};
-  const attrs = row.attributes ?? (nd.filter_attributes as Record<string, unknown>) ?? {};
+  const columnAttrs = row.attributes;
+  const filterAttrs =
+    nd.filter_attributes && typeof nd.filter_attributes === "object" && !Array.isArray(nd.filter_attributes)
+      ? (nd.filter_attributes as Record<string, unknown>)
+      : {};
+  const columnHasValues =
+    columnAttrs != null &&
+    typeof columnAttrs === "object" &&
+    !Array.isArray(columnAttrs) &&
+    Object.keys(columnAttrs as Record<string, unknown>).length > 0;
+  const attrs = columnHasValues ? (columnAttrs as Record<string, unknown>) : filterAttrs;
   const supplierId = row.supplier_id;
   const rawId = row.raw_id;
   if (!supplierId || !rawId) return null;
@@ -224,6 +241,7 @@ async function getOrCreateBrandId(brandName: string): Promise<string | null> {
  * Uses publish_safe: blocks when required attributes are missing or invalid.
  */
 export async function runPublish(input: PublishInput): Promise<PublishResult> {
+  if (privateDbConfigured()) return publishAtomically(input);
   const warnings: string[] = [];
 
   if (input.pricingCaseCostUnavailable) {
@@ -464,16 +482,19 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const offerRow = omitUnapprovedSellPriceFromOfferWrite(
     withResolvedCatalogVariantId(
       buildSupplierOfferUpsertRow(
-        {
-          supplier_id: input.supplierId,
-          product_id: productId,
-          supplier_sku: input.stagedContent.supplier_sku,
-          cost: input.stagedContent.supplier_cost,
-          raw_id: input.rawId,
-          normalized_id: input.normalizedId,
-          is_active: true,
-          units_per_case: input.stagedContent.units_per_case ?? null,
-        },
+        mergeOfferProvenance(
+          {
+            supplier_id: input.supplierId,
+            product_id: productId,
+            supplier_sku: input.stagedContent.supplier_sku,
+            cost: input.stagedContent.supplier_cost,
+            raw_id: input.rawId,
+            normalized_id: input.normalizedId,
+            is_active: true,
+            units_per_case: input.stagedContent.units_per_case ?? null,
+          },
+          offerProvenanceFromStaging(input.stagedNormalizedData, input.publishedBy ?? COST_PROVENANCE_ACTOR.catalogos_operator)
+        ),
         {
           currency_code: "USD",
           cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",

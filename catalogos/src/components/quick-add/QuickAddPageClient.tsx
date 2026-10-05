@@ -11,7 +11,7 @@ import {
   type UpdateQuickAddCoreInput,
 } from "@/app/actions/quick-add";
 import { createNewMasterProduct, publishStagedToLive, getAttributeRequirementsForStaged } from "@/app/actions/review";
-import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/catalog-v2-ids";
 import {
   effectiveImportPricing,
   type ImportAutoPricingWithOverride,
@@ -354,6 +354,11 @@ function QuickAddInner({
             <Link href="/dashboard/review" className="text-primary underline-offset-2 hover:underline">
               Open review queue
             </Link>
+            . For a full size family, use{" "}
+            <Link href="/dashboard/products/new-family" className="text-primary underline-offset-2 hover:underline">
+              New product family
+            </Link>
+            .
           </p>
         </div>
         <PublishResultBanner

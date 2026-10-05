@@ -6,6 +6,9 @@ import { getStagingById, getStagingRows } from "@/lib/review/data";
 import { evaluatePublishReadiness } from "@/lib/review/publish-guards";
 import { logAdminCatalogAudit } from "@/lib/review/admin-audit";
 import { buildPublishInputFromStaged, runPublish } from "@/lib/publish/publish-service";
+import { publishFamilyAtomically } from "@/lib/publish/publish-atomic";
+import { privateDbConfigured, queryPrivate } from "@/lib/db/private-sql";
+import { NEW_PRODUCT_FAMILY_FILENAME } from "@/lib/new-product-family/types";
 import { runPublishVariantGroup } from "@/lib/publish/publish-variant-group";
 import { getReviewDictionaryForCategory, getCategoryIdBySlug } from "@/lib/catalogos/dictionary-service";
 import { isMultiSelectAttribute } from "@/lib/catalogos/attribute-validation";
@@ -30,9 +33,12 @@ import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import {
   buildSupplierOfferUpsertRow,
   parseSupplierOfferCostBasis,
-  withOperatorApprovedSellPrice,
 } from "../../../../lib/supplier-offer-normalization";
-import { validatePublishedListApproval } from "@/lib/pricing/published-list-pricing";
+import {
+  COST_PROVENANCE_ACTOR,
+  parseCostSourceType,
+  withLandedCostProvenance,
+} from "@/lib/pricing/landed-cost-provenance";
 
 function slugForNewCatalogProduct(sku: string, name: string): string {
   const base = (name || sku || "product").trim();
@@ -207,7 +213,16 @@ export async function createNewMasterProduct(
   };
   if (nextSync) patch.search_publish_status = nextSync;
   const { error: updateErr } = await supabase.from("supplier_products_normalized").update(patch).eq("id", normalizedId);
-  if (updateErr) return { success: false, error: updateErr.message };
+  if (updateErr) {
+    const { error: cleanupErr } = await supabase
+      .schema("catalog_v2")
+      .from("catalog_products")
+      .delete()
+      .eq("id", masterId)
+      .eq("status", "draft");
+    const cleanup = cleanupErr ? ` Cleanup failed: ${cleanupErr.message}` : "";
+    return { success: false, error: `${updateErr.message}${cleanup}` };
+  }
 
   await supabase.from("review_decisions").insert({
     normalized_id: normalizedId,
@@ -521,23 +536,34 @@ export async function updateStagedVariantFields(
 }
 
 /**
- * Update a live supplier offer (cost, sell_price, lead time, active). Validates non-negative numbers.
+ * Update a live supplier offer (landed case cost, lead time, active).
+ * CatalogOS does not write or verify a published list — that is storefront approval only.
  */
 export async function updateSupplierOfferAdmin(
   offerId: string,
   fields: {
     cost?: number;
-    sell_price?: number | null;
     lead_time_days?: number | null;
     is_active?: boolean;
+    cost_source_type?: string;
+    cost_source_reference?: string | null;
   },
   options?: { actor?: string; normalizedId?: string | null }
 ): Promise<ReviewResult> {
+  if ("sell_price" in fields) {
+    return {
+      success: false,
+      error: "CatalogOS cannot approve or edit published list. Use storefront OfferVariantMapPanel.",
+    };
+  }
+  const patchCheck = validateOfferAdminPatch(fields);
+  if (!patchCheck.ok) return { success: false, error: patchCheck.error };
+
   const supabase = getSupabaseCatalogos(true);
   const { data: existing, error: fetchErr } = await supabase
     .from("supplier_offers")
     .select(
-      "id, product_id, supplier_id, normalized_id, cost, sell_price, units_per_case, currency_code, cost_basis, lead_time_days, is_active"
+      "id, product_id, supplier_id, normalized_id, cost, units_per_case, currency_code, cost_basis, lead_time_days, is_active"
     )
     .eq("id", offerId)
     .single();
@@ -549,7 +575,6 @@ export async function updateSupplierOfferAdmin(
     supplier_id: string;
     normalized_id: string | null;
     cost: number;
-    sell_price: number | null;
     units_per_case: number | null;
     currency_code: string;
     cost_basis: string;
@@ -558,36 +583,29 @@ export async function updateSupplierOfferAdmin(
   };
 
   const nextCost = fields.cost !== undefined ? fields.cost : Number(row.cost);
+  const actor = options?.actor?.trim() || COST_PROVENANCE_ACTOR.catalogos_operator;
 
-  const base: Record<string, unknown> = {
+  let base: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     cost: nextCost,
     units_per_case: row.units_per_case,
   };
   if (fields.lead_time_days !== undefined) base.lead_time_days = fields.lead_time_days;
   if (fields.is_active !== undefined) base.is_active = fields.is_active;
-  if (fields.sell_price !== undefined) {
-    if (fields.sell_price != null) {
-      const gate = validatePublishedListApproval({ cost: nextCost, sellPrice: fields.sell_price });
-      if (!gate.ok) {
-        return {
-          success: false,
-          error: `${gate.reason} (cost=${gate.cost} list=${gate.sellPrice} min=${gate.minimumSafeList} kodiak=${gate.kodiak} kodiak_gm_pct=${gate.kodiakGmPercent})`,
-        };
-      }
+  if (fields.cost !== undefined) {
+    const sourceType = parseCostSourceType(fields.cost_source_type);
+    if (!sourceType) {
+      return { success: false, error: "Cost source type is required when updating landed case cost" };
     }
-    Object.assign(
-      base,
-      withOperatorApprovedSellPrice(base, {
-        sellPrice: fields.sell_price,
-        verifiedBy: options?.actor ?? "admin",
-      })
-    );
+    base = withLandedCostProvenance(base, {
+      sourceType,
+      sourceReference: fields.cost_source_reference,
+      updatedBy: actor,
+    });
   }
 
   const hasFieldChange =
     fields.cost !== undefined ||
-    fields.sell_price !== undefined ||
     fields.lead_time_days !== undefined ||
     fields.is_active !== undefined;
   if (!hasFieldChange) return { success: true };
@@ -607,7 +625,7 @@ export async function updateSupplierOfferAdmin(
     productId: row.product_id,
     supplierOfferId: offerId,
     action: "supplier_offer_updated",
-    actor: options?.actor ?? "admin",
+    actor,
     details: { fields },
   });
   await revalidateReview();
@@ -768,6 +786,71 @@ export async function publishStagedToLive(
   if (!masterId) return { success: false, error: "master_product_id required", published: false };
   const input = buildPublishInputFromStaged(normalizedId, row, { masterProductId: masterId, publishedBy: options?.publishedBy });
   if (!input) return { success: false, error: "Missing supplier_id or raw_id", published: false };
+
+  if (privateDbConfigured()) {
+    const batchId = String((row as { batch_id?: string }).batch_id ?? "");
+    const batch = batchId
+      ? await queryPrivate("SELECT source_filename FROM catalogos.import_batches WHERE id = $1", [batchId])
+      : { rows: [] as Record<string, unknown>[] };
+    if (batch.rows[0]?.source_filename === NEW_PRODUCT_FAMILY_FILENAME) {
+      const siblings = await queryPrivate(
+        "SELECT id FROM catalogos.supplier_products_normalized WHERE batch_id = $1 AND status IN ('approved', 'merged') ORDER BY id",
+        [batchId]
+      );
+      const familyInputs = [];
+      for (const sibling of siblings.rows) {
+        const siblingId = String(sibling.id);
+        const siblingReadiness = siblingId === normalizedId ? readiness : await evaluatePublishReadiness(siblingId);
+        if (!siblingReadiness.canPublish) {
+          const msg = siblingReadiness.blockers.join(" ");
+          return { success: false, error: msg, publishError: msg, published: false, readiness: siblingReadiness };
+        }
+        const siblingRow = siblingId === normalizedId ? row : await getStagingById(siblingId);
+        if (!siblingRow) return { success: false, error: "Staged row not found", published: false };
+        const siblingMaster = siblingRow.master_product_id as string | undefined;
+        if (!siblingMaster) return { success: false, error: "master_product_id required", published: false };
+        const siblingInput = buildPublishInputFromStaged(siblingId, siblingRow, {
+          masterProductId: siblingMaster,
+          publishedBy: options?.publishedBy,
+        });
+        if (!siblingInput) return { success: false, error: "Missing supplier_id or raw_id", published: false };
+        familyInputs.push(siblingInput);
+      }
+      const familyResult = await publishFamilyAtomically(familyInputs);
+      if (!familyResult.success) {
+        return {
+          success: false,
+          error: familyResult.error,
+          published: false,
+          publishError: familyResult.error,
+          publishComplete: false,
+        };
+      }
+      for (const siblingInput of familyInputs) {
+        await logAdminCatalogAudit({
+          normalizedId: siblingInput.normalizedId,
+          productId: familyResult.productId ?? null,
+          action: "published_to_live",
+          actor: options?.publishedBy ?? "admin",
+          details: {
+            warnings: familyResult.warnings ?? [],
+            searchPublishStatus: familyResult.searchPublishStatus,
+            publishComplete: true,
+            family: true,
+          },
+        });
+      }
+      if (!options?.skipRevalidate) await revalidateReview();
+      return {
+        success: true,
+        published: true,
+        masterProductId: masterId,
+        readiness,
+        searchPublishStatus: familyResult.searchPublishStatus,
+        publishComplete: true,
+      };
+    }
+  }
 
   const result = await runPublish(input);
   if (!result.success) {

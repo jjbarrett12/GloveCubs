@@ -10,13 +10,14 @@ const ADMIN_ROUTE = path.resolve(
 );
 
 describe("published list approval paths share validatePublishedListApproval", () => {
-  it("CatalogOS review and storefront admin both call the shared validator", () => {
+  it("storefront admin is the explicit list approval path and still uses the shared validator", () => {
     const review = readFileSync(REVIEW, "utf8");
     const route = readFileSync(ADMIN_ROUTE, "utf8");
-    expect(review).toContain("validatePublishedListApproval");
+    expect(review).not.toContain("validatePublishedListApproval");
+    expect(review).not.toContain("withOperatorApprovedSellPrice");
     expect(route).toContain("validatePublishedListApproval");
-    expect(review).toContain("gate.reason");
     expect(route).toContain("gate.reason");
+    expect(route).toContain("withOperatorApprovedSellPrice");
   });
 
   it("same helper rejects $85/$100 and allows $151.79 for cost $85", () => {

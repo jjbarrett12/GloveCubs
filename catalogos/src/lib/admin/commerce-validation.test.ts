@@ -19,8 +19,9 @@ describe("commerce-validation", () => {
       expect(validateOfferAdminPatch({ cost: -1 }).ok).toBe(false);
       expect(validateOfferAdminPatch({ cost: NaN }).ok).toBe(false);
     });
-    it("accepts null sell_price", () => {
-      expect(validateOfferAdminPatch({ sell_price: null })).toEqual({ ok: true });
+    it("does not accept sell_price on the CatalogOS patch contract", () => {
+      expect(validateOfferAdminPatch({ cost: 10 })).toEqual({ ok: true });
+      expect("sell_price" in ({} as Record<string, unknown>)).toBe(false);
     });
     it("rejects fractional lead_time_days", () => {
       expect(validateOfferAdminPatch({ lead_time_days: 1.5 }).ok).toBe(false);
