@@ -1,6 +1,7 @@
 -- One CatalogOS publish commits catalog, offer, commerce, and staging together.
 -- A failure at any stage, including gc_commerce.sellable_products, rolls the whole call back.
 -- sell_price is never written. Storefront list approval stays a separate operator action.
+-- Insert starts list_price_minor and bulk_price_minor at NULL. Republish keeps an approved list.
 -- fail_at is ignored unless the caller sets glovecubs.publish_fault_injection=on in the same transaction.
 
 CREATE OR REPLACE FUNCTION catalogos.publish_assert_stage(p_fail text, p_stage text)
@@ -258,8 +259,6 @@ BEGIN
   ON CONFLICT (sku) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     catalog_product_id = EXCLUDED.catalog_product_id,
-    list_price_minor = NULL,
-    bulk_price_minor = NULL,
     unit_cost_minor = EXCLUDED.unit_cost_minor,
     is_active = true,
     updated_at = now();

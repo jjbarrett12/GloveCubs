@@ -106,6 +106,41 @@ describe("private database access contract", () => {
     expect(resolvePrivateDatabaseAccess(env).kind).toBe("refused");
   });
 
+  it("binds direct Postgres values and leaves staging SQL API interpolation in place", async () => {
+    const env = { ...productionBase, SUPABASE_DB_URL: PROD_DB };
+    const postgres = vi.spyOn(privateSqlTransport, "postgres").mockResolvedValue({ rows: [], rowCount: 0 });
+    await queryPrivate("select $1", ["secret-value"], env);
+    expect(postgres).toHaveBeenCalledWith("select $1", env, ["secret-value"]);
+    expect(String(postgres.mock.calls[0]?.[0])).not.toContain("secret-value");
+
+    const staging = {
+      NODE_ENV: "development",
+      GC_ENVIRONMENT: "staging",
+      SUPABASE_URL: STAGING_APP,
+      STAGING_SQL_ACCESS_TOKEN: "sbp_test",
+    } as NodeJS.ProcessEnv;
+    const stagingApi = vi.spyOn(privateSqlTransport, "stagingApi").mockResolvedValue({ rows: [], rowCount: 0 });
+    await queryPrivate("select $1", ["secret-value"], staging);
+    expect(String(stagingApi.mock.calls[0]?.[0])).toContain("$q$secret-value$q$");
+    expect(stagingApi.mock.calls[0]?.[0]).not.toBe("select $1");
+  });
+
+  it("accepts a production session pooler on port 5432 and rejects port 6543", () => {
+    const password = "super-secret-db-password";
+    const session = `postgresql://postgres.mnmagwsenzvetwngaszv:${password}@aws-0-us-east-1.pooler.supabase.com:5432/postgres?uselibpqcompat=true&sslmode=require`;
+    const transaction = session.replace(":5432/", ":6543/");
+    const accepted = resolvePrivateDatabaseAccess({ ...productionBase, SUPABASE_DB_URL: session });
+    expect(accepted).toEqual({ kind: "direct", url: session });
+    const rejected = resolvePrivateDatabaseAccess({ ...productionBase, SUPABASE_DB_URL: transaction });
+    expect(rejected.kind).toBe("refused");
+    if (rejected.kind === "refused") {
+      expect(rejected.reason).toMatch(/port 5432/);
+      expect(rejected.reason).not.toContain(password);
+      expect(rejected.reason).not.toContain("postgresql://");
+      expect(rejected.reason).not.toContain(transaction);
+    }
+  });
+
   it("throws when the private database module is evaluated in a browser scope", () => {
     expect(() => assertPrivateDbProcess({ window: {} } as typeof globalThis)).toThrow(/server-only/);
     expect(() => assertPrivateDbProcess({} as typeof globalThis)).not.toThrow();

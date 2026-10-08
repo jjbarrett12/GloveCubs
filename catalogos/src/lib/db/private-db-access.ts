@@ -52,6 +52,13 @@ export function directDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string 
   return url || null;
 }
 
+function postgresPort(url: string): string | null {
+  const at = url.lastIndexOf("@");
+  const host = at >= 0 ? url.slice(at + 1) : url;
+  const match = host.match(/:(\d+)(?:\/|$|\?)/);
+  return match?.[1] ?? null;
+}
+
 export function assertDatabaseUrlForPlane(url: string, env: NodeJS.ProcessEnv = process.env): void {
   if (!/^postgres(ql)?:\/\//i.test(url)) {
     throw new Error("Private database URL must be a postgres connection string.");
@@ -61,6 +68,11 @@ export function assertDatabaseUrlForPlane(url: string, env: NodeJS.ProcessEnv = 
   const appRef = supabaseProjectRef(configuredSupabaseUrl(env));
   const lower = url.toLowerCase();
   if (plane === "production") {
+    if (postgresPort(url) === "6543") {
+      throw new Error(
+        "SUPABASE_DB_URL must use the Supabase session pooler on port 5432. Port 6543 is the transaction pooler and is not valid for CatalogOS."
+      );
+    }
     if (!appRef || !dbRef || appRef !== dbRef) {
       throw new Error("SUPABASE_DB_URL must be the session or direct connection for the same Supabase project as this deployment.");
     }

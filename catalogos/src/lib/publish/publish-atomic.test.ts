@@ -8,6 +8,21 @@ const migration = readFileSync(
   path.resolve(__dirname, "../../../../supabase/migrations/20261227122600_publish_staged_row_atomic.sql"),
   "utf8"
 );
+const republishMigration = readFileSync(
+  path.resolve(__dirname, "../../../../supabase/migrations/20261227122700_preserve_approved_list_on_republish.sql"),
+  "utf8"
+);
+const publishSource = readFileSync(path.resolve(__dirname, "publish-atomic.ts"), "utf8");
+
+function sellableClauses(sql: string): { insert: string; conflict: string } {
+  const insertAt = sql.indexOf("INSERT INTO gc_commerce.sellable_products");
+  const conflictAt = sql.indexOf("ON CONFLICT (sku) DO UPDATE SET", insertAt);
+  const afterConflict = sql.indexOf("UPDATE catalog_v2.catalog_products", conflictAt);
+  return {
+    insert: sql.slice(insertAt, conflictAt),
+    conflict: sql.slice(conflictAt, afterConflict),
+  };
+}
 
 function plan(extra: PublishWritePlan = {}): PublishWritePlan {
   return {
@@ -44,6 +59,10 @@ describe("atomic publish", () => {
     };
     await expect(commitPublishPlansWith(query, [plan({ fail_at: "sellable" })], true)).rejects.toThrow(/publish_fault:sellable/);
     expect(calls.some((call) => call === "BEGIN")).toBe(true);
+    expect(calls.filter((call) => call.includes("set_config"))).toEqual([
+      "SELECT set_config('glovecubs.publish_fault_injection', 'on', true)",
+    ]);
+    expect(calls.some((call) => call.includes(";"))).toBe(false);
     expect(calls.some((call) => call.includes("publish_staged_rows_atomic"))).toBe(true);
     expect(calls.some((call) => call === "ROLLBACK")).toBe(true);
     expect(calls.some((call) => call === "COMMIT")).toBe(false);
@@ -66,5 +85,25 @@ describe("atomic publish", () => {
   it("refuses a plan that carries a customer price", async () => {
     const query: PrivateQuery = async () => ({ rows: [], rowCount: 0 });
     await expect(commitPublishPlansWith(query, [plan({ sell_price: 12 })])).rejects.toThrow(/sell price/i);
+  });
+
+  it("inserts without a list price and keeps an approved list on republish", () => {
+    for (const sql of [migration, republishMigration]) {
+      const { insert, conflict } = sellableClauses(sql);
+      expect(insert).toContain("list_price_minor, bulk_price_minor");
+      expect(insert).toMatch(/'USD',\s*NULL,\s*NULL,/);
+      expect(insert).not.toMatch(/sell_price/);
+      expect(conflict).not.toMatch(/list_price_minor/);
+      expect(conflict).not.toMatch(/bulk_price_minor/);
+      expect(conflict).toContain("unit_cost_minor = EXCLUDED.unit_cost_minor");
+      const offer = sql.slice(sql.indexOf("INSERT INTO catalogos.supplier_offers"), sql.indexOf("ON CONFLICT (supplier_id"));
+      expect(offer).not.toMatch(/sell_price/);
+    }
+  });
+
+  it("keeps fault injection on the same transaction path as publish", () => {
+    expect(publishSource).not.toContain("set_config('glovecubs.publish_fault_injection', 'on', true); SELECT");
+    expect(publishSource).toContain("withPrivateTransaction");
+    expect(publishSource).toContain("writePublishPlans");
   });
 });

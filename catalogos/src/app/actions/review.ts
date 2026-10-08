@@ -4,6 +4,7 @@ import { getSupabaseCatalogos } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { getStagingById, getStagingRows } from "@/lib/review/data";
 import { evaluatePublishReadiness } from "@/lib/review/publish-guards";
+import { sameStagingRowVersion } from "@/lib/review/staging-row-version";
 import { logAdminCatalogAudit } from "@/lib/review/admin-audit";
 import { buildPublishInputFromStaged, runPublish } from "@/lib/publish/publish-service";
 import { publishFamilyAtomically } from "@/lib/publish/publish-atomic";
@@ -734,14 +735,6 @@ export async function publishVariantGroupForNormalized(
     });
   }
   return result;
-}
-
-/** Direct Postgres returns Date; the review JSON body sends millisecond ISO. Compare the instant. */
-function sameStagingRowVersion(current: unknown, expected: string): boolean {
-  if (current === expected) return true;
-  const currentMs = current instanceof Date ? current.getTime() : Date.parse(String(current));
-  const expectedMs = Date.parse(expected);
-  return Number.isFinite(currentMs) && Number.isFinite(expectedMs) && currentMs === expectedMs;
 }
 
 /**

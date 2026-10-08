@@ -15,7 +15,7 @@ import {
   mergeOfferProvenance,
   offerProvenanceFromStaging,
 } from "@/lib/pricing/landed-cost-provenance";
-import { queryPrivate, type PrivateQuery } from "@/lib/db/private-sql";
+import { queryPrivate, withPrivateTransaction, type PrivateQuery } from "@/lib/db/private-sql";
 import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
@@ -49,6 +49,20 @@ function assertNoSellPrice(plan: PublishWritePlan): void {
   }
 }
 
+async function writePublishPlans(
+  query: PrivateQuery,
+  plans: PublishWritePlan[],
+  faultInjection: boolean
+): Promise<{ productIds: string[] }> {
+  if (faultInjection) {
+    await query("SELECT set_config('glovecubs.publish_fault_injection', 'on', true)");
+  }
+  const result = await query("SELECT catalogos.publish_staged_rows_atomic($1::jsonb) AS result", [JSON.stringify(plans)]);
+  const payload = result.rows[0]?.result as { product_ids?: string[] } | string | undefined;
+  const parsed = typeof payload === "string" ? (JSON.parse(payload) as { product_ids?: string[] }) : payload;
+  return { productIds: parsed?.product_ids ?? [] };
+}
+
 export async function commitPublishPlansWith(
   query: PrivateQuery,
   plans: PublishWritePlan[],
@@ -57,14 +71,9 @@ export async function commitPublishPlansWith(
   for (const plan of plans) assertNoSellPrice(plan);
   await query("BEGIN");
   try {
-    if (faultInjection) {
-      await query("SELECT set_config('glovecubs.publish_fault_injection', 'on', true)");
-    }
-    const result = await query("SELECT catalogos.publish_staged_rows_atomic($1::jsonb) AS result", [JSON.stringify(plans)]);
+    const written = await writePublishPlans(query, plans, faultInjection);
     await query("COMMIT");
-    const payload = result.rows[0]?.result as { product_ids?: string[] } | string | undefined;
-    const parsed = typeof payload === "string" ? (JSON.parse(payload) as { product_ids?: string[] }) : payload;
-    return { productIds: parsed?.product_ids ?? [] };
+    return written;
   } catch (error) {
     await query("ROLLBACK");
     throw error;
@@ -73,16 +82,7 @@ export async function commitPublishPlansWith(
 
 export async function commitPublishPlans(plans: PublishWritePlan[], faultInjection = false): Promise<{ productIds: string[] }> {
   for (const plan of plans) assertNoSellPrice(plan);
-  const sql = faultInjection
-    ? "SELECT set_config('glovecubs.publish_fault_injection', 'on', true); SELECT catalogos.publish_staged_rows_atomic($1::jsonb) AS result"
-    : "SELECT catalogos.publish_staged_rows_atomic($1::jsonb) AS result";
-  const result = await queryPrivate(sql, [JSON.stringify(plans)]);
-  const payload = result.rows[0]?.result;
-  const parsed =
-    typeof payload === "string"
-      ? (JSON.parse(payload) as { product_ids?: string[] })
-      : (payload as { product_ids?: string[] } | undefined);
-  return { productIds: parsed?.product_ids ?? [] };
+  return withPrivateTransaction((query) => writePublishPlans(query, plans, faultInjection));
 }
 
 function attributeRows(

@@ -133,9 +133,9 @@ function announceTransport(transport: "postgres" | "staging-sql-api"): void {
 }
 
 export const privateSqlTransport = {
-  postgres(sql: string, env: NodeJS.ProcessEnv = process.env) {
+  postgres(sql: string, env: NodeJS.ProcessEnv = process.env, params: unknown[] = []) {
     announceTransport("postgres");
-    return getPrivatePool(env).query(sql);
+    return getPrivatePool(env).query(sql, params);
   },
   stagingApi(sql: string, env: NodeJS.ProcessEnv = process.env) {
     announceTransport("staging-sql-api");
@@ -149,10 +149,9 @@ export async function queryPrivate(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }> {
   assertPrivateDbProcess();
-  const sql = sqlWithLiterals(text, params);
   const access = resolvePrivateDatabaseAccess(env);
-  if (access.kind === "direct") return privateSqlTransport.postgres(sql, env);
-  if (access.kind === "staging-api") return privateSqlTransport.stagingApi(sql, env);
+  if (access.kind === "direct") return privateSqlTransport.postgres(text, env, params);
+  if (access.kind === "staging-api") return privateSqlTransport.stagingApi(sqlWithLiterals(text, params), env);
   if (access.kind === "refused") throw new Error(access.reason);
   throw new Error("Private schema access requires SUPABASE_DB_URL or STAGING_DATABASE_URL.");
 }
