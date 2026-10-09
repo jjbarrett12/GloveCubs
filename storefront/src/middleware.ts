@@ -3,11 +3,15 @@ import type { NextRequest } from "next/server";
 import { updateSupabaseSession } from "@/lib/supabase/middleware-session";
 
 /**
- * Supabase session refresh + route gates.
+ * Supabase session refresh + route gates (scoped matcher — not global).
  * Workspace and admin layouts read `x-gc-pathname` for safe post-login redirects.
  *
  * Admin HTML routes (`/admin`, not `/admin/api`) are not blocked here; authorization is
  * `resolveAdminAccess()` / `getAdminUser()` on layouts and route handlers.
+ * Account / workspace authorization is enforced in those layouts and pages.
+ *
+ * Matcher must stay in sync with `lib/middleware/matcher-scope.ts` (MIDDLEWARE_MATCHER /
+ * middlewareShouldRun). Next.js rejects non-literal matcher expressions.
  */
 
 function copyCookies(from: NextResponse, to: NextResponse) {
@@ -30,22 +34,10 @@ export async function middleware(request: NextRequest) {
   const sessionResponse = await updateSupabaseSession(request);
 
   let response = sessionResponse;
-  if (pathname.startsWith("/workspace/procurement")) {
+  if (pathname.startsWith("/workspace/procurement") || pathname === "/workspace") {
     response = withPathnameHeader(request, sessionResponse, pathname);
   } else if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/api")) {
     response = withPathnameHeader(request, sessionResponse, pathname);
-  }
-
-  if (pathname === "/api/ai/invoice/extract") {
-    console.log(
-      JSON.stringify({
-        category: "invoice_intake",
-        event: "legacy_next_path_rewrite",
-        path: pathname,
-        method: request.method,
-        ts: new Date().toISOString(),
-      }),
-    );
   }
 
   if (pathname.startsWith("/api/internal")) {
@@ -66,6 +58,21 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/account",
+    "/account/:path*",
+    "/workspace",
+    "/workspace/:path*",
+    "/admin",
+    "/admin/:path*",
+    "/api/account",
+    "/api/account/:path*",
+    "/api/auth",
+    "/api/auth/:path*",
+    "/api/customer",
+    "/api/customer/:path*",
+    "/api/workspace",
+    "/api/workspace/:path*",
+    "/api/internal",
+    "/api/internal/:path*",
   ],
 };

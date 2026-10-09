@@ -20,11 +20,12 @@ describe("public shell coherence (Slice 1B)", () => {
     expect(s).not.toMatch(/<header className="border-b border-white\/10">/);
   });
 
-  it("PublicExperienceChrome provides header and footer once", () => {
+  it("PublicExperienceChrome provides anonymous header and footer once", () => {
     const s = read("components/layout/PublicExperienceChrome.tsx");
-    expect(s).toContain("<SiteHeaderLoader />");
+    expect(s).toContain("<SiteHeader />");
+    expect(s).not.toContain("SiteHeaderLoader");
     expect(s).toContain("<SiteFooter />");
-    expect((s.match(/<SiteHeaderLoader/g) ?? []).length).toBe(1);
+    expect((s.match(/<SiteHeader/g) ?? []).length).toBe(1);
     expect((s.match(/<SiteFooter/g) ?? []).length).toBe(1);
   });
 

@@ -1,6 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { DataTable, StatusBadge, TableCard } from "@/components/admin";
+import { adminLink } from "@/components/admin/admin-theme-utils";
+import { cn } from "@/lib/utils";
+import { quoteStatusRequiresAction } from "@/lib/admin/launch-ops-status";
 import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
 import { describeQuoteStatusForOperator } from "@/lib/procurement/operator-lifecycle-copy";
 
@@ -38,6 +42,9 @@ export function LeadsTable({ rows }: { rows: LeadQuoteRow[] }) {
               return (
                 <div>
                   <StatusBadge status={row.status} />
+                  {quoteStatusRequiresAction(row.status) ? (
+                    <p className="mt-0.5 text-[10px] font-medium text-admin-warning">Needs action</p>
+                  ) : null}
                   <p className="mt-0.5 max-w-[160px] text-[10px] text-admin-muted">{copy.actionHint}</p>
                 </div>
               );
@@ -49,8 +56,24 @@ export function LeadsTable({ rows }: { rows: LeadQuoteRow[] }) {
             render: (row) => describeQuoteStatusForOperator(row.status).buyerSees,
           },
           { key: "contact_name", header: "Name" },
-          { key: "email", header: "Email" },
-          { key: "company_name", header: "Company" },
+          {
+            key: "email",
+            header: "Email",
+            render: (row) => (
+              <Link href={`/admin/leads/${row.id}`} className={adminLink}>
+                {row.email}
+              </Link>
+            ),
+          },
+          {
+            key: "company_name",
+            header: "Company",
+            render: (row) => (
+              <Link href={`/admin/leads/${row.id}`} className={adminLink}>
+                {row.company_name}
+              </Link>
+            ),
+          },
           {
             key: "gc_company_id",
             header: "Linked co.",
@@ -68,7 +91,9 @@ export function LeadsTable({ rows }: { rows: LeadQuoteRow[] }) {
                 : "—";
               return (
                 <div className="max-w-[240px] align-top">
-                  <p className="font-mono text-[10px] text-admin-muted">{row.id.slice(0, 8)}…</p>
+                  <Link href={`/admin/leads/${row.id}`} className={cn("font-mono text-[10px]", adminLink)}>
+                    {row.id.slice(0, 8)}…
+                  </Link>
                   <p className="text-sm">{deliveryText}</p>
                   {warnIdNoSnap ? (
                     <p className="mt-1 text-xs font-medium text-admin-warning">

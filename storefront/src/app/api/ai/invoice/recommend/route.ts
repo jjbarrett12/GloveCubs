@@ -6,10 +6,29 @@ import { logAiEvent } from "@/lib/ai/telemetry";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getActiveProducts } from "@/lib/gloves/queries";
 import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
+import {
+  isCatalogSupabaseEmergencyDisabled,
+  isPublicAiEmergencyDisabled,
+} from "@/lib/catalog/emergency-catalog-kill-switch";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
 
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/ai/invoice/recommend" });
+  if (!botGate.ok) return botGate.response;
+
+  if (isPublicAiEmergencyDisabled()) {
+    return NextResponse.json(
+      {
+        error: "Invoice recommendations are temporarily unavailable.",
+        emergencyDisabled: true,
+      },
+      { status: 503 },
+    );
+  }
+
   const rate = checkAiRateLimit(request);
   if (!rate.allowed) {
     return NextResponse.json(
@@ -17,6 +36,9 @@ export async function POST(request: NextRequest) {
       { status: 429 }
     );
   }
+
+  const guarded = guardPublicJsonPost(request, { maxBytes: 256 * 1024 });
+  if (guarded) return guarded;
 
   let body: unknown;
   try {
@@ -33,6 +55,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Supabase not configured" },
       { status: 500 }
+    );
+  }
+  if (isCatalogSupabaseEmergencyDisabled()) {
+    return NextResponse.json(
+      {
+        error: "Catalog matching is temporarily unavailable. Please contact sales with your invoice lines.",
+        catalogUnavailable: true,
+      },
+      { status: 503 },
     );
   }
   const supabase = getSupabaseAdmin();

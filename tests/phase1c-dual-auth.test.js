@@ -143,14 +143,16 @@ describe('phase1c user creation (source)', () => {
     assert.doesNotMatch(fn, /bcrypt/);
   });
 
-  it('register and admin create pass plain_password without bcrypt.hash', () => {
+  it('register is drained (410); admin create still passes plain_password without bcrypt.hash', () => {
     const server = read('server.js');
-    assert.match(server, /plain_password: password/);
     const reg = server.slice(
       server.indexOf("app.post('/api/auth/register'"),
       server.indexOf("app.post('/api/auth/login'")
     );
+    assert.match(reg, /sendLegacyPublicWriteGone/);
+    assert.doesNotMatch(reg, /createUser/);
     assert.doesNotMatch(reg, /bcrypt\.hash/);
+    assert.match(server, /plain_password: password/);
   });
 
   it('bootstrap-admin does not create a usable bcrypt parallel credential', () => {

@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { RequestPricingForm } from "@/components/request-pricing/RequestPricingForm";
 
+/** Anonymous inquiry page — statically cacheable; form submits via client/API. */
+export const dynamic = "force-static";
+export const revalidate = 600;
+
 export const metadata: Metadata = {
   title: "Contact GloveCubs | Inquiry",
   description:

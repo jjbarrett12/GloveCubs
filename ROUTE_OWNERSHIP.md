@@ -243,7 +243,7 @@ Audit SQL: `scripts/audit-admin-identity.sql` · Runner: `scripts/audit-admin-id
 | **Next admin (canonical HTML)** | **`/admin/*` on the storefront origin (www)** | Supabase session + `public.admin_users`. All operator HTML. |
 | **Express `/api/admin/*`** | API host | Transitional JSON only; frozen route surface. Express JWT + `admin_users` allowlist. |
 | **Express legacy admin SPA** | ~~`/admin*` on API host~~ | **Deprecated (Phase 1B):** 308 → www. Not served in production. |
-| **CatalogOS** | Internal host | Ingest/publish tooling — not www admin HTML. |
+| **CatalogOS** | Internal host | Ingest/publish tooling — not www admin HTML. RFQ quote-status UI remains an optional internal tool; **storefront `/admin/leads` owns quote status updates for www RFQs.** |
 | **Customer workspace** | **`/workspace` → `/workspace/procurement`** (Next) | Buyer-facing procurement session. |
 
 Operators use **www** + `/admin/...` for all admin HTML. Commerce JSON may still call **api** `/api/admin/*` until drained.

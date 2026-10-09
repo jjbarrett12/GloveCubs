@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { safeCommerceNextPath } from "@/lib/auth/safe-next-path";
@@ -15,15 +15,16 @@ import {
 } from "@/lib/auth/format-sign-in-error";
 
 type Props = {
-  nextPath: string | string[] | undefined;
-  issue: string | string[] | undefined;
-  reset: string | string[] | undefined;
   supabaseConfigured: boolean;
-  hasExplicitNext: boolean;
 };
 
-export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExplicitNext }: Props) {
+function hasExplicitNextParam(raw: string | null): boolean {
+  return typeof raw === "string" && raw.trim() !== "";
+}
+
+export function LoginClient({ supabaseConfigured }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -33,8 +34,10 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
   const passwordMaskedRef = React.useRef<HTMLInputElement>(null);
   const passwordPlainRef = React.useRef<HTMLInputElement>(null);
 
-  const issueStr = Array.isArray(issue) ? issue[0] : issue;
-  const resetStr = Array.isArray(reset) ? reset[0] : reset;
+  const nextPath = searchParams.get("next") ?? undefined;
+  const issueStr = searchParams.get("issue");
+  const resetStr = searchParams.get("reset");
+  const hasExplicitNext = hasExplicitNextParam(nextPath ?? null);
   const explicitDest = safeCommerceNextPath(nextPath);
   const signInAlertRef = React.useRef<HTMLDivElement>(null);
 
@@ -115,6 +118,8 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
         path?: string;
         error?: string;
         code?: string;
+        buyer_default_path?: string;
+        buyer_issue?: string | null;
       };
       if (!res.ok) {
         if (body.code === "missing_supabase_env") {
@@ -146,10 +151,10 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
           ? body.path
           : "/account";
       const buyerDefaultPath =
-        typeof (body as { buyer_default_path?: string }).buyer_default_path === "string" &&
-        (body as { buyer_default_path: string }).buyer_default_path.startsWith("/") &&
-        !(body as { buyer_default_path: string }).buyer_default_path.startsWith("//")
-          ? (body as { buyer_default_path: string }).buyer_default_path
+        typeof body.buyer_default_path === "string" &&
+        body.buyer_default_path.startsWith("/") &&
+        !body.buyer_default_path.startsWith("//")
+          ? body.buyer_default_path
           : defaultPath === "/admin"
             ? "/account"
             : defaultPath;
@@ -162,6 +167,10 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
             "You were trying to open the admin console. Use your buyer account from the storefront, or ask an owner to grant admin access for this email.",
           ],
         });
+        return;
+      }
+      if (!isActiveAdmin && (body.buyer_issue === "needs_signup_complete" || body.buyer_issue === "no_membership")) {
+        window.location.assign("/signup/complete");
         return;
       }
       const dest = resolvePostLoginRedirectPath({
@@ -217,10 +226,10 @@ export function LoginClient({ nextPath, issue, reset, supabaseConfigured, hasExp
         {issueStr === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Your account is signed in but is not linked to an organization yet.{" "}
-            <Link href="/signup" className="font-semibold text-[#f06232] underline">
-              Create an account
+            <Link href="/signup/complete" className="font-semibold text-[#f06232] underline">
+              Finish account setup
             </Link>{" "}
-            to shop gloves and submit quote requests, or{" "}
+            to link your company, or{" "}
             <Link href="/contact" className="font-semibold text-[#f06232] underline">
               contact support
             </Link>

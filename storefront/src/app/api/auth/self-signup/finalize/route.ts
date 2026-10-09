@@ -1,12 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { resolveUserForPostLoginDestination } from "@/lib/auth/post-login-session";
 import { finalizeSelfSignupForUser } from "@/lib/auth/self-signup";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const botGate = await requireHumanBotId({
+    route: "/api/auth/self-signup/finalize",
+  });
+  if (!botGate.ok) return botGate.response;
+
+  const rateLimited = checkPublicWriteRateLimit(
+    req,
+    PUBLIC_WRITE_LIMITS.selfSignupFinalize,
+  );
+  if (rateLimited) return rateLimited;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!url || !anon) {
@@ -59,6 +75,12 @@ export async function POST(req: Request) {
     const message = err instanceof Error ? err.message : "finalize_failed";
     if (message === "missing_signup_metadata") {
       return NextResponse.json({ error: "Signup profile data is missing.", code: message }, { status: 422 });
+    }
+    if (message === "finalize_in_progress") {
+      return NextResponse.json(
+        { error: "Account setup is still in progress. Try again in a moment.", code: message },
+        { status: 409 },
+      );
     }
     console.error("[self-signup/finalize] failed", message.slice(0, 120));
     return NextResponse.json({ error: "Could not complete account setup.", code: "finalize_failed" }, { status: 500 });

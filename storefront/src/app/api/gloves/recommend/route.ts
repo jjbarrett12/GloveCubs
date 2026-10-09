@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendRequestSchema, recommendResponseSchema, type RecommendResponse } from "@/lib/gloves/types";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
+import {
+  isCatalogSupabaseEmergencyDisabled,
+  isPublicAiEmergencyDisabled,
+} from "@/lib/catalog/emergency-catalog-kill-switch";
 import {
   getActiveProducts,
   getUseCaseRiskProfiles,
@@ -12,6 +15,12 @@ import { scoreGloves, topNWithAlternatives } from "@/lib/gloves/scoring";
 import type { ScoredProduct } from "@/lib/gloves/scoring";
 import { chatCompletionPlain, getOpenAIClient } from "@/lib/ai/provider";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 function formatRulesResponse(
   scored: ScoredProduct[],
@@ -51,7 +60,29 @@ function formatRulesResponse(
  * Canonical prep-line / ontology flow lives at **POST /api/ai/glove-finder** (different contract and catalog slice).
  */
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/gloves/recommend" });
+  if (!botGate.ok) return botGate.response;
+
+  const rateLimited = checkPublicWriteRateLimit(
+    request,
+    PUBLIC_WRITE_LIMITS.glovesRecommend,
+  );
+  if (rateLimited) return rateLimited;
+
   try {
+    if (isPublicAiEmergencyDisabled()) {
+      return NextResponse.json(
+        {
+          error: "Recommendations are temporarily unavailable. Please request pricing instead.",
+          emergencyDisabled: true,
+        },
+        { status: 503 },
+      );
+    }
+
+    const guarded = guardPublicJsonPost(request, { maxBytes: 64 * 1024 });
+    if (guarded) return guarded;
+
     const body = await request.json();
     const parsed = recommendRequestSchema.safeParse(body);
     if (!parsed.success) {

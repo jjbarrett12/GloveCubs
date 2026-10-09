@@ -15,6 +15,10 @@ import {
   type InvoiceIntakeIdentity,
 } from "@/lib/invoice/intake-types";
 import {
+  buildInvoiceIdempotencyScope,
+  invoiceIdempotencyScopeMatches,
+} from "@/lib/invoice/idempotency-scope";
+import {
   insertProcurementOpportunity,
   findOpportunityByIdempotencyKey,
   updateProcurementOpportunity,
@@ -25,6 +29,7 @@ import { processInvoicePhase2 } from "@/lib/invoice/invoice-phase2";
 import { recordInvoiceIntakeSpine } from "@/lib/procurement/spine-writes";
 import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 import { resolveActiveCompanyId } from "@/lib/procurement/repo-active-company-resolve";
+import { getAdminNotificationEmail, isSmtpConfigured, sendSmtpMail } from "@/lib/email/smtp";
 
 export const INVOICE_INTAKE_MAX_BYTES = 10 * 1024 * 1024;
 const MAX_FILE_SIZE = INVOICE_INTAKE_MAX_BYTES;
@@ -130,15 +135,30 @@ async function findIntakeByOpportunityId(supabase: any, opportunityId: string): 
   return data as Record<string, unknown>;
 }
 
-async function findIntakeByIdempotencyKey(supabase: any, idempotencyKey: string): Promise<Record<string, unknown> | null> {
+async function findIntakeByIdempotencyKey(
+  supabase: any,
+  idempotencyKey: string,
+  idempotencyScope: string,
+): Promise<Record<string, unknown> | null> {
   const { data, error } = await supabase
     .schema("gc_commerce")
     .from("uploaded_invoices")
     .select("*")
     .eq("idempotency_key", idempotencyKey)
+    .eq("idempotency_scope", idempotencyScope)
     .maybeSingle();
   if (error || !data) return null;
   return data as Record<string, unknown>;
+}
+
+function assertIntakeOwnedByScope(
+  intakeRow: Record<string, unknown>,
+  callerScope: string,
+): boolean {
+  return invoiceIdempotencyScopeMatches(
+    typeof intakeRow.idempotency_scope === "string" ? intakeRow.idempotency_scope : null,
+    callerScope,
+  );
 }
 
 async function findIntakeByCompanyAndSha(
@@ -249,7 +269,8 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   }
 
   const contentSha256 = sha256Hex(buf);
-  const idempotencyKey = (input.idempotencyKeyHeader?.trim() || randomUUID()).slice(0, 200);
+  const ephemeralId = randomUUID();
+  const idempotencyKey = (input.idempotencyKeyHeader?.trim() || ephemeralId).slice(0, 200);
   const identity: InvoiceIntakeIdentity =
     input.identityOverride != null
       ? input.identityOverride
@@ -257,6 +278,7 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
           ...(await resolveInvoiceIntakeIdentity(supabase)),
           anonymous_session_id: input.anonymousSessionId?.trim() || null,
         };
+  const idempotencyScope = buildInvoiceIdempotencyScope(identity, ephemeralId);
 
   const document: InvoiceIntakeContract["document"] = {
     filename: file.filename.slice(0, 500),
@@ -265,10 +287,10 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
     content_sha256: contentSha256,
   };
 
-  const existingOpp = await findOpportunityByIdempotencyKey(supabase, idempotencyKey);
+  const existingOpp = await findOpportunityByIdempotencyKey(supabase, idempotencyKey, idempotencyScope);
   if (existingOpp) {
     const intakeRow = await findIntakeByOpportunityId(supabase, existingOpp.id);
-    if (!intakeRow) {
+    if (!intakeRow || !assertIntakeOwnedByScope(intakeRow, idempotencyScope)) {
       logPublicFunnel("invoice_intake", "incomplete_intake", {
         opportunity_id: existingOpp.id,
         idempotency_key_prefix: idempotencyKey.slice(0, 48),
@@ -328,6 +350,7 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   const created = await insertProcurementOpportunity(supabase, {
     source: "invoice",
     idempotency_key: idempotencyKey,
+    idempotency_scope: idempotencyScope,
     company_name: companyName,
     contact_name: null,
     contact_email: null,
@@ -339,10 +362,10 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
     },
   });
   if (!created) {
-    const raced = await findOpportunityByIdempotencyKey(supabase, idempotencyKey);
+    const raced = await findOpportunityByIdempotencyKey(supabase, idempotencyKey, idempotencyScope);
     if (raced) {
       const intakeRow = await findIntakeByOpportunityId(supabase, raced.id);
-      if (intakeRow) {
+      if (intakeRow && assertIntakeOwnedByScope(intakeRow, idempotencyScope)) {
         const payload = (intakeRow.payload as Record<string, unknown> | null) ?? {};
         const extract = (payload.last_extract as InvoiceExtractResponse | null) ?? null;
         return {
@@ -389,6 +412,8 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
         },
         content_sha256: contentSha256,
         idempotency_key: idempotencyKey,
+        idempotency_scope: idempotencyScope,
+        staff_ops_status: "new",
         intake_status: "received",
         mime_type: mt,
         original_filename: file.filename.slice(0, 500),
@@ -404,8 +429,8 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
     intakeRow = data as Record<string, unknown>;
   } catch (e) {
     if (isPostgresUniqueViolation(e)) {
-      const racedIntake = await findIntakeByIdempotencyKey(supabase, idempotencyKey);
-      if (racedIntake) {
+      const racedIntake = await findIntakeByIdempotencyKey(supabase, idempotencyKey, idempotencyScope);
+      if (racedIntake && assertIntakeOwnedByScope(racedIntake, idempotencyScope)) {
         const payload = (racedIntake.payload as Record<string, unknown> | null) ?? {};
         const extract = (payload.last_extract as InvoiceExtractResponse | null) ?? null;
         return {
@@ -649,6 +674,36 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
     phase2_ok: phase2.ok,
     idempotency_key_prefix: idempotencyKey.slice(0, 48),
   });
+
+  const adminTo = getAdminNotificationEmail();
+  const mail = await sendSmtpMail({
+    to: adminTo,
+    subject: `[GloveCubs] Invoice intake ${extractOk ? "ready" : "needs review"} — ${document.filename}`,
+    text: [
+      "New invoice upload (storefront)",
+      "",
+      `Intake id: ${uploadedInvoiceId}`,
+      `Opportunity id: ${opportunityId}`,
+      `Company: ${companyName}`,
+      `Company id: ${identity.company_id ?? "anonymous"}`,
+      `User id: ${identity.user_id ?? "—"}`,
+      `Filename: ${document.filename}`,
+      `Intake status: ${intakeStatus}`,
+      `Vendor: ${extract?.vendor_name ?? "—"}`,
+      `Invoice #: ${extract?.invoice_number ?? "—"}`,
+      `Total: ${extract?.total_amount ?? "—"}`,
+      `Lines: ${extract?.lines?.length ?? 0}`,
+      `Phase2: ${phase2.ok ? "ok" : phase2Error ?? "failed"}`,
+      "",
+      "Open /admin/invoices to review.",
+    ].join("\n"),
+  });
+  if (!mail.sent) {
+    const prod = process.env.NODE_ENV === "production";
+    const msg = `[invoice_intake] email_notification not sent smtp_configured=${isSmtpConfigured()} reason=${mail.error ?? "unknown"} intake_id=${uploadedInvoiceId}`;
+    if (prod) console.error(`PRODUCTION_ALERT ${msg}`);
+    else console.warn(msg);
+  }
 
   return { ok: true, status: 200, contract };
 }

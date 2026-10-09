@@ -90,7 +90,7 @@ export function buildCatalogSearchString(
   }
   if (p.price_min != null) q.set("price_min", String(p.price_min));
   if (p.price_max != null) q.set("price_max", String(p.price_max));
-  if (p.q) q.set("q", p.q);
+  if (p.q?.trim()) q.set("q", p.q.trim());
   if (p.sort && p.sort !== "newest") q.set("sort", p.sort);
   if (p.page != null && p.page > 1) q.set("page", String(p.page));
   if (p.limit != null && p.limit !== 24) q.set("limit", String(p.limit));

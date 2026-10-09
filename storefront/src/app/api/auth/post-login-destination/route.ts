@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { resolveUserForPostLoginDestination } from "@/lib/auth/post-login-session";
+import { recoverSelfSignupIfNeeded } from "@/lib/auth/self-signup";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,39 @@ function supabaseHost(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+async function resolveBuyerGateForUserId(
+  svc: any,
+  userId: string,
+): Promise<{
+  buyerDefaultPath: "/account/quotes" | "/account" | "/signup/complete";
+  buyerIssue: "company_inactive" | "no_membership" | "needs_signup_complete" | null;
+}> {
+  const { data: members, error: memErr } = await svc
+    .schema("gc_commerce")
+    .from("company_members")
+    .select("company_id")
+    .eq("user_id", userId)
+    .limit(1);
+  if (memErr) {
+    return { buyerDefaultPath: "/account", buyerIssue: null };
+  }
+  if (!members || members.length === 0) {
+    return { buyerDefaultPath: "/account", buyerIssue: "no_membership" };
+  }
+
+  const gate = await resolveCustomerProcurementGate(svc);
+  if (gate.kind === "ready") {
+    return { buyerDefaultPath: "/account/quotes", buyerIssue: null };
+  }
+  if (gate.kind === "company_not_active") {
+    return { buyerDefaultPath: "/account", buyerIssue: "company_inactive" };
+  }
+  if (gate.kind === "no_membership") {
+    return { buyerDefaultPath: "/account", buyerIssue: "no_membership" };
+  }
+  return { buyerDefaultPath: "/account", buyerIssue: null };
 }
 
 export async function GET(req: Request) {
@@ -82,7 +116,7 @@ export async function GET(req: Request) {
 
   const svc = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-  });
+  }) as any;
   const { data: adminUser } = await svc
     .from("admin_users")
     .select("id, is_active")
@@ -94,14 +128,22 @@ export async function GET(req: Request) {
   const adminRowFound = Boolean(adminUser);
   const adminActive = adminRowFound;
 
-  let buyerDefaultPath: "/account/quotes" | "/account" = "/account";
-  let buyerIssue: "company_inactive" | null = null;
+  let buyerDefaultPath: "/account/quotes" | "/account" | "/signup/complete" = "/account";
+  let buyerIssue: "company_inactive" | "no_membership" | "needs_signup_complete" | null = null;
+
   if (!adminUser) {
-    const gate = await resolveCustomerProcurementGate(svc);
-    if (gate.kind === "ready") {
-      buyerDefaultPath = "/account/quotes";
-    } else if (gate.kind === "company_not_active") {
-      buyerIssue = "company_inactive";
+    const recovery = await recoverSelfSignupIfNeeded(
+      svc,
+      auth.user.id,
+      (auth.user.user_metadata ?? {}) as Record<string, unknown>,
+    );
+    if (recovery.kind === "needs_complete" || recovery.kind === "failed") {
+      buyerDefaultPath = "/signup/complete";
+      buyerIssue = "needs_signup_complete";
+    } else {
+      const buyer = await resolveBuyerGateForUserId(svc, auth.user.id);
+      buyerDefaultPath = buyer.buyerDefaultPath;
+      buyerIssue = buyer.buyerIssue;
     }
   }
 

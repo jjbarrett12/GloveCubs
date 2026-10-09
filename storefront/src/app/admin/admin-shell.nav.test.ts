@@ -11,6 +11,8 @@ describe("AdminShell navigation", () => {
     expect(s).not.toContain('href: "/admin/imports"');
     expect(s).not.toContain('href: "/admin/catalog"');
     expect(s).toContain('href: "/admin/leads"');
+    expect(s).toContain('href: "/admin/prospects"');
+    expect(s).toContain('href: "/admin/invoices"');
     expect(s).toContain('href: "/admin/orders"');
     expect(s).toContain('href: "/admin/companies"');
     expect(s).toContain('href: "/admin/settings"');

@@ -6,6 +6,12 @@ import { recordQuoteCartSpine } from "@/lib/procurement/spine-writes";
 import { resolveCustomerProcurementGate } from "@/lib/procurement/customer-procurement-session";
 import { resolveQuoteShipToSnapshot } from "@/lib/commerce/quote-request-ship-to";
 import { formatShipToLabel } from "@/lib/commerce/ship-to-address-format";
+import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
+import { requireHumanBotId } from "@/lib/security/botid-gate";
+import {
+  checkPublicWriteRateLimit,
+  PUBLIC_WRITE_LIMITS,
+} from "@/lib/security/public-write-rate-limit";
 
 function isVariantMandatoryEnforceEnabled(): boolean {
   const v = process.env.VARIANT_MANDATORY_ENFORCE;
@@ -65,6 +71,18 @@ const bodySchema = z
   .strict();
 
 export async function POST(request: NextRequest) {
+  const botGate = await requireHumanBotId({ route: "/api/quote-request" });
+  if (!botGate.ok) return botGate.response;
+
+  const rateLimited = checkPublicWriteRateLimit(
+    request,
+    PUBLIC_WRITE_LIMITS.quoteRequest,
+  );
+  if (rateLimited) return rateLimited;
+
+  const guarded = guardPublicJsonPost(request, { maxBytes: 512 * 1024 });
+  if (guarded) return guarded;
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }
@@ -370,5 +388,11 @@ export async function POST(request: NextRequest) {
     email_notification_sent: emailNotificationSent,
     procurement_opportunity_id,
     buyer_display_ref,
+    ...(emailNotificationSent
+      ? {}
+      : {
+          warning:
+            "Your quote request was saved. We could not send an internal email notification automatically—our team can still see it in admin, or reach us via Contact if you need a faster follow-up.",
+        }),
   });
 }

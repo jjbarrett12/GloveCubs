@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 import { SiteHeaderLoader } from "@/components/home/SiteHeaderLoader";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { resolveCustomerProcurementGate, COMPANY_NOT_ACTIVE_BUYER_MESSAGE } from "@/lib/procurement/customer-procurement-session";
+import { recoverSelfSignupIfNeeded } from "@/lib/auth/self-signup";
 import { AccountSignOut } from "./AccountSignOut";
 import { getAdminUser } from "@/lib/admin/get-admin-user";
 import { b2bTierLabel, b2bTierSiteDiscountPercent } from "@/lib/pricing/b2b-tier-meta";
@@ -17,13 +20,47 @@ export const metadata: Metadata = {
   description: "Your GloveCubs business account.",
 };
 
+async function loadAuthUserMetadata(): Promise<Record<string, unknown> | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!url || !anon) return null;
+  const cookieStore = await cookies();
+  const authClient = createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+    },
+  });
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+  if (!user) return null;
+  return (user.user_metadata ?? {}) as Record<string, unknown>;
+}
+
 export default async function AccountPage() {
   if (!isSupabaseConfigured()) {
     redirect("/request-pricing");
   }
 
   const supabase = getSupabaseAdmin() as any;
-  const gate = await resolveCustomerProcurementGate(supabase);
+  let gate = await resolveCustomerProcurementGate(supabase);
+
+  if (gate.kind === "sign_in_required") {
+    redirect("/login?next=%2Faccount");
+  }
+
+  if (gate.kind === "no_membership") {
+    const meta = await loadAuthUserMetadata();
+    const recovery = await recoverSelfSignupIfNeeded(supabase, gate.userId, meta);
+    if (recovery.kind === "ready") {
+      gate = await resolveCustomerProcurementGate(supabase);
+    } else {
+      redirect("/signup/complete");
+    }
+  }
+
   if (gate.kind === "sign_in_required") {
     redirect("/login?next=%2Faccount");
   }
@@ -101,20 +138,15 @@ export default async function AccountPage() {
 
         {gate.kind === "no_membership" ? (
           <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            <p className="font-medium text-amber-50">Link your organization to unlock quote history</p>
+            <p className="font-medium text-amber-50">Finish linking your organization</p>
             <p className="mt-2 text-xs text-amber-100/80">
-              You can browse the catalog and submit quote requests now. Once your company is linked, requests appear in
-              quote history and workspace tools unlock.
+              Your login works, but company setup did not finish. Complete setup to unlock quote history and workspace
+              tools.
             </p>
             <ul className="mt-3 space-y-1.5 text-xs">
               <li>
-                <Link className="font-semibold text-[#f06232] underline" href="/request-pricing">
-                  Request business pricing
-                </Link>
-              </li>
-              <li>
-                <Link className="font-semibold text-[#f06232] underline" href="/invoice-savings">
-                  Upload invoice for review
+                <Link className="font-semibold text-[#f06232] underline" href="/signup/complete">
+                  Finish account setup
                 </Link>
               </li>
               <li>
