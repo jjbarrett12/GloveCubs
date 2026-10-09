@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { getAttributeDefinitionIdsByKeys } from "@/lib/catalog/store-attribute-defs";
 import { fetchStoreProductRowsByIds, type StoreProductRow } from "@/lib/catalog/store-products";
 import {
@@ -222,6 +223,7 @@ async function fetchRelatedProductIds(
 }
 
 async function loadStoreProductDetail(slug: string): Promise<StoreProductDetail | null> {
+  if (isCatalogSupabaseEmergencyDisabled()) return null;
   if (!isSupabaseConfigured() || !slug.trim()) return null;
 
   const supabase = getSupabaseAdmin() as any;
@@ -418,7 +420,12 @@ export async function enrichStoreProductDetailBuyerPricing(
   detail: StoreProductDetail,
   companyId: string
 ): Promise<StoreProductDetail> {
-  if (!isSupabaseConfigured() || !companyId.trim() || detail.variants.length === 0) {
+  if (
+    isCatalogSupabaseEmergencyDisabled() ||
+    !isSupabaseConfigured() ||
+    !companyId.trim() ||
+    detail.variants.length === 0
+  ) {
     return detail;
   }
   const supabase = getSupabaseAdmin();

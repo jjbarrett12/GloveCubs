@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import { fetchStoreProductRowsByIds, type StoreProductRow } from "@/lib/catalog/store-products";
 import { getAttributeDefinitionIdsByKeys } from "@/lib/catalog/store-attribute-defs";
 import { formatAttributeValueLabel } from "@/lib/catalog/attribute-value-labels";
@@ -168,7 +169,7 @@ export function buildCompareWizardRow(
 }
 
 export async function fetchCompareWizardProducts(): Promise<CompareWizardResult> {
-  if (!isSupabaseConfigured()) {
+  if (isCatalogSupabaseEmergencyDisabled() || !isSupabaseConfigured()) {
     return { rows: [], catalogUnavailable: true };
   }
 

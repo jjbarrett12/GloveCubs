@@ -127,11 +127,11 @@ const STEPS: StepConfig[] = [
   },
   {
     id: "foodSafe",
-    title: "Do you need food-safe gloves?",
-    subtitle: "Direct or indirect food contact in your process.",
+    title: "Do you need gloves for food contact?",
+    subtitle: "Direct or indirect food contact in your process—documentation is verified per SKU.",
     options: [
-      { value: "yes", label: "Yes — food contact", hint: "HACCP-aligned selection" },
-      { value: "no", label: "No food contact", hint: "Industrial or clinical only" },
+      { value: "yes", label: "Yes — food contact", hint: "We will help source documented options" },
+      { value: "no", label: "No food contact", hint: "Industrial or clinical environments" },
     ],
   },
   {
@@ -263,7 +263,7 @@ function deriveCatalogProductHighlights(product: StoreProductRow): ProgramHighli
   const examGrade = product.certificationHints.some((c) => /exam|medical/i.test(c));
 
   const compliance: ProgramHighlight = foodSafe
-    ? { icon: Pill, title: "Food-safe & compliant", body: certLabels || "Food-contact alignment." }
+    ? { icon: Pill, title: "Food-contact considerations", body: certLabels || "Verify documentation for your intended use." }
     : examGrade
       ? { icon: Pill, title: "Exam-grade barrier", body: certLabels || "Medical exam alignment." }
       : {

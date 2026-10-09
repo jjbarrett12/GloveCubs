@@ -1,9 +1,9 @@
 import { Award, Warehouse, Truck, ClipboardCheck, FileText, UserRound } from "lucide-react";
 
 const TILES = [
-  { icon: Award, label: "Authorized distributor" },
+  { icon: Award, label: "Established manufacturer partners" },
   { icon: Warehouse, label: "Repeatable supply programs" },
-  { icon: Truck, label: "Fast fulfillment" },
+  { icon: Truck, label: "Lead times confirmed per quote" },
   { icon: ClipboardCheck, label: "Reviewed sourcing paths" },
   { icon: FileText, label: "Net terms (approved accounts)" },
   { icon: UserRound, label: "Dedicated account support" },

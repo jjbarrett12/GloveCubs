@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import type { StoreCatalogUrlState } from "@/lib/catalog/store-url";
 import { storeCatalogPageLimit } from "@/lib/catalog/store-url";
 import { normalizeStorefrontFilterParams } from "@/lib/catalog/store-params";
@@ -462,7 +463,7 @@ export async function fetchStoreCatalogPage(params: StoreCatalogUrlState): Promi
   const normalized = normalizeStorefrontFilterParams(params);
 
   /** Emergency cost containment: zero catalog PostgREST when set to "1". */
-  if (process.env.GC_EMERGENCY_DISABLE_CATALOG_SUPABASE === "1") {
+  if (isCatalogSupabaseEmergencyDisabled()) {
     return {
       products: [],
       total: 0,
@@ -742,7 +743,7 @@ async function hydrateProductPage(
 /** Hydrate listing rows for a set of catalog_v2 product ids (e.g. PDP related products). */
 export async function fetchStoreProductRowsByIds(productIds: string[]): Promise<StoreProductRow[]> {
   const ids = Array.from(new Set(productIds)).filter(Boolean);
-  if (ids.length === 0 || !isSupabaseConfigured()) return [];
+  if (ids.length === 0 || isCatalogSupabaseEmergencyDisabled() || !isSupabaseConfigured()) return [];
 
   const supabase = getSupabaseAdmin() as any;
   const { data: products, error } = await supabase
@@ -775,7 +776,7 @@ export async function fetchStoreProductCommercialAttrsByProductIds(
   productIds: string[]
 ): Promise<Map<string, StoreProductCommercialAttrs>> {
   const ids = Array.from(new Set(productIds)).filter(Boolean);
-  if (ids.length === 0 || !isSupabaseConfigured()) return new Map();
+  if (ids.length === 0 || isCatalogSupabaseEmergencyDisabled() || !isSupabaseConfigured()) return new Map();
   const supabase = getSupabaseAdmin() as any;
   return fetchCommercialAttrBucketsByProductIds(supabase, ids);
 }

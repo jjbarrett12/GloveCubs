@@ -120,7 +120,7 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { title: "Cold Weather / Freezer", description: "Liners and options for cold prep and walk-in work.", storeHref: getStoreHrefForIntent("store.search.cold_weather") },
     ],
     topCategories: [
-      { label: "Food-Safe Nitrile", storeHref: getStoreHrefForIntent("store.cat.nitrile-gloves") },
+      { label: "Nitrile for food service", storeHref: getStoreHrefForIntent("store.cat.nitrile-gloves") },
       { label: "Black Nitrile", storeHref: getStoreHrefForIntent("store.hospitality.black_nitrile") },
       { label: "Vinyl Gloves", storeHref: getStoreHrefForIntent("store.cat.vinyl-gloves") },
       { label: "Prep & Line", storeHref: getStoreHrefForIntent("store.search.food_prep") },
@@ -136,8 +136,8 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { title: "HACCP-minded choices", description: "Food-safe, powder-free, and single-use options that support your food-safety program." },
     ],
     faq: [
-      { q: "Are these gloves food-safe?", a: "We carry gloves intended for food handling. Choose food-safe nitrile or vinyl and change gloves between tasks per your food-safety policy." },
-      { q: "Why black nitrile for kitchens?", a: "Black nitrile is popular in back-of-house for appearance and durability. We stock food-safe black nitrile in multiple thicknesses." },
+      { q: "Are these gloves food-safe?", a: "Food-contact suitability is SKU-specific. Request pricing with your intended use and we will help source options; verify published documentation against your food-safety policy before use." },
+      { q: "Why black nitrile for kitchens?", a: "Black nitrile is popular in back-of-house for appearance and durability. Confirm pack configuration and any food-contact documentation on the specific SKU before standardizing." },
       { q: "Do you offer case pricing for hospitality?", a: "Yes. Case pricing is standard. Multi-location and high-volume accounts can request custom pricing." },
       {
         q: "How fast can I get restocked?",
@@ -196,7 +196,7 @@ export const INDUSTRIES: Record<IndustryKey, IndustryConfig> = {
       { title: "Dependable supply", description: "Case pricing and high in-stock rates so you don’t run short during peak demand." },
     ],
     faq: [
-      { q: "Are these medical-grade or FDA-approved?", a: "We supply gloves suitable for exam and general clinical use. Check product details for specific certifications. We do not make medical device claims; consult your compliance team for your facility’s requirements." },
+      { q: "Do you publish medical or FDA product claims?", a: "We do not publish blanket medical-device or FDA claims on this site. Ask for the exact SKU documentation required by your facility, and verify suitability for your intended use with your compliance team." },
       { q: "Why powder-free?", a: "Powder-free gloves reduce residue and particulates, which many facilities prefer for exams and procedures and for staff and patient comfort." },
       { q: "Do you have latex-free options?", a: "Yes. We carry latex-free nitrile options for teams and environments where latex sensitivity is a concern." },
       { q: "Can we get case pricing for our facility?", a: "Yes. Case and multi-case pricing is available. Create an account or contact us for facility pricing." },

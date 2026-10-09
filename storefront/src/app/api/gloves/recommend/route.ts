@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendRequestSchema, recommendResponseSchema, type RecommendResponse } from "@/lib/gloves/types";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import {
   getActiveProducts,
   getUseCaseRiskProfiles,
@@ -67,6 +68,16 @@ export async function POST(request: NextRequest) {
     });
 
     const { useCaseKey, answers } = parsed.data;
+
+    if (isCatalogSupabaseEmergencyDisabled()) {
+      return NextResponse.json(
+        {
+          error: "Catalog recommendations are temporarily unavailable. Please request pricing instead.",
+          catalogUnavailable: true,
+        },
+        { status: 503 },
+      );
+    }
 
     if (!isSupabaseConfigured()) {
       return NextResponse.json(

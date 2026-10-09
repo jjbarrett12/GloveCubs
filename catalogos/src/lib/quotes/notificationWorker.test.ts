@@ -1,255 +1,116 @@
-/**
- * Tests for quote notification worker
- */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { QuoteNotificationRow, QuoteRequestRow } from "./types";
+import {
+  NOTIFICATION_NOT_CONFIGURED,
+  deliverQuoteChannelNotification,
+  deliverQuoteEmailNotification,
+} from "./notificationDelivery";
+import { NotificationNotConfiguredError, notifyTeamNewRfq } from "./notifications";
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { QuoteRequestRow, QuoteNotificationRow } from "./types";
-
-// Mock Supabase
-const mockFrom = vi.fn();
-const mockSupabase = {
-  from: mockFrom,
-};
+const updateEq = vi.fn();
+const update = vi.fn(() => ({ eq: updateEq }));
+const selectLimit = vi.fn();
+const selectOrder = vi.fn(() => ({ limit: selectLimit }));
+const selectEq = vi.fn(() => ({ order: selectOrder }));
+const select = vi.fn(() => ({ eq: selectEq }));
+const from = vi.fn((table: string) => {
+  if (table === "quote_notifications") {
+    return { select, update, insert: vi.fn() };
+  }
+  return { select, update };
+});
 
 vi.mock("@/lib/db/client", () => ({
-  getSupabaseCatalogos: vi.fn(() => mockSupabase),
+  getSupabaseCatalogos: vi.fn(() => ({ from })),
 }));
 
-describe("Notification Content Building", () => {
-  const mockQuote: Partial<QuoteRequestRow> = {
-    id: "q1",
-    reference_number: "RFQ-12345678",
-    company_name: "Test Company",
-    contact_name: "John Doe",
-    email: "john@test.com",
-    status: "new",
-    created_at: "2026-03-12T10:00:00Z",
-  };
-
-  it("builds received notification content", () => {
-    const type = "received";
-    const refNum = mockQuote.reference_number;
-    
-    // Verify the expected content structure
-    expect(refNum).toBe("RFQ-12345678");
-    expect(type).toBe("received");
+describe("notificationDelivery", () => {
+  it("email transport returns NOT_CONFIGURED and never success", async () => {
+    const r = await deliverQuoteEmailNotification({ to: "a@b.com", subject: "x" });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.code).toBe(NOTIFICATION_NOT_CONFIGURED);
+    }
   });
 
-  it("builds quoted notification content", () => {
-    const type = "quoted";
-    const refNum = mockQuote.reference_number;
-    
-    expect(refNum).toBeDefined();
-    expect(type).toBe("quoted");
-  });
-
-  it("builds won notification content", () => {
-    const type = "won";
-    expect(type).toBe("won");
-  });
-
-  it("builds lost notification content", () => {
-    const type = "lost";
-    expect(type).toBe("lost");
-  });
-
-  it("builds expired notification content", () => {
-    const type = "expired";
-    expect(type).toBe("expired");
-  });
-
-  it("builds reminder notification content", () => {
-    const type = "reminder";
-    expect(type).toBe("reminder");
+  it("stub channels fail closed", async () => {
+    for (const channel of ["email", "internal", "webhook", "sms"] as const) {
+      const r = await deliverQuoteChannelNotification({
+        channel,
+        to: "ops",
+        subject: "s",
+      });
+      expect(r.success).toBe(false);
+    }
   });
 });
 
-describe("Notification Channel Handling", () => {
-  it("identifies email channel", () => {
-    const notification: Partial<QuoteNotificationRow> = {
+describe("notifications hooks", () => {
+  it("throws typed NOT_CONFIGURED instead of resolving success", async () => {
+    await expect(
+      notifyTeamNewRfq({
+        quoteId: "q",
+        referenceNumber: "RFQ-1",
+        companyName: "Co",
+        contactEmail: "a@b.com",
+        urgency: null,
+      }),
+    ).rejects.toBeInstanceOf(NotificationNotConfiguredError);
+  });
+});
+
+describe("processNotifications truthfulness", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateEq.mockResolvedValue({ error: null });
+  });
+
+  it("marks pending email notifications failed, never sent, when transport unavailable", async () => {
+    const notification: QuoteNotificationRow = {
+      id: "n1",
+      quote_request_id: "q1",
+      notification_type: "received",
       channel: "email",
-      recipient: "test@example.com",
-    };
-    
-    expect(notification.channel).toBe("email");
-    expect(notification.recipient).toContain("@");
-  });
-
-  it("identifies internal channel", () => {
-    const notification: Partial<QuoteNotificationRow> = {
-      channel: "internal",
-      recipient: "admin",
-    };
-    
-    expect(notification.channel).toBe("internal");
-  });
-
-  it("identifies webhook channel", () => {
-    const notification: Partial<QuoteNotificationRow> = {
-      channel: "webhook",
-      recipient: "https://example.com/webhook",
-    };
-    
-    expect(notification.channel).toBe("webhook");
-  });
-
-  it("identifies sms channel", () => {
-    const notification: Partial<QuoteNotificationRow> = {
-      channel: "sms",
-      recipient: "+1234567890",
-    };
-    
-    expect(notification.channel).toBe("sms");
-  });
-});
-
-describe("Notification Status Transitions", () => {
-  it("transitions from pending to sent on success", () => {
-    const notification: Partial<QuoteNotificationRow> = {
+      recipient: "buyer@example.com",
       status: "pending",
-    };
-    
-    expect(notification.status).toBe("pending");
-    
-    // After successful send
-    notification.status = "sent";
-    notification.sent_at = new Date().toISOString();
-    
-    expect(notification.status).toBe("sent");
-    expect(notification.sent_at).toBeDefined();
+      payload: {},
+      error_message: null,
+      sent_at: null,
+      created_at: "2026-07-27T00:00:00Z",
+    } as QuoteNotificationRow;
+
+    const quote: QuoteRequestRow = {
+      id: "q1",
+      reference_number: "RFQ-123",
+      email: "buyer@example.com",
+      company_name: "Co",
+      status: "new",
+    } as QuoteRequestRow;
+
+    selectLimit.mockResolvedValue({
+      data: [{ ...notification, quote_requests: quote }],
+      error: null,
+    });
+
+    const { processNotifications } = await import("./notificationWorker");
+    const result = await processNotifications(10);
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(update).toHaveBeenCalled();
+    const firstCall = (update as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+    const updateArg = firstCall?.[0] as { status?: string; error_message?: string } | undefined;
+    expect(updateArg?.status).toBe("failed");
+    expect(updateArg?.status).not.toBe("sent");
+    expect(String(updateArg?.error_message || "")).toMatch(/not configured/i);
   });
 
-  it("transitions from pending to failed on error", () => {
-    const notification: Partial<QuoteNotificationRow> = {
-      status: "pending",
-    };
-    
-    expect(notification.status).toBe("pending");
-    
-    // After failed send
-    notification.status = "failed";
-    notification.error_message = "SMTP connection failed";
-    
-    expect(notification.status).toBe("failed");
-    expect(notification.error_message).toBeDefined();
-  });
-
-  it("can be skipped", () => {
-    const notification: Partial<QuoteNotificationRow> = {
-      status: "skipped",
-    };
-    
-    expect(notification.status).toBe("skipped");
-  });
-});
-
-describe("Expiring Quote Detection", () => {
-  it("identifies quotes expiring within threshold", () => {
-    const now = new Date();
-    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-    const oneDayFromNow = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-    const fiveDaysFromNow = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
-    
-    const threshold = 3; // days
-    
-    const isExpiringSoon = (expiresAt: Date) => {
-      const daysUntil = (expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000);
-      return daysUntil <= threshold && daysUntil > 0;
-    };
-    
-    expect(isExpiringSoon(oneDayFromNow)).toBe(true);
-    expect(isExpiringSoon(threeDaysFromNow)).toBe(true);
-    expect(isExpiringSoon(fiveDaysFromNow)).toBe(false);
-  });
-
-  it("excludes already expired quotes", () => {
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    
-    const isExpiringSoon = (expiresAt: Date) => {
-      const daysUntil = (expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000);
-      return daysUntil <= 3 && daysUntil > 0;
-    };
-    
-    expect(isExpiringSoon(yesterday)).toBe(false);
-  });
-});
-
-describe("Notification Deduplication", () => {
-  it("checks for existing reminder before queueing", () => {
-    const existingNotifications: Partial<QuoteNotificationRow>[] = [
-      { notification_type: "received", quote_request_id: "q1" },
-      { notification_type: "reminder", quote_request_id: "q1" },
-    ];
-    
-    const hasReminder = existingNotifications.some(
-      n => n.notification_type === "reminder" && n.quote_request_id === "q1"
-    );
-    
-    expect(hasReminder).toBe(true);
-  });
-
-  it("allows queueing reminder if none exists", () => {
-    const existingNotifications: Partial<QuoteNotificationRow>[] = [
-      { notification_type: "received", quote_request_id: "q1" },
-    ];
-    
-    const hasReminder = existingNotifications.some(
-      n => n.notification_type === "reminder" && n.quote_request_id === "q1"
-    );
-    
-    expect(hasReminder).toBe(false);
-  });
-});
-
-describe("Worker Result Tracking", () => {
-  it("tracks processed count", () => {
-    const result = {
-      processed: 0,
-      sent: 0,
-      failed: 0,
-      skipped: 0,
-    };
-    
-    // Process some notifications
-    result.processed = 10;
-    result.sent = 8;
-    result.failed = 1;
-    result.skipped = 1;
-    
-    expect(result.processed).toBe(10);
-    expect(result.sent + result.failed + result.skipped).toBe(10);
-  });
-
-  it("calculates success rate", () => {
-    const result = {
-      processed: 100,
-      sent: 95,
-      failed: 5,
-    };
-    
-    const successRate = result.sent / result.processed;
-    
-    expect(successRate).toBe(0.95);
-  });
-});
-
-describe("URL Building", () => {
-  it("builds correct status URL", () => {
-    const baseUrl = "https://glovecubs.com";
-    const refNum = "RFQ-12345678";
-    
-    const statusUrl = `${baseUrl}/quote/status/${encodeURIComponent(refNum)}`;
-    
-    expect(statusUrl).toBe("https://glovecubs.com/quote/status/RFQ-12345678");
-  });
-
-  it("encodes special characters in reference number", () => {
-    const baseUrl = "https://glovecubs.com";
-    const refNum = "RFQ-TEST/123";
-    
-    const statusUrl = `${baseUrl}/quote/status/${encodeURIComponent(refNum)}`;
-    
-    expect(statusUrl).toContain(encodeURIComponent("/"));
+  it("duplicate worker run does not re-send already failed rows (only pending selected)", async () => {
+    selectLimit.mockResolvedValue({ data: [], error: null });
+    const { processNotifications } = await import("./notificationWorker");
+    const result = await processNotifications(10);
+    expect(result.processed).toBe(0);
+    expect(result.sent).toBe(0);
+    expect(selectEq).toHaveBeenCalledWith("status", "pending");
   });
 });

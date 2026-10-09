@@ -6,6 +6,9 @@ import { resolveUserFromAdminCookies } from "@/lib/auth/post-login-session";
  * Next `/admin/**` gate: any **active** `public.admin_users` row for the current Supabase auth user is treated as a
  * **trusted global operator** (no per-company ACL on these routes yet). Handlers must still avoid leaking secrets in
  * JSON; cross-company reads are intentional for internal ops until real ACLs ship.
+ *
+ * Authorization source of truth: `public.admin_users` via service-role lookup after cookie session resolution.
+ * Do NOT grant admin from `user_metadata`, `app_metadata`, or `@glovecubs.com` email domain — those are not trusted here.
  */
 
 export type AdminAccessResult =
@@ -25,6 +28,7 @@ export async function resolveAdminAccess(): Promise<AdminAccessResult> {
   const user = await resolveUserFromAdminCookies(url, anon, cookieStore);
   if (!user) return { kind: "sign_in_required" };
 
+  // Service-role membership check — never inspect user_metadata / email domain for privilege.
   const supabase = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

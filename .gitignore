@@ -10,7 +10,9 @@
 .env
 .env.*
 !.env.example
+!.env.staging.example
 !**/.env.example
+!**/.env.staging.example
 .DS_Store
 Thumbs.db
 # Supabase CLI local artifacts
@@ -27,6 +29,9 @@ quarantine-plan.json
 quarantine-plan.csv
 .vercel
 .env*.local
+
+# Staging security evidence (may contain identifiers — keep local)
+.artifacts/
 
 # Local storefront scratch / smoke artifacts
 storefront/tmp-*

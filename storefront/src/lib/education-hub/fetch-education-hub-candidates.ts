@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import {
   fetchStoreProductCommercialAttrsByProductIds,
   fetchStoreProductRowsByIds,
@@ -16,8 +17,7 @@ export type EducationHubCatalogFetchResult = {
  * Active published catalog rows for home survey matching — newest first, bounded scan.
  */
 export async function fetchEducationHubCatalogCandidates(): Promise<EducationHubCatalogFetchResult> {
-  /** Emergency cost containment: zero catalog PostgREST when set to "1". */
-  if (process.env.GC_EMERGENCY_DISABLE_CATALOG_SUPABASE === "1") {
+  if (isCatalogSupabaseEmergencyDisabled()) {
     return { candidates: [], catalogUnavailable: true };
   }
 

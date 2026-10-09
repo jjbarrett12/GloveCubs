@@ -4,6 +4,13 @@
  */
 
 import { NextResponse } from "next/server";
+import {
+  evaluateCatalogosAdminAuth,
+  getCatalogosAdminSecret,
+  getCatalogosInternalApiKey,
+  isCatalogosInsecureDevAuthAllowed,
+  isCatalogosProductionLikeRuntime,
+} from "@/lib/auth/catalogos-admin-auth";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -15,42 +22,40 @@ export interface CatalogosSupplierImportAuthContext {
   secretConfigured: boolean;
 }
 
-function tokenFromRequest(req: Request): string | null {
-  const auth = req.headers.get("authorization");
-  if (auth?.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim() || null;
-  }
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const m = cookie.match(/(?:^|;\s*)catalogos_admin=([^;]+)/);
-  return m?.[1] ? decodeURIComponent(m[1].trim()) : null;
-}
-
 /**
- * - When CATALOGOS_ADMIN_SECRET is set: require matching Bearer or catalogos_admin cookie → else 401.
- * - When unset (local dev): allow request through without token.
+ * - Production-like / non-insecure-dev: CATALOGOS_ADMIN_SECRET required; matching Bearer/cookie required.
+ * - Local open access only when CATALOGOS_ALLOW_INSECURE_DEV_AUTH=1 and not production-like.
  * - Always require X-Catalogos-Organization-Id (valid UUID) for supplier-import job routes → else 403.
  * - Optional X-Catalogos-Operator-Id for audit attribution.
  */
 export function requireSupplierImportAuth(
   req: Request
 ): CatalogosSupplierImportAuthContext | NextResponse {
-  const secret = process.env.CATALOGOS_ADMIN_SECRET;
-  const secretConfigured = Boolean(secret && secret.length > 0);
-  if (process.env.NODE_ENV === "production" && !secretConfigured) {
+  const secret = getCatalogosAdminSecret();
+  const secretConfigured = Boolean(secret);
+  const authHeader = req.headers.get("authorization");
+  const bearer =
+    authHeader?.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+  const cookie = req.headers.get("cookie") ?? "";
+  const cookieMatch = cookie.match(/(?:^|;\s*)catalogos_admin=([^;]+)/);
+  const cookieToken = cookieMatch?.[1] ? decodeURIComponent(cookieMatch[1].trim()) : "";
+  const decision = evaluateCatalogosAdminAuth({
+    secret,
+    bearer,
+    cookieToken,
+    apiKey: req.headers.get("x-api-key")?.trim() ?? "",
+    productionLike: isCatalogosProductionLikeRuntime(),
+    allowInsecureDev: isCatalogosInsecureDevAuthAllowed(),
+    internalKey: getCatalogosInternalApiKey(),
+  });
+  if (!decision.ok) {
     return NextResponse.json(
       {
-        error: "Unauthorized",
-        detail: "CATALOGOS_ADMIN_SECRET must be configured for supplier-import APIs in production",
+        error: decision.error,
+        ...(decision.detail ? { detail: decision.detail } : {}),
       },
-      { status: 401 }
+      { status: decision.status },
     );
-  }
-  if (secretConfigured) {
-    const token = tokenFromRequest(req);
-    if (token !== secret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
   }
 
   const organizationId = req.headers.get("x-catalogos-organization-id")?.trim() ?? "";

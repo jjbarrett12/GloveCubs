@@ -31,8 +31,8 @@ type PageProps = {
 /** Request-pricing tiles only (not live SKUs). */
 const STORE_REQUEST_CATEGORY_TILES: { label: string; description: string; intentId: string }[] = [
   {
-    label: "Nitrile exam gloves",
-    description: "Case quantities · powder-free programs",
+    label: "Disposable nitrile programs",
+    description: "Case quantities · powder-free options",
     intentId: "rfq.store.tile.nitrile_exam",
   },
   {
@@ -51,8 +51,8 @@ const STORE_REQUEST_CATEGORY_TILES: { label: string; description: string; intent
     intentId: "rfq.store.tile.janitorial",
   },
   {
-    label: "Medical / exam",
-    description: "Exam-grade and clinical-use programs",
+    label: "Healthcare & clinical buyers",
+    description: "Facility programs · documentation on request",
     intentId: "rfq.store.tile.healthcare",
   },
   {

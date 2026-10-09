@@ -5,14 +5,15 @@ import { getStoreHrefForBrandDisplayNameSearch } from "@/lib/discovery/intent-ro
 
 export const metadata = {
   title: "Brands | GloveCubs",
-  description: "Authorized distributor brands—shop by manufacturer or request a rep-assisted program.",
+  description:
+    "Manufacturer and distribution partner brands—browse when the catalog is available, or request a rep-assisted program.",
 };
 
 export default function BrandsPage() {
   return (
     <PublicSubpageShell
       title="Brands"
-      subtitle="Full brand microsites are on the roadmap. Today you can shop every authorized line in the catalog by brand, or ask us to standardize SKUs for your operation."
+      subtitle="Full brand microsites are on the roadmap. Today you can request pricing by brand preference, or ask us to standardize SKUs for your operation through manufacturer and distribution partners."
       mainClassName="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8"
     >
       <div className="mb-8 rounded-lg border border-[#f06232]/30 bg-[#f06232]/10 px-4 py-3 text-sm text-white/85">

@@ -20,6 +20,10 @@ import {
   deleteOnboardingFile,
   type FileKind,
 } from "@/lib/onboarding/storage";
+import { assertCatalogosAdminAction } from "@/lib/auth/assert-catalogos-admin-action";
+
+/** Signed URL TTL for onboarding private files (seconds). */
+const ONBOARDING_SIGNED_URL_TTL_SEC = 300;
 
 const ONBOARDING_PATHS = ["/dashboard/onboarding", "/dashboard/suppliers", "/dashboard/feeds", "/supplier-intake"];
 
@@ -121,9 +125,21 @@ export async function getOnboardingFileUrlAction(
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   if (options?.byToken && options?.token) {
     const request = await getOnboardingRequestByAccessToken(options.token);
-    if (!request || request.id !== requestId) return { success: false, error: "Invalid or expired link" };
+    if (!request || request.id !== requestId) {
+      return { success: false, error: "Invalid or expired link" };
+    }
+  } else {
+    const admin = await assertCatalogosAdminAction();
+    if (!admin.ok) {
+      return { success: false, error: admin.error };
+    }
   }
-  const url = await getOnboardingFileSignedUrl(requestId, fileId);
+  // Path comes from DB row matched by requestId + fileId (never from client storage path).
+  const url = await getOnboardingFileSignedUrl(
+    requestId,
+    fileId,
+    ONBOARDING_SIGNED_URL_TTL_SEC
+  );
   return url ? { success: true, url } : { success: false, error: "File not found" };
 }
 

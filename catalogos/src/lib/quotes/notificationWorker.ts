@@ -7,6 +7,7 @@
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
 import type { QuoteNotificationRow, QuoteRequestRow } from "./types";
+import { deliverQuoteChannelNotification } from "./notificationDelivery";
 
 export interface NotificationResult {
   notificationId: string;
@@ -20,35 +21,6 @@ export interface WorkerResult {
   failed: number;
   skipped: number;
   results: NotificationResult[];
-}
-
-/**
- * Send email notification (stub - replace with actual email service)
- */
-async function sendEmailNotification(
-  to: string,
-  subject: string,
-  body: string,
-  html?: string
-): Promise<{ success: boolean; error?: string }> {
-  // TODO: Replace with actual email service (SendGrid, Resend, etc.)
-  console.log(`[NotificationWorker] Would send email to ${to}:`);
-  console.log(`  Subject: ${subject}`);
-  console.log(`  Body: ${body.substring(0, 100)}...`);
-  
-  // For now, simulate success
-  // In production, integrate with your email provider:
-  // 
-  // import { Resend } from 'resend';
-  // const resend = new Resend(process.env.RESEND_API_KEY);
-  // const { data, error } = await resend.emails.send({
-  //   from: 'quotes@glovecubs.com',
-  //   to,
-  //   subject,
-  //   html,
-  // });
-  
-  return { success: true };
 }
 
 /**
@@ -161,40 +133,15 @@ async function processNotification(
     // Build content
     const content = buildNotificationContent(notification.notification_type, quote);
     
-    // Send based on channel
-    let result: { success: boolean; error?: string };
-    
-    switch (notification.channel) {
-      case "email":
-        result = await sendEmailNotification(
-          notification.recipient,
-          content.subject,
-          content.body,
-          content.html
-        );
-        break;
-        
-      case "internal":
-        // Internal notifications are just logged
-        console.log(`[Internal Notification] ${notification.notification_type} for ${quote.reference_number}`);
-        result = { success: true };
-        break;
-        
-      case "webhook":
-        // TODO: Implement webhook delivery
-        console.log(`[Webhook] Would call webhook for ${quote.reference_number}`);
-        result = { success: true };
-        break;
-        
-      case "sms":
-        // TODO: Implement SMS delivery
-        console.log(`[SMS] Would send SMS to ${notification.recipient}`);
-        result = { success: true };
-        break;
-        
-      default:
-        result = { success: false, error: `Unknown channel: ${notification.channel}` };
-    }
+    // Send based on channel — never mark sent unless transport confirms success.
+    const result = await deliverQuoteChannelNotification({
+      channel: notification.channel,
+      to: notification.recipient,
+      subject: content.subject,
+    });
+    // content.body/html reserved for future real transport; unused while NOT_CONFIGURED.
+    void content.body;
+    void content.html;
     
     // Update notification status
     if (result.success) {
@@ -202,16 +149,20 @@ async function processNotification(
         .from("quote_notifications")
         .update({ status: "sent", sent_at: new Date().toISOString() })
         .eq("id", notification.id);
-    } else {
-      await supabase
-        .from("quote_notifications")
-        .update({ status: "failed", error_message: result.error })
-        .eq("id", notification.id);
+      return {
+        notificationId: notification.id,
+        success: true,
+      };
     }
-    
+
+    await supabase
+      .from("quote_notifications")
+      .update({ status: "failed", error_message: result.error })
+      .eq("id", notification.id);
+
     return {
       notificationId: notification.id,
-      success: result.success,
+      success: false,
       error: result.error,
     };
     

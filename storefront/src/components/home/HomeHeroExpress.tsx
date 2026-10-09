@@ -34,7 +34,7 @@ export function HomeHeroExpress() {
                 Who Buy by the Case
               </h1>
               <p className="mb-8 max-w-lg text-lg leading-relaxed text-white/78 sm:text-xl">
-                Category expertise, invoice intelligence, and nationwide B2B programs—lead times and formal pricing confirmed
+                Category expertise, invoice intelligence, and B2B programs—lead times and formal pricing confirmed
                 per quote for operators who buy by the case and pallet.
               </p>
 

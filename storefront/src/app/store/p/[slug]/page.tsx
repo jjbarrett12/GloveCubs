@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   enrichStoreProductDetailBuyerPricing,
   fetchStoreProductDetail,
 } from "@/lib/catalog/store-product-detail";
 import { StorePdpContent } from "@/components/store/pdp/StorePdpContent";
+import { StorePageShell } from "@/components/store/StorePageShell";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isCatalogSupabaseEmergencyDisabled } from "@/lib/catalog/emergency-catalog-kill-switch";
 import {
   assertCustomerCompanyAccess,
   resolveCustomerProcurementGate,
@@ -22,6 +25,12 @@ function siteOrigin(): string | null {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  if (isCatalogSupabaseEmergencyDisabled()) {
+    return {
+      title: "Catalog temporarily unavailable | GloveCubs",
+      robots: { index: false, follow: true },
+    };
+  }
   const detail = await fetchStoreProductDetail(params.slug);
   if (!detail) {
     return {
@@ -49,7 +58,38 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return meta;
 }
 
+function CatalogUnavailablePdp() {
+  return (
+    <main className="py-8 sm:py-10">
+      <StorePageShell>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-5 text-sm text-amber-950">
+          <p className="m-0 text-base font-semibold">Catalog listings are temporarily unavailable</p>
+          <p className="mt-2 m-0 leading-relaxed">
+            Product pages are paused while we contain catalog infrastructure load. Request pricing or upload an
+            invoice and our team will help source the right products.
+          </p>
+          <p className="mt-3 m-0 flex flex-wrap gap-3">
+            <Link href="/request-pricing" className="font-semibold text-[#f06232] hover:underline">
+              Request pricing
+            </Link>
+            <Link href="/invoice-savings" className="font-semibold text-[#f06232] hover:underline">
+              Upload invoice
+            </Link>
+            <Link href="/quote-cart" className="font-semibold text-[#f06232] hover:underline">
+              Quote cart
+            </Link>
+          </p>
+        </div>
+      </StorePageShell>
+    </main>
+  );
+}
+
 export default async function StoreProductPage({ params }: PageProps) {
+  if (isCatalogSupabaseEmergencyDisabled()) {
+    return <CatalogUnavailablePdp />;
+  }
+
   let detail = await fetchStoreProductDetail(params.slug);
   if (!detail) notFound();
 
