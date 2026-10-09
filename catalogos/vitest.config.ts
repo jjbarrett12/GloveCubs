@@ -11,6 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@ssrf-safe-fetch": path.resolve(__dirname, "../lib/ssrf-safe-fetch/index.ts"),
+      "@invoice-line-parse": path.resolve(__dirname, "../lib/invoice-line-parse/index.ts"),
       "@commerce-packaging": path.resolve(__dirname, "../lib/commerce-packaging"),
       "@commerce-packaging/extract": path.resolve(__dirname, "../lib/commerce-packaging/extract.ts"),
       "@commerce-packaging/labels": path.resolve(__dirname, "../lib/commerce-packaging/labels.ts"),

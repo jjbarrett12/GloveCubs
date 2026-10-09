@@ -216,6 +216,7 @@ export async function mergeDuplicateProducts(
     const movePatch = buildSupplierOfferUpsertRow(
       {
         product_id: keepProductId,
+        catalog_variant_id: null,
         updated_at: new Date().toISOString(),
         cost: nextCost,
         sell_price: nextSell,

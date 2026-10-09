@@ -69,27 +69,45 @@ export async function aiGloveFinder(
   }
 }
 
+export const INVOICE_EXTRACT_PROMPT =
+  "Extract fields from this invoice. Return JSON with: vendor_name, invoice_number, invoice_date (YYYY-MM-DD or null), po_number, subtotal, discounts, freight, tax, total_amount, lines. Each line: description, quantity, quantity_uom (EA|BX|CS or null), unit_price, total, sku_or_code, manufacturer_sku, supplier_sku, manufacturer, brand, gloves_per_box, boxes_per_case, gloves_per_case, pack_notation, material, color, size, thickness_mil, grade, powder, texture, cuff, certifications. Use numbers for numeric fields. If a field is not clearly present, use null. Do not guess thickness, case pack, manufacturer, certifications, or equivalent products.";
+
 export async function aiExtractInvoice(
   imageBase64: string,
-  mimeType: string
+  mimeType: string,
+  filename = "invoice",
 ): Promise<AiExtractInvoiceResult> {
   if (PROVIDER !== "openai") return { ok: false, error: "AI_PROVIDER not supported" };
+  const mime = mimeType.trim().toLowerCase();
+  if (mime === "image/png" && filename.toLowerCase().endsWith(".pdf")) {
+    return { ok: false, error: "PDF must not be labeled as image/png" };
+  }
   try {
     const openai = await import("./openai");
-    const mediaType = mimeType.startsWith("image/") ? mimeType : "image/png";
-    const messages: ChatMessage[] = [
-      {
-        role: "system",
-        content:
-          "Extract line items from this invoice. Return a JSON object with: vendor_name (string or null), invoice_number (string or null), total_amount (number or null), lines (array of { description, quantity, unit_price, total, sku_or_code }). Use numbers for quantity, unit_price, total. If a field is missing use null.",
-      },
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
-        ],
-      } as ChatMessage,
-    ];
+    let userContent: ChatMessage["content"];
+    if (mime === "application/pdf") {
+      userContent = [
+        {
+          type: "file",
+          file: {
+            filename: filename.toLowerCase().endsWith(".pdf") ? filename : "invoice.pdf",
+            file_data: `data:application/pdf;base64,${imageBase64}`,
+          },
+        },
+        { type: "text", text: INVOICE_EXTRACT_PROMPT },
+      ] as unknown as ChatMessage["content"];
+    } else if (mime.startsWith("image/")) {
+      userContent = [
+        { type: "image_url", image_url: { url: `data:${mime};base64,${imageBase64}` } },
+        { type: "text", text: INVOICE_EXTRACT_PROMPT },
+      ] as unknown as ChatMessage["content"];
+    } else {
+      return { ok: false, error: `Unsupported extract MIME: ${mime}` };
+    }
+    const messages = [
+      { role: "system", content: INVOICE_EXTRACT_PROMPT },
+      { role: "user", content: userContent },
+    ] as ChatMessage[];
     const { content } = await openai.chatJsonSimple({ messages });
     const parsed = invoiceExtractResponseSchema.parse(content);
     return { ok: true, data: parsed };

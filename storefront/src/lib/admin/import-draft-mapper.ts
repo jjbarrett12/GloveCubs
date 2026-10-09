@@ -1,9 +1,7 @@
 import { extractProductFromHtml, type ExtractionResult, type ExtractedProductData, type ExtractedSizeOption } from "@/lib/admin/productExtraction";
 import { attachSkuProposalsToDraft } from "@/lib/admin/variant-sku-intelligence";
-import {
-  normalizeGloveSizeCode,
-  sortGloveSizeCodes,
-} from "@/lib/admin/glove-size-normalization";
+import { sortGloveSizeCodes } from "@/lib/admin/glove-size-normalization";
+import { normalizeSizeCode } from "@/lib/admin/normalize-size-code";
 import {
   IMPORT_DRAFT_PARSER_VERSION,
   IMPORT_DRAFT_SCHEMA_VERSION,
@@ -13,7 +11,7 @@ import {
   type StagingExtractedPayloadV1,
 } from "@/lib/admin/import-draft-types";
 
-const KNOWN_SIZE_CODES = new Set<string>(["XS", "S", "M", "L", "XL", "XXL", "XXXL", "OS", "UNKNOWN"]);
+export { normalizeSizeCode } from "@/lib/admin/normalize-size-code";
 
 function provenanceFromScores(
   field: string,
@@ -96,19 +94,6 @@ export function isExplicitOneSize(sizeLabel: string | null, normalizedCode: stri
   if (normalizedCode === "OS") return true;
   if (!sizeLabel) return false;
   return /\bone[\s-]?size\b/i.test(sizeLabel) || /\b(?:^|\s)os(?:\s|$)\b/i.test(sizeLabel);
-}
-
-export function normalizeSizeCode(raw: string | null | undefined): string | null {
-  if (!raw?.trim()) return null;
-  const t = raw.trim();
-  const upper = t.toUpperCase();
-  if (KNOWN_SIZE_CODES.has(upper)) return upper;
-  const lower = t.toLowerCase();
-  if (/\bone[\s-]?size\b/i.test(lower)) return "OS";
-  const glove = normalizeGloveSizeCode(t);
-  if (glove) return glove;
-  if (/^\d+(\.\d+)?$/.test(t)) return t;
-  return upper.length <= 6 ? upper : null;
 }
 
 function buildVariantFromSizeOption(

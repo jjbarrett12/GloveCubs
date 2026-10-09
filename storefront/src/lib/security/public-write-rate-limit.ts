@@ -68,4 +68,6 @@ export const PUBLIC_WRITE_LIMITS = {
   },
   /** Find-my-glove wizard: 5 / 10 minutes / IP */
   glovesRecommend: { key: "gloves-recommend", limit: 5, windowMs: 10 * 60 * 1000 },
+  /** Prep-line glove finder: same bound; in-process (pair with Vercel WAF). */
+  gloveFinder: { key: "glove-finder", limit: 5, windowMs: 10 * 60 * 1000 },
 } as const;

@@ -8,6 +8,12 @@ import { aiExtractInvoice } from "@/lib/ai/provider";
 import { logAiEvent } from "@/lib/ai/telemetry";
 import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
 import type { InvoiceExtractResponse } from "@/lib/ai/schemas";
+import { enrichExtractWithParser, headerProvenance, parseInvoiceDate } from "@/lib/invoice/enrich-extract";
+import { persistInvoiceOriginal } from "@/lib/invoice/persist-original";
+import {
+  INVOICE_INTAKE_MAX_BYTES,
+  validateInvoiceUpload,
+} from "@/lib/invoice/file-validate";
 import {
   INVOICE_INTAKE_EXTRACTION_VERSION,
   type IntakeStatus,
@@ -31,15 +37,7 @@ import { logPublicFunnel } from "@/lib/observability/public-funnel-log";
 import { resolveActiveCompanyId } from "@/lib/procurement/repo-active-company-resolve";
 import { getAdminNotificationEmail, isSmtpConfigured, sendSmtpMail } from "@/lib/email/smtp";
 
-export const INVOICE_INTAKE_MAX_BYTES = 10 * 1024 * 1024;
-const MAX_FILE_SIZE = INVOICE_INTAKE_MAX_BYTES;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
-
-function normalizeInvoiceMime(mime: string): string {
-  const m = mime.trim().toLowerCase();
-  if (m === "image/jpg") return "image/jpeg";
-  return m;
-}
+export { INVOICE_INTAKE_MAX_BYTES };
 
 export type RunInvoiceIntakeFile = {
   buffer: Buffer;
@@ -211,6 +209,9 @@ function buildContract(params: {
     idempotent_replay: params.idempotentReplay,
     vendor_name: params.extract?.vendor_name ?? null,
     invoice_number: params.extract?.invoice_number ?? null,
+    invoice_date:
+      parseInvoiceDate(params.extract?.invoice_date) ??
+      parseInvoiceDate(typeof r.invoice_date === "string" ? r.invoice_date : null),
     total_amount: params.extract?.total_amount ?? null,
     lines: params.extract?.lines ?? [],
     persisted_line_count: r.line_count_persisted == null ? null : Number(r.line_count_persisted),
@@ -235,38 +236,24 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   const { supabase, file } = input;
   const buf = file.buffer;
   const idemPrefix = input.idempotencyKeyHeader?.trim().slice(0, 48) || null;
-  if (buf.length > MAX_FILE_SIZE) {
+  const validated = validateInvoiceUpload(buf);
+  if (!validated.ok) {
     logPublicFunnel("invoice_intake", "validate_rejected", {
-      reason: "file_too_large",
+      reason: validated.code.toLowerCase(),
+      mime_type: file.mimeType || null,
       byte_size: buf.length,
-      max_bytes: MAX_FILE_SIZE,
       idempotency_key_prefix: idemPrefix,
     });
     return {
       ok: false,
-      status: 413,
+      status: validated.status,
       body: {
-        error: "File too large (max 10MB)",
-        code: "FILE_TOO_LARGE",
+        error: validated.error,
+        code: validated.code,
       },
     };
   }
-  const mt = normalizeInvoiceMime(file.mimeType || "application/octet-stream");
-  if (!ALLOWED_TYPES.has(mt)) {
-    logPublicFunnel("invoice_intake", "validate_rejected", {
-      reason: "unsupported_media_type",
-      mime_type: mt,
-      idempotency_key_prefix: idemPrefix,
-    });
-    return {
-      ok: false,
-      status: 415,
-      body: {
-        error: "Allowed: JPEG, PNG, WebP, or PDF",
-        code: "UNSUPPORTED_MEDIA_TYPE",
-      },
-    };
-  }
+  const mt = validated.mime;
 
   const contentSha256 = sha256Hex(buf);
   const ephemeralId = randomUUID();
@@ -393,7 +380,6 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   }
   opportunityId = created.id;
 
-  const invoiceDate = new Date().toISOString().split("T")[0];
   let intakeRow: Record<string, unknown> | null = null;
   try {
     const { data, error } = await supabase
@@ -404,12 +390,13 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
         created_by_user_id: identity.user_id,
         payload: {
           vendor: "Unknown",
-          invoice_date: invoiceDate,
+          invoice_date: null,
           total_amount: null,
           notes: "",
           line_items: [] as unknown[],
           intake_phase: 1,
         },
+        invoice_date: null,
         content_sha256: contentSha256,
         idempotency_key: idempotencyKey,
         idempotency_scope: idempotencyScope,
@@ -469,6 +456,32 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
 
   const uploadedInvoiceId = String(intakeRow!.id);
 
+  const original = await persistInvoiceOriginal({
+    supabase,
+    companyId: identity.company_id,
+    intakeId: uploadedInvoiceId,
+    sha256: contentSha256,
+    mime: mt,
+    buffer: buf,
+  });
+  if (original.stored) {
+    await supabase
+      .schema("gc_commerce")
+      .from("uploaded_invoices")
+      .update({
+        storage_bucket: original.bucket,
+        storage_object_path: original.path,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", uploadedInvoiceId);
+  } else if (original.reason !== "no_storage_client") {
+    logPublicFunnel("invoice_intake", "original_persist_failed", {
+      intake_id: uploadedInvoiceId,
+      opportunity_id: opportunityId,
+      reason: original.reason.slice(0, 200),
+    });
+  }
+
   const { data: oppRow } = await supabase.from("procurement_opportunities").select("metadata").eq("id", opportunityId).single();
   const prevMeta = (oppRow?.metadata as Record<string, unknown> | undefined) ?? {};
   await updateProcurementOpportunity(supabase, opportunityId, {
@@ -516,13 +529,12 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   await maybeWriteDebugTmp(buf, file.filename);
 
   const base64 = buf.toString("base64");
-  const visionMime = mt.startsWith("image/") ? mt : mt === "application/pdf" ? "application/pdf" : "image/png";
   const extractStart = Date.now();
   let extract: InvoiceExtractResponse | null = null;
   let extractOk = false;
   let extractErr: string | null = null;
   try {
-    const result = await aiExtractInvoice(base64, visionMime);
+    const result = await aiExtractInvoice(base64, mt, file.filename);
     const latencyMs = Date.now() - extractStart;
     if (!result.ok) {
       extractErr = result.error;
@@ -536,7 +548,7 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
       }).catch(() => {});
     } else {
       extractOk = true;
-      extract = result.data;
+      extract = enrichExtractWithParser(result.data);
       await logAiEvent(supabase, {
         event_type: "invoice_extract",
         model_used: OPENAI_CHAT_MODEL,
@@ -569,13 +581,21 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
   });
 
   const intakeStatus: IntakeStatus = extractOk ? "extracted_ok" : "extracted_failed";
+  const extractedInvoiceDate = parseInvoiceDate(extract?.invoice_date);
   const mergedPayload = {
     ...((intakeRow!.payload as Record<string, unknown>) ?? {}),
     vendor: extract?.vendor_name ?? "Unknown",
-    invoice_date: invoiceDate,
+    invoice_date: extractedInvoiceDate,
+    po_number: extract?.po_number ?? null,
+    subtotal: extract?.subtotal ?? null,
+    discounts: extract?.discounts ?? null,
+    freight: extract?.freight ?? null,
+    tax: extract?.tax ?? null,
     total_amount: extract?.total_amount ?? null,
     line_items: extract?.lines ?? [],
     last_extract: extract,
+    original_stored: original.stored,
+    field_provenance: extract ? headerProvenance(extract) : null,
   };
 
   await supabase
@@ -588,6 +608,12 @@ export async function runInvoiceIntake(input: RunInvoiceIntakeInput): Promise<Ru
       extracted_at: new Date().toISOString(),
       extraction_error: extractErr,
       payload: mergedPayload,
+      invoice_date: extractedInvoiceDate,
+      po_number: extract?.po_number ?? null,
+      subtotal: extract?.subtotal ?? null,
+      discounts: extract?.discounts ?? null,
+      freight: extract?.freight ?? null,
+      tax: extract?.tax ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", uploadedInvoiceId);

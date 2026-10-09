@@ -15,6 +15,7 @@ import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
   unitsPerCaseFromStagingNormalizedContent,
+  withResolvedCatalogVariantId,
 } from "../../../../../lib/supplier-offer-normalization";
 
 export interface PublishInput {
@@ -101,6 +102,7 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     }
 
     let masterId = row.master_product_id;
+    let catalogVariantId: string | null = null;
 
     if (!masterId) {
       const sku = String(norm.sku ?? "").trim() || `COS-${row.id.slice(0, 8)}`;
@@ -140,17 +142,23 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
       }
       masterId = newMaster.id as string;
 
-      const { error: vErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
-        catalog_product_id: masterId,
-        variant_sku: sku,
-        sort_order: 0,
-        is_active: true,
-        metadata: {},
-      });
-      if (vErr) {
-        errors.push(`Staging ${stagingId}: catalog_variants: ${vErr.message}`);
+      const { data: insertedVariant, error: vErr } = await admin
+        .schema("catalog_v2")
+        .from("catalog_variants")
+        .insert({
+          catalog_product_id: masterId,
+          variant_sku: sku,
+          sort_order: 0,
+          is_active: true,
+          metadata: {},
+        })
+        .select("id")
+        .single();
+      if (vErr || !insertedVariant) {
+        errors.push(`Staging ${stagingId}: catalog_variants: ${vErr?.message ?? "insert failed"}`);
         continue;
       }
+      catalogVariantId = (insertedVariant as { id: string }).id;
 
       await catalogos
         .from("supplier_products_normalized")
@@ -159,6 +167,16 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
           updated_at: new Date().toISOString(),
         })
         .eq("id", stagingId);
+    } else {
+      const { data: existingVariants } = await publicClient
+        .schema("catalog_v2")
+        .from("catalog_variants")
+        .select("id")
+        .eq("catalog_product_id", masterId);
+      const rows = (existingVariants ?? []) as Array<{ id: string }>;
+      if (rows.length === 1) {
+        catalogVariantId = rows[0]!.id;
+      }
     }
 
     const supplierSku = String(norm.sku ?? row.id).trim();
@@ -166,19 +184,22 @@ export async function publishStagingCatalogos(input: PublishInput): Promise<Publ
     const sellUnit = pricing?.sell_unit ?? "case";
     const offerCostBasis = costBasisFromSellUnit(sellUnit);
     const unitsPer = unitsPerCaseFromStagingNormalizedContent(norm as Record<string, unknown>, attrs as Record<string, unknown>);
-    const offerRow = buildSupplierOfferUpsertRow(
-      {
-        supplier_id: row.supplier_id,
-        product_id: masterId,
-        supplier_sku: supplierSku,
-        cost,
-        sell_price: cost,
-        raw_id: row.raw_id,
-        normalized_id: row.id,
-        is_active: true,
-        units_per_case: unitsPer ?? null,
-      },
-      { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
+    const offerRow = withResolvedCatalogVariantId(
+      buildSupplierOfferUpsertRow(
+        {
+          supplier_id: row.supplier_id,
+          product_id: masterId,
+          supplier_sku: supplierSku,
+          cost,
+          sell_price: cost,
+          raw_id: row.raw_id,
+          normalized_id: row.id,
+          is_active: true,
+          units_per_case: unitsPer ?? null,
+        },
+        { currency_code: "USD", cost_basis: offerCostBasis, cost, units_per_case: unitsPer }
+      ),
+      catalogVariantId
     );
     const { error: offerErr } = await catalogos.from("supplier_offers").upsert(offerRow, {
       onConflict: "supplier_id,product_id,supplier_sku",

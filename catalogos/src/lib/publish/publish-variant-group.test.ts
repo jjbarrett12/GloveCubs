@@ -164,7 +164,16 @@ describe("runPublishVariantGroup partial batch contract", () => {
             };
           }
           if (table === "catalog_variants") {
-            return { insert: vi.fn().mockResolvedValue({ error: null }) };
+            return {
+              insert: vi.fn(() => ({
+                select: vi.fn(() => ({
+                  single: vi.fn().mockResolvedValue({
+                    data: { id: "dddddddd-dddd-dddd-dddd-dddddddddddd" },
+                    error: null,
+                  }),
+                })),
+              })),
+            };
           }
           throw new Error(`unexpected catalog_v2 table in publish-variant-group mock: ${table}`);
         }),

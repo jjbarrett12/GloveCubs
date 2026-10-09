@@ -111,16 +111,25 @@ describe("runManualPostActiveSideEffects", () => {
     }
   });
 
-  it("upserts supplier offer when supplier id is configured", async () => {
+  it("skips supplier offer when manufacturer SKU is unknown", async () => {
     const prev = process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID;
     process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
     const upsert = vi.fn().mockResolvedValue({ error: null });
     const supabase = {
       schema: vi.fn((schema: string) => ({
-        from: vi.fn(() => ({
-          upsert,
-        })),
+        from: vi.fn((table: string) => {
+          if (table === "catalog_variants") {
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockResolvedValue({
+                data: [{ id: "var-1", variant_sku: "GLV-ACME-M" }],
+                error: null,
+              }),
+            };
+          }
+          return { upsert };
+        }),
       })),
     };
 
@@ -136,12 +145,63 @@ describe("runManualPostActiveSideEffects", () => {
     process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID = prev;
 
     expect(result.ok).toBe(true);
-    expect(upsert).toHaveBeenCalled();
+    if (result.ok) {
+      expect(result.skipped).toContain("supplier_sku_missing");
+    }
+    const offerCall = upsert.mock.calls.find((call) => {
+      const row = call[0] as Record<string, unknown>;
+      return row.product_id === "prod-1";
+    });
+    expect(offerCall).toBeUndefined();
+  });
+
+  it("upserts supplier offer with manufacturer SKU and catalog_variant_id", async () => {
+    const prev = process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID;
+    process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = {
+      schema: vi.fn((schema: string) => ({
+        from: vi.fn((table: string) => {
+          if (table === "catalog_variants") {
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockResolvedValue({
+                data: [{ id: "var-1", variant_sku: "GLV-ACME-M" }],
+                error: null,
+              }),
+            };
+          }
+          return { upsert };
+        }),
+      })),
+    };
+
+    const result = await runManualPostActiveSideEffects({
+      supabase,
+      productId: "prod-1",
+      input: activeInput({
+        variants: [
+          { sizeCode: "M", variantSku: "GLV-ACME-M", listPrice: "", manufacturerSku: "GL-N125F-M" },
+        ],
+      }),
+      metadata: {},
+      internalSku: "GC-ABC123",
+      productName: "Nitrile Glove",
+    });
+
+    process.env.GLOVECUBS_MANUAL_PUBLISH_SUPPLIER_ID = prev;
+
+    expect(result.ok).toBe(true);
     const offerCall = upsert.mock.calls.find((call) => {
       const row = call[0] as Record<string, unknown>;
       return row.product_id === "prod-1";
     });
     expect(offerCall).toBeTruthy();
+    const row = offerCall![0] as Record<string, unknown>;
+    expect(row.supplier_sku).toBe("GL-N125F-M");
+    expect(row.catalog_variant_id).toBe("var-1");
+    expect(row.supplier_sku).not.toBe("GLV-ACME-M");
   });
 
   it("skips supplier offer safely when supplier id is missing", async () => {
@@ -179,11 +239,14 @@ describe("manual offer helpers", () => {
     const row = buildManualSupplierOfferRow({
       supplierId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       productId: "prod-1",
-      supplierSku: "GLV-ACME-M",
+      supplierSku: "GL-N125F-L",
+      catalogVariantId: "11111111-1111-4111-8111-111111111111",
       casePrice: 42,
       unitsPerCase: 1000,
     });
     expect(row.supplier_id).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(row.supplier_sku).toBe("GL-N125F-L");
+    expect(row.catalog_variant_id).toBe("11111111-1111-4111-8111-111111111111");
     expect(row.cost_basis).toBe("per_case");
     expect(row.currency_code).toBe("USD");
   });
@@ -194,8 +257,16 @@ describe("manual offer helpers", () => {
     expect(pricing.unitsPerCase).toBe(1000);
   });
 
-  it("resolveManualSupplierSku prefers variant sku", () => {
-    expect(resolveManualSupplierSku(activeInput(), "GC-PARENT")).toBe("GLV-ACME-M");
+  it("resolveManualSupplierSku uses manufacturer SKU, not GloveCubs variant SKU", () => {
+    expect(resolveManualSupplierSku(activeInput(), "GC-PARENT")).toBeNull();
+    expect(
+      resolveManualSupplierSku(
+        activeInput({
+          variants: [{ sizeCode: "M", variantSku: "GLV-ACME-M", listPrice: "", manufacturerSku: "GL-N125F-M" }],
+        }),
+        "GC-PARENT"
+      )
+    ).toBe("GL-N125F-M");
   });
 
   it("resolveManualPublishSupplierId returns null when env unset", () => {

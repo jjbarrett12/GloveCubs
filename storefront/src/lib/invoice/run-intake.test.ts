@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
 import { recordInvoiceIntakeSpine } from "@/lib/procurement/spine-writes";
 import { ProcurementEventType } from "@/lib/procurement/event-taxonomy";
 import { runInvoiceIntake } from "@/lib/invoice/run-intake";
+import { minimalPdfBuffer } from "@/lib/invoice/file-validate";
 import * as aiProvider from "@/lib/ai/provider";
 
 describe("recordInvoiceIntakeSpine", () => {
@@ -168,7 +171,7 @@ describe("runInvoiceIntake", () => {
       },
       idempotencyKeyHeader: "idem-x",
       anonymousSessionId: null,
-      file: { buffer: Buffer.from("x"), filename: "f.pdf", mimeType: "application/pdf" },
+      file: { buffer: minimalPdfBuffer(1), filename: "f.pdf", mimeType: "application/pdf" },
     });
 
     expect(extractSpy).not.toHaveBeenCalled();
@@ -239,7 +242,7 @@ describe("runInvoiceIntake", () => {
       },
       idempotencyKeyHeader: "new-key",
       anonymousSessionId: null,
-      file: { buffer: Buffer.from("same-bytes"), filename: "a.pdf", mimeType: "application/pdf" },
+      file: { buffer: minimalPdfBuffer(1), filename: "a.pdf", mimeType: "application/pdf" },
     });
 
     expect(result.ok).toBe(false);
@@ -298,7 +301,7 @@ describe("runInvoiceIntake", () => {
       },
       idempotencyKeyHeader: "shared-client-key",
       anonymousSessionId: null,
-      file: { buffer: Buffer.from("x"), filename: "f.pdf", mimeType: "application/pdf" },
+      file: { buffer: minimalPdfBuffer(1), filename: "f.pdf", mimeType: "application/pdf" },
     });
 
     // Must not succeed as a cross-tenant replay; create path fails closed without leaking.
@@ -307,5 +310,34 @@ describe("runInvoiceIntake", () => {
       expect(result.body.error).not.toBe("incomplete_intake");
     }
     expect(extractSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects disguised files before calling AI", async () => {
+    const extractSpy = vi.spyOn(aiProvider, "aiExtractInvoice").mockRejectedValue(new Error("AI must not run"));
+    const result = await runInvoiceIntake({
+      supabase: {},
+      identityOverride: {
+        authenticated: true,
+        company_id: "co-1",
+        user_id: "user-1",
+        anonymous_session_id: null,
+      },
+      idempotencyKeyHeader: "k",
+      anonymousSessionId: null,
+      file: { buffer: Buffer.from("MZ not a pdf"), filename: "f.pdf", mimeType: "application/pdf" },
+    });
+    expect(extractSpy).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(415);
+      expect(result.body.code).toBe("UNSUPPORTED_MEDIA_TYPE");
+    }
+  });
+
+  it("never writes today's date as a stand-in invoice_date", () => {
+    const src = readFileSync(path.join(__dirname, "run-intake.ts"), "utf8");
+    expect(src).not.toMatch(/const invoiceDate = new Date\(/);
+    expect(src).not.toMatch(/invoice_date:\s*invoiceDate/);
+    expect(src).toMatch(/parseInvoiceDate/);
   });
 });

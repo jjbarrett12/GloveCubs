@@ -5,6 +5,8 @@
 
 import { OPENCLAW_CONFIG } from "@/lib/openclaw/config";
 
+import { ssrfSafeFetch } from "@ssrf-safe-fetch";
+
 const IMAGE_EXT = /\.(jpe?g|png|webp)(\?|#|$)/i;
 
 /** True when path suggests a raster image (query/hash allowed). */
@@ -17,44 +19,15 @@ export function isLikelyImageUrlByPath(urlString: string): boolean {
   }
 }
 
-const BLOCKED_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "metadata.google.internal",
-  "169.254.169.254",
-]);
-
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (BLOCKED_HOSTS.has(h)) return true;
-  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
-  return false;
-}
-
-/** HEAD request: returns true when Content-Type is image/*. Same host safety as OpenClaw fetch. */
+/** HEAD request: returns true when Content-Type is image/*. SSRF-safe (DNS + redirect hops). */
 export async function isImageContentTypeByHead(urlString: string): Promise<boolean> {
-  try {
-    const url = new URL(urlString.trim());
-    if (!["http:", "https:"].includes(url.protocol)) return false;
-    if (isPrivateHost(url.hostname)) return false;
-
-    const controller = new AbortController();
-    const to = setTimeout(() => controller.abort(), Math.min(8000, OPENCLAW_CONFIG.fetch_timeout_ms));
-    const res = await fetch(urlString, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "User-Agent": OPENCLAW_CONFIG.user_agent },
-    });
-    clearTimeout(to);
-    const ct = (res.headers.get("content-type") ?? "").toLowerCase();
-    return ct.startsWith("image/");
-  } catch {
-    return false;
-  }
+  const res = await ssrfSafeFetch(urlString, {
+    method: "HEAD",
+    timeoutMs: Math.min(8000, OPENCLAW_CONFIG.fetch_timeout_ms),
+    headers: { "User-Agent": OPENCLAW_CONFIG.user_agent },
+  });
+  if (!res.ok) return false;
+  return res.content_type.toLowerCase().startsWith("image/");
 }
 
 export async function shouldIngestUrlAsImage(urlString: string): Promise<boolean> {

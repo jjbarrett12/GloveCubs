@@ -15,6 +15,7 @@ import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
   unitsPerCaseFromStagingNormalizedContent,
+  withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
 import type { SearchPublishStatus } from "./types";
 import { resolvePublishSkusFromStaging } from "@/lib/sku-intelligence/publish-sku-apply";
@@ -310,22 +311,28 @@ async function runPublishVariantGroupAddVariants(params: {
 
     const productId = (inserted as { id: string }).id;
 
-    const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
-      catalog_product_id: productId,
-      variant_sku: variantSku,
-      sort_order: 0,
-      is_active: true,
-      metadata: manufacturerSku ? { manufacturer_sku: manufacturerSku } : {},
-    });
-    if (vInsErr) {
+    const { data: insertedVariant, error: vInsErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_variants")
+      .insert({
+        catalog_product_id: productId,
+        variant_sku: variantSku,
+        sort_order: 0,
+        is_active: true,
+        metadata: manufacturerSku ? { manufacturer_sku: manufacturerSku } : {},
+      })
+      .select("id")
+      .single();
+    if (vInsErr || !insertedVariant) {
       return {
         success: false,
         familyId: params.familyId,
         productIds,
-        error: `catalog_variants ${variantSku}: ${vInsErr.message}`,
+        error: `catalog_variants ${variantSku}: ${vInsErr?.message ?? "failed"}`,
         warnings: params.warnings.length ? params.warnings : undefined,
       };
     }
+    const catalogVariantId = (insertedVariant as { id: string }).id;
     productIds.push(productId);
 
     const { errors: attrErrors } = await syncProductAttributesFromStaged(
@@ -362,19 +369,22 @@ async function runPublishVariantGroupAddVariants(params: {
       nd as Record<string, unknown>,
       mergedAttrs as Record<string, unknown>
     );
-    const offerRow = buildSupplierOfferUpsertRow(
-      {
-        supplier_id: row.supplier_id,
-        product_id: productId,
-        supplier_sku: supplierSku,
-        cost: costNum,
-        sell_price: Number.isFinite(cost) ? cost : null,
-        raw_id: row.raw_id,
-        normalized_id: row.id,
-        is_active: true,
-        units_per_case: unitsPer ?? null,
-      },
-      { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
+    const offerRow = withResolvedCatalogVariantId(
+      buildSupplierOfferUpsertRow(
+        {
+          supplier_id: row.supplier_id,
+          product_id: productId,
+          supplier_sku: supplierSku,
+          cost: costNum,
+          sell_price: Number.isFinite(cost) ? cost : null,
+          raw_id: row.raw_id,
+          normalized_id: row.id,
+          is_active: true,
+          units_per_case: unitsPer ?? null,
+        },
+        { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
+      ),
+      catalogVariantId
     );
     const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
       onConflict: "supplier_id,product_id,supplier_sku",

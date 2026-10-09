@@ -1,14 +1,14 @@
 /**
- * GET /api/catalog/product/[slug]/offers — supplier offers summary for product.
+ * GET /api/catalog/product/[slug]/offers — public supplier offer summary.
+ * Never includes supplier cost.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseCatalogos } from "@/lib/db/client";
 import { getProductBySlug } from "@/lib/catalog/query";
-import type { ProductOffersSummary } from "@/lib/catalog/types";
+import { toPublicOffersSummary } from "@/lib/catalog/public-offers";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
@@ -17,25 +17,7 @@ export async function GET(
     const product = await getProductBySlug(slug);
     if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const supabase = getSupabaseCatalogos(true);
-    const { data: rows } = await supabase
-      .from("supplier_offers")
-      .select("supplier_id, supplier_sku, cost, lead_time_days")
-      .eq("product_id", product.id)
-      .eq("is_active", true);
-    const offers = (rows ?? []).map((r: { supplier_id: string; supplier_sku: string; cost: number; lead_time_days: number | null }) => ({
-      supplier_id: r.supplier_id,
-      supplier_sku: r.supplier_sku,
-      cost: r.cost,
-      lead_time_days: r.lead_time_days,
-    }));
-    const costs = offers.map((o) => o.cost);
-    const summary: ProductOffersSummary = {
-      product_id: product.id,
-      offers,
-      best_price: costs.length ? Math.min(...costs) : 0,
-      offer_count: offers.length,
-    };
+    const summary = await toPublicOffersSummary(product.id);
     return NextResponse.json(summary);
   } catch (e) {
     console.error("[CatalogOS] catalog offers error:", e);

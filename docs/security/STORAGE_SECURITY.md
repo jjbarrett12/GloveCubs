@@ -4,11 +4,12 @@
 |--------|----------------|------------------|----------------|-----------------|----------------|----------|------|
 | `catalog-import-images` | Public | service_role (CatalogOS ingest) | anon/authenticated SELECT | import pipeline keys | N/A (public URL) | `catalog_import_images_public_read` | Low — intentional product imagery |
 | `supplier-onboarding` | Private | CatalogOS service role after admin auth | Signed URL after admin auth | `{request_id}/{file_id}_{name}` | Default 3600s in code | Bucket private; DB metadata RLS required | Medium — ensure CatalogOS auth (Phase 0) |
-| Customer invoice files | N/A (no dedicated public bucket) | Authenticated intake → service_role insert | Company members via RLS on `uploaded_invoices` | Content/hash in DB payload | N/A | Table RLS Phase 1 | Residual: anonymous intake may create rows without company — monitor orphans |
+| `invoice-originals` | Private | Intake service_role upload | None (no anon/authenticated SELECT) | `{company_id\|anonymous}/{intake_id}/{sha256}.{ext}` | N/A (no public URL) | Bucket `public=false`; no SELECT policies | Low if service_role stays server-only |
+| Customer invoice metadata | N/A (table) | Authenticated intake → service_role insert | Company members via RLS on `uploaded_invoices` | Hash/filename/mime/size + private object path | N/A | Table RLS Phase 1 | Residual: anonymous intake may create rows without company — monitor orphans |
 
 ## Decisions
 
-- **Invoice files:** private; company-scoped DB rows; not path-guessable storage objects for customer invoices.
+- **Invoice files:** private `invoice-originals` bucket (service_role write only; no public URL). Company-scoped DB rows on `uploaded_invoices` hold hash, filename, MIME, size, and object path.
 - **Product images:** may remain public (`catalog-import-images`).
 - **Regulatory / compliance evidence:** **internal evidence only** until a product decision and gating exist (launch P0 remains).
 

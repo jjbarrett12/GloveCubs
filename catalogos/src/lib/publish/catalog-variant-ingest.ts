@@ -56,6 +56,10 @@ export function mergeVariantIdentifierField(
 
 type AdminClient = SupabaseClient;
 
+export type UpsertCatalogVariantResult =
+  | { ok: true; catalogVariantId: string }
+  | { ok: false; error: string };
+
 /**
  * Upsert one glove variant for an ingest publish row: match by (catalog_product_id, size_code) or variant_sku.
  */
@@ -69,7 +73,7 @@ export async function upsertCatalogVariantFromGloveIngest(
     mpn?: string | null;
     manufacturerSku?: string | null;
   }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<UpsertCatalogVariantResult> {
   const skuCheck = validatePurchaseItemNumber(input.variantSku);
   if (!skuCheck.ok) return skuCheck;
 
@@ -140,7 +144,7 @@ export async function upsertCatalogVariantFromGloveIngest(
       })
       .eq("id", bySize.id);
     if (updErr) return { ok: false, error: updErr.message };
-    return { ok: true };
+    return { ok: true, catalogVariantId: bySize.id };
   }
 
   if (bySkuId) {
@@ -159,21 +163,28 @@ export async function upsertCatalogVariantFromGloveIngest(
       })
       .eq("id", bySkuId.id);
     if (updErr) return { ok: false, error: updErr.message };
-    return { ok: true };
+    return { ok: true, catalogVariantId: bySkuId.id };
   }
 
   const mergedGtin = mergeVariantIdentifierField(null, input.gtin);
   const mergedMpn = mergeVariantIdentifierField(null, input.mpn);
-  const { error: insErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
-    catalog_product_id: input.catalogProductId,
-    variant_sku: variantSku,
-    size_code: size,
-    sort_order: 0,
-    is_active: true,
-    metadata,
-    gtin: mergedGtin,
-    mpn: mergedMpn,
-  });
-  if (insErr) return { ok: false, error: insErr.message };
-  return { ok: true };
+  const { data: inserted, error: insErr } = await admin
+    .schema("catalog_v2")
+    .from("catalog_variants")
+    .insert({
+      catalog_product_id: input.catalogProductId,
+      variant_sku: variantSku,
+      size_code: size,
+      sort_order: 0,
+      is_active: true,
+      metadata,
+      gtin: mergedGtin,
+      mpn: mergedMpn,
+    })
+    .select("id")
+    .single();
+  if (insErr || !inserted) {
+    return { ok: false, error: insErr?.message ?? "catalog_variants insert failed" };
+  }
+  return { ok: true, catalogVariantId: (inserted as { id: string }).id };
 }

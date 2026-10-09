@@ -229,3 +229,21 @@ export function buildSupplierOfferUpsertRow(
   assertSupplierOfferWritePayloadHasNormalization(row);
   return row;
 }
+
+/**
+ * Include catalog_variant_id only when a variant was actually resolved.
+ * Omitting the key preserves an existing operator mapping on upsert/update.
+ * Explicit unmap / cross-family merge must set catalog_variant_id: null themselves.
+ */
+export function withResolvedCatalogVariantId(
+  row: Record<string, unknown>,
+  catalogVariantId: string | null | undefined
+): Record<string, unknown> {
+  const id = typeof catalogVariantId === "string" ? catalogVariantId.trim() : "";
+  if (!id) {
+    if (!("catalog_variant_id" in row)) return row;
+    const { catalog_variant_id: _removed, ...rest } = row;
+    return rest;
+  }
+  return { ...row, catalog_variant_id: id };
+}
