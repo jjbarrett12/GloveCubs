@@ -229,3 +229,61 @@ export function buildSupplierOfferUpsertRow(
   assertSupplierOfferWritePayloadHasNormalization(row);
   return row;
 }
+
+/**
+ * Include catalog_variant_id only when a variant was actually resolved.
+ * Omitting the key preserves an existing operator mapping on upsert/update.
+ * Explicit unmap / cross-family merge must set catalog_variant_id: null themselves.
+ */
+export function withResolvedCatalogVariantId(
+  row: Record<string, unknown>,
+  catalogVariantId: string | null | undefined
+): Record<string, unknown> {
+  const id = typeof catalogVariantId === "string" ? catalogVariantId.trim() : "";
+  if (!id) {
+    if (!("catalog_variant_id" in row)) return row;
+    const { catalog_variant_id: _removed, ...rest } = row;
+    return rest;
+  }
+  return { ...row, catalog_variant_id: id };
+}
+
+/**
+ * Ingest/publish persist acquisition cost only.
+ * Omitting sell_price (and verification columns) on upsert preserves an operator-approved list.
+ * New inserts get NULL sell_price from the column default — unpublished until approved.
+ */
+export function omitUnapprovedSellPriceFromOfferWrite(
+  row: Record<string, unknown>
+): Record<string, unknown> {
+  const {
+    sell_price: _sellPrice,
+    sell_price_verified_at: _verifiedAt,
+    sell_price_verified_by: _verifiedBy,
+    ...rest
+  } = row;
+  return rest;
+}
+
+/** Operator approval / clear of published list. Never used by ingest. */
+export function withOperatorApprovedSellPrice(
+  row: Record<string, unknown>,
+  args: { sellPrice: number | null; verifiedBy: string; verifiedAt?: string }
+): Record<string, unknown> {
+  const n = args.sellPrice == null ? NaN : Number(args.sellPrice);
+  if (!Number.isFinite(n) || n <= 0) {
+    return {
+      ...row,
+      sell_price: null,
+      sell_price_verified_at: null,
+      sell_price_verified_by: null,
+    };
+  }
+  const by = args.verifiedBy.trim();
+  return {
+    ...row,
+    sell_price: n,
+    sell_price_verified_at: args.verifiedAt ?? new Date().toISOString(),
+    sell_price_verified_by: by || "admin",
+  };
+}

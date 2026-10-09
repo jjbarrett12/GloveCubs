@@ -142,62 +142,14 @@ describe("public AI BotID fail-closed ordering", () => {
   });
 
   describe("POST /api/ai/invoice/recommend", () => {
-    it("bot → 403 before OpenAI / telemetry", async () => {
-      requireHumanBotId.mockResolvedValue({
-        ok: false,
-        response: NextResponse.json({ code: "bot_rejected" }, { status: 403 }),
-      });
+    it("is disabled (410) and never calls OpenAI", async () => {
       const { POST } = await import("@/app/api/ai/invoice/recommend/route");
-      const res = await POST(
-        jsonPost("/api/ai/invoice/recommend", {
-          lines: [{ description: "nitrile gloves", quantity: 1, unit_price: 10 }],
-        }),
-      );
-      expect(res.status).toBe(403);
+      const res = await POST();
+      expect(res.status).toBe(410);
+      const body = await res.json();
+      expect(body.code).toBe("invoice_recommend_disabled");
       expect(aiInvoiceSavings).not.toHaveBeenCalled();
       expect(logAiEvent).not.toHaveBeenCalled();
-    });
-
-    it("rate limit → 429 before OpenAI / telemetry", async () => {
-      checkAiRateLimit.mockReturnValue({ allowed: false, retryAfterMs: 1000 });
-      const { POST } = await import("@/app/api/ai/invoice/recommend/route");
-      const res = await POST(
-        jsonPost("/api/ai/invoice/recommend", {
-          lines: [{ description: "nitrile gloves", quantity: 1, unit_price: 10 }],
-        }),
-      );
-      expect(res.status).toBe(429);
-      expect(aiInvoiceSavings).not.toHaveBeenCalled();
-      expect(logAiEvent).not.toHaveBeenCalled();
-    });
-
-    it("human → continues past BotID/rate gates", async () => {
-      aiInvoiceSavings.mockResolvedValue({
-        ok: true,
-        data: {
-          total_current_estimate: 1,
-          total_recommended_estimate: 1,
-          estimated_savings: 0,
-          swaps: [],
-        },
-      });
-      logAiEvent.mockResolvedValue(undefined);
-      const { POST } = await import("@/app/api/ai/invoice/recommend/route");
-      const res = await POST(
-        jsonPost("/api/ai/invoice/recommend", {
-          lines: [
-            {
-              description: "nitrile gloves",
-              quantity: 1,
-              unit_price: 10,
-              total: 10,
-            },
-          ],
-        }),
-      );
-      expect(res.status).toBe(200);
-      expect(requireHumanBotId).toHaveBeenCalled();
-      expect(aiInvoiceSavings).toHaveBeenCalled();
     });
   });
 });

@@ -4,12 +4,13 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { privateIntegrationConfigured } from "@/lib/db/private-db-access";
 import { getSupabase, getSupabaseCatalogos } from "@/lib/db/client";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "./ensure-catalog-v2-link";
 
-const hasDb =
-  !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Requires the server database connection. PostgREST cannot see private schemas.
+const hasDb = privateIntegrationConfigured();
 
 describe.skipIf(!hasDb)("refreshProductAttributesJsonSnapshot (integration)", () => {
   it("runs select with embed and updates v2 metadata facet snapshot for a stub product", async () => {

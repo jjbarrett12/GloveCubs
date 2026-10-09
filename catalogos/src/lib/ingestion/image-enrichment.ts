@@ -15,6 +15,7 @@
  */
 
 import { getSupabaseCatalogos } from "@/lib/db/client";
+import { ssrfSafeFetch } from "@ssrf-safe-fetch";
 import type { ImageSearchTier } from "./image-search-queries";
 import { buildImageSearchQueryPlan } from "./image-search-queries";
 import { adjustImageCandidateScore, pickBestCandidate } from "./image-enrichment-scoring";
@@ -304,13 +305,13 @@ async function fetchManufacturerProductImage(sku: string): Promise<string | null
   if (!template?.includes("{sku}") || !template.startsWith("http")) return null;
   const url = template.replace(/\{sku\}/gi, encodeURIComponent(raw));
   try {
-    const res = await fetch(url, {
+    const res = await ssrfSafeFetch(url, {
       method: "GET",
+      timeoutMs: 10_000,
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return null;
-    const j = (await res.json()) as { image_url?: string; url?: string };
+    if (!res.ok || res.status < 200 || res.status >= 300) return null;
+    const j = JSON.parse(res.buffer.toString("utf8")) as { image_url?: string; url?: string };
     const u = j.image_url ?? j.url;
     return typeof u === "string" ? httpImageUrl(u) : null;
   } catch {
@@ -321,27 +322,21 @@ async function fetchManufacturerProductImage(sku: string): Promise<string | null
 const VERIFY_SEARCH_IMAGES = process.env.CATALOGOS_IMAGE_ENRICH_VERIFY === "1";
 
 async function quickImageReachable(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      signal: AbortSignal.timeout(4500),
-      redirect: "follow",
-      headers: { Accept: "image/*,*/*", "User-Agent": "CatalogOS-ImageEnrich/1.0" },
+  const head = await ssrfSafeFetch(url, {
+    method: "HEAD",
+    timeoutMs: 4500,
+    headers: { Accept: "image/*,*/*", "User-Agent": "CatalogOS-ImageEnrich/1.0" },
+  });
+  if (head.ok && head.status >= 200 && head.status < 300) return true;
+  if (head.ok && head.status === 405) {
+    const g = await ssrfSafeFetch(url, {
+      method: "GET",
+      timeoutMs: 4500,
+      headers: { Range: "bytes=0-1023", "User-Agent": "CatalogOS-ImageEnrich/1.0" },
     });
-    if (res.ok) return true;
-    if (res.status === 405) {
-      const g = await fetch(url, {
-        method: "GET",
-        signal: AbortSignal.timeout(4500),
-        redirect: "follow",
-        headers: { Range: "bytes=0-1023", "User-Agent": "CatalogOS-ImageEnrich/1.0" },
-      });
-      return g.ok;
-    }
-    return false;
-  } catch {
-    return false;
+    return g.ok && g.status >= 200 && g.status < 300;
   }
+  return false;
 }
 
 type CandidateKey = string;

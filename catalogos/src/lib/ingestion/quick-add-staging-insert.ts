@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  COST_PROVENANCE_ACTOR,
+  parseCostSourceType,
+  stagingLandedCostFields,
+} from "@/lib/pricing/landed-cost-provenance";
 
 export interface InsertQuickAddStagingRowInput {
   batchId: string;
@@ -10,6 +15,10 @@ export interface InsertQuickAddStagingRowInput {
   name: string;
   category_slug: string;
   normalized_case_cost: number;
+  cost_source_type?: string;
+  cost_source_reference?: string | null;
+  cost_updated_by?: string;
+  landed_cost_trusted?: boolean;
   /** Merged into normalized_data after the standard Quick Add shape (e.g. csv_bulk_needs_review). */
   normalizedDataExtra?: Record<string, unknown>;
 }
@@ -36,6 +45,10 @@ export async function insertQuickAddStagingRow(
     name,
     category_slug,
     normalized_case_cost: cost,
+    cost_source_type,
+    cost_source_reference,
+    cost_updated_by,
+    landed_cost_trusted,
     normalizedDataExtra,
   } = input;
 
@@ -56,6 +69,23 @@ export async function insertQuickAddStagingRow(
   }
 
   const rawId = rawRow.id as string;
+  const sourceType = parseCostSourceType(cost_source_type);
+  const costFields: Record<string, unknown> = sourceType
+    ? stagingLandedCostFields({
+        cost,
+        sourceType,
+        sourceReference: cost_source_reference,
+        updatedBy: cost_updated_by?.trim() || COST_PROVENANCE_ACTOR.catalogos_operator,
+        trusted: landed_cost_trusted !== false,
+      })
+    : {
+        supplier_cost: cost,
+        normalized_case_cost: cost,
+      };
+  const landedPricing =
+    typeof costFields.pricing === "object" && costFields.pricing !== null
+      ? (costFields.pricing as Record<string, unknown>)
+      : {};
   const normalized_data: Record<string, unknown> = {
     name,
     canonical_title: name,
@@ -63,9 +93,9 @@ export async function insertQuickAddStagingRow(
     sku,
     category_slug,
     filter_attributes: {},
-    supplier_cost: cost,
-    normalized_case_cost: cost,
+    ...costFields,
     pricing: {
+      ...landedPricing,
       sell_unit: "case",
       normalized_case_cost: cost,
     },

@@ -7,6 +7,8 @@
  */
 
 import { getSupabaseCatalogos, getSupabase } from "@/lib/db/client";
+import { privateDbConfigured } from "@/lib/db/private-sql";
+import { publishAtomically } from "./publish-atomic";
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 import { refreshProductAttributesJsonSnapshot } from "./product-attributes-snapshot";
 import { setLifecycleStatus } from "@/lib/catalog-expansion/lifecycle";
@@ -20,8 +22,15 @@ import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Prod
 import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
+  omitUnapprovedSellPriceFromOfferWrite,
   unitsPerCaseFromStagingNormalizedContent,
+  withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
+import {
+  COST_PROVENANCE_ACTOR,
+  mergeOfferProvenance,
+  offerProvenanceFromStaging,
+} from "@/lib/pricing/landed-cost-provenance";
 import {
   extractSizeCodeFromFilterAttributes,
   isGloveCategorySlug,
@@ -84,7 +93,17 @@ export function buildPublishInputFromStaged(
   }
 ): PublishInput | null {
   const nd = row.normalized_data ?? {};
-  const attrs = row.attributes ?? (nd.filter_attributes as Record<string, unknown>) ?? {};
+  const columnAttrs = row.attributes;
+  const filterAttrs =
+    nd.filter_attributes && typeof nd.filter_attributes === "object" && !Array.isArray(nd.filter_attributes)
+      ? (nd.filter_attributes as Record<string, unknown>)
+      : {};
+  const columnHasValues =
+    columnAttrs != null &&
+    typeof columnAttrs === "object" &&
+    !Array.isArray(columnAttrs) &&
+    Object.keys(columnAttrs as Record<string, unknown>).length > 0;
+  const attrs = columnHasValues ? (columnAttrs as Record<string, unknown>) : filterAttrs;
   const supplierId = row.supplier_id;
   const rawId = row.raw_id;
   if (!supplierId || !rawId) return null;
@@ -222,6 +241,7 @@ async function getOrCreateBrandId(brandName: string): Promise<string | null> {
  * Uses publish_safe: blocks when required attributes are missing or invalid.
  */
 export async function runPublish(input: PublishInput): Promise<PublishResult> {
+  if (privateDbConfigured()) return publishAtomically(input);
   const warnings: string[] = [];
 
   if (input.pricingCaseCostUnavailable) {
@@ -264,6 +284,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   let productId: string;
   let slug: string | null = null;
   let internalSkuForSellable = "";
+  let catalogVariantId: string | null = null;
 
   if (input.masterProductId) {
     productId = input.masterProductId;
@@ -331,6 +352,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
         manufacturerSku: resolvedSkus?.manufacturerSku ?? null,
       });
       if (!vr.ok) return { success: false, error: vr.error };
+      catalogVariantId = vr.catalogVariantId;
     }
   } else if (input.newProductPayload) {
     const payload = input.newProductPayload;
@@ -377,17 +399,25 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     const variantMetadata: Record<string, unknown> = gloveIngestSize ? { size: gloveIngestSize } : {};
     const mfr = resolvedSkus?.manufacturerSku?.trim();
     if (mfr) variantMetadata.manufacturer_sku = mfr;
-    const { error: vInsErr } = await admin.schema("catalog_v2").from("catalog_variants").insert({
-      catalog_product_id: productId,
-      variant_sku: variantSku,
-      sort_order: 0,
-      is_active: true,
-      metadata: variantMetadata,
-      ...(gloveIngestSize ? { size_code: gloveIngestSize } : {}),
-      ...(input.stagedContent.gtin ? { gtin: input.stagedContent.gtin } : {}),
-      ...(input.stagedContent.mpn ? { mpn: input.stagedContent.mpn } : {}),
-    });
-    if (vInsErr) return { success: false, error: `catalog_variants insert: ${vInsErr.message}` };
+    const { data: insertedVariant, error: vInsErr } = await admin
+      .schema("catalog_v2")
+      .from("catalog_variants")
+      .insert({
+        catalog_product_id: productId,
+        variant_sku: variantSku,
+        sort_order: 0,
+        is_active: true,
+        metadata: variantMetadata,
+        ...(gloveIngestSize ? { size_code: gloveIngestSize } : {}),
+        ...(input.stagedContent.gtin ? { gtin: input.stagedContent.gtin } : {}),
+        ...(input.stagedContent.mpn ? { mpn: input.stagedContent.mpn } : {}),
+      })
+      .select("id")
+      .single();
+    if (vInsErr || !insertedVariant) {
+      return { success: false, error: `catalog_variants insert: ${vInsErr?.message ?? "failed"}` };
+    }
+    catalogVariantId = (insertedVariant as { id: string }).id;
   } else {
     return { success: false, error: "Either masterProductId or newProductPayload is required" };
   }
@@ -449,41 +479,37 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     return { success: false, error: activateResult.error, productId, slug: slug ?? undefined };
   }
 
-  const sellPrice = input.overrideSellPrice ?? input.stagedContent.supplier_cost;
-  const offerRow = buildSupplierOfferUpsertRow(
-    {
-      supplier_id: input.supplierId,
-      product_id: productId,
-      supplier_sku: input.stagedContent.supplier_sku,
-      cost: input.stagedContent.supplier_cost,
-      sell_price: Number.isFinite(sellPrice) ? sellPrice : input.stagedContent.supplier_cost,
-      raw_id: input.rawId,
-      normalized_id: input.normalizedId,
-      is_active: true,
-      units_per_case: input.stagedContent.units_per_case ?? null,
-    },
-    {
-      currency_code: "USD",
-      cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
-      cost: input.stagedContent.supplier_cost,
-      units_per_case: input.stagedContent.units_per_case,
-    }
+  const offerRow = omitUnapprovedSellPriceFromOfferWrite(
+    withResolvedCatalogVariantId(
+      buildSupplierOfferUpsertRow(
+        mergeOfferProvenance(
+          {
+            supplier_id: input.supplierId,
+            product_id: productId,
+            supplier_sku: input.stagedContent.supplier_sku,
+            cost: input.stagedContent.supplier_cost,
+            raw_id: input.rawId,
+            normalized_id: input.normalizedId,
+            is_active: true,
+            units_per_case: input.stagedContent.units_per_case ?? null,
+          },
+          offerProvenanceFromStaging(input.stagedNormalizedData, input.publishedBy ?? COST_PROVENANCE_ACTOR.catalogos_operator)
+        ),
+        {
+          currency_code: "USD",
+          cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
+          cost: input.stagedContent.supplier_cost,
+          units_per_case: input.stagedContent.units_per_case,
+        }
+      ),
+      catalogVariantId
+    )
   );
   const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
     onConflict: "supplier_id,product_id,supplier_sku",
   });
   if (offerErr) return { success: false, error: `Supplier offer: ${offerErr.message}`, productId, slug: slug ?? undefined };
 
-  const listPriceMinor =
-    sellPrice != null && Number.isFinite(Number(sellPrice)) ? Math.round(Number(sellPrice) * 100) : null;
-  if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
-    return {
-      success: false,
-      error: "Publish blocked: sellable list price missing (invalid sell price / supplier cost)",
-      productId,
-      slug: slug ?? undefined,
-    };
-  }
   const unitCostMinor =
     input.stagedContent.supplier_cost != null && Number.isFinite(Number(input.stagedContent.supplier_cost))
       ? Math.round(Number(input.stagedContent.supplier_cost) * 100)
@@ -499,7 +525,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const sellable = await upsertSellableForCatalogV2Product(productId, {
     name: v2n?.name ?? input.stagedContent.canonical_title ?? "Product",
     internalSku: (v2n?.internal_sku || internalSkuForSellable || "sku").trim(),
-    listPriceMinor,
+    listPriceMinor: null,
     bulkPriceMinor: null,
     unitCostMinor,
     isActive: true,

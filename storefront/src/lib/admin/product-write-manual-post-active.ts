@@ -5,9 +5,10 @@
 
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { resolveEffectiveCasePriceFromPackaging } from "@commerce-packaging/pricing";
-import { buildSupplierOfferUpsertRow } from "../../../../lib/supplier-offer-normalization";
+import { buildSupplierOfferUpsertRow, omitUnapprovedSellPriceFromOfferWrite } from "../../../../lib/supplier-offer-normalization";
 import { refreshProductAttributesJsonSnapshot } from "@/lib/admin/product-attributes-json-snapshot";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
+import { planManualVariantOffers } from "@/lib/admin/offer-variant-map";
 
 export type ManualPostActiveSideEffectSkipReason =
   | "supplier_id_unconfigured"
@@ -46,11 +47,18 @@ export function resolveManualPublishSupplierId(): string | null {
   return raw;
 }
 
-export function resolveManualSupplierSku(input: ProductWriteInput, internalSku: string): string | null {
-  const fromVariant = input.variants.find((v) => v.variantSku.trim())?.variantSku.trim();
-  if (fromVariant) return fromVariant;
-  const parent = internalSku.trim();
-  return parent || null;
+export function resolveManualOfferSupplierSku(manufacturerSku?: string | null): string | null {
+  const s = manufacturerSku?.trim() ?? "";
+  return s || null;
+}
+
+/** Never copies GloveCubs variant_sku or parent SKU into supplier_sku. */
+export function resolveManualSupplierSku(input: ProductWriteInput, _internalSku: string): string | null {
+  for (const v of input.variants) {
+    const sku = resolveManualOfferSupplierSku(v.manufacturerSku);
+    if (sku) return sku;
+  }
+  return null;
 }
 
 export function resolveManualCasePricing(commercePackaging: CommercePackagingV1 | null | undefined): {
@@ -70,25 +78,28 @@ export function buildManualSupplierOfferRow(args: {
   supplierId: string;
   productId: string;
   supplierSku: string;
+  catalogVariantId: string;
   casePrice: number;
   unitsPerCase: number | null;
 }): Record<string, unknown> {
-  return buildSupplierOfferUpsertRow(
-    {
-      supplier_id: args.supplierId,
-      product_id: args.productId,
-      supplier_sku: args.supplierSku,
-      cost: args.casePrice,
-      sell_price: args.casePrice,
-      is_active: true,
-      units_per_case: args.unitsPerCase,
-    },
-    {
-      currency_code: "USD",
-      cost_basis: "per_case",
-      cost: args.casePrice,
-      units_per_case: args.unitsPerCase,
-    }
+  return omitUnapprovedSellPriceFromOfferWrite(
+    buildSupplierOfferUpsertRow(
+      {
+        supplier_id: args.supplierId,
+        product_id: args.productId,
+        supplier_sku: args.supplierSku,
+        catalog_variant_id: args.catalogVariantId,
+        cost: args.casePrice,
+        is_active: true,
+        units_per_case: args.unitsPerCase,
+      },
+      {
+        currency_code: "USD",
+        cost_basis: "per_case",
+        cost: args.casePrice,
+        units_per_case: args.unitsPerCase,
+      }
+    )
   );
 }
 
@@ -98,7 +109,7 @@ async function upsertManualSellableProduct(
   row: {
     name: string;
     internalSku: string;
-    listPriceMinor: number;
+    listPriceMinor: number | null;
     unitCostMinor: number | null;
   }
 ): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -138,46 +149,66 @@ export async function runManualPostActiveSideEffects(
   }
 
   const supplierId = resolveManualPublishSupplierId();
-  const supplierSku = resolveManualSupplierSku(input, internalSku);
   const { casePrice, unitsPerCase } = resolveManualCasePricing(input.commercePackaging);
 
   if (!supplierId) {
     skipped.push("supplier_id_unconfigured");
   } else if (casePrice == null || !Number.isFinite(casePrice) || casePrice <= 0) {
     skipped.push("case_price_missing");
-  } else if (!supplierSku) {
-    skipped.push("supplier_sku_missing");
   } else {
-    const offerRow = buildManualSupplierOfferRow({
-      supplierId,
-      productId,
-      supplierSku,
-      casePrice,
-      unitsPerCase,
-    });
-    const { error: offerErr } = await (supabase as any)
-      .schema("catalogos")
-      .from("supplier_offers")
-      .upsert(offerRow, { onConflict: "supplier_id,product_id,supplier_sku" });
-    if (offerErr) {
-      warnings.push(`supplier_offers upsert: ${offerErr.message}`);
+    const { data: dbVariants, error: variantErr } = await (supabase as any)
+      .schema("catalog_v2")
+      .from("catalog_variants")
+      .select("id, variant_sku")
+      .eq("catalog_product_id", productId);
+    if (variantErr) {
+      warnings.push(`catalog_variants lookup: ${variantErr.message}`);
+    } else {
+      const plans = planManualVariantOffers({
+        inputVariants: input.variants.map((v) => ({
+          variantSku: v.variantSku,
+          manufacturerSku: v.manufacturerSku,
+        })),
+        dbVariants: ((dbVariants ?? []) as Array<{ id: string; variant_sku: string }>).map((v) => ({
+          id: v.id,
+          variant_sku: v.variant_sku,
+        })),
+      });
+      const upserts = plans.filter((p): p is Extract<typeof p, { kind: "upsert" }> => p.kind === "upsert");
+      if (upserts.length === 0) {
+        skipped.push("supplier_sku_missing");
+      } else {
+        for (const plan of upserts) {
+          const offerRow = buildManualSupplierOfferRow({
+            supplierId,
+            productId,
+            supplierSku: plan.supplierSku,
+            catalogVariantId: plan.catalogVariantId,
+            casePrice,
+            unitsPerCase,
+          });
+          const { error: offerErr } = await (supabase as any)
+            .schema("catalogos")
+            .from("supplier_offers")
+            .upsert(offerRow, { onConflict: "supplier_id,product_id,supplier_sku" });
+          if (offerErr) {
+            warnings.push(`supplier_offers upsert (${plan.supplierSku}): ${offerErr.message}`);
+          }
+        }
+      }
     }
   }
 
-  const listPriceMinor =
+  const unitCostMinor =
     casePrice != null && Number.isFinite(casePrice) && casePrice > 0 ? Math.round(casePrice * 100) : null;
-  if (listPriceMinor == null) {
-    skipped.push("sellable_list_price_missing");
-  } else {
-    const sellable = await upsertManualSellableProduct(supabase, productId, {
-      name: productName.trim() || "Product",
-      internalSku: internalSku.trim(),
-      listPriceMinor,
-      unitCostMinor: listPriceMinor,
-    });
-    if (!sellable.ok) {
-      warnings.push(sellable.message);
-    }
+  const sellable = await upsertManualSellableProduct(supabase, productId, {
+    name: productName.trim() || "Product",
+    internalSku: internalSku.trim(),
+    listPriceMinor: null,
+    unitCostMinor,
+  });
+  if (!sellable.ok) {
+    warnings.push(sellable.message);
   }
 
   return { ok: true, skipped, warnings };

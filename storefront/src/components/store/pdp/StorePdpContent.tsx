@@ -16,6 +16,7 @@ import { PdpVariantMatrix } from "@/components/store/pdp/PdpVariantMatrix";
 import { PdpHeroSection } from "@/components/store/pdp/PdpHeroSection";
 import { PdpEducationSection } from "@/components/store/pdp/education/PdpEducationSection";
 import {
+  quoteUnitPriceMajorFromSelectedVariant,
   resolvePdpParentFromDisplay,
   resolvePdpSelectedVariantPricingDisplay,
 } from "@/lib/pricing/pdp-variant-pricing-display";
@@ -52,15 +53,14 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
     [selectedVariant?.id, detail.variantPricing, detail.buyerUnitReferencesByVariantId]
   );
 
-  const variantListPriceFallback = useMemo(() => {
-    if (selectedPricing.kind === "list_only") return selectedPricing.listUsd;
-    if (selectedPricing.kind === "tier_reference") return selectedPricing.listUsd;
-    return detail.bestPrice;
-  }, [selectedPricing, detail.bestPrice]);
+  const variantAuthoritativePrice = useMemo(
+    () => quoteUnitPriceMajorFromSelectedVariant(selectedPricing),
+    [selectedPricing]
+  );
 
   const commerce = useMemo(
-    () => pdpCommerceFromProductMetadata(detail.metadata, variantListPriceFallback),
-    [detail.metadata, variantListPriceFallback]
+    () => pdpCommerceFromProductMetadata(detail.metadata, variantAuthoritativePrice),
+    [detail.metadata, variantAuthoritativePrice]
   );
 
   useEffect(() => {
@@ -70,8 +70,8 @@ export function StorePdpContent({ detail }: { detail: StoreProductDetail }) {
   }, [commerce.palletBuyingEnabled, sellUnit]);
 
   const quoteCommerce = useMemo(
-    () => buildPdpQuoteCommerce(commerce, sellUnit, quantity, variantListPriceFallback),
-    [commerce, sellUnit, quantity, variantListPriceFallback]
+    () => buildPdpQuoteCommerce(commerce, sellUnit, quantity, variantAuthoritativePrice),
+    [commerce, sellUnit, quantity, variantAuthoritativePrice]
   );
 
   const showQuoteCta =

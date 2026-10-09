@@ -4,14 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export interface OfferRow {
   supplier_sku: string;
-  cost: number;
   sell_price?: number | null;
   lead_time_days: number | null;
 }
 
 function displayPrice(o: OfferRow): string {
-  const p = o.sell_price != null && Number.isFinite(o.sell_price) ? o.sell_price : o.cost;
-  return `$${Number(p).toFixed(2)}`;
+  const p = o.sell_price != null && Number.isFinite(o.sell_price) ? o.sell_price : null;
+  return p != null ? `$${Number(p).toFixed(2)}` : "—";
 }
 
 interface SupplierOffersDisclosureProps {

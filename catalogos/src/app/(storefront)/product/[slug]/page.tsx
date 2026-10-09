@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import Script from "next/script";
-import { getProductDetailBySlug, getOffersSummaryByProductId, listLiveProducts, getFirstImageByProductIds } from "@/lib/catalog/query";
+import { getProductDetailBySlug, listLiveProducts, getFirstImageByProductIds } from "@/lib/catalog/query";
+import { toPublicOffersSummary } from "@/lib/catalog/public-offers";
 import { resolveProductImageUrl } from "@/lib/images";
 import { computePricePerGlove } from "@/lib/conversion/price-per-glove";
 import { computeSignalsForProduct } from "@/lib/conversion/value-signals";
@@ -85,7 +86,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) notFound();
 
   const [offersSummary, relatedPayload] = await Promise.all([
-    getOffersSummaryByProductId(product.id),
+    toPublicOffersSummary(product.id),
     listLiveProducts({
       category: product.category_slug ?? undefined,
       limit: 4,

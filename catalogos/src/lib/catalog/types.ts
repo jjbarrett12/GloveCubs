@@ -99,7 +99,7 @@ export interface StorefrontFilterUIContract {
 export interface ProductOfferRow {
   supplier_id: string;
   supplier_sku: string;
-  cost: number;
+  /** Public/customer DTOs must omit supplier cost. */
   sell_price?: number | null;
   lead_time_days: number | null;
 }

@@ -1,6 +1,6 @@
 /** Phase 1 invoice intake — API contract + status values (gc_commerce.uploaded_invoices). */
 
-export const INVOICE_INTAKE_EXTRACTION_VERSION = "invoice-intake-v1" as const;
+export const INVOICE_INTAKE_EXTRACTION_VERSION = "invoice-intake-v2" as const;
 
 export type IntakeStatus =
   | "received"
@@ -46,6 +46,7 @@ export type InvoiceIntakeContract = {
   idempotent_replay: boolean;
   vendor_name?: string | null;
   invoice_number?: string | null;
+  invoice_date?: string | null;
   total_amount?: number | null;
   lines?: Array<{
     description: string;

@@ -35,7 +35,8 @@ export type PdpBuyerUnitReference = {
 
 export const PDP_BEST_PRICE_SCOPE = "product_min" as const;
 
-const MAX_BATCH_VARIANT_IDS = 50;
+/** Bounded `.in(catalog_variant_id, ids)` size for variant list lookups. */
+export const VARIANT_PRICING_ID_BATCH = 50;
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
@@ -105,7 +106,7 @@ export async function fetchVariantPricingRows(
   client: SupabaseClient,
   variantIds: string[]
 ): Promise<PdpVariantPricingRow[]> {
-  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, MAX_BATCH_VARIANT_IDS);
+  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, VARIANT_PRICING_ID_BATCH);
   if (ids.length === 0) return [];
 
   const { data, error } = await client
@@ -126,7 +127,7 @@ export async function fetchVariantCaseEconomicsBatch(
   client: SupabaseClient,
   variantIds: string[]
 ): Promise<PdpVariantCaseEconomics[]> {
-  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, MAX_BATCH_VARIANT_IDS);
+  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, VARIANT_PRICING_ID_BATCH);
   if (ids.length === 0) return [];
 
   const { data, error } = await client.rpc("gc_variant_case_economics_batch", {
@@ -150,7 +151,7 @@ export async function fetchBuyerUnitReferencesBatch(
   variantIds: string[],
   quantity = 1
 ): Promise<Record<string, PdpBuyerUnitReference>> {
-  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, MAX_BATCH_VARIANT_IDS);
+  const ids = Array.from(new Set(variantIds)).filter(Boolean).slice(0, VARIANT_PRICING_ID_BATCH);
   if (ids.length === 0) return {};
 
   const { data, error } = await client.rpc("gc_resolve_buyer_unit_prices_batch", {
