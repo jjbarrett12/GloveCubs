@@ -5,6 +5,7 @@
  */
 
 import type { NormalizedProductContent } from "@/lib/catalogos/attribute-dictionary-types";
+import type { CatalogOsSkuProposalsV1 } from "@/lib/sku-intelligence/types";
 import type { NormalizedDisposableGloveAttributes, NormalizedWorkGloveAttributes } from "@/lib/catalogos/attribute-dictionary-types";
 import { stageSafe } from "@/lib/catalogos/validation-modes";
 import { extractContentFromRaw } from "./normalization-utils";
@@ -22,6 +23,24 @@ import { mergeCommercePackagingIntoFilterAttributes } from "@commerce-packaging/
 import { buildCatalogOsSkuProposalsFromParsedRow } from "@/lib/sku-intelligence/staging-sku-proposals";
 
 const DEFAULT_LOW_CONFIDENCE_THRESHOLD = 0.6;
+
+/** Staging JSON attached after canonical normalization. Not part of NormalizedProductContent. */
+type StagingNormalizedContent = NormalizedProductContent & {
+  commerce_packaging?: unknown;
+  boxes_per_case?: unknown;
+  gloves_per_box?: unknown;
+  total_gloves_per_case?: unknown;
+  sku_proposals?: CatalogOsSkuProposalsV1;
+};
+
+/** Own enumerable fields as a string-keyed object for staging readers. Values are not coerced. */
+function enumerableFields(value: object): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, fieldValue] of Object.entries(value)) {
+    fields[key] = fieldValue;
+  }
+  return fields;
+}
 
 export interface NormalizationEngineOptionsWithDict extends NormalizationEngineOptions {
   /** DB-backed + in-memory merged synonym map (from dictionary-service loadSynonymMap). */
@@ -145,26 +164,27 @@ export function runNormalization(
     "gloves_per_box",
     "total_gloves_per_case",
   ] as const;
+  const staged: StagingNormalizedContent = { ...content };
   for (const key of packagingPassthrough) {
     if (rawRow[key] != null) {
-      (content as Record<string, unknown>)[key] = rawRow[key];
+      staged[key] = rawRow[key];
     }
   }
   if (!rawRow.commerce_packaging) {
-    (content as Record<string, unknown>).commerce_packaging = resolveCommercePackagingForStagingRow(rawRow, {
+    staged.commerce_packaging = resolveCommercePackagingForStagingRow(rawRow, {
       categorySlug: category_slug,
     });
   }
 
   const mergedFilterAttributes = mergeCommercePackagingIntoFilterAttributes(
-    filter_attributes as Record<string, unknown>,
-    getCommercePackagingFromNormalized(content as Record<string, unknown>)
+    enumerableFields(filter_attributes),
+    getCommercePackagingFromNormalized(enumerableFields(staged))
   );
 
-  (content as Record<string, unknown>).sku_proposals = buildCatalogOsSkuProposalsFromParsedRow(rawRow);
+  staged.sku_proposals = buildCatalogOsSkuProposalsFromParsedRow(rawRow);
 
   return {
-    content,
+    content: staged,
     category_slug,
     category_inference: {
       category_slug: categoryInference.category_slug,
