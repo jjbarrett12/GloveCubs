@@ -212,14 +212,12 @@ export async function mergeDuplicateProducts(
       units_per_case: number | null;
     };
     const nextCost = Number(r.cost);
-    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
     const movePatch = buildSupplierOfferUpsertRow(
       {
         product_id: keepProductId,
         catalog_variant_id: null,
         updated_at: new Date().toISOString(),
         cost: nextCost,
-        sell_price: nextSell,
         units_per_case: r.units_per_case,
       },
       {
@@ -237,7 +235,6 @@ export async function mergeDuplicateProducts(
             is_active: false,
             updated_at: new Date().toISOString(),
             cost: nextCost,
-            sell_price: nextSell,
             units_per_case: r.units_per_case,
           },
           {

@@ -9,6 +9,8 @@ import {
   parseSupplierOfferCostBasis,
   assertSupplierOfferWritePayloadHasNormalization,
   withResolvedCatalogVariantId,
+  omitUnapprovedSellPriceFromOfferWrite,
+  withOperatorApprovedSellPrice,
 } from "./supplier-offer-normalization";
 
 describe("supplier-offer-normalization", () => {
@@ -126,5 +128,33 @@ describe("supplier-offer-normalization", () => {
       null
     );
     expect(payload).not.toHaveProperty("catalog_variant_id");
+  });
+});
+
+describe("published list omit / operator approve", () => {
+  it("omits sell_price so re-ingest cannot clobber an approved list", () => {
+    const existing = { sell_price: 199, sell_price_verified_at: "2026-09-11T00:00:00.000Z" };
+    const payload = omitUnapprovedSellPriceFromOfferWrite({
+      supplier_sku: "GL-N125F-L",
+      cost: 85,
+      sell_price: 85,
+    });
+    expect(payload).not.toHaveProperty("sell_price");
+    expect(payload).not.toHaveProperty("sell_price_verified_at");
+    expect(payload.cost).toBe(85);
+    expect({ ...existing, ...payload }.sell_price).toBe(199);
+  });
+
+  it("operator approve writes sell_price and verified_at; clear writes null", () => {
+    const approved = withOperatorApprovedSellPrice(
+      { cost: 85 },
+      { sellPrice: 120, verifiedBy: "op@glovecubs.com", verifiedAt: "2026-09-11T12:00:00.000Z" }
+    );
+    expect(approved.sell_price).toBe(120);
+    expect(approved.sell_price_verified_at).toBe("2026-09-11T12:00:00.000Z");
+    expect(approved.sell_price_verified_by).toBe("op@glovecubs.com");
+    const cleared = withOperatorApprovedSellPrice({ cost: 85, sell_price: 120 }, { sellPrice: null, verifiedBy: "op" });
+    expect(cleared.sell_price).toBeNull();
+    expect(cleared.sell_price_verified_at).toBeNull();
   });
 });

@@ -30,7 +30,9 @@ import { flattenV2Metadata } from "@/lib/catalog/v2-master-product";
 import {
   buildSupplierOfferUpsertRow,
   parseSupplierOfferCostBasis,
+  withOperatorApprovedSellPrice,
 } from "../../../../lib/supplier-offer-normalization";
+import { validatePublishedListApproval } from "@/lib/pricing/published-list-pricing";
 
 function slugForNewCatalogProduct(sku: string, name: string): string {
   const base = (name || sku || "product").trim();
@@ -556,21 +558,32 @@ export async function updateSupplierOfferAdmin(
   };
 
   const nextCost = fields.cost !== undefined ? fields.cost : Number(row.cost);
-  const nextSell =
-    fields.sell_price !== undefined
-      ? fields.sell_price
-      : row.sell_price != null
-        ? Number(row.sell_price)
-        : nextCost;
 
   const base: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     cost: nextCost,
-    sell_price: nextSell,
     units_per_case: row.units_per_case,
   };
   if (fields.lead_time_days !== undefined) base.lead_time_days = fields.lead_time_days;
   if (fields.is_active !== undefined) base.is_active = fields.is_active;
+  if (fields.sell_price !== undefined) {
+    if (fields.sell_price != null) {
+      const gate = validatePublishedListApproval({ cost: nextCost, sellPrice: fields.sell_price });
+      if (!gate.ok) {
+        return {
+          success: false,
+          error: `${gate.reason} (cost=${gate.cost} list=${gate.sellPrice} min=${gate.minimumSafeList} kodiak=${gate.kodiak} kodiak_gm_pct=${gate.kodiakGmPercent})`,
+        };
+      }
+    }
+    Object.assign(
+      base,
+      withOperatorApprovedSellPrice(base, {
+        sellPrice: fields.sell_price,
+        verifiedBy: options?.actor ?? "admin",
+      })
+    );
+  }
 
   const hasFieldChange =
     fields.cost !== undefined ||
@@ -638,13 +651,11 @@ export async function unpublishLiveProduct(
       cost_basis: string;
     };
     const nextCost = Number(r.cost);
-    const nextSell = r.sell_price != null ? Number(r.sell_price) : nextCost;
     const patch = buildSupplierOfferUpsertRow(
       {
         is_active: false,
         updated_at: new Date().toISOString(),
         cost: nextCost,
-        sell_price: nextSell,
         units_per_case: r.units_per_case,
       },
       {

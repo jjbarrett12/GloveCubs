@@ -5,7 +5,7 @@
 
 import type { CommercePackagingV1 } from "@commerce-packaging/types";
 import { resolveEffectiveCasePriceFromPackaging } from "@commerce-packaging/pricing";
-import { buildSupplierOfferUpsertRow } from "../../../../lib/supplier-offer-normalization";
+import { buildSupplierOfferUpsertRow, omitUnapprovedSellPriceFromOfferWrite } from "../../../../lib/supplier-offer-normalization";
 import { refreshProductAttributesJsonSnapshot } from "@/lib/admin/product-attributes-json-snapshot";
 import type { ProductWriteInput } from "@/lib/admin/product-write";
 import { planManualVariantOffers } from "@/lib/admin/offer-variant-map";
@@ -82,23 +82,24 @@ export function buildManualSupplierOfferRow(args: {
   casePrice: number;
   unitsPerCase: number | null;
 }): Record<string, unknown> {
-  return buildSupplierOfferUpsertRow(
-    {
-      supplier_id: args.supplierId,
-      product_id: args.productId,
-      supplier_sku: args.supplierSku,
-      catalog_variant_id: args.catalogVariantId,
-      cost: args.casePrice,
-      sell_price: args.casePrice,
-      is_active: true,
-      units_per_case: args.unitsPerCase,
-    },
-    {
-      currency_code: "USD",
-      cost_basis: "per_case",
-      cost: args.casePrice,
-      units_per_case: args.unitsPerCase,
-    }
+  return omitUnapprovedSellPriceFromOfferWrite(
+    buildSupplierOfferUpsertRow(
+      {
+        supplier_id: args.supplierId,
+        product_id: args.productId,
+        supplier_sku: args.supplierSku,
+        catalog_variant_id: args.catalogVariantId,
+        cost: args.casePrice,
+        is_active: true,
+        units_per_case: args.unitsPerCase,
+      },
+      {
+        currency_code: "USD",
+        cost_basis: "per_case",
+        cost: args.casePrice,
+        units_per_case: args.unitsPerCase,
+      }
+    )
   );
 }
 
@@ -108,7 +109,7 @@ async function upsertManualSellableProduct(
   row: {
     name: string;
     internalSku: string;
-    listPriceMinor: number;
+    listPriceMinor: number | null;
     unitCostMinor: number | null;
   }
 ): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -198,20 +199,16 @@ export async function runManualPostActiveSideEffects(
     }
   }
 
-  const listPriceMinor =
+  const unitCostMinor =
     casePrice != null && Number.isFinite(casePrice) && casePrice > 0 ? Math.round(casePrice * 100) : null;
-  if (listPriceMinor == null) {
-    skipped.push("sellable_list_price_missing");
-  } else {
-    const sellable = await upsertManualSellableProduct(supabase, productId, {
-      name: productName.trim() || "Product",
-      internalSku: internalSku.trim(),
-      listPriceMinor,
-      unitCostMinor: listPriceMinor,
-    });
-    if (!sellable.ok) {
-      warnings.push(sellable.message);
-    }
+  const sellable = await upsertManualSellableProduct(supabase, productId, {
+    name: productName.trim() || "Product",
+    internalSku: internalSku.trim(),
+    listPriceMinor: null,
+    unitCostMinor,
+  });
+  if (!sellable.ok) {
+    warnings.push(sellable.message);
   }
 
   return { ok: true, skipped, warnings };

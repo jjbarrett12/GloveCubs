@@ -14,7 +14,6 @@ import {
 import type { InvoicePackFacts } from "@/lib/procurement/invoice-pack-authority";
 import type { GloveSpecSnapshot } from "@/lib/procurement/glove-compatibility";
 import { resolveBuyerUnitPriceViaRpc } from "@/lib/pricing/resolve-buyer-unit-price";
-import { sellPriceLooksLikeCost } from "@/lib/procurement/governed-savings";
 
 export type LineForComparison = {
   id: string;
@@ -224,10 +223,8 @@ async function loadGloveCubsSide(
       pricing_source = String(row.pricing_source ?? "catalogos.variant_best_offer_price");
     }
   }
-  if (pricing_source && sellPriceLooksLikeCost(pricing_source)) {
-    sell_unit_price = null;
-    pricing_source = "blocked_supplier_cost";
-  }
+  const published_list_approved =
+    sell_unit_price != null && Number.isFinite(sell_unit_price) && sell_unit_price > 0;
 
   const { data: product } = await supabase
     .schema("catalog_v2")
@@ -270,6 +267,7 @@ async function loadGloveCubsSide(
     sell_unit_price,
     sell_gloves_per_unit,
     pricing_source,
+    published_list_approved,
   };
 }
 

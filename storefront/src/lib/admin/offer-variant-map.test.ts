@@ -5,6 +5,7 @@ import {
   planManualVariantOffers,
   selectVariantBestSellPrice,
 } from "@/lib/admin/offer-variant-map";
+import { requireApprovedListToMap } from "@/lib/pricing/published-list-pricing";
 
 const VARIANT_A = "11111111-1111-4111-8111-111111111111";
 const VARIANT_B = "22222222-2222-4222-8222-222222222222";
@@ -17,7 +18,7 @@ describe("variant best sell price contract (FK, sell_price only)", () => {
       selectVariantBestSellPrice({
         variantId: VARIANT_A,
         variantActive: true,
-        offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: 42, cost: 9 }],
+        offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: 42, sellPriceVerifiedAt: "2026-09-11T00:00:00Z", cost: 9 }],
       })
     ).toBe(42);
   });
@@ -27,7 +28,7 @@ describe("variant best sell price contract (FK, sell_price only)", () => {
       selectVariantBestSellPrice({
         variantId: VARIANT_A,
         variantActive: true,
-        offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: 18.5, cost: 7 }],
+        offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: 18.5, sellPriceVerifiedAt: "2026-09-11T00:00:00Z", cost: 7 }],
       })
     ).toBe(18.5);
   });
@@ -48,8 +49,8 @@ describe("variant best sell price contract (FK, sell_price only)", () => {
         variantId: VARIANT_A,
         variantActive: true,
         offers: [
-          { catalogVariantId: VARIANT_A, isActive: true, sellPrice: 20, cost: 8 },
-          { catalogVariantId: VARIANT_A, isActive: true, sellPrice: 15, cost: 11 },
+          { catalogVariantId: VARIANT_A, isActive: true, sellPrice: 20, sellPriceVerifiedAt: "2026-09-11T00:00:00Z", cost: 8 },
+          { catalogVariantId: VARIANT_A, isActive: true, sellPrice: 15, sellPriceVerifiedAt: "2026-09-11T00:00:00Z", cost: 11 },
         ],
       })
     ).toBe(15);
@@ -71,6 +72,16 @@ describe("variant best sell price contract (FK, sell_price only)", () => {
         variantId: VARIANT_A,
         variantActive: true,
         offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: null, cost: 99 }],
+      })
+    ).toBeNull();
+  });
+
+  it("does not use unverified sell_price as published list", () => {
+    expect(
+      selectVariantBestSellPrice({
+        variantId: VARIANT_A,
+        variantActive: true,
+        offers: [{ catalogVariantId: VARIANT_A, isActive: true, sellPrice: 85, sellPriceVerifiedAt: null, cost: 85 }],
       })
     ).toBeNull();
   });
@@ -132,6 +143,13 @@ describe("mapping integrity", () => {
         catalogVariantId: VARIANT_A,
       })
     ).toEqual({ ok: true });
+  });
+
+  it("blocks MAP unless published list is approved", () => {
+    expect(requireApprovedListToMap({ sellPrice: 85, verifiedAt: null })).toEqual({
+      ok: false,
+      reason: "list_unapproved",
+    });
   });
 
   it("reports exact manufacturer-SKU candidates without auto-approving size conflicts", () => {

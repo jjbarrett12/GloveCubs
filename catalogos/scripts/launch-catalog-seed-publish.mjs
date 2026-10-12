@@ -243,6 +243,7 @@ async function applyLaunchPublishPatch(catalogos, admin, normalizedId) {
   if (pricing) nd.import_auto_pricing = pricing;
 
   const caseCost = roundMoney(pricing?.list_price ? pricing.list_price * unitsPerCase : unitCost * unitsPerCase * 1.15);
+  // Synthetic seed economics only (extracted $0 + default unit). Do not copy into live sell_price or treat $1220/$1310 as published list.
   nd.supplier_cost = caseCost;
   nd.normalized_case_cost = caseCost;
   cp.case_price = cp.case_price ?? caseCost;

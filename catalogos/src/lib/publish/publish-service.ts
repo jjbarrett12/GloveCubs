@@ -20,6 +20,7 @@ import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Prod
 import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
+  omitUnapprovedSellPriceFromOfferWrite,
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
@@ -460,44 +461,34 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
     return { success: false, error: activateResult.error, productId, slug: slug ?? undefined };
   }
 
-  const sellPrice = input.overrideSellPrice ?? input.stagedContent.supplier_cost;
-  const offerRow = withResolvedCatalogVariantId(
-    buildSupplierOfferUpsertRow(
-      {
-        supplier_id: input.supplierId,
-        product_id: productId,
-        supplier_sku: input.stagedContent.supplier_sku,
-        cost: input.stagedContent.supplier_cost,
-        sell_price: Number.isFinite(sellPrice) ? sellPrice : input.stagedContent.supplier_cost,
-        raw_id: input.rawId,
-        normalized_id: input.normalizedId,
-        is_active: true,
-        units_per_case: input.stagedContent.units_per_case ?? null,
-      },
-      {
-        currency_code: "USD",
-        cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
-        cost: input.stagedContent.supplier_cost,
-        units_per_case: input.stagedContent.units_per_case,
-      }
-    ),
-    catalogVariantId
+  const offerRow = omitUnapprovedSellPriceFromOfferWrite(
+    withResolvedCatalogVariantId(
+      buildSupplierOfferUpsertRow(
+        {
+          supplier_id: input.supplierId,
+          product_id: productId,
+          supplier_sku: input.stagedContent.supplier_sku,
+          cost: input.stagedContent.supplier_cost,
+          raw_id: input.rawId,
+          normalized_id: input.normalizedId,
+          is_active: true,
+          units_per_case: input.stagedContent.units_per_case ?? null,
+        },
+        {
+          currency_code: "USD",
+          cost_basis: input.stagedContent.offer_cost_basis ?? "per_case",
+          cost: input.stagedContent.supplier_cost,
+          units_per_case: input.stagedContent.units_per_case,
+        }
+      ),
+      catalogVariantId
+    )
   );
   const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
     onConflict: "supplier_id,product_id,supplier_sku",
   });
   if (offerErr) return { success: false, error: `Supplier offer: ${offerErr.message}`, productId, slug: slug ?? undefined };
 
-  const listPriceMinor =
-    sellPrice != null && Number.isFinite(Number(sellPrice)) ? Math.round(Number(sellPrice) * 100) : null;
-  if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
-    return {
-      success: false,
-      error: "Publish blocked: sellable list price missing (invalid sell price / supplier cost)",
-      productId,
-      slug: slug ?? undefined,
-    };
-  }
   const unitCostMinor =
     input.stagedContent.supplier_cost != null && Number.isFinite(Number(input.stagedContent.supplier_cost))
       ? Math.round(Number(input.stagedContent.supplier_cost) * 100)
@@ -513,7 +504,7 @@ export async function runPublish(input: PublishInput): Promise<PublishResult> {
   const sellable = await upsertSellableForCatalogV2Product(productId, {
     name: v2n?.name ?? input.stagedContent.canonical_title ?? "Product",
     internalSku: (v2n?.internal_sku || internalSkuForSellable || "sku").trim(),
-    listPriceMinor,
+    listPriceMinor: null,
     bulkPriceMinor: null,
     unitCostMinor,
     isActive: true,

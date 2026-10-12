@@ -85,8 +85,3 @@ export function computeGovernedSavings(input: {
     invoice_glove_count,
   };
 }
-
-export function sellPriceLooksLikeCost(source: string | null | undefined): boolean {
-  const s = String(source ?? "").toLowerCase();
-  return s.includes("cost") && !s.includes("sell");
-}

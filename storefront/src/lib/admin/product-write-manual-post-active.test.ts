@@ -249,6 +249,7 @@ describe("manual offer helpers", () => {
     expect(row.catalog_variant_id).toBe("11111111-1111-4111-8111-111111111111");
     expect(row.cost_basis).toBe("per_case");
     expect(row.currency_code).toBe("USD");
+    expect(row).not.toHaveProperty("sell_price");
   });
 
   it("resolveManualCasePricing reads commerce packaging case price", () => {

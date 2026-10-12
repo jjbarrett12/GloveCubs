@@ -14,6 +14,7 @@ import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID, upsertSellableForCatalogV2Prod
 import {
   buildSupplierOfferUpsertRow,
   costBasisFromSellUnit,
+  omitUnapprovedSellPriceFromOfferWrite,
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
@@ -369,22 +370,23 @@ async function runPublishVariantGroupAddVariants(params: {
       nd as Record<string, unknown>,
       mergedAttrs as Record<string, unknown>
     );
-    const offerRow = withResolvedCatalogVariantId(
-      buildSupplierOfferUpsertRow(
-        {
-          supplier_id: row.supplier_id,
-          product_id: productId,
-          supplier_sku: supplierSku,
-          cost: costNum,
-          sell_price: Number.isFinite(cost) ? cost : null,
-          raw_id: row.raw_id,
-          normalized_id: row.id,
-          is_active: true,
-          units_per_case: unitsPer ?? null,
-        },
-        { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
-      ),
-      catalogVariantId
+    const offerRow = omitUnapprovedSellPriceFromOfferWrite(
+      withResolvedCatalogVariantId(
+        buildSupplierOfferUpsertRow(
+          {
+            supplier_id: row.supplier_id,
+            product_id: productId,
+            supplier_sku: supplierSku,
+            cost: costNum,
+            raw_id: row.raw_id,
+            normalized_id: row.id,
+            is_active: true,
+            units_per_case: unitsPer ?? null,
+          },
+          { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
+        ),
+        catalogVariantId
+      )
     );
     const { error: offerErr } = await supabase.from("supplier_offers").upsert(offerRow, {
       onConflict: "supplier_id,product_id,supplier_sku",
@@ -399,23 +401,12 @@ async function runPublishVariantGroupAddVariants(params: {
       };
     }
 
-    const listPriceMinor =
-      cost != null && Number.isFinite(Number(cost)) ? Math.round(Number(cost) * 100) : null;
-    if (listPriceMinor == null || !Number.isFinite(listPriceMinor)) {
-      return {
-        success: false,
-        familyId: params.familyId,
-        productIds,
-        error: `Publish blocked (variant ${variantSku}): sellable list price missing`,
-        warnings: params.warnings.length ? params.warnings : undefined,
-      };
-    }
     const unitCostMinor =
       cost != null && Number.isFinite(Number(cost)) ? Math.round(Number(cost) * 100) : null;
     const sellable = await upsertSellableForCatalogV2Product(productId, {
       name: variantName,
       internalSku: variantSku,
-      listPriceMinor,
+      listPriceMinor: null,
       bulkPriceMinor: null,
       unitCostMinor,
       isActive: true,

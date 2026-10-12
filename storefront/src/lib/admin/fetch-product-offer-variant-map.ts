@@ -5,13 +5,20 @@ import {
   type ApparentOfferCandidate,
   detectApparentOfferCandidates,
 } from "@/lib/admin/offer-variant-map";
+import { isApprovedPublishedList } from "@/lib/pricing/published-list-pricing";
 
 export type OfferVariantMapOffer = {
   id: string;
   supplierId: string;
   supplierName: string | null;
   supplierSku: string;
+  cost: number | null;
+  costBasis: string | null;
+  unitsPerCase: number | null;
   sellPrice: number | null;
+  sellPriceVerifiedAt: string | null;
+  sellPriceVerifiedBy: string | null;
+  listApproved: boolean;
   isActive: boolean;
   catalogVariantId: string | null;
 };
@@ -35,9 +42,10 @@ export type OfferVariantMapPayload =
     }
   | { available: false; reason: "not_configured" | "migration_pending" | "not_found" };
 
-function isMissingCatalogVariantColumn(message: string | undefined): boolean {
+function isMissingOfferMapColumn(message: string | undefined): boolean {
   const m = (message ?? "").toLowerCase();
-  return m.includes("catalog_variant_id") && (m.includes("does not exist") || m.includes("schema cache"));
+  if (!m.includes("does not exist") && !m.includes("schema cache")) return false;
+  return m.includes("catalog_variant_id") || m.includes("sell_price_verified_at") || m.includes("sell_price_verified_by");
 }
 
 export async function fetchProductOfferVariantMap(productId: string): Promise<OfferVariantMapPayload> {
@@ -72,11 +80,13 @@ export async function fetchProductOfferVariantMap(productId: string): Promise<Of
   const { data: offerRows, error: oErr } = await supabase
     .schema("catalogos")
     .from("supplier_offers")
-    .select("id, supplier_id, supplier_sku, sell_price, is_active, catalog_variant_id")
+    .select(
+      "id, supplier_id, supplier_sku, cost, cost_basis, units_per_case, sell_price, sell_price_verified_at, sell_price_verified_by, is_active, catalog_variant_id"
+    )
     .eq("product_id", productId);
 
   if (oErr) {
-    if (isMissingCatalogVariantColumn(oErr.message)) {
+    if (isMissingOfferMapColumn(oErr.message)) {
       return { available: false, reason: "migration_pending" };
     }
     return { available: false, reason: "not_found" };
@@ -121,19 +131,37 @@ export async function fetchProductOfferVariantMap(productId: string): Promise<Of
       id: string;
       supplier_id: string;
       supplier_sku: string;
+      cost: number | null;
+      cost_basis: string | null;
+      units_per_case: number | null;
       sell_price: number | null;
+      sell_price_verified_at: string | null;
+      sell_price_verified_by: string | null;
       is_active: boolean;
       catalog_variant_id: string | null;
     }>
-  ).map((o) => ({
-    id: o.id,
-    supplierId: o.supplier_id,
-    supplierName: supplierNames.get(o.supplier_id) ?? null,
-    supplierSku: o.supplier_sku,
-    sellPrice: o.sell_price != null && Number.isFinite(Number(o.sell_price)) ? Number(o.sell_price) : null,
-    isActive: o.is_active === true,
-    catalogVariantId: o.catalog_variant_id,
-  }));
+  ).map((o) => {
+    const sellPrice = o.sell_price != null && Number.isFinite(Number(o.sell_price)) ? Number(o.sell_price) : null;
+    const cost = o.cost != null && Number.isFinite(Number(o.cost)) ? Number(o.cost) : null;
+    const unitsPerCase =
+      o.units_per_case != null && Number.isFinite(Number(o.units_per_case)) ? Number(o.units_per_case) : null;
+    const sellPriceVerifiedAt = o.sell_price_verified_at ? String(o.sell_price_verified_at) : null;
+    return {
+      id: o.id,
+      supplierId: o.supplier_id,
+      supplierName: supplierNames.get(o.supplier_id) ?? null,
+      supplierSku: o.supplier_sku,
+      cost,
+      costBasis: o.cost_basis ? String(o.cost_basis) : null,
+      unitsPerCase,
+      sellPrice,
+      sellPriceVerifiedAt,
+      sellPriceVerifiedBy: o.sell_price_verified_by ? String(o.sell_price_verified_by) : null,
+      listApproved: isApprovedPublishedList({ sellPrice, verifiedAt: sellPriceVerifiedAt }),
+      isActive: o.is_active === true,
+      catalogVariantId: o.catalog_variant_id,
+    };
+  });
 
   return {
     available: true,

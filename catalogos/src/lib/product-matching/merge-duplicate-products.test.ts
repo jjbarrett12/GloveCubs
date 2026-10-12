@@ -105,6 +105,7 @@ describe("mergeDuplicateProducts catalog_variant_id", () => {
     for (const patch of movePatches) {
       expect(patch.product_id).toBe(PRODUCT_B);
       expect(patch.catalog_variant_id).toBeNull();
+      expect(patch).not.toHaveProperty("sell_price");
     }
   });
 });

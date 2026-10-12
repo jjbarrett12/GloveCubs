@@ -64,6 +64,7 @@ function baseGood(over: Partial<InvoiceLineComparisonInput> = {}): InvoiceLineCo
       sell_unit_price: 16,
       sell_gloves_per_unit: 200,
       pricing_source: "site_variant_list_x_company_tier_v1",
+      published_list_approved: true,
     },
     ...over,
   };
