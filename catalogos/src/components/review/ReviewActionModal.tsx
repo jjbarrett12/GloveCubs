@@ -11,7 +11,7 @@ import {
   mergeWithStaged,
   type ReviewResult,
 } from "@/app/actions/review";
-import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/ensure-catalog-v2-link";
+import { CATALOG_V2_LEGACY_GLOVE_PRODUCT_TYPE_ID } from "@/lib/publish/catalog-v2-ids";
 
 interface ReviewActionModalProps {
   normalizedId: string;

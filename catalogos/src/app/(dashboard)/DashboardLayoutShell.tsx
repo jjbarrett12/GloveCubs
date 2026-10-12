@@ -95,6 +95,9 @@ export default function DashboardLayoutShell({ children }: { children: React.Rea
               <Link href="/dashboard/review" className={navLinkClass}>
                 Review queue
               </Link>
+              <Link href="/dashboard/products/new-family" className={navLinkClass}>
+                New product family
+              </Link>
               <Link href="/dashboard/products/quick-add" className={navLinkClass}>
                 Quick add product
               </Link>

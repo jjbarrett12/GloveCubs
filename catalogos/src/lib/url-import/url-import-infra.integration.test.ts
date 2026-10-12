@@ -4,13 +4,14 @@
 
 import { describe, expect, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
+import { privateIntegrationConfigured } from "@/lib/db/private-db-access";
 import { getSupabaseCatalogos } from "@/lib/db/client";
 import { createUrlImportJob, runUrlImportCrawl } from "./crawl-service";
 import { getUrlImportJobDetail, listUrlImportJobs } from "./admin-data";
 import { getOrCreateSupplierId } from "./supplier";
 
-const hasDb =
-  !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Requires the server database connection. A PostgREST URL alone is not enough.
+const hasDb = privateIntegrationConfigured();
 
 describe.skipIf(!hasDb)("url import infra (integration)", () => {
   it("uses catalogos schema for url_import_jobs (not public)", async () => {
@@ -46,5 +47,5 @@ describe.skipIf(!hasDb)("url import infra (integration)", () => {
 
     const detail = await getUrlImportJobDetail(jobId);
     expect(detail?.job.status).toMatch(/completed|failed/);
-  });
+  }, 30_000);
 });

@@ -5,7 +5,23 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@/lib/db/client", () => {
+  const result = { data: [], error: null };
+  const chain: Record<string, unknown> = {};
+  const self = new Proxy(chain, {
+    get(_target, prop) {
+      if (prop === "then") return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+      return () => self;
+    },
+  });
+  return {
+    isSupabaseConfigured: () => true,
+    getSupabaseCatalogos: () => ({ from: () => self }),
+  };
+});
+
 import { syncProductAttributesFromStaged } from "./product-attribute-sync";
 
 describe("product-attribute-sync", () => {
@@ -30,9 +46,7 @@ describe("product-attribute-sync", () => {
     expect(r2.errors).toEqual([]);
   });
 
-    it("reports errors when attribute_definition missing for category (unknown key)", async () => {
-    const hasSupabase = !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!hasSupabase) return;
+  it("reports errors when attribute_definition missing for category (unknown key)", async () => {
     const result = await syncProductAttributesFromStaged("product-id", "category-id", {
       unknown_key: "value",
     });

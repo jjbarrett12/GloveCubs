@@ -18,13 +18,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const supplierId = row.supplier_id as string | null | undefined;
   if (masterId && supplierId) {
     const supabase = getSupabaseCatalogos(true);
-    const { data } = await supabase
+    const withProvenance = await supabase
       .from("supplier_offers")
-      .select("id, supplier_id, product_id, supplier_sku, cost, sell_price, lead_time_days, is_active, normalized_id")
+      .select(
+        "id, supplier_id, product_id, supplier_sku, cost, lead_time_days, is_active, normalized_id, cost_source_type, cost_source_reference, cost_updated_at, cost_updated_by"
+      )
       .eq("product_id", masterId)
       .eq("supplier_id", supplierId)
       .order("updated_at", { ascending: false });
-    supplier_offers = data ?? [];
+    if (!withProvenance.error) {
+      supplier_offers = withProvenance.data ?? [];
+    } else {
+      const base = await supabase
+        .from("supplier_offers")
+        .select("id, supplier_id, product_id, supplier_sku, cost, lead_time_days, is_active, normalized_id")
+        .eq("product_id", masterId)
+        .eq("supplier_id", supplierId)
+        .order("updated_at", { ascending: false });
+      supplier_offers = base.data ?? [];
+    }
   }
 
   return NextResponse.json({

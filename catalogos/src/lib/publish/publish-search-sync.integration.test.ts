@@ -3,13 +3,13 @@
  * Requires Supabase. Skips when env not configured.
  */
 import { describe, it, expect } from "vitest";
+import { privateIntegrationConfigured } from "@/lib/db/private-db-access";
 import { getSupabase } from "@/lib/db/client";
 import { isCatalogV2ProductActive } from "./canonical-sync-service";
 import { listLiveProducts } from "@/lib/catalog/query";
 
-const hasSupabase =
-  !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-  !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Requires the server database connection. PostgREST cannot see catalog_v2.
+const hasSupabase = privateIntegrationConfigured();
 
 describe.runIf(hasSupabase)("publish / search sync (live DB)", () => {
   it("active catalog_v2 product is findable via listLiveProducts (storefront search path)", async () => {

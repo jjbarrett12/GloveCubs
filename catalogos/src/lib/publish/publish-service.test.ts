@@ -9,6 +9,7 @@ import * as productAttributeSync from "./product-attribute-sync";
 import * as productAttributesSnapshot from "./product-attributes-snapshot";
 import * as catalogVariantIngest from "./catalog-variant-ingest";
 import * as dbClient from "@/lib/db/client";
+import * as privateSql from "@/lib/db/private-sql";
 
 describe("publish service", () => {
   describe("buildPublishInputFromStaged", () => {
@@ -60,6 +61,22 @@ describe("publish service", () => {
       expect(input!.stagedContent.brand).toBe("Acme");
       expect(input!.categorySlug).toBe("disposable_gloves");
       expect(input!.stagedFilterAttributes).toEqual({ material: "nitrile", size: "m", color: "blue" });
+    });
+
+    it("uses filter attributes when the review attributes column is empty", () => {
+      const row = {
+        supplier_id: "sup-1",
+        raw_id: "raw-1",
+        normalized_data: {
+          canonical_title: "Gloves",
+          supplier_sku: "X",
+          supplier_cost: 12,
+          filter_attributes: { material: "nitrile", color: "blue", brand: "GloveCubs" },
+        },
+        attributes: {},
+      };
+      const input = buildPublishInputFromStaged("n-empty", row, {});
+      expect(input!.stagedFilterAttributes).toEqual({ material: "nitrile", color: "blue", brand: "GloveCubs" });
     });
 
     it("uses attributes when normalized_data.filter_attributes missing", () => {
@@ -264,6 +281,7 @@ describe("publish service", () => {
     });
 
     it("fails before snapshot when syncProductAttributesFromStaged returns errors; snapshot not invoked", async () => {
+      vi.spyOn(privateSql, "privateDbConfigured").mockReturnValue(false);
       const masterProductId = "11111111-1111-1111-1111-111111111111";
       const categoryId = "22222222-2222-2222-2222-222222222222";
 

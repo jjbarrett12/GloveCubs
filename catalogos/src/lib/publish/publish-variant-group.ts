@@ -18,6 +18,11 @@ import {
   unitsPerCaseFromStagingNormalizedContent,
   withResolvedCatalogVariantId,
 } from "../../../../lib/supplier-offer-normalization";
+import {
+  COST_PROVENANCE_ACTOR,
+  mergeOfferProvenance,
+  offerProvenanceFromStaging,
+} from "@/lib/pricing/landed-cost-provenance";
 import type { SearchPublishStatus } from "./types";
 import { resolvePublishSkusFromStaging } from "@/lib/sku-intelligence/publish-sku-apply";
 
@@ -373,16 +378,19 @@ async function runPublishVariantGroupAddVariants(params: {
     const offerRow = omitUnapprovedSellPriceFromOfferWrite(
       withResolvedCatalogVariantId(
         buildSupplierOfferUpsertRow(
-          {
-            supplier_id: row.supplier_id,
-            product_id: productId,
-            supplier_sku: supplierSku,
-            cost: costNum,
-            raw_id: row.raw_id,
-            normalized_id: row.id,
-            is_active: true,
-            units_per_case: unitsPer ?? null,
-          },
+          mergeOfferProvenance(
+            {
+              supplier_id: row.supplier_id,
+              product_id: productId,
+              supplier_sku: supplierSku,
+              cost: costNum,
+              raw_id: row.raw_id,
+              normalized_id: row.id,
+              is_active: true,
+              units_per_case: unitsPer ?? null,
+            },
+            offerProvenanceFromStaging(nd as Record<string, unknown>, COST_PROVENANCE_ACTOR.catalogos_operator)
+          ),
           { currency_code: "USD", cost_basis: offerCostBasis, cost: costNum, units_per_case: unitsPer }
         ),
         catalogVariantId

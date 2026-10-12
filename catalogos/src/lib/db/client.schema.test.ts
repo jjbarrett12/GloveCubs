@@ -11,6 +11,11 @@ describe("getSupabaseCatalogos schema routing", () => {
     createClient.mockClear();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+    delete process.env.SUPABASE_DB_URL;
+    delete process.env.STAGING_DATABASE_URL;
+    delete process.env.STAGING_SQL_ACCESS_TOKEN;
+    delete process.env.VERCEL_ENV;
+    delete process.env.GC_ENVIRONMENT;
   });
 
   afterEach(() => {

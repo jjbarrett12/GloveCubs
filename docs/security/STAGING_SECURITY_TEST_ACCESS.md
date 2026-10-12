@@ -45,6 +45,14 @@ SET LOCAL ROLE authenticated;
 
 Helpers: `lib/stagingSqlAccess.js` → `setRequestJwt`.
 
+## CatalogOS server database
+
+CatalogOS reads and writes `catalogos`, `catalog_v2`, and `gc_commerce` through a server-only Postgres connection. Those schemas stay off PostgREST (`npm run verify:private-schemas-unexposed`).
+
+Set `SUPABASE_DB_URL` on the CatalogOS server to the session or direct URI for the same Supabase project as that deployment. Do not commit it, do not prefix it with `NEXT_PUBLIC_`, and do not point it at a different project. Production fails closed when it is missing. Production cannot use the staging SQL API, the Supabase CLI, or service-role PostgREST against those schemas.
+
+Local staging can use `STAGING_DATABASE_URL` in `.env.staging.local`. The staging SQL API is a fallback only when `GC_ENVIRONMENT=staging` (or `CATALOGOS_ALLOW_STAGING_SQL_API=1`) and the app URL is the staging project. It does not run when `VERCEL_ENV=production`.
+
 ## Application target
 
 Preferred: local Express + storefront against staging env vars in `.env.staging.local`.

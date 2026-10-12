@@ -39,8 +39,8 @@ export async function checkAndRecordRateLimit(
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
   try {
-    const { getSupabase } = await import("@/lib/db/client");
-    const supabase = getSupabase(true);
+    const { getSupabasePublic } = await import("@/lib/db/public-client");
+    const supabase = getSupabasePublic(true);
 
     const now = new Date();
     const windowStart = new Date(now.getTime() - config.window_ms);
