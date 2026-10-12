@@ -20,7 +20,6 @@ export {
   filterApplyCandidates,
   isSafeProductSetupApplyCandidate,
   isHighRiskComplianceField,
-  isGlvLookingSku,
   PRODUCT_SETUP_APPLY_CANDIDATE_SCHEMA_VERSION,
 } from "./product-setup-apply-candidates";
 export type {

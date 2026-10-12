@@ -104,7 +104,7 @@ function storefrontFacetFilterKeys(): readonly string[] {
 export async function getFilteredProductIds(params: StorefrontFilterParams): Promise<Set<string> | null> {
   const effectiveParams = normalizeStorefrontFilterParams(params);
   const filterKeys = storefrontFacetFilterKeys();
-  const multiKeys = new Set(GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS);
+  const multiKeys = new Set<string>(GLOBAL_MULTI_SELECT_ATTRIBUTE_KEYS);
   const keysWithValues: Array<{ key: (typeof filterKeys)[number]; values: string[] }> = [];
   for (const key of filterKeys) {
     const raw = effectiveParams[key as keyof StorefrontFilterParams];
