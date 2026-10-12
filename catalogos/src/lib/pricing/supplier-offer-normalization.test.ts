@@ -8,6 +8,7 @@ import {
   buildSupplierOfferUpsertRow,
   parseSupplierOfferCostBasis,
   assertSupplierOfferWritePayloadHasNormalization,
+  withResolvedCatalogVariantId,
 } from "./supplier-offer-normalization";
 
 describe("supplier-offer-normalization", () => {
@@ -92,5 +93,38 @@ describe("supplier-offer-normalization", () => {
     expect(() => parseSupplierOfferCostBasis("")).toThrow();
     expect(() => parseSupplierOfferCostBasis("per_kg")).toThrow();
     expect(parseSupplierOfferCostBasis("per_case")).toBe("per_case");
+  });
+
+  it("unresolved upsert omits catalog_variant_id so an existing mapping is preserved", () => {
+    const existing = { catalog_variant_id: "variant-A", supplier_sku: "GL-N125F-L" };
+    const payload = withResolvedCatalogVariantId(
+      { supplier_sku: "GL-N125F-L", cost: 10 },
+      null
+    );
+    expect(payload).not.toHaveProperty("catalog_variant_id");
+    expect({ ...existing, ...payload }.catalog_variant_id).toBe("variant-A");
+  });
+
+  it("resolved upsert writes catalog_variant_id (idempotent retry keeps same FK)", () => {
+    const existing = { catalog_variant_id: "variant-A" };
+    const first = withResolvedCatalogVariantId({ supplier_sku: "GL-N125F-L" }, "variant-A");
+    const retry = withResolvedCatalogVariantId(first, "variant-A");
+    expect(first.catalog_variant_id).toBe("variant-A");
+    expect(retry.catalog_variant_id).toBe("variant-A");
+    expect({ ...existing, ...retry }.catalog_variant_id).toBe("variant-A");
+  });
+
+  it("resolved upsert can update mapping to a new variant id", () => {
+    const existing = { catalog_variant_id: "variant-A" };
+    const payload = withResolvedCatalogVariantId({ supplier_sku: "GL-N125F-L" }, "variant-B");
+    expect({ ...existing, ...payload }.catalog_variant_id).toBe("variant-B");
+  });
+
+  it("strips an accidental null catalog_variant_id key from a row", () => {
+    const payload = withResolvedCatalogVariantId(
+      { supplier_sku: "X", catalog_variant_id: null },
+      null
+    );
+    expect(payload).not.toHaveProperty("catalog_variant_id");
   });
 });

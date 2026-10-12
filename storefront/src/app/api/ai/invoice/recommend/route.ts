@@ -1,120 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
-import { invoiceRecommendRequestSchema } from "@/lib/ai/schemas";
-import { aiInvoiceSavings } from "@/lib/ai/provider";
-import { checkAiRateLimit } from "@/lib/ai/middleware";
-import { logAiEvent } from "@/lib/ai/telemetry";
-import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
-import { getActiveProducts } from "@/lib/gloves/queries";
-import { OPENAI_CHAT_MODEL } from "@/lib/ai/openai";
-import {
-  isCatalogSupabaseEmergencyDisabled,
-  isPublicAiEmergencyDisabled,
-} from "@/lib/catalog/emergency-catalog-kill-switch";
-import { guardPublicJsonPost } from "@/lib/http/public-post-guard";
-import { requireHumanBotId } from "@/lib/security/botid-gate";
+import { NextResponse } from "next/server";
 
 export const maxDuration = 30;
 
-export async function POST(request: NextRequest) {
-  const botGate = await requireHumanBotId({ route: "/api/ai/invoice/recommend" });
-  if (!botGate.ok) return botGate.response;
+/**
+ * Public AI invoice "cheaper or better" recommendations are disabled.
+ * Savings must use governed spec compatibility + deterministic pricing (Phase 2+).
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: "Invoice AI recommendations are disabled. Use invoice intake and governed review.",
+      code: "invoice_recommend_disabled",
+    },
+    { status: 410 },
+  );
+}
 
-  if (isPublicAiEmergencyDisabled()) {
-    return NextResponse.json(
-      {
-        error: "Invoice recommendations are temporarily unavailable.",
-        emergencyDisabled: true,
-      },
-      { status: 503 },
-    );
-  }
-
-  const rate = checkAiRateLimit(request);
-  if (!rate.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests", retryAfterMs: rate.retryAfterMs },
-      { status: 429 }
-    );
-  }
-
-  const guarded = guardPublicJsonPost(request, { maxBytes: 256 * 1024 });
-  if (guarded) return guarded;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-  const parsed = invoiceRecommendRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
-  }
-
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json(
-      { error: "Supabase not configured" },
-      { status: 500 }
-    );
-  }
-  if (isCatalogSupabaseEmergencyDisabled()) {
-    return NextResponse.json(
-      {
-        error: "Catalog matching is temporarily unavailable. Please contact sales with your invoice lines.",
-        catalogUnavailable: true,
-      },
-      { status: 503 },
-    );
-  }
-  const supabase = getSupabaseAdmin();
-  let catalog: Awaited<ReturnType<typeof getActiveProducts>> = [];
-  try {
-    catalog = await getActiveProducts(supabase);
-  } catch {
-    catalog = [];
-  }
-
-  const start = Date.now();
-  try {
-    const result = await aiInvoiceSavings(parsed.data.lines, catalog);
-    const latencyMs = Date.now() - start;
-    if (!result.ok) {
-      await logAiEvent(supabase, {
-        event_type: "invoice_recommend",
-        model_used: OPENAI_CHAT_MODEL,
-        tokens_estimate: null,
-        success: false,
-        latency_ms: latencyMs,
-        meta: { error: result.error },
-      }).catch(() => {});
-      return NextResponse.json({ error: result.error }, { status: 500 });
-    }
-    await logAiEvent(supabase, {
-      event_type: "invoice_recommend",
-      model_used: OPENAI_CHAT_MODEL,
-      tokens_estimate: null,
-      success: true,
-      latency_ms: latencyMs,
-      meta: { swaps_count: result.data.swaps.length },
-    }).catch(() => {});
-
-    return NextResponse.json({
-      total_current_estimate: result.data.total_current_estimate,
-      total_recommended_estimate: result.data.total_recommended_estimate,
-      estimated_savings: result.data.estimated_savings,
-      swaps: result.data.swaps,
-    });
-  } catch (e) {
-    const latencyMs = Date.now() - start;
-    await logAiEvent(supabase, {
-      event_type: "invoice_recommend",
-      model_used: OPENAI_CHAT_MODEL,
-      tokens_estimate: null,
-      success: false,
-      latency_ms: latencyMs,
-      meta: { error: e instanceof Error ? e.message : "unknown" },
-    }).catch(() => {});
-    const message = e instanceof Error ? e.message : "Recommendation failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+export async function GET() {
+  return NextResponse.json(
+    { error: "Invoice AI recommendations are disabled.", code: "invoice_recommend_disabled" },
+    { status: 410 },
+  );
 }

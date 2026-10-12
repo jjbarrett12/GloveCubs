@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   );
   if (writeLimited) return writeLimited;
 
-  const guarded = guardPublicMultipartPost(request, { maxBytes: 8 * 1024 * 1024 });
+  const guarded = guardPublicMultipartPost(request, { maxBytes: 10 * 1024 * 1024 });
   if (guarded) return guarded;
 
   const rate = checkAiRateLimit(request);
@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       ...c,
       vendor_name: c.vendor_name,
       invoice_number: c.invoice_number,
+      invoice_date: c.invoice_date,
       total_amount: c.total_amount,
       lines: c.lines ?? [],
     },

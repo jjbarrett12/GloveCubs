@@ -94,17 +94,45 @@ export const GloveFinderResponseSchema = z.preprocess(normalizeGloveFinderRespon
 export type GloveFinderResponse = z.infer<typeof gloveFinderResponseInner>;
 
 // ---- Invoice extraction ----
+// ---- Invoice extraction ----
+const nullableString = z.string().nullable().optional();
+const nullableNumber = z.number().nullable().optional();
+
 export const invoiceLineSchema = z.object({
   description: z.string(),
   quantity: z.number(),
   unit_price: z.number().nullable(),
   total: z.number().nullable(),
   sku_or_code: z.string().optional().nullable(),
+  manufacturer_sku: nullableString,
+  supplier_sku: nullableString,
+  manufacturer: nullableString,
+  brand: nullableString,
+  quantity_uom: nullableString,
+  gloves_per_box: nullableNumber,
+  boxes_per_case: nullableNumber,
+  gloves_per_case: nullableNumber,
+  pack_notation: nullableString,
+  material: nullableString,
+  color: nullableString,
+  size: nullableString,
+  thickness_mil: nullableNumber,
+  grade: nullableString,
+  powder: nullableString,
+  texture: nullableString,
+  cuff: nullableString,
+  certifications: z.array(z.string()).optional().nullable(),
 });
 
 export const invoiceExtractResponseSchema = z.object({
   vendor_name: z.string().optional().nullable(),
   invoice_number: z.string().optional().nullable(),
+  invoice_date: nullableString,
+  po_number: nullableString,
+  subtotal: nullableNumber,
+  discounts: nullableNumber,
+  freight: nullableNumber,
+  tax: nullableNumber,
   total_amount: z.number().optional().nullable(),
   lines: z.array(invoiceLineSchema),
 });

@@ -33,6 +33,20 @@ function pricingByVariantId(rows: PdpVariantPricingRow[]): Map<string, PdpVarian
   return new Map(rows.map((r) => [r.catalogVariantId, r]));
 }
 
+/**
+ * Quote-cart unit price for the selected size.
+ * Uses the same variant-authoritative list the PDP shows — never family/product-min.
+ * `null` means request pricing (unmapped / unpublished size).
+ */
+export function quoteUnitPriceMajorFromSelectedVariant(
+  selected: PdpSelectedVariantPricingDisplay
+): number | null {
+  if (selected.kind === "request_pricing") return null;
+  const n = selected.listUsd;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 /** Selected-variant pricing only — never maps parent bestPrice into variant fields. */
 export function resolvePdpSelectedVariantPricingDisplay(
   selectedVariantId: string | null,
@@ -68,7 +82,7 @@ export function resolvePdpSelectedVariantPricingDisplay(
 
 export function resolvePdpParentFromDisplay(
   bestPrice: number | null | undefined,
-  bestPriceScope: StoreProductDetail["bestPriceScope"]
+  bestPriceScope: StoreProductDetail["bestPriceScope"] | undefined
 ): PdpParentFromDisplay | null {
   if (bestPrice == null || !Number.isFinite(bestPrice) || bestPrice <= 0) return null;
   if (bestPriceScope !== PDP_BEST_PRICE_SCOPE) return null;

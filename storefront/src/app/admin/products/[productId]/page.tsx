@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductImage } from "@/components/store/ProductImage";
 import { ADMIN_PRODUCT_UUID_RE, fetchAdminProductDetail } from "@/lib/admin/product-operations";
+import { fetchProductOfferVariantMap } from "@/lib/admin/fetch-product-offer-variant-map";
+import { OfferVariantMapPanel } from "@/app/admin/products/_components/OfferVariantMapPanel";
 import { PageHeader, PageSection, StatCard, StatGrid, StatusBadge, TableCard, ErrorState } from "@/components/admin";
 import {
   adminCardSurface,
@@ -61,6 +63,7 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
     notFound();
   }
 
+  const offerMap = await fetchProductOfferVariantMap(productId);
   const p = data.product;
   const catalogosBase = process.env.NEXT_PUBLIC_CATALOGOS_URL?.trim().replace(/\/$/, "") ?? "";
   const productMeta = (p.metadata ?? {}) as Record<string, unknown>;
@@ -195,6 +198,13 @@ export default async function AdminProductDetailPage({ params }: { params: { pro
             </table>
           </div>
         </TableCard>
+      </PageSection>
+
+      <PageSection
+        title="Supplier offer mapping"
+        description="Deterministic variant ↔ offer link for Pricing Authority V2. Confirm or leave unmapped. No AI."
+      >
+        <OfferVariantMapPanel productId={p.id} map={offerMap} />
       </PageSection>
 
       <PageSection

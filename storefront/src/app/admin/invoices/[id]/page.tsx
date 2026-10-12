@@ -8,6 +8,7 @@ import { getAdminOperator } from "@/lib/admin/get-admin-user";
 import { invoiceOpsRequiresAction } from "@/lib/admin/launch-ops-status";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { InvoiceOpsStatusForm } from "./InvoiceOpsStatusForm";
+import { InvoiceLineReviewPanel, type InvoiceLineReviewRow } from "./InvoiceLineReviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,15 @@ export default async function AdminInvoiceDetailPage({ params }: { params: { id:
     (typeof extract?.error === "string" ? extract.error : null) ??
     (typeof payload.phase2_error === "string" ? payload.phase2_error : null);
 
+  const { data: lineRows } = await supabase
+    .schema("gc_commerce")
+    .from("invoice_lines")
+    .select(
+      "id, line_index, raw_description, quantity, unit_price, line_total, supplier_sku, manufacturer_sku, quantity_uom, gloves_per_box, boxes_per_case, gloves_per_case, review_status, match_reason, match_trust_status, comparison_block_reason, competitor_product_id, catalog_product_id, comparison_snapshot",
+    )
+    .eq("uploaded_invoice_id", params.id)
+    .order("line_index", { ascending: true });
+  const persistedLines = (lineRows ?? []) as InvoiceLineReviewRow[];
   const intakeFailed = data.intake_status === "extracted_failed" || data.intake_status === "intake_failed";
 
   return (
@@ -152,6 +162,12 @@ export default async function AdminInvoiceDetailPage({ params }: { params: { id:
         <InvoiceOpsStatusForm invoiceId={data.id} currentStatus={data.staff_ops_status} />
       </PremiumSectionCard>
 
+      {persistedLines.length > 0 ? (
+        <PremiumSectionCard title="Governed line comparison" className="mt-6">
+          <InvoiceLineReviewPanel lines={persistedLines} />
+        </PremiumSectionCard>
+      ) : null}
+
       {lines.length > 0 ? (
         <PremiumSectionCard title="Extracted lines" className="mt-6">
           <TableCard>
@@ -178,6 +194,10 @@ export default async function AdminInvoiceDetailPage({ params }: { params: { id:
 
       <Link href="/admin/invoices" className={cn("mt-4 inline-block text-sm", adminLink)}>
         ← Invoice intakes
+      </Link>
+      {" · "}
+      <Link href="/admin/procurement/crosswalk" className={cn("mt-4 inline-block text-sm", adminLink)}>
+        Competitor crosswalk
       </Link>
     </div>
   );

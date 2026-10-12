@@ -106,18 +106,30 @@ describe("PDP quantity math", () => {
 });
 
 describe("buildQuoteLineCommerceFields", () => {
-  it("builds case add payload", () => {
+  it("does not treat packaging casePrice as quote authority", () => {
     const fields = buildQuoteLineCommerceFields("case", 3, fullPalletPkg);
     expect(fields.sell_unit).toBe("case");
-    expect(fields.unit_price_major).toBe(42);
+    expect(fields.unit_price_major).toBeNull();
     expect(fields.units_per_case).toBe(1000);
     expect(fields.commerce_summary).toBe("3 cases · 3,000 gloves total");
   });
 
-  it("builds pallet add payload", () => {
+  it("stores explicit variant-authoritative case list", () => {
+    const fields = buildQuoteLineCommerceFields("case", 3, fullPalletPkg, 85);
+    expect(fields.unit_price_major).toBe(85);
+    expect(fields.pricing_status).toBe("variant_published_list");
+  });
+
+  it("stamps request_pricing when there is no variant list", () => {
+    const fields = buildQuoteLineCommerceFields("case", 3, fullPalletPkg, null);
+    expect(fields.unit_price_major).toBeNull();
+    expect(fields.pricing_status).toBe("request_pricing");
+  });
+
+  it("does not treat packaging palletPrice as quote authority", () => {
     const fields = buildQuoteLineCommerceFields("pallet", 2, fullPalletPkg);
     expect(fields.sell_unit).toBe("pallet");
-    expect(fields.unit_price_major).toBe(2950);
+    expect(fields.unit_price_major).toBeNull();
     expect(fields.cases_per_pallet).toBe(84);
     expect(fields.commerce_summary).toContain("2 pallets");
     expect(fields.commerce_summary).toContain("168 cases");
@@ -127,6 +139,18 @@ describe("buildQuoteLineCommerceFields", () => {
     const fields = buildQuoteLineCommerceFields("case", 1, fullPalletPkg);
     expect(["case", "pallet"]).toContain(fields.sell_unit);
     expect(fields.sell_unit).not.toBe("box");
+  });
+
+  it("does not inherit family bestPrice via packaging fallback arg", () => {
+    const pkg = pdpCommerceFromProductMetadata({ units_per_case: 1000 }, 85);
+    expect(pkg.casePrice).toBe(85);
+    const fields = buildQuoteLineCommerceFields("case", 1, pkg, null);
+    expect(fields.unit_price_major).toBeNull();
+  });
+
+  it("rejects zero and negative as unknown, not a price", () => {
+    expect(buildQuoteLineCommerceFields("case", 1, fullPalletPkg, 0).unit_price_major).toBeNull();
+    expect(buildQuoteLineCommerceFields("case", 1, fullPalletPkg, -1).unit_price_major).toBeNull();
   });
 });
 
@@ -163,6 +187,24 @@ describe("quote cart line display", () => {
   it("shows total units secondary", () => {
     expect(formatQuoteCartLineSecondary(caseLine)).toBe("3,000 gloves total");
     expect(formatQuoteCartLineSecondary(palletLine)).toBe("168 cases / 168,000 gloves total");
+  });
+
+  it("shows request pricing when unit price is absent", () => {
+    expect(
+      formatQuoteCartLinePrimary({
+        ...caseLine,
+        unit_price_major: null,
+      })
+    ).toBe("3 cases · Request pricing");
+  });
+
+  it("does not show $0 as a published price", () => {
+    expect(
+      formatQuoteCartLinePrimary({
+        ...caseLine,
+        unit_price_major: 0,
+      })
+    ).toBe("3 cases · Request pricing");
   });
 
   it("does not show stock or sold-as language", () => {

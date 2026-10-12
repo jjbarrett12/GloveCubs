@@ -5,12 +5,14 @@
 
 import { randomUUID } from "crypto";
 import type { InvoiceExtractResponse } from "@/lib/ai/schemas";
+import { enrichExtractWithParser, type EnrichedInvoiceLine } from "@/lib/invoice/enrich-extract";
 import { appendProcurementEvent } from "@/lib/procurement/opportunity-service";
 import { ProcurementEventType } from "@/lib/procurement/event-taxonomy";
 import { resolveInvoiceVendor } from "@/lib/invoice/supplier-resolve";
 import { resolveInvoiceLinesViaCatalogos, type CatalogosResolveLineResult } from "@/lib/invoice/catalogos-resolve-client";
+import { persistGovernedComparisonsForInvoice } from "@/lib/procurement/invoice-line-comparison-run";
 
-export const INVOICE_MATCHING_VERSION = "invoice-match-v1" as const;
+export const INVOICE_MATCHING_VERSION = "invoice-match-v2" as const;
 
 export function lineReviewFromMatch(m: CatalogosResolveLineResult): string {
   if (m.matched) {
@@ -53,6 +55,23 @@ export type ProcessInvoicePhase2Input = {
 
 export type ProcessInvoicePhase2Result = { ok: true } | { ok: false; error: string };
 
+function intakeLineMemory(ln: EnrichedInvoiceLine): Record<string, unknown> {
+  return {
+    quantity_uom: ln.quantity_uom ?? null,
+    gloves_per_box: ln.gloves_per_box ?? null,
+    boxes_per_case: ln.boxes_per_case ?? null,
+    gloves_per_case: ln.gloves_per_case ?? null,
+    pack_notation: ln.pack_notation ?? null,
+    manufacturer_sku: ln.manufacturer_sku ?? null,
+    material: ln.material ?? null,
+    color: ln.color ?? null,
+    size: ln.size ?? null,
+    purchased_quantity: ln.quantity,
+    purchased_uom: ln.quantity_uom ?? null,
+    field_provenance: { pack: ln.pack, specs: ln.specs },
+  };
+}
+
 export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Promise<ProcessInvoicePhase2Result> {
   const { supabase, opportunityId, uploadedInvoiceId, extractOk, extract } = input;
 
@@ -71,10 +90,11 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
   const { data: intakeRow } = await supabase
     .schema("gc_commerce")
     .from("uploaded_invoices")
-    .select("matching_attempt")
+    .select("matching_attempt, company_id")
     .eq("id", uploadedInvoiceId)
     .single();
   const nextAttempt = Number((intakeRow as { matching_attempt?: number } | null)?.matching_attempt ?? 0) + 1;
+  const companyId = (intakeRow as { company_id?: string | null } | null)?.company_id ?? null;
   await supabase
     .schema("gc_commerce")
     .from("uploaded_invoices")
@@ -85,16 +105,20 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
     })
     .eq("id", uploadedInvoiceId);
 
-  const lines = extract?.lines ?? [];
+  const enriched = extract ? enrichExtractWithParser(extract) : null;
+  const lines = enriched?.lines ?? [];
   const vendorRaw = extract?.vendor_name ?? "";
 
   const lineIds: string[] = [];
   const rowsToInsert: Record<string, unknown>[] = [];
+  const intakeByLineId = new Map<string, Record<string, unknown>>();
 
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i]!;
     const id = randomUUID();
     lineIds.push(id);
+    const intake = intakeLineMemory(ln);
+    intakeByLineId.set(id, intake);
     rowsToInsert.push({
       id,
       uploaded_invoice_id: uploadedInvoiceId,
@@ -103,10 +127,17 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
       quantity: Number(ln.quantity) || 0,
       unit_price: ln.unit_price != null ? Number(ln.unit_price) : null,
       line_total: ln.total != null ? Number(ln.total) : null,
-      supplier_sku: ln.sku_or_code != null ? String(ln.sku_or_code).slice(0, 500) : null,
+      supplier_sku: ln.sku_or_code != null ? String(ln.sku_or_code).slice(0, 500) : ln.supplier_sku != null ? String(ln.supplier_sku).slice(0, 500) : null,
+      manufacturer_sku: ln.manufacturer_sku != null ? String(ln.manufacturer_sku).slice(0, 500) : null,
+      quantity_uom: ln.quantity_uom ?? null,
+      gloves_per_box: ln.gloves_per_box ?? null,
+      boxes_per_case: ln.boxes_per_case ?? null,
+      gloves_per_case: ln.gloves_per_case ?? null,
+      pack_notation: ln.pack_notation ?? null,
       extraction_confidence: null,
       review_status: "pending_review",
-      normalized_snapshot: {},
+      normalized_snapshot: intake,
+      field_provenance: { pack: ln.pack, specs: ln.specs },
       substitute_candidate: false,
       decision_source: "system",
       updated_at: new Date().toISOString(),
@@ -171,6 +202,15 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
           cost: ln.unit_price ?? 0,
           unit_cost: ln.unit_price ?? 0,
           quantity: ln.quantity,
+          quantity_uom: ln.quantity_uom ?? null,
+          gloves_per_box: ln.gloves_per_box ?? null,
+          boxes_per_case: ln.boxes_per_case ?? null,
+          gloves_per_case: ln.gloves_per_case ?? null,
+          material: ln.material ?? null,
+          color: ln.color ?? null,
+          size: ln.size ?? null,
+          powder: ln.powder ?? null,
+          grade: ln.grade ?? null,
         },
       };
     }),
@@ -179,6 +219,10 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
   const lineStatuses: string[] = [];
   const noMatchLineIds: string[] = [];
   const reviewLineIds: string[] = [];
+  const catalogByLine = new Map<
+    string,
+    { catalog_product_id: string | null; match_reason: string; normalized_snapshot?: Record<string, unknown> }
+  >();
 
   if (lineIds.length === 0) {
     const okProd = await appendProcurementEvent(supabase, opportunityId, ProcurementEventType.product_match_completed, {
@@ -201,15 +245,26 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
         if (review === "no_match") noMatchLineIds.push(r.line_id);
         if (review === "review_required") reviewLineIds.push(r.line_id);
 
+        catalogByLine.set(r.line_id, {
+          catalog_product_id: r.catalog_product_id,
+          match_reason: r.match_reason,
+          normalized_snapshot: r.normalized_snapshot as Record<string, unknown> | undefined,
+        });
+        const fuzzyCandidate = r.match_reason === "fuzzy_title";
         const { error: upErr } = await supabase
           .schema("gc_commerce")
           .from("invoice_lines")
           .update({
             review_status: review,
-            normalized_snapshot: r.normalized_snapshot,
+            normalized_snapshot: {
+              ...(intakeByLineId.get(r.line_id) ?? {}),
+              ...r.normalized_snapshot,
+              intake: intakeByLineId.get(r.line_id) ?? null,
+            },
             catalog_product_id: r.catalog_product_id,
             match_confidence: r.match_confidence,
             match_reason: r.match_reason,
+            substitute_candidate: fuzzyCandidate,
             updated_at: new Date().toISOString(),
           })
           .eq("id", r.line_id);
@@ -289,6 +344,12 @@ export async function processInvoicePhase2(input: ProcessInvoicePhase2Input): Pr
       line_ids: reviewLineIds,
     });
     if (!okRv) return { ok: false, error: "event_line_review_failed" };
+  }
+
+  try {
+    await persistGovernedComparisonsForInvoice(supabase, uploadedInvoiceId, companyId, catalogByLine);
+  } catch {
+    /* Comparison is additive; intake must still complete. */
   }
 
   const aggregate = computeAggregateReview(lineStatuses, supplier.review_status);

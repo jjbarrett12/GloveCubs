@@ -10,5 +10,4 @@ export const BOTID_PROTECTED_ROUTES = [
   { path: "/api/auth/self-signup/finalize", method: "POST" },
   { path: "/api/gloves/recommend", method: "POST" },
   { path: "/api/ai/glove-finder", method: "POST" },
-  { path: "/api/ai/invoice/recommend", method: "POST" },
 ] as const;

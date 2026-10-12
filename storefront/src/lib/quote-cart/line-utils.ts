@@ -1,4 +1,4 @@
-import type { QuoteCartItem, QuoteCartSellUnit } from "@/lib/quote-cart/types";
+import type { QuoteCartItem, QuoteCartSellUnit, QuoteLinePricingStatus } from "@/lib/quote-cart/types";
 
 const MAX_LINE_NOTE_LEN = 2000;
 
@@ -23,6 +23,23 @@ function normalizeUnitNoun(raw: unknown): QuoteCartItem["unit_noun"] | undefined
   return undefined;
 }
 
+/**
+ * Unlabeled legacy prices cannot prove variant-authoritative list.
+ * Keep a stored number only when the line was stamped `variant_published_list`
+ * (still UX-only; the quote-request API re-resolves).
+ */
+export function normalizeQuoteLinePricingProvenance(
+  pricingStatus: unknown,
+  unitPriceMajor: unknown
+): { pricing_status: QuoteLinePricingStatus; unit_price_major: number | null } {
+  const stamped = pricingStatus === "variant_published_list";
+  const price = stamped ? normalizeOptionalNumber(unitPriceMajor) : null;
+  if (price == null) {
+    return { pricing_status: "request_pricing", unit_price_major: null };
+  }
+  return { pricing_status: "variant_published_list", unit_price_major: price };
+}
+
 /** Normalize optional variant fields; strip orphan SKU/size when no variant id. */
 export function normalizeQuoteCartLineInput(
   p: Omit<QuoteCartItem, "quantity">
@@ -30,9 +47,11 @@ export function normalizeQuoteCartLineInput(
   const vid = p.catalog_variant_id?.trim() || null;
   const line_note = normalizeLineNote(p.line_note ?? null);
   const sell_unit = resolveQuoteSellUnit(p.sell_unit);
+  const pricing = normalizeQuoteLinePricingProvenance(p.pricing_status, p.unit_price_major);
   const commerceFields = {
     sell_unit,
-    unit_price_major: normalizeOptionalNumber(p.unit_price_major),
+    unit_price_major: pricing.unit_price_major,
+    pricing_status: pricing.pricing_status,
     units_per_case: normalizeOptionalNumber(p.units_per_case),
     cases_per_pallet: normalizeOptionalNumber(p.cases_per_pallet),
     units_per_pallet: normalizeOptionalNumber(p.units_per_pallet),

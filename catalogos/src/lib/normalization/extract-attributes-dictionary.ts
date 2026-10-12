@@ -34,6 +34,7 @@ import {
 } from "@/lib/catalogos/attribute-dictionary-types";
 import { lookupAllowed, type SynonymMapOption } from "./synonym-lookup";
 import { combinedText, num, strLower, parseThicknessFromRaw } from "./normalization-utils";
+import { parseGloveInvoiceLine } from "@invoice-line-parse";
 
 export type RawRow = Record<string, unknown>;
 
@@ -102,9 +103,9 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
     confidenceByKey.size = 0.9;
   } else if (sz.normalizedRaw && sz.unmapped) unmapped.push({ attribute_key: "size", raw_value: sz.normalizedRaw });
 
-  // Color
-  const colorRaw = strLower(row.color ?? row.colour) || text;
-  const col = lookupAllowed("color", colorRaw || extractColorFromText(text), COLOR_VALUES, synonymMap);
+  // Color — do not treat the full description as a color raw value
+  const colorFromRow = strLower(row.color ?? row.colour);
+  const col = lookupAllowed("color", colorFromRow || extractColorFromText(text), COLOR_VALUES, synonymMap);
   if (col.value) {
     attributes.color = col.value;
     confidenceByKey.color = 0.85;
@@ -227,7 +228,13 @@ export function extractDisposableGloveAttributes(row: RawRow, options: ExtractOp
   }
 
   // Packaging
-  const qty = packagingQtyFromRow(row);
+  const parsedPack = parseGloveInvoiceLine(text);
+  const qty = packagingQtyFromRow({
+    ...row,
+    gloves_per_box: row.gloves_per_box ?? parsedPack.gloves_per_box,
+    boxes_per_case: row.boxes_per_case ?? parsedPack.boxes_per_case,
+    case_qty: row.case_qty ?? parsedPack.gloves_per_case,
+  });
   let packRaw: string | undefined;
   if (qty != null && qty >= 2000) packRaw = "case_2000_plus_ct";
   else if (qty != null && qty >= 1000) packRaw = "case_1000_ct";
@@ -343,6 +350,8 @@ function parseMilFromText(text: string): number | undefined {
 }
 
 function extractMaterialFromText(text: string): string {
+  const parsed = parseGloveInvoiceLine(text).material;
+  if (parsed) return parsed;
   const cleaned = text
     .replace(/\blatex[\s-]?free\b/gi, " ")
     .replace(/\bnot\s+made\s+with\s+latex\b/gi, " ")
@@ -359,11 +368,15 @@ function extractMaterialFromText(text: string): string {
 }
 
 function extractSizeFromText(text: string): string {
+  const parsed = parseGloveInvoiceLine(text).size;
+  if (parsed) return parsed;
   const m = text.match(/\b(xs|s|m|l|xl|xxl)\b/i);
   return m ? m[1].toLowerCase() : "";
 }
 
 function extractColorFromText(text: string): string {
+  const parsed = parseGloveInvoiceLine(text).color;
+  if (parsed) return parsed;
   if (/\b(light[- ]?blue|lt blue)\b/i.test(text)) return "light_blue";
   for (const c of COLOR_VALUES) {
     const re = new RegExp("\\b" + c.replace("_", "[- ]?") + "\\b", "i");

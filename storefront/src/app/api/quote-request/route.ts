@@ -12,6 +12,11 @@ import {
   checkPublicWriteRateLimit,
   PUBLIC_WRITE_LIMITS,
 } from "@/lib/security/public-write-rate-limit";
+import {
+  formatQuoteRequestEmailPriceLabel,
+  resolveQuoteRequestPublishedListPrices,
+  snapshotClientPriceAudit,
+} from "@/lib/quote-cart/resolve-quote-published-list";
 
 function isVariantMandatoryEnforceEnabled(): boolean {
   const v = process.env.VARIANT_MANDATORY_ENFORCE;
@@ -214,6 +219,7 @@ export async function POST(request: NextRequest) {
 
   const phone = body.phone?.trim() || null;
   const submittedAt = new Date().toISOString();
+  const publishedByIndex = await resolveQuoteRequestPublishedListPrices(supabase, body.items);
 
   const insertPayload: Record<string, unknown> = {
     company_name: companyName,
@@ -247,8 +253,14 @@ export async function POST(request: NextRequest) {
   const quoteRequestId = qr.id;
 
   try {
-    for (const item of body.items) {
+    for (let i = 0; i < body.items.length; i++) {
+      const item = body.items[i];
+      const published = publishedByIndex[i] ?? {
+        unit_price_major: null,
+        pricing_status: "request_pricing" as const,
+      };
       const lineNote = item.line_note?.trim() || null;
+      const clientAudit = snapshotClientPriceAudit(item.unit_price_major, published);
       const snapshot = {
         product_name: item.name,
         slug: item.slug ?? null,
@@ -260,7 +272,9 @@ export async function POST(request: NextRequest) {
         quantity: item.quantity,
         line_note: lineNote,
         sell_unit: item.sell_unit ?? "case",
-        unit_price_major: item.unit_price_major ?? null,
+        unit_price_major: published.unit_price_major,
+        pricing_status: published.pricing_status,
+        ...(clientAudit != null ? { client_unit_price_major: clientAudit } : {}),
         units_per_case: item.units_per_case ?? null,
         cases_per_pallet: item.cases_per_pallet ?? null,
         units_per_pallet: item.units_per_pallet ?? null,
@@ -300,7 +314,7 @@ export async function POST(request: NextRequest) {
 
   const adminTo = getAdminNotificationEmail();
   const linesText = body.items
-    .map((i) => {
+    .map((i, idx) => {
       const variantBits = [
         i.catalog_variant_id ? `variant_id: ${i.catalog_variant_id}` : null,
         i.variant_sku ? `variant_sku: ${i.variant_sku}` : null,
@@ -316,7 +330,9 @@ export async function POST(request: NextRequest) {
         : i.sell_unit === "pallet"
           ? "\n  Sell unit: pallet"
           : "";
-      return `- ${i.name} × ${i.quantity} (catalog_v2 product: ${i.product_id})${suffix}${commerceLine}${noteLine}`;
+      const published = publishedByIndex[idx];
+      const price = formatQuoteRequestEmailPriceLabel(published?.unit_price_major ?? null);
+      return `- ${i.name} × ${i.quantity} (${price}; catalog_v2 product: ${i.product_id})${suffix}${commerceLine}${noteLine}`;
     })
     .join("\n");
 

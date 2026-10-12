@@ -98,9 +98,13 @@ export function QuoteCartProvider({ children }: { children: ReactNode }) {
       let next: QuoteCartItem[];
       if (idx >= 0) {
         next = [...prev];
+        const existing = next[idx];
         next[idx] = {
-          ...next[idx],
-          quantity: Math.min(99999, next[idx].quantity + qty),
+          ...existing,
+          quantity: Math.min(99999, existing.quantity + qty),
+          ...(norm.pricing_status === "variant_published_list"
+            ? { unit_price_major: norm.unit_price_major, pricing_status: "variant_published_list" as const }
+            : {}),
         };
       } else {
         next = [...prev, { ...norm, quantity: qty }];
@@ -118,9 +122,13 @@ export function QuoteCartProvider({ children }: { children: ReactNode }) {
         const norm = normalizeQuoteCartLineInput(product);
         const idx = findLineIndex(next, norm);
         if (idx >= 0) {
+          const existing = next[idx];
           next[idx] = {
-            ...next[idx],
-            quantity: Math.min(99999, next[idx].quantity + qtyEach),
+            ...existing,
+            quantity: Math.min(99999, existing.quantity + qtyEach),
+            ...(norm.pricing_status === "variant_published_list"
+              ? { unit_price_major: norm.unit_price_major, pricing_status: "variant_published_list" as const }
+              : {}),
           };
         } else {
           next = [...next, { ...norm, quantity: qtyEach }];

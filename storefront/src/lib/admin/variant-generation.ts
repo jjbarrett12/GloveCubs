@@ -1,5 +1,5 @@
 import type { ImportDraftProductV1, ImportDraftVariantV1 } from "@/lib/admin/import-draft-types";
-import { normalizeSizeCode } from "@/lib/admin/import-draft-mapper";
+import { normalizeSizeCode } from "@/lib/admin/normalize-size-code";
 import { sortGloveSizeCodes } from "@/lib/admin/glove-size-normalization";
 import { SKU_PROPOSAL_SAFE_CONFIDENCE } from "@/lib/admin/variant-sku-intelligence";
 

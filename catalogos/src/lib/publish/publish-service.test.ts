@@ -286,7 +286,10 @@ describe("publish service", () => {
         grade: "industrial_grade",
       };
 
-      vi.spyOn(catalogVariantIngest, "upsertCatalogVariantFromGloveIngest").mockResolvedValue({ ok: true });
+      vi.spyOn(catalogVariantIngest, "upsertCatalogVariantFromGloveIngest").mockResolvedValue({
+        ok: true,
+        catalogVariantId: "33333333-3333-3333-3333-333333333333",
+      });
 
       const adminMock = {
         schema: vi.fn(() => ({

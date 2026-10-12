@@ -73,4 +73,40 @@ describe("normalizeQuoteCartLineInput", () => {
     const n = normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, line_note: "   " });
     expect(n.line_note).toBeNull();
   });
+
+  it("persists null unit_price_major as request pricing, not zero", () => {
+    const n = normalizeQuoteCartLineInput({
+      ...base,
+      catalog_variant_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      unit_price_major: null,
+    });
+    expect(n.unit_price_major).toBeNull();
+  });
+
+  it("does not keep a zero or negative number as a published price", () => {
+    expect(
+      normalizeQuoteCartLineInput({ ...base, catalog_variant_id: null, unit_price_major: 0 }).unit_price_major
+    ).toBeNull();
+  });
+
+  it("discards unlabeled legacy unit_price_major as untrusted", () => {
+    const n = normalizeQuoteCartLineInput({
+      ...base,
+      catalog_variant_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      unit_price_major: 85,
+    });
+    expect(n.unit_price_major).toBeNull();
+    expect(n.pricing_status).toBe("request_pricing");
+  });
+
+  it("keeps stamped variant_published_list prices for cart display", () => {
+    const n = normalizeQuoteCartLineInput({
+      ...base,
+      catalog_variant_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      unit_price_major: 85,
+      pricing_status: "variant_published_list",
+    });
+    expect(n.unit_price_major).toBe(85);
+    expect(n.pricing_status).toBe("variant_published_list");
+  });
 });
