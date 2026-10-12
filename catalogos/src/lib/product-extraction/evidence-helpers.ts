@@ -12,7 +12,7 @@ export function makeFieldEvidence<T>(
   value: T,
   confidence: number,
   source: ExtractionSource,
-  extra?: Partial<Omit<FieldEvidence<T>, "value" | "confidence" | "trust" | "source">>
+  extra?: Partial<Omit<FieldEvidence<T>, "value" | "confidence" | "source">>
 ): FieldEvidence<T> {
   return {
     value,
