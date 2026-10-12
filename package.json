@@ -64,7 +64,7 @@
     "test:commerce-packaging": "node --test tests/commerce-packaging-phase2e.test.js && cd storefront && npx vitest run ../lib/commerce-packaging/extract.test.ts ../lib/commerce-packaging/product-backfill.test.ts src/lib/admin/commerce-packaging-editor.test.ts src/lib/catalog/store-product-commerce.test.ts src/lib/quote-cart/commerce-line.test.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
+    "@supabase/supabase-js": "^2.99.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
